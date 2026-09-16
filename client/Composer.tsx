@@ -237,7 +237,7 @@ export function Composer({
         {busy ? (
           <button
             type="button"
-            className="composer__send composer__send--stop"
+            className="composer__send"
             onClick={onStop}
             aria-label="Stop generating"
             title="Stop"

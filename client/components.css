@@ -661,8 +661,7 @@
   height: 1.75rem;
 }
 
-.composer__send,
-.composer__send--stop {
+.composer__send {
   margin-left: auto;
 }
 
@@ -689,7 +688,6 @@
 .composer__send {
   transition:
     background-color var(--motion-fast) var(--ease-out),
-    border-radius var(--motion) var(--ease-out),
     opacity var(--motion-fast) var(--ease-out),
     transform var(--motion-fast) var(--ease-out);
 }
@@ -701,12 +699,6 @@
 
 .composer__send:active:not(:disabled) {
   transform: scale(0.94);
-}
-
-/* Stop squares off, so the shape changes with the action and not just the
-   glyph inside it. */
-.composer__send--stop {
-  border-radius: 0.875rem;
 }
 
 /*
