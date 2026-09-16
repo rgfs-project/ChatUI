@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Check, Copy, Download, X } from 'lucide-react';
 import { ARTIFACT_LANGUAGE, type ArtifactDto } from '@shared/artifact';
+import { downloadArtifact } from './downloadArtifact.ts';
 import { useArtifactSource } from './queries.ts';
 import { useCopy } from './useCopy.ts';
 import { Spinner } from './Spinner.tsx';
@@ -38,26 +39,6 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps): React.
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  /**
-   * Saved through a blob of our own rather than by linking at the source route.
-   *
-   * The route deliberately serves `text/plain` so that nothing a browser does
-   * with an artifact depends on the artifact's own type. A download should
-   * still land under the name and extension the reader expects, and building
-   * the blob here is what separates those two concerns.
-   */
-  const download = (): void => {
-    const text = source.data;
-    if (text === undefined) return;
-
-    const url = URL.createObjectURL(new Blob([text], { type: artifact.mediaType }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = artifact.name;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <aside className="artifact-panel" aria-label={`Artifact: ${artifact.name}`}>
       <header className="artifact-panel__head">
@@ -80,7 +61,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps): React.
           <button
             type="button"
             className="icon-button"
-            onClick={download}
+            onClick={() => void downloadArtifact(artifact, source.data)}
             disabled={source.data === undefined}
             aria-label="Download artifact"
             title="Download"

@@ -1,5 +1,7 @@
+import { Download, Eye } from 'lucide-react';
 import { ARTIFACT_LANGUAGE, type ArtifactDto } from '@shared/artifact';
 import { artifactIconFor } from './artifactIcon.ts';
+import { downloadArtifact } from './downloadArtifact.ts';
 
 /**
  * The files a reply produced, under the reply that produced them.
@@ -10,9 +12,12 @@ import { artifactIconFor } from './artifactIcon.ts';
  * the transcript showed a code block, leaving the file itself somewhere else
  * entirely. A card here is the thing the sentence is pointing at.
  *
- * Opening one is the whole card rather than a button on it. The row in the
- * dialog splits open from delete because a list is somewhere you tidy up; a
- * transcript is not, so there is one action and the card is it.
+ * The card body opens the file, and the two buttons beside it name the things
+ * a reader wants to do with one: view it, or keep it. View repeats what the
+ * body already does, deliberately — the body being clickable is something you
+ * have to discover, and a file card with no visible verb on it is a dead end
+ * for anybody who does not try. Delete is not here: a list is somewhere you
+ * tidy up, and the dialog is that list; a transcript is not.
  *
  * Rendered beside `MemoryProposals` and for the same reason — both belong to a
  * turn rather than to the conversation, and both read as a consequence of the
@@ -30,8 +35,12 @@ export function ArtifactCards({ artifacts, onOpen }: ArtifactCardsProps): React.
       {artifacts.map((artifact) => {
         const Icon = artifactIconFor(artifact.mediaType);
         return (
-          <li key={artifact.id}>
-            <button type="button" className="artifact-card" onClick={() => onOpen(artifact)}>
+          <li key={artifact.id} className="artifact-card">
+            <button
+              type="button"
+              className="artifact-card__open"
+              onClick={() => onOpen(artifact)}
+            >
               <span className="artifact-card__icon" aria-hidden="true">
                 <Icon size={18} />
               </span>
@@ -46,6 +55,31 @@ export function ArtifactCards({ artifacts, onOpen }: ArtifactCardsProps): React.
                 </span>
               </span>
             </button>
+
+            <span className="artifact-card__actions">
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => onOpen(artifact)}
+                aria-label={`View ${artifact.name}`}
+                title="View"
+              >
+                <Eye size={16} />
+              </button>
+              {/* The bytes are fetched by the click rather than held for every
+                  card on screen, so a failure here is a download that does not
+                  happen — the same as the panel's, and not worth a second
+                  error surface in the middle of a transcript. */}
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => void downloadArtifact(artifact)}
+                aria-label={`Download ${artifact.name}`}
+                title="Download"
+              >
+                <Download size={16} />
+              </button>
+            </span>
           </li>
         );
       })}

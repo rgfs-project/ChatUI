@@ -3007,7 +3007,7 @@ button.linkish:hover {
 .artifact-card {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   width: 100%;
   padding: 0.75rem;
   background: none;
@@ -3023,6 +3023,33 @@ button.linkish:hover {
 .artifact-card:hover {
   background: var(--surface);
   border-color: var(--border-strong);
+}
+
+/*
+ * The body of the card, which opens it.
+ *
+ * A button rather than the card itself, because the card now holds buttons of
+ * its own and one cannot be nested inside another. It keeps the whole area a
+ * target all the same: it is what stretches, and the actions are what do not.
+ */
+.artifact-card__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  color: inherit;
+}
+
+.artifact-card__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
 }
 
 .artifact-card__icon {

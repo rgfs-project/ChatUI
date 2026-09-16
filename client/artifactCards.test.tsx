@@ -24,8 +24,13 @@ import {
  * a card appears under the turn that made it and not under any other turn
  * (the back-link is per-message, so grouping by it is the whole feature);
  * an artifact belonging to no turn stays out of the transcript instead of
- * defaulting into the first one; and opening a card opens the panel, which is
- * the card's only job.
+ * defaulting into the first one; opening a card opens the panel; and the
+ * download button saves the file without opening it, which is the one action
+ * on the card that is not just another way to open it.
+ *
+ * The name queries are anchored: the card's own button leads with the file
+ * name, while the two action buttons are labelled "View <name>" and
+ * "Download <name>", so an unanchored pattern now matches three buttons.
  */
 
 let server: TestServer;
@@ -90,7 +95,7 @@ async function mountWithArtifacts(artifacts: Record<string, unknown>[]): Promise
 describe('artifacts under the reply that produced them', () => {
   it('shows a card for the turn named by the back-link', async () => {
     await mountWithArtifacts([artifact()]);
-    expect(await screen.findByRole('button', { name: /chart-test\.html/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /^chart-test\.html/ })).toBeTruthy();
   });
 
   it('does not show one whose turn is a different message', async () => {
@@ -98,7 +103,7 @@ describe('artifacts under the reply that produced them', () => {
 
     // The transcript rendered; the card did not follow it in.
     expect(screen.getByText('Here it is.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /chart-test\.html/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^chart-test\.html/ })).toBeNull();
   });
 
   /*
@@ -111,16 +116,38 @@ describe('artifacts under the reply that produced them', () => {
     await mountWithArtifacts([artifact({ messageId: undefined })]);
 
     expect(screen.getByText('Here it is.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /chart-test\.html/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^chart-test\.html/ })).toBeNull();
   });
 
   it('opens the panel when the card is chosen', async () => {
     await mountWithArtifacts([artifact()]);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: /chart-test\.html/ }));
+    await user.click(await screen.findByRole('button', { name: /^chart-test\.html/ }));
 
     // The panel asks for the bytes, which nothing else in this screen does.
     await server.waitFor('/api/artifacts/a1/source');
+  });
+
+  it('offers view and download beside the card', async () => {
+    await mountWithArtifacts([artifact()]);
+
+    expect(await screen.findByRole('button', { name: 'View chart-test.html' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Download chart-test.html' })).toBeTruthy();
+  });
+
+  /*
+   * The card does not hold the bytes — the request is what the click is for.
+   * Asserting the fetch rather than the saved file: `URL.createObjectURL` and
+   * a synthetic link click are the browser's side of this, not ours.
+   */
+  it('fetches the source when download is chosen, without opening the panel', async () => {
+    await mountWithArtifacts([artifact()]);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Download chart-test.html' }));
+
+    await server.waitFor('/api/artifacts/a1/source');
+    expect(screen.queryByLabelText('Artifact: chart-test.html')).toBeNull();
   });
 });
