@@ -164,7 +164,7 @@ body {
    * and bottom rule have to reach the top edge or there is a strip of page
    * showing through above them.
    */
-  padding: var(--safe-top) var(--gutter) 0 max(0.5rem, var(--safe-left));
+  padding: var(--safe-top) var(--bar-inset) 0 max(0.5rem, var(--safe-left));
   height: calc(var(--header-height) + var(--safe-top));
   border-bottom: 1px solid var(--border);
 }
@@ -275,7 +275,7 @@ body {
   /* Grown by the status bar exactly as the sidebar's own header is, so the two
      stay one line across the seam on a notched phone as well as on a desktop. */
   padding: var(--safe-top) max(var(--gutter), var(--safe-right)) 0
-    max(var(--gutter), var(--safe-left));
+    max(var(--bar-inset), var(--safe-left));
   height: calc(var(--header-height) + var(--safe-top));
   border-bottom: 1px solid var(--border);
 }

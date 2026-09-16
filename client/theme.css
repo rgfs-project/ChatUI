@@ -107,6 +107,13 @@
    */
   --gutter: 1.375rem;
 
+  /* The sidebar's own inset, measured to the wordmark's first letter: the
+     0.5rem the brand row holds plus the 0.625rem a row gives its text. The
+     two bars' inner edges — the space after the sidebar's control, and the
+     space before the main header's title — are set from this rather than from
+     the gutter, so all three read as one column. */
+  --bar-inset: 1.125rem;
+
   /* What an icon button holds between its edge and the glyph it draws: 32px
      box, 18px glyph. Subtracted wherever a margin is meant to be measured to
      the glyph rather than to the box. */
