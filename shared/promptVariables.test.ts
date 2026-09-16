@@ -30,7 +30,7 @@ describe('applyPromptVariables', () => {
       AT
     );
 
-    expect(out).toBe('Today is Monday. You are talking to ada.');
+    expect(out).toBe('Today is Monday. You are talking to Ada.');
   });
 
   it('reports the zone it was given', () => {
@@ -92,7 +92,7 @@ describe('applyPromptVariables', () => {
   });
 
   it('fills every occurrence, not just the first', () => {
-    expect(applyPromptVariables('{{USER_NAME}} and {{USER_NAME}}', AT)).toBe('ada and ada');
+    expect(applyPromptVariables('{{USER_NAME}} and {{USER_NAME}}', AT)).toBe('Ada and Ada');
   });
 
   it('returns a template with no placeholders untouched', () => {
@@ -101,6 +101,46 @@ describe('applyPromptVariables', () => {
 
   it('handles an empty name without leaving the token behind', () => {
     expect(applyPromptVariables('[{{USER_NAME}}]', { ...AT, userName: '' })).toBe('[]');
+  });
+
+  /*
+   * A name is stored lower case because that is what makes it
+   * case-insensitively unique, but a system prompt is prose — "You are
+   * assisting ada" is the identifier showing through the sentence.
+   */
+  describe('the name is cased for prose, not as stored', () => {
+    it('upcases the first letter', () => {
+      expect(applyPromptVariables('{{USER_NAME}}', { ...AT, userName: 'ada' })).toBe('Ada');
+    });
+
+    /* Only the first character. Anything cleverer is a guess about somebody's
+       name, and `mcdonald` becoming `McDonald` would be wrong as often as not. */
+    it('leaves the rest of the name exactly as stored', () => {
+      expect(applyPromptVariables('{{USER_NAME}}', { ...AT, userName: 'mcdonald' })).toBe(
+        'Mcdonald'
+      );
+      expect(applyPromptVariables('{{USER_NAME}}', { ...AT, userName: 'ada.lovelace' })).toBe(
+        'Ada.lovelace'
+      );
+    });
+
+    /* Usernames may begin with a digit or an underscore, where there is no
+       case to change and nothing should be dropped reaching for one. */
+    it('returns a name that does not start with a letter unchanged', () => {
+      expect(applyPromptVariables('{{USER_NAME}}', { ...AT, userName: '3cats' })).toBe('3cats');
+      expect(applyPromptVariables('{{USER_NAME}}', { ...AT, userName: '_ada' })).toBe('_ada');
+    });
+
+    /*
+     * The casing must not become a second substitution pass. The name is
+     * attacker-influenced on a multi-user instance, and upcasing `{` is a
+     * no-op, so a name shaped like a placeholder still survives as text.
+     */
+    it('does not let casing reopen the injection it was closed against', () => {
+      expect(
+        applyPromptVariables('{{USER_NAME}}', { ...AT, userName: '{{current_datetime}}' })
+      ).toBe('{{current_datetime}}');
+    });
   });
 
   /* A browser can report a zone this runtime has never heard of, and a

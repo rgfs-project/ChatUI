@@ -263,7 +263,10 @@ describe('system prompt placeholders', () => {
     await service.start(USER, id, 'local', 'GPT', 'hello', [], 'UTC');
     await service.settled(USER, id);
 
-    expect(systemPromptOf()).toContain('Today is Monday. Speak to ada.');
+    // `Ada`, not `ada`: the account name is stored lower case for uniqueness,
+    // and the prompt is prose. Asserted here as well as in the shared unit,
+    // because this is the path that reaches the provider.
+    expect(systemPromptOf()).toContain('Today is Monday. Speak to Ada.');
   });
 
   it('uses the zone the client sent, not the server’s', async () => {

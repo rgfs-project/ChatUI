@@ -54,6 +54,28 @@ function format(now: Date, timeZone: string, options: Intl.DateTimeFormatOptions
   return new Intl.DateTimeFormat('en-GB', { ...options, timeZone }).format(now);
 }
 
+/**
+ * The name as a sentence would address it, rather than as it is stored.
+ *
+ * Usernames are normalised to lower case on the way in, because that is what
+ * makes them case-insensitively unique — so the stored form of a name is
+ * `ada`, and a prompt that reads "You are assisting {{USER_NAME}}" rendered
+ * "You are assisting ada". That is the identifier leaking into prose.
+ *
+ * Only the first character, and only upcased: the rest is left exactly as
+ * stored, so `mcdonald` does not become `McDonald` on a guess about somebody's
+ * name, and a name that does not start with a letter is returned unchanged
+ * because `toUpperCase` on a digit is a no-op.
+ *
+ * `toUpperCase`, not `toLocaleUpperCase`: a username is `a-z0-9_.-` by
+ * validation, and locale casing would map `i` to `İ` under a Turkish locale on
+ * whatever machine happens to be running the server — a server-locale
+ * dependency in a value that is meant to be the reader's.
+ */
+function forProse(userName: string): string {
+  return userName === '' ? userName : userName[0]!.toUpperCase() + userName.slice(1);
+}
+
 /** What each placeholder resolves to. Exported so a UI can show a preview. */
 export function resolvePromptVariables(context: PromptContext): Record<PromptVariable, string> {
   // A zone the browser made up would throw inside `Intl`, which would fail the
@@ -67,7 +89,7 @@ export function resolvePromptVariables(context: PromptContext): Record<PromptVar
       timeStyle: 'short',
     }),
     CURRENT_TIMEZONE: zone,
-    USER_NAME: context.userName,
+    USER_NAME: forProse(context.userName),
   };
 }
 
