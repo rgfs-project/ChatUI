@@ -775,6 +775,12 @@
 }
 
 .model-menu__list {
+  display: flex;
+  flex-direction: column;
+  /* Rows carry their own fill, so two of them lit at once — the selected one
+     and the one under the pointer — merged into a single tall block with no
+     seam. A hairline of gap keeps them reading as two rows. */
+  gap: 0.125rem;
   max-height: 20rem;
   overflow-y: auto;
   padding: 0.25rem;
@@ -793,6 +799,9 @@
   align-items: center;
   gap: 0.5rem;
   width: 100%;
+  /* A flex child in a scrolling column: without this it would be squeezed
+     shorter than its own text once the list overflows. */
+  flex: none;
   text-align: left;
   padding: 0.625rem;
   /* Inset from the menu's own edge, so the highlight is a rounded row sitting
