@@ -1,0 +1,353 @@
+import { resolve } from 'node:path';
+import { z } from 'zod';
+
+const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'silent'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
+/**
+ * An optional setting, where "set to nothing" means "not set".
+ *
+ * Compose writes `KEY: ${KEY:-}` for anything an operator may or may not have,
+ * and an `.env` line with nothing after the `=` is the ordinary way to leave a
+ * value out. Both arrive as the empty string rather than as an absent variable,
+ * so a plain `.min(1).optional()` reads them as a deliberate empty value and
+ * refuses to boot — a fresh deployment failing on a key nobody set, with a
+ * message about a string being too short.
+ *
+ * Trimmed as well, because a value that is only whitespace was not a value.
+ */
+const optionalSetting = z
+  .string()
+  .optional()
+  .transform((value) => {
+    const trimmed = value?.trim();
+    return trimmed === undefined || trimmed === '' ? undefined : trimmed;
+  });
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().min(0).max(65535).default(3001),
+  DATA_DIR: z.string().min(1).default('./data'),
+  LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+
+  // Temporary identity (Phase 3). Replaced by real sessions in Phase 4. This is
+  // the ONLY source of the user-directory segment until then (INV-14); it is
+  // never read from a header, query, body, or route param.
+  LOCAL_USER_ID: z
+    .string()
+    .regex(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      'must be a canonical lowercase UUID'
+    )
+    .default('0a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d'),
+
+  // Auth (Phase 4).
+  REGISTRATION_MODE: z.enum(['closed', 'open']).default('closed'),
+  SESSION_ABSOLUTE_TTL_MS: z.coerce
+    .number()
+    .int()
+    .min(60_000)
+    .default(30 * 24 * 60 * 60 * 1000),
+  SESSION_IDLE_TTL_MS: z.coerce
+    .number()
+    .int()
+    .min(60_000)
+    .default(7 * 24 * 60 * 60 * 1000),
+
+  /*
+   * How many reverse proxies sit in front of this server.
+   *
+   * `0` — the default — means none, and `req.ip` is the socket's peer address:
+   * whatever Express is handed, no header is believed. Any other value is the
+   * operator stating, as a fact about their deployment, how many hops to trust
+   * at the end of `X-Forwarded-For`.
+   *
+   * A count rather than a boolean, and never `true`. `trust proxy: true`
+   * believes the whole chain, so a caller who writes their own
+   * `X-Forwarded-For` picks their own address and walks away from every
+   * per-address limit. Trusting exactly `n` hops takes the nth entry from the
+   * right, which is the one the proxy itself appended and nobody upstream can
+   * forge (SECURITY.md E-2).
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
+
+  // Streaming lifecycle (Phase 6).
+  //
+  // A checkpoint is written on every state transition and at most this often
+  // while streaming, so a long generation costs a bounded number of writes
+  // rather than one per token.
+  GENERATION_CHECKPOINT_MS: z.coerce.number().int().min(100).max(60_000).default(1_000),
+  // Replay window. 2000 events is roughly a long reply's worth of tokens at one
+  // event per chunk, so an ordinary reconnect replays rather than resyncs,
+  // while the memory held per generation stays bounded and small.
+  SSE_REPLAY_EVENTS: z.coerce.number().int().min(1).max(100_000).default(2_000),
+  GENERATION_RETENTION_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .default(10 * 60 * 1000),
+
+  // SSRF host policy (Phase 5). Private hosts are allowed by default because a
+  // local llama.cpp is the primary use case; metadata ranges are blocked
+  // regardless of this setting.
+  ALLOW_PRIVATE_PROVIDER_HOSTS: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  PROVIDER_HOST_ALLOWLIST: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((host) => host.trim())
+        .filter((host) => host !== '')
+    ),
+
+  // Provider (Phase 2). A single llama.cpp endpoint; multi-provider is Phase 5.
+  /*
+   * Present but empty means absent here too, for the same reason as
+   * `optionalSetting` below: `${LLAMA_BASE_URL:-}` in the compose file is how a
+   * deployment says "I have not set this", and `.default()` only applies to a
+   * key that is missing altogether. Without the preprocess step, the shipped
+   * compose file refused to boot with "Invalid URL" on a variable nobody set.
+   */
+  LLAMA_BASE_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.url().default('http://127.0.0.1:8080')
+  ),
+  LLAMA_API_KEY: optionalSetting,
+
+  // Native TLS. Both or neither — a cert with no key, or the reverse, is a
+  // misconfiguration that should stop the boot, not silently fall back to
+  // plaintext on a port the operator believes is encrypted.
+  TLS_CERT_FILE: optionalSetting,
+  TLS_KEY_FILE: optionalSetting,
+  PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
+  DEFAULT_CONTEXT_TOKENS: z.coerce.number().int().min(512).max(2_000_000).default(8_192),
+  MAX_OUTPUT_TOKENS: z.coerce.number().int().min(16).max(1_000_000).default(2_048),
+
+  /*
+   * Attachments (Phase 11).
+   *
+   * The per-file limit is deliberately well under what a model can actually be
+   * sent: an image is re-encoded as base64 into the prompt, so the bytes cost
+   * roughly a third more again, and the context budget runs out long before a
+   * disk does.
+   */
+  ATTACHMENT_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1_024)
+    .max(64 * 1024 * 1024)
+    .default(10 * 1024 * 1024),
+  ATTACHMENT_MAX_TOTAL_BYTES_PER_USER: z.coerce
+    .number()
+    .int()
+    .min(1_024)
+    .max(64 * 1024 * 1024 * 1024)
+    .default(512 * 1024 * 1024),
+  /** How long an upload nobody referenced survives before it is collected. */
+  ATTACHMENT_PENDING_TTL_MS: z.coerce
+    .number()
+    .int()
+    .min(60_000)
+    .max(30 * 24 * 60 * 60 * 1000)
+    .default(24 * 60 * 60 * 1000),
+  /**
+   * The most pixels an image may declare (Phase 12).
+   *
+   * 50 megapixels is far beyond any screenshot or phone photo and far below
+   * what a decompression bomb declares.
+   */
+  ATTACHMENT_MAX_IMAGE_PIXELS: z.coerce
+    .number()
+    .int()
+    .min(10_000)
+    .max(500_000_000)
+    .default(50_000_000),
+  /** Characters of a text attachment inlined into a prompt before truncation. */
+  ATTACHMENT_MAX_INLINE_CHARS: z.coerce.number().int().min(1_000).max(2_000_000).default(100_000),
+});
+
+/**
+ * Resolves the TLS pair, or throws if only one half is set.
+ *
+ * Failing the boot on a half-configuration is deliberate: the dangerous
+ * outcome is a server that was meant to be HTTPS quietly coming up on plain
+ * HTTP because one variable was mistyped, on a port the operator now trusts.
+ */
+function resolveTls(
+  certFile: string | undefined,
+  keyFile: string | undefined
+): { certFile: string; keyFile: string } | null {
+  if (certFile === undefined && keyFile === undefined) return null;
+  if (certFile === undefined || keyFile === undefined) {
+    throw new Error('TLS requires both TLS_CERT_FILE and TLS_KEY_FILE, or neither.');
+  }
+  return { certFile, keyFile };
+}
+
+export interface Config {
+  nodeEnv: 'development' | 'test' | 'production';
+  port: number;
+  /** Absolute path. The persistent boundary (contracts §1). Nothing writes to it in Phase 1. */
+  dataDir: string;
+  logLevel: LogLevel;
+  isProduction: boolean;
+  /** Reverse proxies in front of this server; 0 means the peer address is used. */
+  trustProxyHops: number;
+  /**
+   * Whether `LLAMA_BASE_URL` was set, as opposed to defaulted.
+   *
+   * It decides whether a first run writes a provider for it. A default of
+   * `http://127.0.0.1:8080` is a guess, and bootstrapping from a guess is how a
+   * fresh instance used to acquire a provider that was never there —
+   * permanently unavailable, in exactly the place an operator goes looking. A
+   * value the operator typed is a statement about their deployment, and worth
+   * acting on once.
+   */
+  providerConfigured: boolean;
+  /** Present only when both cert and key are configured; server runs HTTPS. */
+  tls: { certFile: string; keyFile: string } | null;
+  /** Canonical lowercase UUID. Used only by `user:create --adopt-local-data`. */
+  localUserId: string;
+  auth: AuthConfig;
+  /** Outbound SSRF policy, applied on config load and every request (INV-19). */
+  hostPolicy: HostPolicy;
+  streaming: StreamingConfig;
+  provider: ProviderConfig;
+  attachments: AttachmentConfig;
+}
+
+/** Phase 11. Grouped like the others, so one thing owns the whole subject. */
+export interface AttachmentConfig {
+  maxBytes: number;
+  maxTotalBytesPerUser: number;
+  pendingTtlMs: number;
+  /** Characters, not bytes: what is counted is what goes into a prompt. */
+  maxInlineChars: number;
+  /** Declared pixels, checked from the header rather than by decoding. */
+  maxImagePixels: number;
+}
+
+export interface StreamingConfig {
+  checkpointMs: number;
+  replayEvents: number;
+  retentionMs: number;
+}
+
+export interface HostPolicy {
+  allowPrivateHosts: boolean;
+  hostAllowlist: string[];
+}
+
+export interface AuthConfig {
+  /** `closed` (default) rejects `POST /api/auth/register` with REGISTRATION_CLOSED. */
+  registrationMode: 'closed' | 'open';
+  /** Never extended; a session dies this long after login whatever happens. */
+  absoluteTtlMs: number;
+  /** Slides forward on each authenticated request. */
+  idleTtlMs: number;
+}
+
+export interface ProviderConfig {
+  /** Base URL with any trailing slash removed, so path joins are unambiguous. */
+  baseUrl: string;
+  /**
+   * Bearer token for the upstream server. Secret: it is sent upstream only and
+   * never reaches a response, a log, or the browser (INV-04).
+   */
+  apiKey: string | undefined;
+  timeoutMs: number;
+  /** Used when the provider does not disclose a model's context length. */
+  defaultContextTokens: number;
+  maxOutputTokens: number;
+}
+
+/**
+ * Validates the environment once and fails fast with a readable message.
+ * Never logs values, so a malformed secret can't leak through a boot error.
+ */
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const parsed = envSchema.safeParse(env);
+
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+      .join('\n');
+    throw new Error(`Invalid environment configuration:\n${issues}`);
+  }
+
+  const {
+    NODE_ENV,
+    PORT,
+    DATA_DIR,
+    LOG_LEVEL,
+    LOCAL_USER_ID,
+    TRUST_PROXY_HOPS,
+    REGISTRATION_MODE,
+    SESSION_ABSOLUTE_TTL_MS,
+    SESSION_IDLE_TTL_MS,
+    GENERATION_CHECKPOINT_MS,
+    SSE_REPLAY_EVENTS,
+    GENERATION_RETENTION_MS,
+    ALLOW_PRIVATE_PROVIDER_HOSTS,
+    PROVIDER_HOST_ALLOWLIST,
+    LLAMA_BASE_URL,
+    LLAMA_API_KEY,
+    TLS_CERT_FILE,
+    TLS_KEY_FILE,
+    PROVIDER_TIMEOUT_MS,
+    DEFAULT_CONTEXT_TOKENS,
+    MAX_OUTPUT_TOKENS,
+    ATTACHMENT_MAX_BYTES,
+    ATTACHMENT_MAX_TOTAL_BYTES_PER_USER,
+    ATTACHMENT_PENDING_TTL_MS,
+    ATTACHMENT_MAX_INLINE_CHARS,
+    ATTACHMENT_MAX_IMAGE_PIXELS,
+  } = parsed.data;
+
+  return {
+    nodeEnv: NODE_ENV,
+    port: PORT,
+    dataDir: resolve(DATA_DIR),
+    logLevel: LOG_LEVEL,
+    isProduction: NODE_ENV === 'production',
+    trustProxyHops: TRUST_PROXY_HOPS,
+    providerConfigured: (env['LLAMA_BASE_URL'] ?? '').trim() !== '',
+    tls: resolveTls(TLS_CERT_FILE, TLS_KEY_FILE),
+    localUserId: LOCAL_USER_ID,
+    auth: {
+      registrationMode: REGISTRATION_MODE,
+      absoluteTtlMs: SESSION_ABSOLUTE_TTL_MS,
+      idleTtlMs: SESSION_IDLE_TTL_MS,
+    },
+    attachments: {
+      maxBytes: ATTACHMENT_MAX_BYTES,
+      maxTotalBytesPerUser: ATTACHMENT_MAX_TOTAL_BYTES_PER_USER,
+      pendingTtlMs: ATTACHMENT_PENDING_TTL_MS,
+      maxInlineChars: ATTACHMENT_MAX_INLINE_CHARS,
+      maxImagePixels: ATTACHMENT_MAX_IMAGE_PIXELS,
+    },
+    streaming: {
+      checkpointMs: GENERATION_CHECKPOINT_MS,
+      replayEvents: SSE_REPLAY_EVENTS,
+      retentionMs: GENERATION_RETENTION_MS,
+    },
+    hostPolicy: {
+      allowPrivateHosts: ALLOW_PRIVATE_PROVIDER_HOSTS,
+      hostAllowlist: PROVIDER_HOST_ALLOWLIST,
+    },
+    provider: {
+      baseUrl: LLAMA_BASE_URL.replace(/\/+$/, ''),
+      apiKey: LLAMA_API_KEY,
+      timeoutMs: PROVIDER_TIMEOUT_MS,
+      defaultContextTokens: DEFAULT_CONTEXT_TOKENS,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+    },
+  };
+}
+
+/** Maximum accepted JSON body size. Anything larger becomes `PAYLOAD_TOO_LARGE`. */
+export const JSON_BODY_LIMIT = '100kb';

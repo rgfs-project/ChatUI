@@ -1,0 +1,595 @@
+/*
+ * Fonts are vendored through Fontsource rather than linked from Google's CDN.
+ * This is a self-hosted application that is expected to run against a local
+ * model on a machine that may have no internet at all, so a stylesheet that
+ * phones home on every load would be both a privacy leak and an offline
+ * failure. Both faces are OFL-1.1.
+ */
+@import '@fontsource/google-sans/400.css';
+@import '@fontsource/google-sans/500.css';
+@import '@fontsource/google-sans/600.css';
+@import '@fontsource-variable/playfair';
+
+/*
+ * Monochrome. Every value is strictly achromatic (R = G = B), anchored on pure
+ * black and pure white — no tint in any channel. Meaning that colour used to
+ * carry (primary vs destructive, error states) is carried by contrast, fill,
+ * and border weight instead, which also keeps it legible to anyone who
+ * wouldn't have distinguished the hues in the first place.
+ */
+/*
+ * Three ground levels, because the design layers them: the sidebar sits
+ * *below* the canvas and the composer, model menu and cards sit *above* it.
+ * On a flat white page the composer has no edge of its own and dissolves into
+ * the canvas, so the canvas is held just off white to give it one.
+ */
+:root {
+  --bg: #ffffff;
+  --raised: #ffffff;
+  --surface: #f4f4f4;
+  --surface-2: #ececec;
+  --surface-3: #e0e0e0;
+  --border: #e2e2e2;
+  --border-strong: #d4d4d4;
+  --text: #000000;
+  --text-soft: #333333;
+  --muted: #737373;
+  --faint: #a3a3a3;
+  --hover: #ececec;
+  --active: #e0e0e0;
+  --focus: #b5b5b5;
+  --danger: #9a3f36;
+  --danger-bg: #f9eeec;
+  --danger-border: #e2c3bf;
+  --ok: #3f7a4f;
+  --ok-bg: #eef6f0;
+  --ok-border: #c3ddc9;
+  --warn: #8a5a13;
+  --warn-bg: #fdf3e0;
+  --warn-border: #f0dcb0;
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.12);
+  /* Heavier than --shadow-pop: a toast has to read as floating over whatever
+     panel or dialog happens to be open beneath its corner, not just lifted
+     off the canvas the way a menu is. */
+  --shadow-toast: 0 16px 40px rgb(0 0 0 / 0.22);
+  --accent: #121212;
+  --on-accent: #ffffff;
+
+  /*
+   * Motion.
+   *
+   * Two durations and one curve, shared by everything, so the interface moves
+   * at one speed rather than at each component's guess. `--ease-out` decelerates
+   * into place, which is what makes something entering read as arriving rather
+   * than as being thrown.
+   *
+   * Chrome moves; **text does not**. Nothing here is applied to message bodies,
+   * markdown, or the transcript: animating content that is already streaming in
+   * fights the reader, and a body that fades on every token is unreadable.
+   */
+  /* The admin rail's close control and section buttons share one height. */
+  --panel-control-height: 2.125rem;
+
+  /*
+   * One size for every button, so a row of them lines up.
+   *
+   * A step below the body text rather than level with it. A control's label is
+   * not prose — it names an action, is read once, and is found by position as
+   * much as by reading. At 13px against 13px body text the buttons competed
+   * with the settings they belonged to, which is what made a pane of rows read
+   * as a pane of buttons.
+   */
+  --button-font-size: 0.75rem;
+  --button-padding: 0.3125rem 0.625rem;
+
+  --motion-fast: 120ms;
+  --motion: 180ms;
+  /* Long enough to read as a cross-fade rather than a stutter. */
+  --motion-theme: 260ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
+  /* 268px, read straight off the reference's own `w-[268px]`. */
+  --sidebar-width: 16.75rem;
+  /* Wide enough for a comfortable 80-column line of code plus its gutter. */
+  --artifact-width: 30rem;
+  /* 56px, the reference's. The bar holds one line of type on each side of the
+     seam; the extra 12px it had were empty on both. */
+  --header-height: 3.5rem;
+  /*
+   * The margin down the left of a header, measured to what can actually be
+   * seen there rather than to the box around it.
+   *
+   * The bar holds either a control and a title or, once the sidebar has taken
+   * the control, a title alone — and both have to begin on the same column.
+   * They do not measure the same, though: an icon button carries 7px of padding
+   * inside its own box, so the box is pulled back by that much (`--control-bleed`
+   * below) and its glyph lands where the title's first letter otherwise would.
+   */
+  --gutter: 1.375rem;
+
+  /* What an icon button holds between its edge and the glyph it draws: 32px
+     box, 18px glyph. Subtracted wherever a margin is meant to be measured to
+     the glyph rather than to the box. */
+  --control-bleed: 0.4375rem;
+  --radius: 0.75rem;
+
+  /* How far the conversation column and the composer under it stand off the
+     window's edges. One value for both, so the composer sits directly beneath
+     the text rather than a few pixels wider or narrower than it. Tightened on
+     a phone, where the screen has none of that room to give away. */
+  --column-inset: 1.5rem;
+
+  /*
+   * Where the sidebar stops being a column and becomes a drawer.
+   *
+   * Stated here because it is asked in two languages: `useNarrowViewport` reads
+   * it through `matchMedia` to decide what the sidebar *is*, and the stylesheets
+   * read it to decide what the overlays *look like*. The two had drifted — 56rem
+   * in the hook against 48rem in the one responsive block — which left a 128px
+   * band where the sidebar behaved as a drawer while every menu still sized
+   * itself as though there were a desktop behind it.
+   *
+   * A custom property cannot be used in a media query, so the number itself
+   * still appears in each `@media`; this declaration is what they are checked
+   * against, and `useNarrowViewport` names it in a comment for the same reason.
+   */
+  --breakpoint-narrow: 56rem;
+
+  /*
+   * The safe areas, resolved once.
+   *
+   * `env()` is only non-zero with `viewport-fit=cover`, and on a desktop browser
+   * every one of these is 0 — so the same declarations are correct everywhere
+   * and there is no need to branch on device. Naming them here keeps the
+   * `max(padding, inset)` pattern from being spelled out at each use site.
+   */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  --font-sans:
+    'Google Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Playfair Variable', 'Playfair Display', Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  /*
+   * Stated explicitly per theme rather than `light dark`.
+   *
+   * `light dark` lets the browser pick from the *system* preference, so a
+   * system-dark user reading the app in light mode got a dark canvas behind a
+   * light page — and the scrollbars and form controls to match. The app's own
+   * theme is the authority here, so each value names one.
+   */
+  color-scheme: light;
+  font-family: var(--font-sans);
+  font-synthesis-weight: none;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  /*
+   * The canvas is the ground and the sidebar sits just above it — the reverse
+   * of the light theme, where the sidebar is recessed. On a black canvas a
+   * sidebar *darker* than the page has nowhere to go, so the relationship is
+   * inverted rather than compressed.
+   */
+  --bg: #000000;
+  --raised: #131313;
+  --surface: #0d0d0d;
+  --surface-2: #161616;
+  --surface-3: #262626;
+  --border: #232323;
+  --border-strong: #333333;
+  --text: #f5f5f5;
+  --text-soft: #d8d8d8;
+  --muted: #9a9a9a;
+  --faint: #6b6b6b;
+  --hover: #1a1a1a;
+  --active: #262626;
+  --focus: #4a4a4a;
+  --danger: #e0837c;
+  --danger-bg: #170d0c;
+  --danger-border: #3a201e;
+  --ok: #6fbf83;
+  --ok-bg: #0d150f;
+  --ok-border: #223a28;
+  --warn: #e0ac54;
+  --warn-bg: #191207;
+  --warn-border: #3d2e14;
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.6);
+  --shadow-toast: 0 16px 40px rgb(0 0 0 / 0.75);
+  --accent: #f2f2f2;
+  --on-accent: #0a0a0a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+ * Cross-fading between themes.
+ *
+ * Custom properties are not animatable, so transitioning `--bg` does nothing —
+ * the variable flips instantly. What *can* transition is the resolved colour
+ * each element ends up with, so the transition goes on the properties rather
+ * than on the tokens.
+ *
+ * It is applied only while a toggle is in flight, added by the control and
+ * removed when it lands. Left on permanently it would put a 260ms fade on
+ * every hover and focus in the application, which would make the whole
+ * interface feel like it was lagging behind the pointer.
+ *
+ * Surfaces cross-fade; **text does not**. `color` is deliberately absent, for
+ * the same reason nothing else animates text: letters easing through the
+ * midpoint between two ink colours read as blurring rather than as changing.
+ * They swap once, cleanly, while the ground moves underneath them.
+ */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition:
+    background-color var(--motion-theme) ease,
+    border-color var(--motion-theme) ease,
+    box-shadow var(--motion-theme) ease !important;
+}
+
+/*
+ * One switch for everyone who has asked for less movement. Declared once,
+ * globally, rather than repeated per rule — a component added later is covered
+ * without anyone remembering to cover it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /*
+   * Stated again at matching specificity.
+   *
+   * Among `!important` declarations the more specific selector wins whatever
+   * the source order, and `.theme-transition *` outranks a bare `*` — so the
+   * blanket rule above does not reach the theme cross-fade. This one does.
+   */
+  .theme-transition,
+  .theme-transition *,
+  .theme-transition *::before,
+  .theme-transition *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * Scrollbars are hidden wherever the application scrolls.
+ *
+ * Only the painted bar goes: every one of these keeps `overflow: auto`, so
+ * wheel, trackpad, keyboard and touch scrolling all still work — `overflow:
+ * hidden` would have taken the scrolling with it. The transcript's own
+ * affordance is the jump-to-latest control, which appears as soon as the
+ * reader moves away from the bottom.
+ */
+.transcript,
+.sidebar__list,
+.model-menu__list,
+.reasoning__body,
+.code-block pre,
+.table-scroll,
+.composer__input,
+.msg__editor {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* older Edge */
+}
+
+.transcript::-webkit-scrollbar,
+.sidebar__list::-webkit-scrollbar,
+.model-menu__list::-webkit-scrollbar,
+.reasoning__body::-webkit-scrollbar,
+.code-block pre::-webkit-scrollbar,
+.table-scroll::-webkit-scrollbar,
+.composer__input::-webkit-scrollbar,
+.msg__editor::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- controls ----------------------------------------------------------- */
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 0.5rem;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/*
+ * The conversation is the only text there is.
+ *
+ * Everything else is furniture — nav labels, section headings, the wordmark,
+ * timestamps, the glyphs inside buttons — and none of it is anything anyone
+ * wants on the clipboard. A stray drag across the window, a select-all, or a
+ * long press on a phone used to highlight all of it. The callout goes with it:
+ * on iOS a press and hold on a control raised the system's own Copy / Look Up
+ * menu over the control being pressed.
+ *
+ * So: off everywhere, back on for the two things it is actually for — what was
+ * said, and what is being typed.
+ */
+body {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.msg__body,
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/*
+ * No tap flash.
+ *
+ * iOS paints a grey rectangle over whatever was tapped, drawn to the element's
+ * box and ignoring its rounding — so a round control flashed square, and a row
+ * flashed a shade that belongs to no palette here. Every control already
+ * answers a press with its own fill or scale.
+ */
+button,
+a,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
+/**
+ * A quiet square button, used for icons throughout.
+ *
+ * The padding is zeroed and the glyph pinned, which is a fix rather than a
+ * tidy-up: a button carries 1px 6px of padding by default, so a box narrower
+ * than its glyph plus 12 left the glyph — a flex child, and shrinkable —
+ * squeezed narrower than it was asked to be. It drew a 15px icon at 9 in the
+ * message actions and a round 18px plus at 14 wide in the composer, each time
+ * looking like a different bug.
+ */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--muted);
+  flex: none;
+}
+
+.icon-button > svg {
+  flex: none;
+}
+
+.icon-button {
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+/*
+ * Colour, not a fill.
+ *
+ * A filled hover puts a box behind a glyph that is mostly holes, and at these
+ * sizes the box is the thing that registers rather than the icon inside it —
+ * most of them sit on a surface that is already a panel or an already-filled
+ * row, so what appeared was a darker patch rather than a lit control. Going
+ * from muted to full text colour says the same thing without drawing anything.
+ */
+.icon-button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+/*
+ * A small, immediate acknowledgement of the press itself.
+ *
+ * Every control that acts like a button gets it rather than a chosen few:
+ * pressing one and watching it give, then pressing its neighbour and watching
+ * nothing happen, reads as the second one being broken.
+ *
+ * Listed rather than matched on the `button` element. A bare element selector
+ * plus three pseudo-classes outranks a single class, so it would quietly take
+ * over the send control's own deeper press — and menu options are meant to be
+ * left out: the menu closes on the press, so the animation would play on
+ * something already leaving.
+ *
+ * A conversation scales as a whole row. Only its title is the press target,
+ * but it is one visible pill with the row controls inside it, and shrinking
+ * the title alone would slide it out from under them.
+ */
+.icon-button:active:not(:disabled),
+.nav-button:active,
+.button-primary:active:not(:disabled),
+button.linkish:active:not(:disabled),
+.select:active:not(:disabled),
+.model-trigger:active:not(:disabled),
+.panel__rail-item:active,
+.panel__row-control button:not(.icon-button):not(.select):active,
+.panel__form-actions button:not(.button-primary):not(.linkish):active,
+.conversation:has(.conversation__open:active) {
+  transform: scale(0.96);
+}
+
+/**
+ * The filled, high-contrast action.
+ *
+ * Shares its metrics with every other button so a row of them lines up. It
+ * previously set no `font-size` and inherited the 16px body text, and carried
+ * a heavier weight besides — so it read as both larger and bolder than the
+ * secondary button beside it. The filled background is what marks it as
+ * primary; size and weight do not need to say it a second time.
+ */
+.button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: var(--button-padding);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--button-font-size);
+  transition:
+    opacity var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.button-primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+/** A full-width row that reads as navigation, not a control. */
+/*
+ * Scaled with the pane it sits in.
+ *
+ * The sidebar narrowed from 22rem to 17rem, and type that did not narrow with
+ * it would be a bigger share of a smaller column — the rows would read as
+ * cramped rather than as smaller. Every size here is the old one times 17/22,
+ * which is what keeps the proportions of the design intact.
+ */
+.nav-button {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  text-align: left;
+  color: var(--text-soft);
+  /* Matches `.conversation__open` right below it — a nav row and a
+     conversation title are rows in the same list, not two different sizes
+     of type stacked on top of each other. */
+  font-size: 0.875rem;
+}
+
+.nav-button {
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.nav-button:hover {
+  background: var(--hover);
+}
+
+/* A filled pill, not a bordered field — the design gives search the same
+   weight as the nav rows above it rather than making it look editable. */
+.search {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  /* Side padding as the nav rows, so the two glyphs share a column. Vertically
+     a pixel less, because an input's line box is 2px taller than a button's
+     and the rows have to come out the same height. */
+  padding: 0.625rem 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  color: var(--muted);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.search {
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+
+.search:focus-within {
+  border-color: var(--border-strong);
+}
+
+.search input::placeholder {
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* With the footer's 12px padding and the row's 4px, this is what puts the
+     account bar at the reference's 65px. */
+  width: 1.875rem;
+  height: 1.875rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  flex: none;
+}
+
+.error-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--border-strong);
+  border-left-width: 3px;
+  border-radius: 0.5rem;
+  background: var(--surface-2);
+  font-size: 0.9375rem;
+}

@@ -1,0 +1,95 @@
+import { useState } from 'react';
+import { LogIn, UserPlus } from 'lucide-react';
+import type { UserDto } from '@shared/auth';
+import { ApiError, login, register, setCsrfToken } from './api.ts';
+import { showToast } from './toast.ts';
+
+export interface SignInProps {
+  /** Registration is only offered when the server says it is open. */
+  registrationOpen: boolean;
+  onSignedIn: (user: UserDto) => void;
+}
+
+export function SignIn({ registrationOpen, onSignedIn }: SignInProps): React.JSX.Element {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const registering = mode === 'register' && registrationOpen;
+
+  async function submit(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (busy) return;
+
+    setBusy(true);
+    try {
+      const result = registering
+        ? await register(username.trim(), password)
+        : await login(username.trim(), password);
+
+      setCsrfToken(result.csrfToken);
+      setPassword('');
+      onSignedIn(result.user);
+    } catch (err) {
+      showToast(
+        'error',
+        err instanceof ApiError ? err.message : 'Something went wrong. Please try again.'
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="signin">
+      <form className="signin__card" onSubmit={(e) => void submit(e)}>
+        {/* Grouped, so the name and the line under it space as one thing. The
+            subtitle previously pulled itself up with a negative margin to
+            escape the card's own gap, which is the shape of a layout fighting
+            itself. */}
+        <header className="signin__head">
+          <h1>ChatUI</h1>
+          <p className="muted">{registering ? 'Create an account.' : 'Sign in to continue.'}</p>
+        </header>
+
+        <label className="field">
+          <span>Username</span>
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+            autoFocus
+            required
+          />
+        </label>
+
+        <label className="field">
+          <span>Password</span>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete={registering ? 'new-password' : 'current-password'}
+            required
+          />
+        </label>
+
+        <button type="submit" disabled={busy || username.trim() === '' || password === ''}>
+          {registering ? <UserPlus size={16} /> : <LogIn size={16} />}
+          {registering ? 'Create account' : 'Sign in'}
+        </button>
+
+        {registrationOpen && (
+          <button
+            type="button"
+            className="linkish"
+            onClick={() => setMode(registering ? 'login' : 'register')}
+          >
+            {registering ? 'I already have an account' : 'Create an account instead'}
+          </button>
+        )}
+      </form>
+    </main>
+  );
+}

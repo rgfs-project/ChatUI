@@ -1,0 +1,545 @@
+/*
+ * Application shell.
+ *
+ * The layout contract, in one place:
+ *
+ *   ┌─ sidebar ────────┬─ main ─────────────────────┐
+ *   │ header    fixed  │ header              fixed  │
+ *   │ actions   fixed  ├────────────────────────────┤
+ *   │ ---------------- │                            │
+ *   │ list    SCROLLS  │ transcript        SCROLLS  │
+ *   │ ---------------- │                            │
+ *   │ footer    fixed  ├────────────────────────────┤
+ *   │                  │ composer            fixed  │
+ *   └──────────────────┴────────────────────────────┘
+ *
+ * There are exactly **two** scroll containers: the conversation list and the
+ * transcript. The document itself never scrolls — `html, body { overflow:
+ * hidden }` below is what enforces that, and every intermediate flex item
+ * carries `min-height: 0` so a child can actually shrink rather than pushing
+ * the page taller. Without that `min-height`, a flex item defaults to
+ * `min-height: auto` and grows to fit its content, which silently hands the
+ * scroll back to the body — the single most common way this layout breaks.
+ */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body {
+  overflow: hidden;
+
+  /*
+   * Panning, and nothing else.
+   *
+   * `pan-x pan-y` rather than `none`: the document itself never scrolls, but
+   * everything inside it does, and touch-action is resolved up the tree — the
+   * nearest ancestor that forbids a gesture forbids it for every descendant,
+   * which no `touch-action: auto` further down can hand back. `none` here
+   * would have frozen the transcript, the conversation list, every code block
+   * and the panel rail's own sideways strip along with the page.
+   *
+   * What it does suppress is pinch and double-tap zoom, and with them the
+   * gestures iOS reads out of an ordinary two-finger scroll or a quick second
+   * tap on a message — an app that answers a tap by zooming into it does not
+   * read as an application.
+   */
+  touch-action: pan-x pan-y;
+
+  /* Landscape on iOS otherwise reflows body copy a size larger on its own,
+     which moves every line of a conversation for a rotation. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/*
+ * The sidebar floats over the main area rather than taking a column beside it.
+ *
+ * Sharing the width meant every toggle re-measured the transcript: the text
+ * column narrowed, lines re-wrapped, and the whole conversation shifted under
+ * the reader for a change that had nothing to do with its content. Overlaying
+ * costs the width it covers while it is open, and buys a transcript whose
+ * layout never depends on a piece of navigation.
+ */
+.shell {
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* --- sidebar ------------------------------------------------------------ */
+
+.sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 20;
+  width: var(--sidebar-width);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  /* Opaque, and lifted: it sits on top of the transcript. */
+  background: var(--surface);
+  box-shadow: 2px 0 16px rgb(0 0 0 / 8%);
+
+  /*
+   * Slides rather than appearing. It stays mounted so the transform has
+   * something to animate — a conditionally rendered element has no "before" to
+   * move from — and is made `inert` while off-screen so its buttons are not
+   * tabbable from behind the page.
+   */
+  transform: translateX(-100%);
+  /*
+   * Hidden as well as moved, so nothing off-screen is reachable or announced.
+   *
+   * The two directions are timed separately, and the difference is load-bearing
+   * rather than cosmetic. Given a duration, `visibility` does not ease — it
+   * flips at a point *inside* the transition. Held visible for the whole slide
+   * out is what is wanted here. On the way in it is not: the drawer stayed
+   * unrendered for the first part of its own entrance, and an unrendered
+   * element cannot take focus — `focus()` is refused silently, so the focus
+   * trap appeared to do nothing and the keyboard stayed on the page behind.
+   *
+   * Measured, with a plain `visibility var(--motion)` on the way in: the
+   * computed visibility is still `hidden` on the next animation frame, so even
+   * deferring the focus by a frame does not help. The `0s` on the expanded rule
+   * below is the part that makes the drawer focusable at all.
+   */
+  visibility: hidden;
+  transition:
+    transform var(--motion) var(--ease-out),
+    visibility 0s linear var(--motion);
+}
+
+.shell[data-sidebar='expanded'] .sidebar {
+  transform: none;
+  visibility: visible;
+  transition:
+    transform var(--motion) var(--ease-out),
+    visibility 0s;
+}
+
+/* The main column follows it on a wide window, at the same rate. */
+.main {
+  transition:
+    padding-left var(--motion) var(--ease-out),
+    padding-right var(--motion) var(--ease-out);
+}
+
+.sidebar__brand,
+.sidebar__actions,
+.sidebar__footer {
+  flex: none; /* fixed regions */
+}
+
+/*
+ * The top row, shared with the main header.
+ *
+ * Both are `--header-height` tall, both centre their contents, and both inset
+ * their first element by `--gutter` — so the wordmark, the collapse control and
+ * the conversation title all sit on one line, and the title keeps the same
+ * offset from the visible left edge whether the sidebar is open or shut.
+ */
+/*
+ * Inset like the rows below it rather than by the shared gutter, so the
+ * control's box ends on the same edge every row ends on. The wordmark takes
+ * the rows' own 10px back (below), which puts its first letter on the column
+ * the nav icons and the conversation titles start from.
+ */
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  /*
+   * The status bar sits on top of this row on a notched phone, so the bar grows
+   * by the inset and pads its contents down past it. Height rather than margin:
+   * the row is still the thing against the top of the screen, and its background
+   * and bottom rule have to reach the top edge or there is a strip of page
+   * showing through above them.
+   */
+  padding: var(--safe-top) var(--gutter) 0 max(0.5rem, var(--safe-left));
+  height: calc(var(--header-height) + var(--safe-top));
+  border-bottom: 1px solid var(--border);
+}
+
+/*
+ * The same margin as the main header's, from the other side. This control and
+ * that one are the same control — it moves between the two bars as the sidebar
+ * opens and closes — so the space beside it has to measure the same in both,
+ * and to the glyph rather than to the box, hence the same pull back.
+ */
+.sidebar__brand > .icon-button:last-child {
+  margin-right: calc(var(--control-bleed) * -1);
+}
+
+/* The one place the display face is used, so it reads as a mark rather than
+   as a heading competing with the conversation titles below it. */
+.brand {
+  margin: 0;
+  /* The inset a row gives its own text, so the mark starts on the column the
+     nav icons and the conversation titles start on. */
+  padding-left: 0.625rem;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.5rem;
+  /* Matches the title's line box so the two centre on the same line. */
+  line-height: 1.5rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.sidebar__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* The same side padding as the list below it, so the nav rows and the
+     conversation rows are one width on one edge — and no padding under the
+     rule, which marks where the scrolling list begins. Anything between the
+     two is a band of empty sidebar that scrolled content disappears behind. */
+  padding: 0.625rem 0.5rem 0;
+}
+
+/*
+ * A hairline between the ways out of this pane and the conversations below it.
+ *
+ * A flex child rather than a border on the container, so it takes the content
+ * width and lines up with the rows instead of running to the sidebar's edges,
+ * and the column's own gap spaces it without any margin of its own.
+ */
+.sidebar__actions::after {
+  content: '';
+  height: 1px;
+  background: var(--border);
+}
+
+/* The only scrolling part of the sidebar. */
+.sidebar__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* The drawer is over the transcript on a phone; scrolling to the end of the
+     conversation list must not start scrolling the transcript underneath it. */
+  overscroll-behavior: contain;
+  /* The same side padding as the actions above it, so a conversation row and
+     the Admin row are one width and sit on one edge. Nothing on top: the rule
+     above is the list's edge, and a row scrolling up should meet it. */
+  padding: 0 0.5rem 0.625rem;
+}
+
+/* 65px tall, from the reference, and inset like everything above it. */
+.sidebar__footer {
+  display: flex;
+  align-items: center;
+  /* `max` rather than `+`: on a phone the home indicator is the thing to clear,
+     on a desktop the inset is 0 and the designed padding is what remains. */
+  padding: 0.75rem 0.5rem max(0.75rem, var(--safe-bottom)) max(0.5rem, var(--safe-left));
+  border-top: 1px solid var(--border);
+}
+
+/* --- main --------------------------------------------------------------- */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main {
+  height: 100dvh;
+}
+
+.main__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  /*
+   * 11px, which puts the title 58 from the edge — the reference's own column.
+   *
+   * Not the gutter less the control's padding, which is the arithmetic that
+   * makes both spaces measure 22: a glyph is lighter than a letter and the gap
+   * after it reads wider than the same number before it, so matching them by
+   * measurement left the title looking adrift of the control.
+   */
+  gap: 0.6875rem;
+  /* Grown by the status bar exactly as the sidebar's own header is, so the two
+     stay one line across the seam on a notched phone as well as on a desktop. */
+  padding: var(--safe-top) max(var(--gutter), var(--safe-right)) 0
+    max(var(--gutter), var(--safe-left));
+  height: calc(var(--header-height) + var(--safe-top));
+  border-bottom: 1px solid var(--border);
+}
+
+/*
+ * Pulled back by its own padding, so the glyph — not the box around it — sits
+ * on the gutter. Without this the control drew 7px right of where the title
+ * starts when the sidebar has taken it, and the two states disagreed about
+ * where the bar begins.
+ */
+.main__header > .icon-button:first-child {
+  margin-left: calc(var(--control-bleed) * -1);
+}
+
+/*
+ * On a wide window the sidebar takes its space back from the main column.
+ *
+ * The sidebar is positioned rather than laid out, so without this `main` keeps
+ * the full window width and centres its content in it — putting the left edge
+ * of the transcript and the composer *underneath* the sidebar. Content you
+ * cannot see is worse than content that moves, so the inset applies to the
+ * whole column and it centres in the space that is actually visible.
+ *
+ * On a narrow window it does not apply: there the sidebar is a drawer over the
+ * page, and insetting would shove the header and transcript off the right-hand
+ * edge to make room for something that is already covering them.
+ */
+.shell[data-sidebar='expanded']:not([data-narrow='true']) .main {
+  padding-left: var(--sidebar-width);
+}
+
+/* --- the artifact panel -------------------------------------------------- */
+
+/*
+ * An artifact, open beside the conversation that produced it.
+ *
+ * Positioned against the shell rather than laid out inside `main`, for the
+ * reason the sidebar is: `main` is the scroll container for the transcript, and
+ * making it a row would mean the transcript and the panel fighting over one
+ * height. The panel takes its width off the main column's right-hand padding
+ * instead, exactly as the sidebar takes its own off the left.
+ */
+:root {
+  --artifact-width: 32rem;
+}
+
+.artifact-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 12;
+  width: min(var(--artifact-width), 100%);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  animation: artifact-in var(--motion) var(--ease-out);
+}
+
+.main--with-artifact {
+  padding-right: min(var(--artifact-width), 100%);
+}
+
+/*
+ * On a narrow window it covers the conversation instead of sitting beside it.
+ *
+ * There is not room for both, and a 32rem panel on a phone would leave the
+ * transcript as a sliver — which is worse than being covered, because a sliver
+ * looks like it is still meant to be read.
+ */
+@media (max-width: 60rem) {
+  .main--with-artifact {
+    padding-right: 0;
+  }
+
+  .artifact-panel {
+    width: 100%;
+    border-left: none;
+  }
+}
+
+@keyframes artifact-in {
+  from {
+    transform: translateX(1rem);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-panel {
+    animation: none;
+  }
+}
+
+/* Dismisses the drawer, and dims what it is covering so it reads as temporary. */
+/* A passthrough wrapper that exists only to carry `inert`. */
+.sidebar-host {
+  display: contents;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: color-mix(in srgb, #000 45%, transparent);
+  animation: fade-in var(--motion-fast) var(--ease-out);
+}
+
+.main__title {
+  /* What an icon button holds around its glyph, so the title starts on the
+     column the control's glyph starts on — whichever header it is in. */
+  padding-left: 0.4375rem;
+  font-size: 0.90625rem;
+  font-weight: 400;
+  line-height: 1.5rem;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The transcript: the other scroll container. */
+.transcript {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  /* Stops a streaming reply from making the browser fight the scroll anchor. */
+  overflow-anchor: none;
+  /*
+   * Reaching the end of the transcript stops there rather than handing the
+   * gesture on. There is nothing behind it to scroll — the document is
+   * `overflow: hidden` — so what this actually suppresses is the overscroll
+   * *glass*: the rubber-band on iOS and pull-to-refresh on Android, both of
+   * which read as the whole app coming loose when the reader is only trying to
+   * reach the last message.
+   */
+  overscroll-behavior: contain;
+}
+
+/*
+ * One measure for the transcript and the composer, so the composer sits
+ * directly under the column of text rather than drifting wider than it.
+ *
+ * 48rem is measured off the reference, where the composer is 768px against our
+ * 1005. Wider than a typical prose measure still, because the assistant's
+ * answers are meant to read as documents rather than as a narrow centred
+ * column — but no longer most of a wide window.
+ */
+.transcript__inner,
+.composer-region__inner {
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.transcript__inner {
+  /* The bottom is deeper than the top on purpose. The last message's controls
+     hang below it and eat most of this padding themselves, so it has to cover
+     their height as well as the gap — otherwise they sit against the composer. */
+  /* The side insets matter in landscape, where the cutout is beside the text
+     rather than above it and an unpadded first character sits under it. */
+  padding: 2.5rem max(var(--column-inset), var(--safe-right)) 4.5rem
+    max(var(--column-inset), var(--safe-left));
+  display: flex;
+  flex-direction: column;
+  /* Fills the scroll port even when nearly empty, so the empty state's
+     `margin: auto` has a full column height to centre itself within. */
+  min-height: 100%;
+  /*
+   * Turns are separated by whitespace alone — there are no dividers or speaker
+   * labels, so the gap is the only thing marking the boundary. Enough to part
+   * them clearly, but not so much that a one-word reply floats away from the
+   * question it answers.
+   *
+   * The spacing itself is each message's own bottom margin rather than a gap
+   * on this column, because the two sides carry different amounts: a question
+   * sits closer to the answer it gets than an answer does to the next question.
+   */
+  gap: 0;
+}
+
+/* Holds the room the last question is pushed up into. Its height is measured
+   and set from `useTailSpace`; it draws nothing. */
+.transcript__tail {
+  flex: none;
+}
+
+/*
+ * The composer sits at the bottom of the shell, and the shell is `100dvh`.
+ *
+ * With `interactive-widget=resizes-content` the keyboard shortens the layout
+ * viewport, so `dvh` resolves to the space left above the keys and the composer
+ * follows it up with no measurement at all. This is the whole of the
+ * keyboard-avoidance strategy: there is no `visualViewport` listener, because
+ * CSS already expresses it and a JS one would have to fight the same reflow it
+ * was reacting to.
+ */
+.composer-region {
+  flex: none;
+  padding: 0 max(var(--column-inset), var(--safe-right)) max(1.25rem, var(--safe-bottom))
+    max(var(--column-inset), var(--safe-left));
+}
+
+/* A phone-width window gives the column its edges back — 768px, the width the
+   reference tightens this at, and unlike the type scale it applies to a shrunk
+   desktop window too: the room really is gone either way. */
+@media (max-width: 767px) {
+  :root {
+    --column-inset: 1rem;
+  }
+}
+
+/* Positioning context for the jump-to-latest control above it. */
+.composer-region__inner {
+  position: relative;
+}
+
+/* --- artifact panel ----------------------------------------------------- */
+
+/*
+ * A column on the right, laid out exactly as the sidebar is on the left: an
+ * absolutely-positioned overlay, with `.main` inset to make room for it.
+ *
+ * The same reasoning as the sidebar's, for the same reason. Putting the shell
+ * on a grid would mean opening a panel re-wraps every line of the conversation
+ * beside it — the text shifting under the reader for something that had nothing
+ * to do with the text. Insetting the main column moves it once, predictably,
+ * and the transcript's own max-width does the rest.
+ */
+.artifact {
+  position: absolute;
+  inset: 0 0 0 auto;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  width: var(--artifact-width);
+  max-width: 100%;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  /* Cannot be reached by the page behind it; the panel scrolls internally. */
+  overflow: hidden;
+}
+
+.shell[data-artifact='open']:not([data-narrow='true']) .main {
+  padding-right: var(--artifact-width);
+}
+
+/*
+ * Below the breakpoint there is no "beside": the panel takes the window.
+ *
+ * It sits above the sidebar drawer's z-index so that opening an artifact from
+ * the gallery — which is reached through the drawer on a phone — does not land
+ * behind it.
+ */
+@media (max-width: 56rem) {
+  .artifact {
+    z-index: 30;
+    width: 100%;
+    border-left: none;
+    /* Clear of the home indicator on a phone, via the same token the rest of
+       the layout uses rather than a second spelling of `env()`. */
+    padding-bottom: var(--safe-bottom);
+  }
+}

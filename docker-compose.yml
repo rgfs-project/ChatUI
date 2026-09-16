@@ -1,0 +1,138 @@
+# rgfschat, as it is meant to be run.
+#
+# Everything is here: the build, the persistent volume, and every operator task
+# that would otherwise need a host with Node on it. Nothing outside a container
+# is required — see the README for the four commands that make up a deployment.
+#
+#   docker compose up -d --build
+#   docker compose run --rm -i app create-admin --username you --admin
+#
+# The project name is pinned rather than taken from the directory this file
+# happens to sit in, because the volume and image names derive from it and are
+# quoted in the README: cloning into a differently named folder would otherwise
+# silently produce a different volume, and a deployment that renamed its folder
+# would come up with an empty one.
+name: workspace
+
+services:
+  app:
+    build: .
+    image: workspace_app:latest
+
+    # The published port. `127.0.0.1:3001:3001` instead if a reverse proxy on
+    # this host is the only thing that should reach it — and see
+    # TRUST_PROXY_HOPS below when you do.
+    ports:
+      - '${RGFSCHAT_PORT:-3001}:3001'
+
+    # The entire persistent boundary. A named volume, not a bind mount: the
+    # engine owns it, so it survives `up`, `down`, a rebuild and an image
+    # upgrade, and there is no host directory whose uid has to line up with the
+    # container's user. That last part is what makes rootless Podman work
+    # without `--userns=keep-id` or an SELinux relabel.
+    volumes:
+      - chatui-data:/data
+      # A certificate and key, if this terminates TLS itself. `:ro` because it
+      # only ever reads them; `:z` so SELinux allows the container to, on
+      # Fedora, RHEL and friends — harmless where SELinux is not enforcing.
+      # - ./tls:/tls:ro,z
+
+    environment:
+      NODE_ENV: production
+      PORT: '3001'
+      DATA_DIR: /data
+
+      # --- the model provider -------------------------------------------
+      #
+      # `localhost` inside a container is the container, never the host, so a
+      # provider running on this machine is NOT http://localhost:8080. Pick the
+      # line that matches where yours is (the README has the full table):
+      #
+      #   on this host        http://host.docker.internal:8080  (extra_hosts below)
+      #   another machine     http://192.168.1.50:8080
+      #   a compose service   http://llama:8080                 (service name)
+      #
+      # Keep it https:// or on a private network: a plaintext hop carries the
+      # key and every message.
+      #
+      # Empty by default, and deliberately: this file cannot know where your
+      # model server is, and guessing writes a provider on first start that is
+      # usually not there — permanently unavailable, in the first place an
+      # operator looks. Set it in .env and the first start records it; leave it
+      # and the admin panel is where a provider gets added.
+      LLAMA_BASE_URL: ${LLAMA_BASE_URL:-}
+      LLAMA_API_KEY: ${LLAMA_API_KEY:-}
+
+      # --- behind a reverse proxy ---------------------------------------
+      #
+      # How many proxies forward to this container. At 0 no forwarding header
+      # is believed and every request appears to come from the proxy, so the
+      # per-address limits on login and registration become one shared budget
+      # and the first caller to trip it locks out everybody. A count, never
+      # `true` — SECURITY.md E-2.
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+
+      # --- serving TLS directly -----------------------------------------
+      # Both or neither. Unset when a proxy in front terminates TLS.
+      # TLS_CERT_FILE: /tls/cert.pem
+      # TLS_KEY_FILE: /tls/key.pem
+
+      # ADMIN_PASSWORD is deliberately not here: a password in a committed file
+      # is a published password. Put it in .env (git-ignored) if you want the
+      # first account made at boot, or use `create-admin`, which reads it from
+      # stdin.
+
+    restart: unless-stopped
+
+    # The engine's init, rather than one installed in the image. The server
+    # handles SIGTERM itself, so this is here for reaping — and it means the
+    # image needs no apt layer for it.
+    init: true
+
+    # `host.docker.internal` is a Docker Desktop convenience; on Linux — which
+    # is what a server runs — it does not resolve at all unless it is mapped
+    # here. Without this the default provider URL above cannot connect on
+    # exactly the platform this is deployed on. Harmless where the name already
+    # exists. Podman 4.7+ understands `host-gateway` too.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+    # The process needs no privileges beyond opening a socket above 1024 and
+    # writing to its own volume, and it already runs as `node` rather than
+    # root. Saying so here means a flaw in a dependency cannot reach for
+    # anything more: `no-new-privileges` blocks a setuid binary from raising
+    # privileges mid-container, and dropping every capability leaves nothing to
+    # raise them to.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # Shutdown is prompt — in-flight generations are cancelled and the listener
+    # closed on SIGTERM — but the default 10s leaves no margin if a slow disk is
+    # mid-write when the signal lands. Past this, the engine sends SIGKILL,
+    # which is how a half-written file happens.
+    stop_grace_period: 30s
+
+    # One JSON line per request, and the default driver keeps every one of them
+    # forever. On a long-lived deployment that is a disk that fills for no
+    # reason anybody notices until it is full.
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+    # The image carries its own HEALTHCHECK, which reads PORT and the TLS
+    # variables the way the server does. It is repeated here so that
+    # `depends_on: condition: service_healthy` works under Podman too, whose
+    # default image format drops the instruction.
+    healthcheck:
+      test: ['CMD', 'entrypoint', 'healthcheck']
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  chatui-data:

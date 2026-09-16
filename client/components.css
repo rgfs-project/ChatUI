@@ -1,0 +1,3164 @@
+/* --- sidebar list -------------------------------------------------------- */
+
+/* 14px with 16px above it and 4px below, which is what separates one date from
+   the rows of the one before it. A step over the 13 measured off the reference,
+   in step with the rows it heads. */
+.sidebar__empty,
+.sidebar__group-label {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  padding: 1rem 0.625rem 0.25rem;
+  margin: 0;
+}
+
+.sidebar__group-label {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/*
+ * Rows are separated rather than stacked flush.
+ *
+ * Every row is a hit target with its own hover and selected background, and
+ * touching backgrounds read as one block that happens to have text in it. A
+ * small gap is enough to say where one ends.
+ */
+.sidebar__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sidebar__username {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+}
+
+.conversation {
+  display: flex;
+  align-items: center;
+  border-radius: 0.625rem;
+}
+
+.conversation.is-current {
+  background: var(--surface-3);
+}
+
+.conversation__open {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation {
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.conversation:not(.is-current):hover {
+  background: var(--surface-2);
+}
+
+.conversation__warning {
+  margin-right: 0.375rem;
+}
+
+.conversation__actions {
+  display: flex;
+  padding-right: 0.25rem;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+.conversation:hover .conversation__actions,
+.conversation:focus-within .conversation__actions,
+/* Held open while its menu is: the pointer has left the row to use the menu,
+   and a trigger that vanishes under the menu it opened reads as a glitch. */
+.conversation__actions.is-open {
+  opacity: 1;
+}
+
+/*
+ * 15px glyph in 4px of padding, as in the message-actions row, and starting
+ * from --faint: it is the quietest thing in a row whose title is what is meant
+ * to be read.
+ */
+.conversation__actions .icon-button {
+  width: 1.4375rem;
+  height: 1.4375rem;
+  border-radius: 0.25rem;
+  color: var(--faint);
+}
+
+/* --- transcript ---------------------------------------------------------- */
+
+/* Centred in the transcript, vertically and horizontally. */
+.empty-state {
+  margin: auto 0;
+  text-align: center;
+}
+
+.empty-state h2 {
+  font-size: 1.6875rem;
+  font-weight: 400;
+  color: var(--text-soft);
+  margin: 0 0 0.75rem;
+}
+
+/* The same size as the model's own control below it: on an empty conversation
+   these two are the same fact, stated in the two places it is wanted. */
+.empty-state p {
+  font-size: 0.9375rem;
+  color: var(--faint);
+  margin: 0.5rem 0 0;
+}
+
+.msg {
+  position: relative;
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  /* Arriving from search, a message lands under the header rather than flush
+     against it. */
+  scroll-margin-top: 1.5rem;
+}
+
+/*
+ * The user's turn is a column, not the bubble itself: the bubble holds what
+ * was said, and the controls sit under it on the page. Wrapping both in the
+ * bubble's own background put the timestamp and the icons inside the bubble.
+ *
+ * Turns are spaced by their own bottom margin rather than by a gap on the
+ * column, because the two sides are spaced differently: 32px under a question,
+ * 40px under an answer, as the reference has them.
+ */
+.msg--user {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-bottom: 2rem;
+}
+
+/* The user speaks in a bubble; the assistant answers as a document. Only one
+   side needs a container for the alternation to be legible.
+
+   Boxed to the reference's own measurements: 85% of the column, 16px of
+   horizontal padding against 10 vertical, a 1rem radius with the bottom-right
+   turned down to 6px — the corner nearest the side the message came from,
+   which points the bubble at its author the way a tail does without drawing
+   one. A one-word message comes out 66 x 45, as it does there. */
+.msg__bubble {
+  max-width: 85%;
+  background: var(--hover);
+  border-radius: 1rem 1rem 0.375rem 1rem;
+  padding: 0.625rem 1rem;
+}
+
+/*
+ * 10 against 16 is a text bubble's own vertical rhythm — line-height already
+ * puts air above and below a word, so the padding needs less of its own. An
+ * attachment carries no such rhythm: with nothing else in the bubble, the
+ * same padding read as noticeably more room to the sides than above and
+ * below the picture. Squared to the horizontal figure so the frame around an
+ * image is even on every side, the way a photo's mat would be.
+ */
+.msg__bubble:has(> .attachments:only-child) {
+  padding: 1rem;
+}
+
+.msg--user .msg__body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg--assistant {
+  align-self: stretch;
+  margin-bottom: 2.5rem;
+}
+
+/* The answer reads a half-step larger and a touch looser than the question:
+   it is the part that gets read at length. */
+.msg--assistant .msg__body {
+  font-size: 0.96875rem;
+  line-height: 1.7;
+}
+
+.msg__status {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  border-left: 2px solid var(--border-strong);
+  padding-left: 0.625rem;
+}
+
+/*
+ * What went wrong, under the outcome it explains.
+ *
+ * Its own line rather than a continuation of the label: "Failed" is the fact
+ * and the sentence under it is the explanation, and running them together
+ * makes a short label read as the start of a long one.
+ */
+.msg__reason {
+  display: block;
+  margin-top: 0.125rem;
+  color: var(--muted);
+}
+
+.msg__empty {
+  margin: 0;
+  font-style: italic;
+}
+
+/*
+ * In flow, and always there.
+ *
+ * Revealing this row on hover meant it had to be taken out of flow — otherwise
+ * the space it reserved read as enormous bubble padding — and out of flow it
+ * then overlapped whatever came next on a touch screen, where it is always
+ * shown because there is no hover. The reference simply keeps it in the
+ * document at every width, which is both simpler and steadier: nothing moves
+ * or appears as the pointer crosses the transcript.
+ */
+.msg__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  /* Close under the text they belong to. The row is chrome attached to a
+     message, not a band between two messages, so it sits nearer its own
+     message than to the next one. */
+  margin-top: 0.5rem;
+  color: var(--faint);
+  font-size: 0.78125rem;
+  /* Hidden, not removed, while the answer is still arriving: the row keeps its
+     space so the transcript does not jump when generation ends. */
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+/* 15px glyph in 4px of padding, the size the reference draws them at. */
+.msg__actions .icon-button {
+  width: 1.4375rem;
+  height: 1.4375rem;
+  border-radius: 0.25rem;
+  color: inherit;
+}
+
+/* When it was sent, read at a glance rather than by opening the file — the
+   same caption scale used for a fact stated rather than acted on elsewhere in
+   the app. Tabular figures so the row does not twitch as the minutes tick. */
+.msg__time {
+  margin-right: 0.25rem;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The conversation row's controls are still hover-revealed, and there is no
+   hover here to reveal them. */
+@media (hover: none) {
+  .conversation__actions {
+    opacity: 1;
+  }
+}
+
+/*
+ * A message arrived at from search.
+ *
+ * A ring rather than a change of background: the assistant's turn has no
+ * container to fill, so the two sides would have to be marked differently, and
+ * marking the *edges* works the same on both. It fades of its own accord —
+ * finding the line is the point, and a mark that stayed would become another
+ * thing to dismiss.
+ */
+.msg.is-found {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 0.5rem;
+  animation: found-fade 2s var(--ease-out) forwards;
+}
+
+/* The assistant's turn has no shape of its own, so the ring is given one. */
+.msg--assistant.is-found {
+  border-radius: 1.625rem;
+}
+
+/* The user's turn is a full-width column holding a bubble, so the ring goes
+   round the bubble — round the column it would span the whole measure to mark
+   a few words. */
+.msg--user.is-found {
+  outline: none;
+  animation: none;
+}
+
+.msg--user.is-found .msg__bubble {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 0.5rem;
+  animation: found-fade 2s var(--ease-out) forwards;
+}
+
+@keyframes found-fade {
+  0%,
+  60% {
+    outline-color: var(--border-strong);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+
+/*
+ * Editing takes the width of the column, not the width of the bubble.
+ *
+ * A user message is a flex item sized to its content, and a textarea's content
+ * width is its `cols` — about twenty characters. So the bubble collapsed to a
+ * narrow box the moment it went into edit mode, and a message that had read as
+ * one line came back wrapped over three. Stating the width settles it, and a
+ * roomy box is the right shape for rewriting in besides.
+ */
+.msg--editing {
+  width: 100%;
+  max-width: 100%;
+}
+
+/*
+ * The editor is the bubble, rather than a field drawn inside one. It inherits
+ * the bubble's surface and the message's own type, so what is being rewritten
+ * stays in the place and the shape it was read in.
+ */
+.msg__editor {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+/* The ring belongs on the bubble: on the textarea it redraws the inner box
+   this design exists to remove. Focus stays visible either way. */
+.msg__editor:focus-visible {
+  outline: none;
+}
+
+.msg--editing:focus-within {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
+.msg__edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.reasoning {
+  margin-bottom: 0.75rem;
+  border-left: 2px solid var(--border);
+  padding-left: 0.75rem;
+}
+
+.reasoning summary {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.78125rem;
+  list-style: none;
+}
+
+.reasoning summary::-webkit-details-marker {
+  display: none;
+}
+
+.reasoning__chevron {
+  transition: transform 120ms ease;
+}
+
+.reasoning[open] .reasoning__chevron {
+  transform: rotate(90deg);
+}
+
+.reasoning__body {
+  white-space: pre-wrap;
+  color: var(--muted);
+  font-size: 0.78125rem;
+  line-height: 1.6;
+  margin-top: 0.5rem;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.cursor {
+  display: inline-block;
+  width: 0.45rem;
+  height: 1.05rem;
+  background: var(--text);
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.thinking {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  height: 1.25rem;
+}
+
+.thinking span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--muted);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.thinking span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.thinking span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor,
+  .thinking span {
+    animation: none;
+  }
+}
+
+.malformed {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  background: var(--surface);
+}
+
+.malformed h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.malformed p {
+  margin: 0 0 1rem;
+  line-height: 1.6;
+}
+
+/* Centred just above the composer, anchored to it rather than to the
+   transcript so it keeps the same distance however the transcript scrolls. */
+.jump-to-latest {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 10%);
+  /* The centred variant: a plain `translateY` keyframe would drop the
+     `translateX(-50%)` that centres it and make it jump right on entry. */
+  animation: rise-in-centred var(--motion) var(--ease-out);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.jump-to-latest:hover {
+  background: var(--surface-2);
+  /* Keeps the centring translate while nudging it up. */
+  transform: translate(-50%, -2px);
+}
+
+/*
+ * Entrances.
+ *
+ * Overlays are mounted on demand, so they animate with keyframes rather than a
+ * transition — there is no previous state for a transition to run from. Each
+ * one rises a few pixels into place: enough to read as arriving, small enough
+ * that it never moves far from where it will end up, which matters because
+ * these are things the pointer is already heading towards.
+ */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes rise-in-centred {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* --- composer ------------------------------------------------------------ */
+
+/* A raised white card on the canvas, with the controls on a second row so the
+   text field keeps the full width of the box. */
+/* 768 x 98 with a 1rem radius and 10px of padding, from the reference's own
+   box model. */
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--raised);
+  padding: 0.625rem;
+}
+
+.composer:focus-within {
+  border-color: var(--border-strong);
+}
+
+.composer__input {
+  width: 100%;
+  border: none;
+  background: none;
+  outline: none;
+  resize: none;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  /*
+   * One line, and no more, until something is typed.
+   *
+   * The resting composer is the most-seen piece of furniture in the app and it
+   * was holding two lines' worth of room for a field with nothing in it. The
+   * height is set from the text by the measurement in `Composer.tsx`; this is
+   * the floor it starts from and returns to when the field is emptied or a
+   * message is sent. The cap matches `MAX_HEIGHT_PX` there — past it the field
+   * scrolls rather than eating the transcript.
+   */
+  padding: 0.25rem 0.5rem;
+  min-height: 1.75rem;
+  max-height: 12.5rem;
+  overflow-y: auto;
+  /*
+   * Centres a single line in whatever the floor above ends up being, rather
+   * than pinning it to the top of the box. Padding alone can't do this: the
+   * touch-target floor below sets `min-height` well past one line's worth of
+   * padding-plus-text, and a `<textarea>` starts its content at the top of
+   * that box by default, not the middle — the couple of typed lines a reader
+   * actually sees sat noticeably closer to the top than the bottom. This
+   * tracks whatever the floor happens to be at any breakpoint instead of a
+   * padding number computed by hand to match one of them.
+   */
+  align-content: center;
+}
+
+.composer__input::placeholder {
+  color: var(--muted);
+}
+
+/*
+ * These inputs are borderless children of a container that already shows focus
+ * (`.composer:focus-within`, and the pill around each search field). Left to
+ * the global rule they drew a second focus ring *inside* that container.
+ */
+.composer__input:focus-visible,
+.search input:focus-visible,
+.model-menu__search input:focus-visible {
+  outline: none;
+}
+
+/*
+ * Attach and model on the left as one group, send on the right.
+ *
+ * `space-between` spread all three evenly, which left the model selector
+ * stranded in the middle of the bar. The two things that decide what is *in*
+ * the message belong together; the send button is the only thing that belongs
+ * at the other end, and `margin-left: auto` on it is what says so — rather
+ * than a wrapper element that exists only to hold two children.
+ */
+.composer__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/*
+ * 28px, so the glyph lines up with the text above it.
+ *
+ * A "+" is drawn well inside its own box — about 4px of it at this size — so a
+ * control centred on the column the text starts from puts the visible cross to
+ * the right of the first letter. Narrowing the box moves the glyph left by half
+ * the difference, which is what buys those pixels back. Grown to a 44px tap
+ * target it was worse still: a third of the height of the box it sits in, hard
+ * against the corner, with the 10px of padding that reads as air around it
+ * gone. The bar is the full width of the screen and nothing crowds it.
+ */
+.composer__bar .icon-button {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.composer__send,
+.composer__send--stop {
+  margin-left: auto;
+}
+
+.composer__send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  flex: none;
+}
+
+/* Disabled is the resting state of an empty composer, so it gets a real
+   appearance rather than a dimmed version of the filled button. */
+.composer__send:disabled {
+  background: var(--surface-2);
+  color: var(--muted);
+  opacity: 1;
+}
+
+.composer__send {
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-radius var(--motion) var(--ease-out),
+    opacity var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.composer__send:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: scale(1.06);
+}
+
+.composer__send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+/* Stop squares off, so the shape changes with the action and not just the
+   glyph inside it. */
+.composer__send--stop {
+  border-radius: 0.875rem;
+}
+
+/*
+ * The gap matches the side padding.
+ *
+ * At 6px against 8px margins the chevron sat closer to the label than to the
+ * edge, so the pair read as crowded to one side rather than as one control
+ * with even air around it. One value for both spaces removes the question.
+ */
+.model-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  /* Matches `.model-option__name` — the trigger shows the same model name the
+     menu's rows do, so it reads oddly if the two disagree on size or weight. */
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.model-trigger {
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+/* --- model menu (portalled) ----------------------------------------------
+
+   Sized with the composer it opens from rather than on its own terms: at 16px
+   rows in a 24rem box it was the largest type on a screen whose own message
+   field is 14, so the menu read as a different application's. */
+
+.model-menu {
+  position: fixed;
+  z-index: 100;
+  width: 22.25rem;
+  max-width: calc(100vw - 1rem);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  /* The composer's own radius, not the shared --radius: the two are stacked
+     one directly above the other, and two nested cards whose corners are cut
+     to different curves read as a misalignment rather than as a pair. */
+  border-radius: 1rem;
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  animation: rise-in var(--motion) var(--ease-out);
+}
+
+.model-menu__search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--faint);
+}
+
+.model-menu__search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 0.84375rem;
+}
+
+.model-menu__list {
+  max-height: 20rem;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+.model-menu__empty {
+  padding: 0.75rem 0.875rem;
+  margin: 0;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--faint);
+}
+
+.model-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.model-option {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.model-option:hover,
+.model-option[aria-selected='true'] {
+  background: var(--hover);
+}
+
+.model-option__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-option__tags,
+.model-option__provider {
+  color: var(--faint);
+  font-size: 0.75rem;
+  flex: none;
+}
+
+.model-option__check {
+  margin-left: auto;
+  flex: none;
+}
+
+/* --- markdown ------------------------------------------------------------ */
+
+.markdown {
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol {
+  margin: 0.875rem 0;
+}
+
+.markdown blockquote {
+  margin: 1rem 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 1.5rem 0 0.75rem;
+  line-height: 1.35;
+}
+
+/* Descending, which they were not: an h2 set larger than the h1 above it
+   inverted the outline of any answer that used both. */
+.markdown h1 {
+  font-size: 1.1875rem;
+}
+.markdown h2 {
+  font-size: 1.0625rem;
+}
+.markdown h3 {
+  font-size: 0.96875rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.25rem;
+}
+
+.markdown li {
+  margin: 0.375rem 0;
+}
+
+.markdown blockquote {
+  border-left: 2px solid var(--border-strong);
+  padding-left: 1rem;
+  color: var(--muted);
+}
+
+.markdown a {
+  color: var(--text);
+  text-underline-offset: 2px;
+}
+
+/* A link whose scheme was refused: shown, but inert. */
+.link-blocked {
+  text-decoration: line-through;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+}
+
+.inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--surface-2);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+}
+
+.code-block {
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  overflow: hidden;
+  margin: 0 0 1rem;
+  background: var(--surface);
+}
+
+.code-block__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.5rem 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.code-block__lang {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+/* The block scrolls; the page never does. */
+.code-block pre {
+  margin: 0;
+  padding: 0.875rem;
+  overflow-x: auto;
+}
+
+.code-block code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+/*
+ * Wide tables scroll inside their own container, never the page.
+ *
+ * `scrollbar-gutter` keeps the bar's space reserved rather than letting an
+ * overlay scrollbar appear only on hover: a table that scrolls sideways has to
+ * *say* so, or the columns past the edge are simply invisible. The wrapper is
+ * focusable for the same reason — a scrollable region reachable only by
+ * dragging is not reachable at all without a mouse.
+ */
+.table-scroll {
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+  margin: 0 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+}
+
+.table-scroll:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
+/*
+ * Sized to its contents, and at least as wide as the message.
+ *
+ * `width: 100%` squeezed every column into the message's width however much
+ * was in them, and with the `word-break: break-word` inherited from `.markdown`
+ * the result was headings chopped mid-word — "Architect / ures" — in columns
+ * two characters wider than they needed to be. Growing past the edge and
+ * scrolling is the honest answer: the wrapper above is what it scrolls in.
+ */
+.markdown table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.9375rem;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 0.625rem 0.875rem;
+  text-align: left;
+  vertical-align: top;
+  /*
+   * Ordinary words are never broken: `word-break: normal` undoes the
+   * transcript-wide rule, and `overflow-wrap: break-word` steps in only for a
+   * word that cannot fit on a line of its own — a hash, a URL, an identifier —
+   * which is the case the rule was there for.
+   */
+  word-break: normal;
+  overflow-wrap: break-word;
+  /* Wide enough that a label wraps at a space rather than inside a word, and
+     bounded so one long cell cannot drag the table out to an absurd width. */
+  min-width: 7rem;
+  max-width: 24rem;
+}
+
+/* A phone has no room for a 7rem minimum in three columns; the wrapper still
+   scrolls, and the padding stays readable rather than being squeezed away. */
+@media (max-width: 30rem) {
+  .markdown th,
+  .markdown td {
+    min-width: 5.5rem;
+    max-width: 16rem;
+    padding: 0.5rem 0.625rem;
+  }
+}
+
+.markdown th {
+  background: var(--surface-2);
+  font-weight: 500;
+}
+
+.markdown table tr > *:first-child {
+  border-left: none;
+}
+.markdown table tr > *:last-child {
+  border-right: none;
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+
+/* --- sign in and dialogs -------------------------------------------------- */
+
+.signin {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: var(--bg);
+}
+
+.signin__card,
+.modal__card {
+  width: 100%;
+  max-width: 18rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+/*
+ * Its own width and padding, no longer the dialog's.
+ *
+ * `.modal__card` is a question asked over a page the reader is coming back to,
+ * so it is deliberately small. This is the whole screen, with nothing behind
+ * it — at 18rem it read as a dialog that had lost its page.
+ */
+.signin__card {
+  max-width: 20rem;
+  gap: 1.25rem;
+  padding: 1.75rem;
+}
+
+/* The name and the line under it are one unit, so they sit closer to each
+   other than the card's own gap puts anything else. */
+.signin__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.signin__card h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.signin__head .muted {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+/*
+ * What went wrong, shaped like the notice it sits beside.
+ *
+ * This carried no rule at all, so it inherited the body's 16px and came out the
+ * largest and heaviest thing on the card — bigger than the labels beneath it
+ * and louder than the wordmark above. A failed attempt became the focal point
+ * of the screen, which is both ugly and backwards: the form is what the reader
+ * is here to use, and the error is a remark about it.
+ *
+ * Tinted rather than flat grey: a callout that borrows the surrounding
+ * surface colour for both good and bad news reads as one undifferentiated
+ * "something happened" box, which is what made it forgettable *and* homely
+ * at once. `--danger`/`--ok` were already in the palette for exactly this and
+ * sitting unused everywhere but a single attachment chip.
+ */
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--danger-border);
+  border-radius: 0.625rem;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.error__icon,
+.notice__icon {
+  flex: none;
+  margin-top: 0.0625rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+/* 0.75rem, not 0.6875: a field label is read once before typing and was the
+   smallest text in the application, a size below even the button labels it
+   sits above. */
+.field > span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/*
+ * Scoped to labelled form fields on purpose. As a bare element selector this
+ * also claimed the search box and the model-menu filter, which are borderless
+ * inputs living inside their own pill — they came out as a white bordered box
+ * nested in a grey one.
+ */
+.field input {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5rem;
+  padding: 0.4375rem 0.625rem;
+  font-size: 0.8125rem;
+  outline: none;
+}
+
+.signin__card button[type='submit'],
+.modal__card button[type='submit'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: var(--button-padding);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--button-font-size);
+}
+
+.signin__card button[type='submit']:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+/*
+ * A quiet, low-commitment action — cancel, or a secondary route out.
+ *
+ * No underline: sitting beside two real buttons it does not need to advertise
+ * that it is clickable, and the rule only added noise to a row that is already
+ * three controls wide. The colour lift on hover carries that instead.
+ */
+button.linkish {
+  background: none;
+  /* Transparent rather than none: the bordered buttons beside it are 2px
+     taller otherwise, and the row stops lining up. */
+  border: 1px solid transparent;
+  color: var(--muted);
+  padding: var(--button-padding);
+  font-size: var(--button-font-size);
+  transition:
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+button.linkish:hover {
+  color: var(--text);
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  /*
+   * Above the admin panel, which is itself an overlay a dialog can be opened
+   * *from*. At 200 against its 300 the confirmation before clearing a user's
+   * history rendered behind the panel that asked for it: the click appeared to
+   * do nothing, and the only way to reach the button was to close the panel
+   * the dialog belonged to.
+   *
+   * The ladder, low to high: scrim 15, sidebar 20, message controls 1 (local),
+   * model menu 100, admin panel 300, popup menu 400, dialog 500, and the
+   * select's own list 600 — a select can appear inside any of them.
+   */
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  padding: 1.5rem;
+  animation: fade-in var(--motion-fast) var(--ease-out);
+}
+
+.modal .modal__card {
+  animation: scale-in var(--motion) var(--ease-out);
+}
+
+.modal__card h2 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.modal__actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
+/*
+ * Destructive actions are marked by an outline rather than a colour, since the
+ * palette is achromatic and red is not available to carry the warning.
+ */
+/* Specific enough to beat `.modal__card button[type='submit']`, which would
+   otherwise fill it like any other primary action. */
+.modal__card button[type='submit'].button-destructive {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--text);
+}
+
+.modal__card button[type='submit'].button-destructive:hover:not(:disabled) {
+  background: var(--text);
+  color: var(--raised);
+  opacity: 1;
+}
+
+/* The backdrop dims what is behind it, so the dialog reads as modal. */
+.modal {
+  backdrop-filter: blur(2px);
+}
+
+/* --- menus ---------------------------------------------------------------- */
+
+/*
+ * A popup menu. Fixed, because it is portalled to the body and positioned
+ * against a trigger that lives inside a scroll container — absolute would put
+ * it relative to the page rather than to what the reader can see.
+ */
+.menu {
+  position: fixed;
+  z-index: 400;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.375rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  /* Tighter and fainter than the 32px/18% this used to carry, which stacked
+     under the hairline border and read as a dark ring drawn around the menu
+     rather than as a lift off the sidebar. */
+  box-shadow: var(--shadow-pop);
+  animation: scale-in var(--motion-fast) var(--ease-out);
+}
+
+.menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  text-align: left;
+  color: var(--text-soft);
+  font-size: 0.84375rem;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.menu__item.is-active {
+  background: var(--hover);
+}
+
+.menu__item:active {
+  transform: scale(0.97);
+}
+
+.menu__icon {
+  display: inline-flex;
+}
+
+/* No colour: the palette is achromatic on purpose, and destructive is carried
+   by the separator above it, as it is on the dialogs' destructive button. */
+
+/* --- account row ---------------------------------------------------------- */
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.75rem;
+  /* A button centres its text; this one is a row, and the name belongs beside
+     the avatar rather than floating in the middle of the footer. */
+  text-align: left;
+  color: var(--text);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.account:hover {
+  background: var(--surface-2);
+}
+
+.account:active {
+  transform: scale(0.98);
+}
+
+.account__chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+/* Down at rest and up once the menu is open — it points at where the menu
+   will be, then at the row it came from. */
+.account__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* --- search palette ------------------------------------------------------- */
+
+/*
+ * Wide enough for a line of a message with its context, and centred in the
+ * window like every other overlay here.
+ *
+ * The list has a fixed maximum height rather than growing with the results, so
+ * a centred card does not walk up the screen as answers arrive.
+ */
+.palette {
+  width: 100%;
+  max-width: 32rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  animation: scale-in var(--motion) var(--ease-out);
+}
+
+.palette__field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.palette__field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.palette__field input::placeholder {
+  color: var(--muted);
+}
+
+/* A floor as well as a ceiling: centred, a card that sized itself to its
+   results would slide up the screen as they arrived and leave the reader
+   chasing the row they were about to click. */
+.palette__list {
+  min-height: 14rem;
+  max-height: min(60vh, 24rem);
+  overflow-y: auto;
+  padding: 0.375rem;
+}
+
+.palette__label {
+  margin: 0.25rem 0.5rem 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.palette__empty {
+  margin: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.palette__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.625rem;
+  text-align: left;
+  color: var(--text);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+/* One highlight, driven by the keyboard cursor. The mouse moves the cursor
+   rather than painting a second, competing one. */
+.palette__row.is-active {
+  background: var(--surface-2);
+}
+
+.palette__row:active {
+  transform: scale(0.99);
+}
+
+.palette__icon {
+  flex: none;
+  margin-top: 0.125rem;
+  color: var(--muted);
+}
+
+.palette__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.palette__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+}
+
+/* Two lines, then it stops: a snippet is an identifier, not the message. */
+.palette__snippet {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Inline-block, because a plain inline child of a `-webkit-box` loses its
+   margins and the speaker ran straight into the snippet. */
+.palette__from {
+  display: inline-block;
+  margin-right: 0.375rem;
+  color: var(--text);
+}
+
+.small {
+  font-size: 0.875rem;
+}
+
+/* --- boot, boundaries, notices -------------------------------------------- */
+
+.booting {
+  display: grid;
+  place-items: center;
+  height: 100dvh;
+  background: var(--bg);
+}
+
+/* The ring and its label as one inline unit, so it drops into a list row, a
+   chip, or the middle of an empty page without a wrapper per site. */
+.spinner-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/*
+ * A turning ring.
+ *
+ * The contrast sits on one arc rather than the whole circle, because a ring of
+ * even weight rotating is indistinguishable from a ring standing still — the
+ * asymmetry is the entire reason it reads as motion. Track and arc are
+ * `--border` and `--text`, so it stays achromatic like the rest of the app and
+ * inverts correctly in the dark theme without a second rule.
+ *
+ * Linear, not eased: an easing curve makes a spinner appear to stall at the
+ * ends of each turn, which reads as the app hanging rather than working.
+ */
+.spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  border: 2px solid var(--border);
+  border-top-color: var(--text);
+  border-radius: 999px;
+  animation: spin 700ms linear infinite;
+}
+
+/* In a line of text rather than alone on a page: the border thins with the
+   ring, since 2px on a 14px circle closes most of the hole and stops it
+   reading as a ring at all. */
+.spinner--small {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-width: 1.5px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Carried for a screen reader while the ring is doing the talking for everyone
+   else. Revealed below when the ring is not allowed to move. */
+.spinner__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * With motion suppressed the words come back and the ring goes away.
+ *
+ * `animation: none` would be the usual move, and it is wrong here: a stopped
+ * spinner is not a calmer spinner, it is a circle with one darker edge sitting
+ * on the screen looking like something that has failed. The sentence says the
+ * same thing and says it without moving.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    display: none;
+  }
+
+  /* Size is inherited rather than stated: this stands in for the ring wherever
+     it was, and a fixed size would be wrong in four of the five places. */
+  .spinner__label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip-path: none;
+    color: var(--muted);
+  }
+}
+
+/*
+ * A boundary replaces only its own region, so it is sized to sit inside a pane
+ * rather than taking over the viewport.
+ */
+.boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.boundary__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.boundary__detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-family: var(--font-mono);
+  word-break: break-word;
+}
+
+/* An explanation for an arrival the user did not ask for. Tinted with `--ok`
+   for the same reason `.error` is tinted with `--danger` — see the comment
+   there. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--ok-border);
+  border-radius: 0.625rem;
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* A report has more than one line to say, each its own fact rather than one
+   run-on sentence trying to hold all of them. Plain text colour: the ok/warn/
+   danger tint belongs to the box as a whole, not to which of several true
+   statements happens to be read first. */
+.notice__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--text);
+}
+
+/*
+ * A third state between `.notice` and `.error`: nothing failed, but nothing
+ * was quite a clean success either — a session that ran out on its own, an
+ * import where half the rows already existed. Green for that would overstate
+ * it and red would overstate it the other way; amber is the one of the three
+ * that isn't a verdict.
+ */
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--warn-border);
+  border-radius: 0.625rem;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.warning__icon {
+  flex: none;
+  margin-top: 0.0625rem;
+}
+
+/*
+ * Corner notifications, `.notice`/`.warning`/`.error` fired as toasts instead
+ * of sat inline. `pointer-events: none` on the stack and `auto` again on each
+ * toast: the empty space around a corner stack must stay click-through to
+ * whatever is under it, which a container spanning that space would block.
+ *
+ * Set back from the very corner rather than flush against it: a settings or
+ * admin panel is itself centred with real width, and its own top edge often
+ * lands close to the viewport's top-right — flush, a toast there reads as
+ * part of that panel's header rather than as something floating above the
+ * whole page. The extra margin and heavier shadow below are what keep it
+ * read as a layer of its own over whatever is on screen.
+ */
+.toasts {
+  position: fixed;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(22rem, calc(100vw - 3rem));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  box-shadow: var(--shadow-toast);
+  animation: toast-in var(--motion) var(--ease-out);
+  transition:
+    opacity var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.toast.is-leaving {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* --- administration ------------------------------------------------------- */
+
+.panel {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(2px);
+  animation: fade-in var(--motion-fast) var(--ease-out);
+}
+
+.panel__card {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  width: min(52rem, 100%);
+  height: min(34rem, 100%);
+  overflow: hidden;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 28%);
+  animation: scale-in var(--motion) var(--ease-out);
+}
+
+/* The rail scrolls independently of the pane, so a long section list never
+   pushes the content out of reach. */
+.panel__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* Invisible at desktop — the rail's own flex column lays these out exactly as
+   if they were still its direct children. The mobile breakpoint below turns
+   this into the one part of the rail that actually scrolls. */
+.panel__rail-items {
+  display: contents;
+}
+
+/*
+ * The close control and the section buttons are one family.
+ *
+ * Their height is stated rather than left to their contents: identical padding
+ * still produced different boxes, because a line of text has a taller line box
+ * than the bare icon the close button contains — 47px against 39px. Fixing the
+ * height and centring inside it makes the two agree whatever they hold.
+ *
+ * The horizontal padding is shared too, so the close glyph sits on the same
+ * left edge as the section icons rather than a few pixels inside them.
+ */
+.panel__close,
+.panel__rail-item {
+  height: var(--panel-control-height);
+  padding: 0 0.75rem;
+  border-radius: 0.625rem;
+}
+
+/*
+ * Square. It holds one glyph, and the section buttons' horizontal padding —
+ * inherited from the rule above, which exists to line their *text* up — made
+ * it 4px wider than it is tall, so the one control in the rail that is only an
+ * icon was the one that did not look like an icon button.
+ */
+.panel__close {
+  align-self: flex-start;
+  width: var(--panel-control-height);
+  padding: 0;
+  margin-bottom: 0.5rem;
+}
+
+.panel__rail-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-align: left;
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.panel__rail-item {
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.panel__rail-item:hover {
+  background: var(--surface-2);
+}
+
+.panel__rail-item.is-current {
+  background: var(--surface-3);
+  font-weight: 500;
+}
+
+/*
+ * The default focus outline sits outside the button's own box and ignores its
+ * border-radius, so inside the rail's horizontally-scrolling, clipped strip it
+ * rendered as a stray square fragment sheared off by the scrollport edge. An
+ * inset box-shadow stays inside the button and follows its rounding exactly.
+ */
+.panel__rail-item:focus-visible,
+.panel__close:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--border-strong);
+}
+
+.panel__pane {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.125rem 1.25rem 1.5rem;
+  scrollbar-width: none;
+}
+
+.panel__pane::-webkit-scrollbar {
+  display: none;
+}
+
+.panel__title {
+  margin: 0 0 0.875rem;
+  font-size: 1.0625rem;
+  font-weight: 500;
+}
+
+/* The row is the unit the whole pane is built from: label and optional
+   description on the left, controls on the right, divided by a hairline. */
+.panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.25rem;
+  padding: 0.625rem 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Wraps to its own line rather than being squeezed to a sliver: below this,
+   the label and its description were breaking after almost every word. */
+.panel__row-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.panel__row-label {
+  font-size: 0.8125rem;
+}
+
+.panel__row-desc {
+  margin: 0.125rem 0 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+
+.panel__row-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex: 0 1 auto;
+}
+
+/* --- memories -------------------------------------------------------------- */
+
+/*
+ * A list of statements, not of documents. Each is shown as written, up to a
+ * few lines: a memory the reader cannot read back is one they cannot correct,
+ * and an imported one can be a whole page.
+ */
+.memories {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.memories__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--surface-2);
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.memories__text {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* The field the next one is written in, shaped like the rows above it so the
+   list reads as something you add to rather than a form beneath it. */
+.memories__add {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.375rem 0.375rem 0.375rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.625rem;
+}
+
+.memories__add input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.memories__add input::placeholder {
+  color: var(--muted);
+}
+
+/* --- select --------------------------------------------------------------- */
+
+/*
+ * A bordered control, sized to its label.
+ *
+ * The gap equals the side padding, so the three spaces inside the box — before
+ * the label, between label and chevron, after the chevron — are the same. It
+ * hugs its content rather than reserving a minimum width: with a minimum, the
+ * slack lands in the side padding and no amount of tuning makes the spacing
+ * even, because the box is wider than what it holds.
+ */
+.select {
+  display: inline-flex;
+  align-items: center;
+  /* Kept equal to the side padding above, per the rule this comment opens
+     with — so both move together when the shared token does. */
+  gap: 0.625rem;
+  padding: var(--button-padding);
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5rem;
+  font-size: var(--button-font-size);
+  text-align: left;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--text);
+}
+
+.select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select__chevron {
+  flex: none;
+  color: var(--muted);
+}
+
+/* Portalled, so a scrolling pane cannot clip it. */
+.select__menu {
+  position: fixed;
+  z-index: 600;
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0.25rem;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
+  animation: rise-in var(--motion-fast) var(--ease-out);
+  scrollbar-width: none;
+}
+
+.select__menu::-webkit-scrollbar {
+  display: none;
+}
+
+.select__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.4rem;
+  color: var(--text);
+  font-size: var(--button-font-size);
+  text-align: left;
+}
+
+/* Driven by state rather than `:hover`, so the keyboard and the pointer
+   highlight the same way. */
+.select__option.is-active {
+  background: var(--surface-2);
+}
+
+.select__option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `.select` is excluded: it is a dropdown, not an action, and carries its own
+   shape — without this the button rule outranks it on specificity and hands it
+   a button's padding and minimum width. */
+.panel__row-control button:not(.icon-button):not(.select),
+.panel__actions button:not(.icon-button),
+.panel__form-actions button:not(.button-primary):not(.linkish) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: var(--button-padding);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5rem;
+  font-size: var(--button-font-size);
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+/*
+ * One width down the right-hand edge of the rows — in the one pane that has a
+ * column of them.
+ *
+ * These labels differ in length — Refresh, Visible, Hidden — so left to
+ * themselves each button is a different size and the column of them has a
+ * ragged edge. A floor on the width lines them up, and the label stays centred
+ * inside it.
+ *
+ * Scoped, because that argument is about a *column*. Unscoped it also caught
+ * the lone Edit on a provider row, which has nothing to line up against: a
+ * four-letter quiet action came out 112px wide, wider than the ten-letter
+ * primary button below it, which is the opposite of the ranking those two are
+ * supposed to have.
+ */
+.panel__models .panel__row-control button:not(.icon-button):not(.select) {
+  min-width: 6rem;
+}
+
+/* A row of actions that belong to the pane rather than to one of its rows. */
+.panel__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.panel__form-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* 56rem, not 48: the same line `useNarrowViewport` watches. At 48 there was a
+   128px band where the sidebar had already become a drawer while the panel
+   still laid itself out as though a desktop were behind it. */
+@media (max-width: 56rem) {
+  /*
+   * A sheet that uses the phone, rather than a card floating in it.
+   *
+   * The desktop shape is a dialog: 52x34rem centred in 2rem of dimmed page,
+   * which is right when the page around it is what you are coming back to. On a
+   * 402x714 viewport those same numbers leave a 338px card capped at 544px tall
+   * — four fifths of the screen given to a backdrop, with the settings squeezed
+   * into the rest and scrolling inside their own little window. Nothing is
+   * clipped, but everything reads a size too small for the device.
+   *
+   * So on a phone it fills what it is given, minus enough margin to still read
+   * as a layer over the page. The insets are `max(…)` against the safe areas so
+   * the sheet clears the cutout and the home indicator rather than tucking
+   * under them.
+   */
+  .panel {
+    padding: max(1rem, var(--safe-top)) max(1rem, var(--safe-right)) max(1rem, var(--safe-bottom))
+      max(1rem, var(--safe-left));
+  }
+
+  .panel__card {
+    /* minmax(0, 1fr), not 1fr: a bare `1fr` track won't shrink past its
+       content's min-content size, which is exactly what the scrolling rail
+       below needs it to do — otherwise the whole card stretches to fit it. */
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    width: 100%;
+    height: 100%;
+  }
+
+  /*
+   * Scrolls sideways rather than wrapping.
+   *
+   * Wrapping put a lone section on a second line and changed the height of the
+   * whole strip as the list grew, which moved everything below it. One row that
+   * scrolls keeps the header a fixed height however many sections there are.
+   */
+  .panel__rail {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    overflow: visible;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* The close button stays put; only the section strip beside it scrolls. */
+  .panel__rail-items {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .panel__rail-items::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Never squeezed to fit: a shrunk label is worse than one you scroll to. */
+  .panel__rail-item,
+  .panel__close {
+    flex: none;
+  }
+
+  /*
+   * Both of these belong to the vertical rail, where the close control sits
+   * above the sections. Laid out in a row they only add space below the whole
+   * strip — 21px underneath against 12px on top, which is the padding reading
+   * as uneven.
+   */
+  .panel__close {
+    align-self: center;
+    margin-bottom: 0;
+  }
+}
+
+/* --- sampler -------------------------------------------------------------- */
+
+.sampler {
+  margin-top: 1.5rem;
+  animation: rise-in var(--motion-fast) var(--ease-out);
+}
+
+.sampler__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* A subheading under the pane's own title, so it sits a step below it. */
+.sampler__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.sampler__note {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+.sampler__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1.25rem 1.5rem;
+  margin: 1.5rem 0;
+}
+
+/*
+ * An overridden field is marked down its left edge rather than by colour,
+ * since the palette is achromatic and there is no hue to spend. The rule is
+ * quiet until it means something.
+ */
+.sampler__field {
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+
+.sampler__field.is-override {
+  border-left-color: var(--text);
+}
+
+.sampler__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* Sentence case, at `--button-font-size` — these name a control rather than
+   label a row, so they sit with the buttons and selects instead of with
+   `.panel__row-label`. This had drifted to 0.875rem, which put the sampler's
+   own grid a step larger than everything around it in the same pane. */
+.sampler__label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  cursor: help;
+}
+
+.sampler__field.is-override .sampler__label {
+  color: var(--text);
+}
+
+.sampler__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+/* Typed when a slider cannot land on the value you want. */
+/* Flush with the row edge, so the box's right side lands exactly on the end of
+   the slider below it. */
+.sampler__number {
+  width: 4.25rem;
+  padding: 0.2rem 0.375rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  color: var(--muted);
+  /* The label's size: the two sit on one row, and a readout larger than the
+     thing it is labelled by made the grid read as the pane's headline rather
+     than as one of its settings. */
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+.sampler__field.is-override .sampler__number {
+  color: var(--text);
+}
+
+.sampler__number:hover,
+.sampler__number:focus {
+  border-color: var(--border-strong);
+  outline: none;
+}
+
+.sampler__undo,
+.sampler__undo-slot {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+}
+
+.sampler input[type='range'] {
+  width: 100%;
+  margin: 0.5rem 0 0.25rem;
+  accent-color: var(--text);
+}
+
+/* Says where the number came from, which is the thing a number cannot say. */
+.sampler__origin {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.sampler__prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+/* Sized and bordered like the message editor, which is the other multi-line
+   field in the application. */
+.sampler__prompt textarea {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.625rem;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.sampler__prompt textarea::placeholder {
+  color: var(--muted);
+}
+
+/* The placeholders the prompt above accepts. Set in the monospace face so a
+   `{{TOKEN}}` reads as something to be typed exactly, not as prose. */
+.sampler__variables {
+  margin-top: 0.5rem;
+  line-height: 1.6;
+}
+
+.sampler__variables code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--text);
+}
+
+/* ==========================================================================
+   Touch
+   ==========================================================================
+
+   A finger is not a cursor: it covers roughly 44 CSS px and it arrives without
+   a hover to say where it is about to land. Both facts are asked as capability
+   queries rather than as widths, because they are properties of the input
+   device — a touchscreen laptop at 1440px needs the larger targets as much as a
+   phone does, and a phone attached to a mouse does not.
+   ========================================================================== */
+
+/*
+ * Real touch phones only, not a shrunk desktop window: `max-width` alone
+ * would also fire on a desktop browser resized narrow, and a mouse-driven
+ * layout does not need larger type just because the window got smaller.
+ * `hover: none` is what actually distinguishes a phone from a laptop with a
+ * touchscreen digitizer in addition to a trackpad — that laptop still
+ * reports `hover: hover`, so it keeps the desktop sizes.
+ */
+@media (max-width: 767px) and (hover: none) and (pointer: coarse) {
+  .msg,
+  .composer__input {
+    font-size: 1.0625rem;
+  }
+
+  .msg--assistant .msg__body {
+    font-size: 1.09375rem;
+  }
+
+  .msg__actions,
+  .reasoning summary,
+  .reasoning__body {
+    font-size: 0.90625rem;
+  }
+
+  .main__title {
+    font-size: 1.0625rem;
+  }
+
+  .empty-state h2 {
+    font-size: 1.875rem;
+  }
+
+  /*
+   * The sidebar grows with the transcript.
+   *
+   * It is the same reader at the same distance: a conversation set at 17 and a
+   * list of conversations set at 14 read as two applications, and the list is
+   * the half that is being *scanned* rather than read, which is the harder job
+   * of the two. The date headings stay a step behind the rows they head —
+   * they are punctuation in the list, not entries in it.
+   */
+  .nav-button {
+    font-size: 1.0625rem;
+  }
+
+  /*
+   * Both together, not `.model-trigger` alone.
+   *
+   * The trigger is always 1px under `.composer__input` — 0.875 against 0.9375
+   * on desktop, and that gap is what makes the model name read as a label
+   * beside the field rather than competing with it. Bumping only the trigger
+   * here for touch would hold that gap; bumping neither would lose it to the
+   * input's own touch bump instead, widening it to 3px. Carrying `.model-option`
+   * up with it is what the trigger is actually promised to match — the row
+   * showing the same model name inside the menu this opens.
+   */
+  .model-trigger,
+  .model-option {
+    font-size: 1rem;
+  }
+
+  .empty-state p {
+    font-size: 1rem;
+  }
+
+  .conversation__open,
+  .sidebar__username {
+    font-size: 1rem;
+  }
+
+  .sidebar__empty,
+  .sidebar__group-label {
+    font-size: 0.875rem;
+  }
+}
+
+@media (pointer: coarse) {
+  /*
+   * Nothing a finger can type into may be smaller than 16px.
+   *
+   * This is not a legibility preference, it is what stops iOS Safari zooming.
+   * Focus a field whose computed size is under 16px and Safari scales the whole
+   * page up to make it readable — and it does not scale back afterwards, so the
+   * layout is left cropped: the sidebar off one edge, a panel that no longer
+   * fits the screen, everything apparently the wrong size. Every text control
+   * here was between 13px and 15px, so every one of them did it.
+   *
+   * `1rem` rather than `16px` so a reader who has enlarged their browser's
+   * default text keeps the margin rather than being pinned at the threshold.
+   *
+   * Bare element selectors and `!important` on purpose. Each of these controls
+   * sets its own size through a class, which outranks an element selector, and
+   * listing the classes instead would mean the next field someone adds is the
+   * one that zooms — a regression that only appears on a phone, which is the
+   * worst place to discover it. This is a property of the input device, like
+   * the reduced-motion override at the top of the theme, and it has to win.
+   *
+   * Ranges and checkboxes are left out: they have no text to size, and they do
+   * not trigger the zoom.
+   */
+  input:not([type='range']):not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    font-size: 1rem !important;
+  }
+
+  /*
+   * The controls are grown, rather than given an invisible pad that is larger
+   * than they are.
+   *
+   * The pad is the usual trick — an absolutely positioned `::after` stretched
+   * to 44px and pushed behind with `z-index: -1` — and it has two failure modes
+   * that are both silent. Behind is behind: an ancestor that paints a
+   * background covers the pad, and taps that look like they are on the control
+   * land on the ancestor instead. And two neighbours 8px apart each grown by 6
+   * on a side overlap, so one of them quietly answers for four pixels of the
+   * other.
+   *
+   * Sizing the control itself has neither problem, and the cost is only that
+   * its hover and press fills are drawn at 44px on a device that has no hover
+   * and shows a press for 120ms. 56px headers and 65px footers already have the
+   * room.
+   */
+  /*
+   * The message-actions row is the exception: grown to 44px its four controls
+   * became a band as tall as a line of the message, spaced far wider apart
+   * than the row they belong to, and it read as chrome rather than as the
+   * message's own footnote. It keeps the size it has everywhere else.
+   */
+  .icon-button:not(
+    .msg__actions .icon-button,
+    .main__header .icon-button,
+    .composer__bar .icon-button
+  ) {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  /*
+   * The header's own control is the other exception, for the same reason from
+   * the other direction: grown, it pushed the title 12px right of where the
+   * reference sets it, and the two headers stopped agreeing across the seam.
+   * The bar is 56px tall, so the target it loses is width alone.
+   */
+  .main__header .icon-button {
+    height: 2.75rem;
+  }
+
+  /* Rows: height only. They are already the full width of their container, and
+     widening them is what would push a scroll container into overflowing.
+
+     The model trigger is not one of them, for all that it opens a menu like
+     one: it sits inline in the composer beside the attach and send controls,
+     and grown to 44 it became a pill half the height of the box it lives in,
+     with 12px of fill above and below a line of 13.5px type. */
+  .conversation__open,
+  .menu__item,
+  .model-option,
+  .panel__rail-item,
+  .nav-button,
+  .account {
+    min-height: 2.75rem;
+  }
+
+  /*
+   * The message field is a target as much as the buttons beside it — it is the
+   * one a reader aims at most often, and at 34px it was the smallest thing on
+   * the screen. `min-height` rather than `height` because it grows with what is
+   * typed into it and must keep doing so.
+   */
+  .composer textarea {
+    min-height: 2.75rem;
+  }
+}
+
+/*
+ * The same floor by width, not only by pointer.
+ *
+ * The rule above asks for a coarse pointer, which a phone has and a narrow
+ * window on a laptop does not — and a narrow window is where the composer is
+ * hardest to hit for everyone, thumbs or not. Duplicated rather than merged
+ * into one query because the two ask different questions: that one is about
+ * fingers, this one is about a cramped layout.
+ */
+@media (max-width: 30rem) {
+  .composer textarea {
+    min-height: 2.75rem;
+  }
+}
+
+/* ==========================================================================
+   Narrow windows
+   ==========================================================================
+
+   Matches `--breakpoint-narrow` in `theme.css`, the same line
+   `useNarrowViewport` watches. Below it the sidebar is a drawer, and every
+   overlay that was positioned against a desktop's spare room has to be told
+   what to do without any.
+   ========================================================================== */
+
+@media (max-width: 56rem) {
+  /*
+   * The model picker stays the same compact, anchored popover as the
+   * conversation and account menus at every width — like the admin and
+   * settings panes, it reads as its own floating surface rather than as the
+   * screen itself. Select's own placement logic already clamps it on-screen,
+   * the same way Menu does for the other two.
+   */
+
+  /*
+   * Dialogs sit against the bottom too, for the same reason, but keep their
+   * side margins: a confirmation that fills the screen edge to edge reads as a
+   * new page rather than as a question about the one behind it.
+   */
+  .modal .modal__card {
+    align-self: end;
+    width: 100%;
+    max-width: none;
+    margin-bottom: max(0.5rem, var(--safe-bottom));
+  }
+
+  /* Panels fill the available room at this width, but stay a floating card —
+     the surrounding `.panel` padding means corners are still visible, so they
+     keep the same rounding as the desktop card instead of squaring off. */
+  .panel__card {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    padding-bottom: var(--safe-bottom);
+  }
+}
+
+/* ==========================================================================
+   Standalone pages
+   ==========================================================================
+
+   The conversation index and the not-found screen. Neither is the chat shell:
+   they replace it rather than appearing over it, so they bring their own
+   scrolling and their own measure instead of borrowing the transcript's.
+   ========================================================================== */
+
+.page {
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2rem max(1.25rem, var(--safe-right)) max(2rem, var(--safe-bottom))
+    max(1.25rem, var(--safe-left));
+  padding-top: calc(2rem + var(--safe-top));
+}
+
+/* Centred, for a page that is one short statement rather than a list. */
+.page--centred {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.75rem;
+}
+
+.page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 48rem;
+  margin: 0 auto 1.5rem;
+}
+
+.page__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.page__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.page__list {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 48rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.page__list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  /* A row, not a link in a paragraph: the underline belongs to prose. */
+  text-decoration: none;
+  color: var(--text);
+  font-size: 0.8125rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.page__list-item:hover {
+  background: var(--surface-2);
+}
+
+.page__list-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (pointer: coarse) {
+  .page__list-item {
+    min-height: 2.75rem;
+  }
+}
+
+/* ==========================================================================
+   Attachments
+   ========================================================================== */
+
+/* Only visible to a screen reader — the file input the attach button drives. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The composer while a file is over it. A ring rather than a fill: the field
+   underneath still has to be readable, and a wash over it reads as disabled. */
+.composer.is-dropping {
+  outline: 2px dashed var(--border-strong);
+  outline-offset: -3px;
+}
+
+.composer__warning {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+/* --- chips, above the field ---------------------------------------------- */
+
+.chips {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  background: var(--surface);
+}
+
+/*
+ * Progress as a fill behind the name rather than as a bar of its own.
+ *
+ * A separate bar would make an uploading chip taller than a finished one, so
+ * the whole strip — and the composer above it — would resize as each upload
+ * completed. This way the chip is one size for its whole life.
+ */
+.chip--uploading {
+  background: linear-gradient(
+    to right,
+    var(--surface-2) 0 var(--chip-progress, 0%),
+    var(--surface) var(--chip-progress, 0%) 100%
+  );
+}
+
+.chip--error {
+  border-color: var(--danger, #b3261e);
+  color: var(--danger, #b3261e);
+}
+
+.chip__icon {
+  display: inline-flex;
+  color: var(--muted);
+  flex: none;
+}
+
+/* A thumbnail stands in for the icon once there is one to show. */
+.chip__thumb {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.25rem;
+  object-fit: cover;
+  flex: none;
+}
+
+.chip__name {
+  min-width: 0;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip__meta {
+  flex: none;
+  font-size: 0.6875rem;
+}
+
+.chip__remove {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+}
+
+/* --- in the transcript ---------------------------------------------------- */
+
+.attachments {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* A user message is a right-aligned bubble; what it carried aligns with it.
+   Inside the bubble it sits above the text rather than under it, so the margin
+   moves to the other side. */
+.msg--user .attachments {
+  justify-content: flex-end;
+  margin: 0 0 0.375rem;
+}
+
+/* An attachment sent with nothing typed beside it is the whole message, so the
+   gap that separates it from the text below would be a gap against the bottom
+   of the bubble. */
+.msg--user .attachments:last-child {
+  margin-bottom: 0;
+}
+
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+}
+
+.attachment--image img {
+  display: block;
+  max-width: 12rem;
+  max-height: 12rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.attachment--file,
+.attachment--missing,
+.attachment--loading {
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.attachment--file a {
+  color: var(--text);
+}
+
+.attachment--missing {
+  border-style: dashed;
+}
+
+@media (pointer: coarse) {
+  .chip__remove {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .attachment--file,
+  .attachment--missing {
+    min-height: 2.75rem;
+  }
+}
+
+/* An audio attachment plays where it sits; a clip you must download first is
+   a clip nobody listens to. */
+.attachment--audio {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.attachment--audio audio {
+  max-width: 20rem;
+  height: 2.25rem;
+}
+
+.attachment__name {
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- memory proposals ----------------------------------------------------- */
+
+/*
+ * A memory the model has offered to save, under the turn that offered it.
+ *
+ * Deliberately quiet. This is a question, not an alert: it sits in the
+ * transcript's own left column like an assistant turn, carries the surface the
+ * user bubble does rather than a border of its own, and spends no colour — the
+ * palette is achromatic, so what marks it out is the icon and the pair of
+ * controls, not a hue nothing else here uses.
+ *
+ * The negative top margin pulls it up out of the transcript's 2.5rem turn gap:
+ * it belongs to the message above it rather than sitting between two turns, and
+ * at the full gap it read as a third participant in the conversation.
+ */
+.proposals {
+  list-style: none;
+  align-self: stretch;
+  margin: -1.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: rise-in var(--motion) var(--ease-out);
+}
+
+.proposal {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.625rem 0.625rem 0.625rem 0.75rem;
+  background: var(--surface-2);
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.proposal__icon {
+  display: inline-flex;
+  flex: none;
+  /* Centred on the first line of text rather than on the box, so it stays put
+     as the note below it wraps. */
+  margin-top: 0.125rem;
+  color: var(--muted);
+}
+
+.proposal__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.proposal__head {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* The one thing in the row that is an identifier rather than prose. */
+.proposal__name {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* The note as it would be saved, so what is being agreed to is what is shown.
+   Wrapped rather than elided: a memory nobody can read is one nobody can
+   judge, and these are a sentence or two by construction. */
+.proposal__body {
+  margin: 0.25rem 0 0;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.proposal__actions {
+  flex: none;
+  display: flex;
+  gap: 0.125rem;
+}
+
+/* Accept leads by weight, not by fill: a filled button here would outrank the
+   send control, which is the one thing on the screen that should look like the
+   primary action. */
+.proposal__accept {
+  color: var(--text);
+}
+
+.proposal--error {
+  color: var(--muted);
+}
+
+/* --- artifacts ----------------------------------------------------------- */
+
+/*
+ * The panel's own header.
+ *
+ * Its height matches the main header's so the two line up across the seam: the
+ * artifact's name sits on the same line as the conversation's title, and the
+ * panel reads as a second column of the same page rather than as a thing
+ * dropped on top of it.
+ */
+.artifact-panel__head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: var(--safe-top) max(var(--gutter), var(--safe-right)) 0.75rem var(--gutter);
+  padding-top: calc(var(--safe-top) + 0.75rem);
+  border-bottom: 1px solid var(--border);
+}
+
+.artifact-panel__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.artifact-panel__title h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.4;
+  /* A generated name can be long; it elides rather than wrapping the header
+     into two lines that push the source down. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What kind of file it is, under its name — the one thing a reader needs to
+   know before reading a line of it. */
+.artifact-panel__lang {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.artifact-panel__actions {
+  flex: none;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.artifact-panel__description {
+  flex: none;
+  margin: 0;
+  padding: 0.75rem var(--gutter);
+  font-size: 0.8125rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+/* The body scrolls, so the header stays put while the source moves under it. */
+.artifact-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--gutter);
+}
+
+/*
+ * The source, as written.
+ *
+ * `pre` rather than a rendering, and the only thing in the application that
+ * shows a whole file at once — so it keeps its own horizontal scroll rather
+ * than wrapping: a wrapped line of code is a line that has stopped saying
+ * where its indentation is.
+ */
+.artifact-panel__source {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+}
+
+/* --- the artifacts list --------------------------------------------------- */
+
+/* A heading where the search palette has its field: this list is not searched. */
+.palette__field--plain {
+  justify-content: space-between;
+}
+
+/*
+ * Stated, because the row it sits in is muted.
+ *
+ * `.palette__field` sets `color: var(--muted)` for the search glyph and the
+ * placeholder beside it, which is right for a field — but this heading is a
+ * child of that row and was inheriting it, so the dialog's title came out the
+ * colour of its own placeholder text. A title is the one thing in the row that
+ * is not secondary.
+ */
+.palette__heading {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/*
+ * The same inset as the settings panel's `.panel__pane`, so the two dialogs a
+ * reader flips between for their own stuff — files they made, the account
+ * that made them — don't disagree about how far content sits from the edge.
+ * `.palette__list` stays tight everywhere else: search's rows are numerous
+ * enough that the wider margin would just be room taken from results.
+ */
+.palette--artifacts .palette__field--plain {
+  padding: 1.125rem 1.25rem 0.875rem;
+}
+
+.palette--artifacts .palette__list {
+  padding: 0 1.25rem 1.5rem;
+}
+
+/*
+ * A row is two controls, not one.
+ *
+ * Opening and deleting are different enough that one target for both would be
+ * a row you cannot delete without opening. The row carries the hover state so
+ * the pair still reads as a single line.
+ */
+.artifact-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-right: 0.5rem;
+}
+
+.artifact-row__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+}
+
+.artifact-row__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+/*
+ * The name and its subtitle take the room; the date does not.
+ *
+ * Without this the row sizes itself to its text, so the date lands at a
+ * different place on every line and the column of them reads as ragged
+ * nothing. Growing the text block pins the date to one edge instead.
+ */
+.artifact-row .palette__text {
+  flex: 1;
+}
+
+/*
+ * One line for the subtitle here, unlike in search.
+ *
+ * A search snippet is the thing being looked for and is worth two lines; an
+ * artifact's description is a label on a row that already has a name, and
+ * letting it wrap makes one row taller than its neighbours, which is what
+ * turns a list into a stack of cards.
+ */
+.artifact-row .palette__snippet {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Right-aligned and quiet: it is how you tell two similar names apart, not
+   something to read on the way past. */
+.artifact-row__when {
+  flex: none;
+  padding-left: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.artifact-row__confirm {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+}
+
+/*
+ * No colour, as everywhere else: the palette is achromatic on purpose and
+ * destructive is carried by weight and by what sits beside it — here, the
+ * Cancel it is paired with, which leads for the same reason it leads in the
+ * dialogs.
+ */
+.linkish.is-destructive {
+  font-weight: 500;
+  color: var(--text);
+}

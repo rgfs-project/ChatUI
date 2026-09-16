@@ -1,0 +1,568 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import type { ToolCall } from '@shared/generation.ts';
+import type { ProviderConfig } from '../config.ts';
+import { isAppError } from '../errors/AppError.ts';
+import { createLogger } from '../logger.ts';
+import { LlamaCppProvider } from './llamacpp.ts';
+import { startMockProvider, type MockProvider, type MockProviderOptions } from './mockServer.ts';
+
+const logger = createLogger({ level: 'silent', write: () => {} });
+
+let mock: MockProvider | undefined;
+
+afterEach(async () => {
+  await mock?.close();
+  mock = undefined;
+});
+
+async function provider(
+  options: MockProviderOptions = {},
+  overrides: Partial<ProviderConfig> = {}
+): Promise<LlamaCppProvider> {
+  mock = await startMockProvider(options);
+  return new LlamaCppProvider(
+    {
+      baseUrl: mock.url,
+      apiKey: undefined,
+      timeoutMs: 5_000,
+      defaultContextTokens: 8_192,
+      maxOutputTokens: 128,
+      ...overrides,
+    },
+    logger
+  );
+}
+
+async function collect(
+  iterable: AsyncIterable<{ type: string; text?: string; reason?: string; call?: ToolCall }>
+) {
+  const chunks = [];
+  for await (const chunk of iterable) chunks.push(chunk);
+  return chunks;
+}
+
+describe('LlamaCppProvider.listModels', () => {
+  it('maps entries to the narrow DTO', async () => {
+    const p = await provider();
+
+    const models = await p.listModels();
+
+    expect(models).toEqual([
+      { id: 'GPT', inputModalities: ['text'], loaded: true },
+      { id: 'Qwen Mini', inputModalities: ['text', 'image'], loaded: false },
+    ]);
+  });
+
+  it('reads the launch sampler from status.args', async () => {
+    const p = await provider({
+      modelsPayload: {
+        data: [
+          {
+            id: 'Gemi',
+            status: {
+              value: 'unloaded',
+              args: [
+                '/app/llama-server',
+                '--api-key-file',
+                '/run/api-key',
+                '--temperature',
+                '0.75',
+                '--top-k',
+                '64',
+                '--top-p',
+                '0.95',
+                '--min-p',
+                '0.05',
+                '--repeat-penalty',
+                '1.0',
+                '--model',
+                '/models/gemi/Gemi.gguf',
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const [model] = await p.listModels();
+
+    // Router mode reports each model's command line for free; the alternative,
+    // `/props?model=`, loads the model and evicts the resident one.
+    expect(model?.defaults).toEqual({
+      temperature: 0.75,
+      topP: 0.95,
+      topK: 64,
+      minP: 0.05,
+      repeatPenalty: 1,
+    });
+  });
+
+  it('reports no defaults when the launch line carries no sampling', async () => {
+    const p = await provider({
+      modelsPayload: {
+        data: [{ id: 'Plain', status: { value: 'unloaded', args: ['/app/llama-server'] } }],
+      },
+    });
+
+    const [model] = await p.listModels();
+
+    // Absent, not an object of undefineds: "no information" and "every value
+    // happens to be unset" are different answers.
+    expect(model?.defaults).toBeUndefined();
+  });
+
+  it('INV-04: parsing the launch line does not carry the line itself out', async () => {
+    const p = await provider({
+      modelsPayload: {
+        data: [
+          {
+            id: 'Gemi',
+            status: {
+              value: 'loaded',
+              args: [
+                '--api-key-file',
+                '/run/api-key',
+                '--temperature',
+                '0.75',
+                '--model',
+                '/models/secret.gguf',
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const serialized = JSON.stringify(await p.listModels());
+
+    expect(serialized).toContain('0.75');
+    expect(serialized).not.toContain('api-key-file');
+    expect(serialized).not.toContain('/run/api-key');
+    expect(serialized).not.toContain('secret.gguf');
+    expect(serialized).not.toContain('args');
+  });
+
+  it('INV-04: drops status.args and status.preset, which leak the API key path', async () => {
+    const p = await provider();
+
+    const models = await p.listModels();
+
+    const serialized = JSON.stringify(models);
+    expect(serialized).not.toContain('api-key-file');
+    expect(serialized).not.toContain('/run/api-key');
+    expect(serialized).not.toContain('llama-server');
+    expect(serialized).not.toContain('.gguf');
+    for (const model of models) {
+      // `defaults` is permitted, and is numbers parsed out of the launch line —
+      // never the line itself.
+      expect(Object.keys(model).sort()).toEqual(
+        ['id', 'inputModalities', 'loaded', ...('defaults' in model ? ['defaults'] : [])].sort()
+      );
+    }
+  });
+
+  describe('unexpected model list shapes', () => {
+    it('rejects a body that is not a model list', async () => {
+      for (const payload of [
+        {},
+        { data: null },
+        { data: 'not an array' },
+        { data: { id: 'not-an-array' } },
+        [],
+        'plain text',
+      ]) {
+        const p = await provider({ modelsPayload: payload });
+        await expect(p.listModels(), JSON.stringify(payload)).rejects.toMatchObject({
+          code: 'PROVIDER_ERROR',
+        });
+        await mock?.close();
+        mock = undefined;
+      }
+    });
+
+    it('rejects a body that is not valid JSON at all', async () => {
+      const p = await provider({ modelsPayload: '{ this is not json' });
+
+      await expect(p.listModels()).rejects.toMatchObject({ code: 'PROVIDER_ERROR' });
+    });
+
+    it('skips individual entries that have no usable id, keeping the rest', async () => {
+      // A provider that adds a field we do not understand must not break
+      // discovery; only an entry with no id is unusable.
+      const p = await provider({
+        modelsPayload: {
+          object: 'list',
+          data: [
+            { id: 'good-one', architecture: { input_modalities: ['text'] } },
+            { id: '' },
+            { id: 42 },
+            { noIdAtAll: true },
+            null,
+            { id: 'good-two', surprising_new_field: { nested: true } },
+          ],
+        },
+      });
+
+      const models = await p.listModels();
+
+      expect(models.map((m) => m.id)).toEqual(['good-one', 'good-two']);
+      // An entry with no declared modalities still gets a sane default.
+      expect(models[1]?.inputModalities).toEqual(['text']);
+    });
+
+    it('ignores modality values it does not recognise', async () => {
+      const p = await provider({
+        modelsPayload: {
+          data: [{ id: 'm', architecture: { input_modalities: ['text', 'hologram', 7, null] } }],
+        },
+      });
+
+      expect((await p.listModels())[0]?.inputModalities).toEqual(['text']);
+    });
+  });
+
+  it('preserves model ids containing spaces', async () => {
+    const p = await provider({ models: ['Qwen Max', 'North Mini'] });
+
+    const models = await p.listModels();
+
+    expect(models.map((m) => m.id)).toEqual(['Qwen Max', 'North Mini']);
+  });
+
+  it('sends the bearer token upstream but never returns it', async () => {
+    const p = await provider({ requireApiKey: 'secret-key' }, { apiKey: 'secret-key' });
+
+    const models = await p.listModels();
+
+    expect(mock?.requests[0]?.authorization).toBe('Bearer secret-key');
+    expect(JSON.stringify(models)).not.toContain('secret-key');
+  });
+
+  it('normalizes an auth failure without leaking the upstream body', async () => {
+    const p = await provider({ requireApiKey: 'right' }, { apiKey: 'wrong' });
+
+    const error = await p.listModels().catch((e: unknown) => e);
+
+    expect(isAppError(error) && error.code).toBe('PROVIDER_ERROR');
+    expect((error as Error).message).not.toContain('Invalid API Key');
+    expect(JSON.stringify(error)).not.toContain('right');
+  });
+
+  it('reports an unreachable provider as PROVIDER_UNAVAILABLE', async () => {
+    mock = await startMockProvider();
+    const url = mock.url;
+    await mock.close();
+    mock = undefined;
+
+    const p = new LlamaCppProvider(
+      {
+        baseUrl: url,
+        apiKey: undefined,
+        timeoutMs: 2_000,
+        defaultContextTokens: 8_192,
+        maxOutputTokens: 128,
+      },
+      logger
+    );
+
+    await expect(p.listModels()).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' });
+  });
+});
+
+/** The body of the chat completion the provider actually sent upstream. */
+function chatBody(): Record<string, unknown> {
+  const request = mock?.requests.find((r) => r.path.startsWith('/v1/chat/completions'));
+  if (request === undefined) throw new Error('no chat completion was sent');
+  return request.body as Record<string, unknown>;
+}
+
+describe('LlamaCppProvider.streamChat sampling', () => {
+  it('sends only the fields that are set', async () => {
+    const p = await provider();
+    const chunks = [];
+    for await (const chunk of p.streamChat({
+      model: 'm',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxOutputTokens: 64,
+      sampler: { temperature: 0.7, topK: 40 },
+      signal: new AbortController().signal,
+    })) {
+      chunks.push(chunk);
+    }
+
+    const body = chatBody();
+    expect(body['temperature']).toBe(0.7);
+    expect(body['top_k']).toBe(40);
+    // Untouched knobs are absent entirely, so llama-server applies its own
+    // configured value rather than one of ours.
+    expect('top_p' in body).toBe(false);
+    expect('min_p' in body).toBe(false);
+    expect('repeat_penalty' in body).toBe(false);
+  });
+
+  it('sends no sampling at all when none is configured', async () => {
+    const p = await provider();
+    for await (const _ of p.streamChat({
+      model: 'm',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxOutputTokens: 64,
+      signal: new AbortController().signal,
+    })) {
+      void _;
+    }
+
+    const body = chatBody();
+    for (const key of ['temperature', 'top_p', 'top_k', 'min_p', 'repeat_penalty']) {
+      expect(key in body, key).toBe(false);
+    }
+  });
+
+  it('sends an explicit zero rather than dropping it', async () => {
+    const p = await provider();
+    for await (const _ of p.streamChat({
+      model: 'm',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxOutputTokens: 64,
+      sampler: { temperature: 0, minP: 0 },
+      signal: new AbortController().signal,
+    })) {
+      void _;
+    }
+
+    const body = chatBody();
+    expect(body['temperature']).toBe(0);
+    expect(body['min_p']).toBe(0);
+  });
+});
+
+describe('LlamaCppProvider.streamChat', () => {
+  const request = (signal: AbortSignal) => ({
+    model: 'GPT',
+    messages: [{ role: 'user' as const, content: 'hi' }],
+    maxOutputTokens: 64,
+    signal,
+  });
+
+  it('separates reasoning from content', async () => {
+    const p = await provider({
+      reasoningChunks: ['think ', 'harder'],
+      contentChunks: ['Hello', ' there'],
+    });
+
+    const chunks = await collect(p.streamChat(request(new AbortController().signal)));
+
+    expect(chunks.filter((c) => c.type === 'reasoning').map((c) => c.text)).toEqual([
+      'think ',
+      'harder',
+    ]);
+    expect(chunks.filter((c) => c.type === 'content').map((c) => c.text)).toEqual([
+      'Hello',
+      ' there',
+    ]);
+    expect(chunks.at(-1)).toEqual({ type: 'finish', reason: 'stop' });
+  });
+
+  it('survives a null content delta and an empty choices array', async () => {
+    // The mock always emits both shapes; reaching a clean finish proves the
+    // parser guards them (provider notes §5).
+    const p = await provider({ reasoningChunks: [], contentChunks: ['ok'] });
+
+    const chunks = await collect(p.streamChat(request(new AbortController().signal)));
+
+    expect(chunks).toEqual([
+      { type: 'content', text: 'ok' },
+      { type: 'finish', reason: 'stop' },
+    ]);
+  });
+
+  it('skips an unparseable frame instead of failing the stream', async () => {
+    const p = await provider({ emitGarbageFrame: true, contentChunks: ['fine'] });
+
+    const chunks = await collect(p.streamChat(request(new AbortController().signal)));
+
+    expect(chunks.some((c) => c.type === 'content' && c.text === 'fine')).toBe(true);
+  });
+
+  it('raises PROVIDER_ERROR on a mid-stream error frame', async () => {
+    const p = await provider({ errorMidStream: true });
+
+    await expect(
+      collect(p.streamChat(request(new AbortController().signal)))
+    ).rejects.toMatchObject({ code: 'PROVIDER_ERROR' });
+  });
+
+  it('maps an unknown model to MODEL_NOT_FOUND', async () => {
+    const p = await provider({
+      failWith: { status: 400, message: "model 'nope' not found", type: 'invalid_request_error' },
+    });
+
+    await expect(
+      collect(p.streamChat(request(new AbortController().signal)))
+    ).rejects.toMatchObject({ code: 'MODEL_NOT_FOUND' });
+  });
+
+  it('maps an oversized prompt without disclosing n_ctx', async () => {
+    const p = await provider({
+      failWith: {
+        status: 400,
+        type: 'exceed_context_size_error',
+        message: 'request (400068 tokens) exceeds the available context size (131072 tokens)',
+      },
+    });
+
+    const error = await collect(p.streamChat(request(new AbortController().signal))).catch(
+      (e: unknown) => e
+    );
+
+    expect(isAppError(error) && error.code).toBe('PROVIDER_ERROR');
+    expect(JSON.stringify(error)).not.toContain('131072');
+    expect((error as Error).message).not.toContain('400068');
+  });
+
+  it('times out slowly enough to be distinguishable from a failure', async () => {
+    const p = await provider({ hang: true }, { timeoutMs: 1_000 });
+
+    await expect(
+      collect(p.streamChat(request(new AbortController().signal)))
+    ).rejects.toMatchObject({ code: 'PROVIDER_TIMEOUT' });
+  });
+
+  it('propagates a caller abort rather than reporting a provider failure', async () => {
+    const p = await provider({ chunkDelayMs: 50, contentChunks: ['a', 'b', 'c', 'd'] });
+    const controller = new AbortController();
+
+    const iterator = p.streamChat(request(controller.signal))[Symbol.asyncIterator]();
+    await iterator.next();
+    controller.abort();
+
+    await expect(iterator.next()).rejects.toSatisfy(
+      (err: unknown) => !isAppError(err) || err.code !== 'PROVIDER_UNAVAILABLE'
+    );
+  });
+});
+
+describe('LlamaCppProvider tool calls', () => {
+  const stream = (p: LlamaCppProvider) =>
+    p.streamChat({
+      model: 'GPT',
+      messages: [{ role: 'user', content: 'hi' }],
+      maxOutputTokens: 64,
+      signal: new AbortController().signal,
+    });
+
+  it('omits `tools` entirely when none are offered', async () => {
+    const p = await provider();
+
+    await collect(stream(p));
+
+    const body = mock?.requests.at(-1)?.body as Record<string, unknown>;
+    expect(body).not.toHaveProperty('tools');
+  });
+
+  it('sends the definitions it is given', async () => {
+    const p = await provider();
+    const tools = [
+      {
+        type: 'function' as const,
+        function: { name: 'remember', description: 'save a note', parameters: { type: 'object' } },
+      },
+    ];
+
+    await collect(
+      p.streamChat({
+        model: 'GPT',
+        messages: [{ role: 'user', content: 'hi' }],
+        maxOutputTokens: 64,
+        tools,
+        signal: new AbortController().signal,
+      })
+    );
+
+    expect((mock?.requests.at(-1)?.body as Record<string, unknown>)['tools']).toEqual(tools);
+  });
+
+  /* The whole point of the accumulator: a call arrives as fragments, and only
+     the first names it. */
+  it('reassembles one call from fragments split across frames', async () => {
+    const p = await provider({
+      contentChunks: [],
+      toolCalls: [
+        {
+          id: 'call_1',
+          name: 'remember',
+          argumentChunks: ['{"name":"coff', 'ee-order","con', 'tent":"Flat white."}'],
+        },
+      ],
+    });
+
+    const chunks = await collect(stream(p));
+
+    expect(chunks.filter((chunk) => chunk.type === 'tool_call')).toEqual([
+      {
+        type: 'tool_call',
+        call: {
+          id: 'call_1',
+          name: 'remember',
+          arguments: '{"name":"coffee-order","content":"Flat white."}',
+        },
+      },
+    ]);
+  });
+
+  it('keeps two interleaved calls apart, ordered by index', async () => {
+    const p = await provider({
+      contentChunks: [],
+      toolCalls: [
+        { id: 'call_a', name: 'remember', argumentChunks: ['{"name":"a",', '"content":"A"}'] },
+        { id: 'call_b', name: 'forget_memory', argumentChunks: ['{"name"', ':"b"}'] },
+      ],
+    });
+
+    const calls = (await collect(stream(p)))
+      .filter((chunk): chunk is { type: 'tool_call'; call: ToolCall } => chunk.type === 'tool_call')
+      .map((chunk) => chunk.call);
+
+    expect(calls).toEqual([
+      { id: 'call_a', name: 'remember', arguments: '{"name":"a","content":"A"}' },
+      { id: 'call_b', name: 'forget_memory', arguments: '{"name":"b"}' },
+    ]);
+  });
+
+  /* Flushed before `finish`, so a consumer that stops reading there still has
+     them. */
+  it('emits calls ahead of the finish chunk', async () => {
+    const p = await provider({
+      contentChunks: ['ok'],
+      toolCalls: [{ id: 'c', name: 'remember', argumentChunks: ['{}'] }],
+    });
+
+    const types = (await collect(stream(p))).map((chunk) => chunk.type);
+
+    expect(types.indexOf('tool_call')).toBeLessThan(types.indexOf('finish'));
+  });
+
+  it('drops a call the provider never named', async () => {
+    const p = await provider({
+      contentChunks: [],
+      toolCalls: [{ id: 'c', name: '', argumentChunks: ['{"name":"x"}'] }],
+    });
+
+    expect((await collect(stream(p))).filter((chunk) => chunk.type === 'tool_call')).toEqual([]);
+  });
+
+  /* Content alongside a call must survive it: a reply that says "I've offered
+     to remember that" is the half the reader actually sees. */
+  it('still streams content when a call is made', async () => {
+    const p = await provider({
+      contentChunks: ['Noted', '.'],
+      toolCalls: [{ id: 'c', name: 'remember', argumentChunks: ['{}'] }],
+    });
+
+    const text = (await collect(stream(p)))
+      .filter((chunk) => chunk.type === 'content')
+      .map((chunk) => chunk.text)
+      .join('');
+
+    expect(text).toBe('Noted.');
+  });
+});
