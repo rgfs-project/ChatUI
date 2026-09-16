@@ -2822,10 +2822,23 @@ button.linkish:hover {
   font-size: 0.75rem;
 }
 
+/*
+ * One height for every picture, whatever shape it came in.
+ *
+ * Bounded instead by a box each picture sized itself inside, a set of them
+ * ended on a different line as well as a different column than its neighbour,
+ * and three screenshots wrapped into a ragged stack rather than reading as one
+ * thing the message carried. A shared height lines the row up on both edges;
+ * the width still follows the picture's own aspect, so nothing is cropped to
+ * get there — except the very wide, which the max-width trims rather than
+ * letting one picture run the width of the bubble.
+ */
 .attachment--image img {
   display: block;
-  max-width: 12rem;
-  max-height: 12rem;
+  height: 8.5rem;
+  width: auto;
+  max-width: 14rem;
+  object-fit: cover;
   border-radius: 0.5rem;
   border: 1px solid var(--border);
 }
