@@ -104,8 +104,41 @@ export function useTailSpace({ port, content, anchorId, adjustBy }: TailSpaceOpt
 
     const observer = new ResizeObserver(() => onResize());
     observer.observe(scroller);
+
+    /*
+     * And the turns themselves, which change height without React rendering.
+     *
+     * A web font swapping in under text already on screen, an image finishing
+     * its decode, a details block animating open — none of them is a value this
+     * hook is given or a render it would hear about, and all of them change how
+     * much room is left to reserve. The reserve computed against the layout
+     * before the change is then simply kept, which puts the question somewhere
+     * other than the top and leaves the view short of the bottom it was
+     * following. Measuring again is the whole of the fix; the measurement
+     * subtracts the reserve already in place, so the pass this triggers settles
+     * rather than feeding itself.
+     */
+    const list = content.current;
+    if (list !== null) observer.observe(list);
+
     return () => observer.disconnect();
-  }, [onResize, port]);
+  }, [onResize, port, content]);
+
+  /*
+   * The first paint uses whatever font is already available, and the real one
+   * arriving re-lays every line of the transcript out at a different height.
+   * That happens once, after the load this hook does its first measuring in,
+   * and a ResizeObserver on the list catches it — but only where one exists.
+   */
+  useLayoutEffect(() => {
+    let cancelled = false;
+    void document.fonts?.ready.then(() => {
+      if (!cancelled) onResize();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onResize]);
 
   /*
    * Deliberately every render, with no dependency list.

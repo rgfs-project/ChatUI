@@ -256,3 +256,41 @@ test('the jump control is never offered on a transcript that fits', async ({ app
   });
   await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeHidden();
 });
+
+/**
+ * A reload is not a scroll either.
+ *
+ * The reserve is rebuilt from scratch against a transcript the page has only
+ * just rendered, and the view follows the bottom it produces. If the two get
+ * out of step — a measurement taken before the text settled at its final
+ * height, and then kept, because nothing React renders changed afterwards —
+ * the transcript comes back at a different position than the one the reader
+ * left, which is the whole of "the chat moves when I refresh".
+ */
+test('the transcript comes back where the reader left it', async ({ app, page }) => {
+  await signIn(page, app.baseUrl);
+  await withHistory(page, app);
+
+  const composer = composerField(page);
+  await composer.fill('the last question');
+  await composer.press('Enter');
+  await app.provider.waitForStream();
+  // Short enough to leave the reserve standing, with `code` in it: the font it
+  // loads in is the layout change that arrives after the first measurement.
+  app.provider.send('Stored under `data/<user-uuid>/`, as before.');
+  app.provider.finish();
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
+
+  const before = await questionY(page);
+  expect(before).not.toBeNull();
+
+  await page.reload();
+  await expect(page.getByText('as before.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
+
+  // The reserve is rebuilt asynchronously, so this is the settled position
+  // rather than the first one painted.
+  await expect
+    .poll(async () => Math.round((await questionY(page)) ?? -1))
+    .toBe(Math.round(before as number));
+});
