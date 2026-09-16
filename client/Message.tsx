@@ -141,20 +141,24 @@ export function Message({
         </details>
       )}
 
-      {/* The bubble is the user's turn alone: what they said and what they
-          carried with it. The controls below sit outside it, on the page. */}
+      {/* The bubble is what the user said; what they carried stands above it,
+          each thing on its own. A picture in the bubble had to be matted to sit
+          in a box built for a line of text, and a set of them turned the bubble
+          into a frame around a stack. The controls below sit outside both, on
+          the page. */}
       {message.type === 'user' ? (
-        <div className="msg__bubble">
+        <>
           <MessageAttachments ids={message.attachments ?? []} />
-          {/* A turn can be an attachment and nothing else. Rendering the body
-              anyway leaves an empty paragraph under the picture, which reads as
-              a caption that failed to load. */}
+          {/* A turn can be an attachment and nothing else, and an empty bubble
+              beneath it reads as a caption that failed to load. */}
           {message.body.trim() !== '' && (
-            <div className="msg__body">
-              <Markdown>{message.body}</Markdown>
+            <div className="msg__bubble">
+              <div className="msg__body">
+                <Markdown>{message.body}</Markdown>
+              </div>
             </div>
           )}
-        </div>
+        </>
       ) : (
         <div className="msg__body">
           {message.body === '' && statusLabel !== undefined ? (

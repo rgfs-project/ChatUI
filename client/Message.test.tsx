@@ -217,9 +217,9 @@ function cleanupAndRender(message: MessageModel, isLast: boolean): void {
 /**
  * A turn can be an attachment and nothing else.
  *
- * The bubble then holds only what was attached. Rendering the body anyway
- * leaves an empty paragraph under the picture, which reads as a caption that
- * failed to load — and the fix for the send path deliberately stores no
+ * The attachments then stand alone and there is no bubble at all. Rendering
+ * one anyway leaves an empty bubble under the picture, which reads as a caption
+ * that failed to load — and the fix for the send path deliberately stores no
  * placeholder text to fill it with.
  */
 describe('a user message with no text', () => {
@@ -228,8 +228,9 @@ describe('a user message with no text', () => {
       userMessage({ body: '', attachments: ['11111111-1111-4111-8111-111111111111'] })
     );
 
-    expect(view.container.querySelector('.msg__bubble')).not.toBeNull();
-    expect(view.container.querySelector('.msg__bubble .msg__body')).toBeNull();
+    expect(view.container.querySelector('.msg__bubble')).toBeNull();
+    expect(view.container.querySelector('.msg__body')).toBeNull();
+    expect(view.container.querySelector('.attachments')).not.toBeNull();
   });
 
   it('renders no body for whitespace either', () => {
@@ -246,11 +247,10 @@ describe('a user message with no text', () => {
     );
 
     // Nothing invented stands in for the words the reader did not write. The
-    // bubble holds the attachment list and nothing else.
+    // turn is the attachment list and nothing else.
     expect(screen.queryByText(/\[image\]/i)).toBeNull();
-    const bubble = view.container.querySelector('.msg__bubble');
-    expect(bubble?.children).toHaveLength(1);
-    expect(bubble?.firstElementChild?.classList.contains('attachments')).toBe(true);
+    expect(view.container.querySelector('.msg__bubble')).toBeNull();
+    expect(view.container.querySelector('.attachments')).not.toBeNull();
   });
 
   it('still renders the body when there is one', () => {
@@ -259,6 +259,8 @@ describe('a user message with no text', () => {
     );
 
     expect(view.container.querySelector('.msg__bubble .msg__body')).not.toBeNull();
+    // And what it carried is beside the bubble, not inside it.
+    expect(view.container.querySelector('.msg__bubble .attachments')).toBeNull();
     expect(screen.getByText('what is this?')).toBeTruthy();
   });
 });

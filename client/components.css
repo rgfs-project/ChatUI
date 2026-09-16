@@ -166,35 +166,6 @@
   padding: 0.625rem 1rem;
 }
 
-/*
- * 10 against 16 is a text bubble's own vertical rhythm — line-height already
- * puts air above and below a word, so the padding needs less of its own. An
- * attachment carries no such rhythm: with nothing else in the bubble, the
- * same padding read as noticeably more room to the sides than above and
- * below the picture. Squared to the horizontal figure so the frame around an
- * image is even on every side, the way a photo's mat would be.
- */
-.msg__bubble:has(> .attachments:only-child) {
-  padding: 1rem;
-}
-
-/*
- * The same mat, when something was typed beside the picture.
- *
- * The rule above only reaches a bubble the attachment has to itself, so adding
- * a word put the picture back on the text figure: 10px above it and 16 to
- * either side, an uneven frame on the one element that shows it. The top edge
- * is against a picture whichever it is, so it takes the picture's figure.
- *
- * The bottom is left alone on purpose — that edge is against text, and text
- * brings its own rhythm, which is the whole reason the two figures differ.
- * Lower specificity than the rule above, so a lone attachment still squares
- * all four sides rather than being caught by this one.
- */
-.msg__bubble:has(> .attachments) {
-  padding-top: 1rem;
-}
-
 .msg--user .msg__body {
   white-space: pre-wrap;
   word-break: break-word;
@@ -2798,21 +2769,17 @@ button.linkish:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  /* The bubble's own measure, which the list no longer sits inside: what a
+     turn carried wraps on the column it was said in rather than running the
+     full width of the transcript. */
+  max-width: 85%;
 }
 
-/* A user message is a right-aligned bubble; what it carried aligns with it.
-   Inside the bubble it sits above the text rather than under it, so the margin
-   moves to the other side. */
+/* A user message is a right-aligned bubble; what it carried stands above the
+   bubble and aligns with it, so the margin moves to the other side. */
 .msg--user .attachments {
   justify-content: flex-end;
   margin: 0 0 0.375rem;
-}
-
-/* An attachment sent with nothing typed beside it is the whole message, so the
-   gap that separates it from the text below would be a gap against the bottom
-   of the bubble. */
-.msg--user .attachments:last-child {
-  margin-bottom: 0;
 }
 
 .attachment {
