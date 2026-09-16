@@ -777,7 +777,7 @@
 .model-menu__list {
   max-height: 20rem;
   overflow-y: auto;
-  padding: 0.25rem 0;
+  padding: 0.25rem;
 }
 
 .model-menu__empty {
@@ -794,7 +794,10 @@
   gap: 0.5rem;
   width: 100%;
   text-align: left;
-  padding: 0.625rem 0.875rem;
+  padding: 0.625rem;
+  /* Inset from the menu's own edge, so the highlight is a rounded row sitting
+     inside the card rather than a band running into its clipped corners. */
+  border-radius: 0.625rem;
   font-size: 0.875rem;
   color: var(--text);
 }
