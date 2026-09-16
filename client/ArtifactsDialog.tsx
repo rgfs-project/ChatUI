@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Code2, FileText, Image, Table2, Trash2, X } from 'lucide-react';
-import { ARTIFACT_LANGUAGE, type ArtifactDto, type ArtifactMediaType } from '@shared/artifact';
+import { Trash2, X } from 'lucide-react';
+import { ARTIFACT_LANGUAGE, type ArtifactDto } from '@shared/artifact';
+import { artifactIconFor } from './artifactIcon.ts';
 import { useArtifacts, useDeleteArtifact } from './queries.ts';
 import { relativeTime } from './relativeTime.ts';
 import { Spinner } from './Spinner.tsx';
@@ -20,21 +21,6 @@ import { Spinner } from './Spinner.tsx';
 export interface ArtifactsDialogProps {
   onOpen: (artifact: ArtifactDto) => void;
   onClose: () => void;
-}
-
-/**
- * The mark on a row.
- *
- * Grouped by what the file *is* rather than one icon per media type: a reader
- * scanning the list is telling a page from a script from a picture, and twelve
- * distinct glyphs would be twelve things to learn for a distinction nobody is
- * making.
- */
-function iconFor(mediaType: ArtifactMediaType) {
-  if (mediaType === 'image/svg+xml') return Image;
-  if (mediaType === 'text/csv') return Table2;
-  if (mediaType === 'text/markdown' || mediaType === 'text/plain') return FileText;
-  return Code2;
 }
 
 export function ArtifactsDialog({ onOpen, onClose }: ArtifactsDialogProps): React.JSX.Element {
@@ -114,7 +100,7 @@ export function ArtifactsDialog({ onOpen, onClose }: ArtifactsDialogProps): Reac
           )}
 
           {rows.map((artifact, index) => {
-            const Icon = iconFor(artifact.mediaType);
+            const Icon = artifactIconFor(artifact.mediaType);
             const pending = confirming === artifact.id;
 
             return (

@@ -13,6 +13,7 @@ import type { ArtifactDto } from '@shared/artifact';
 import type { UserDto } from '@shared/auth';
 import { hasSendableContent } from '@shared/conversation';
 import { ApiError, cancelGeneration, downloadConversation, type MemoryProposalDto } from './api.ts';
+import { ArtifactCards } from './ArtifactCards.tsx';
 import { ArtifactPanel } from './ArtifactPanel.tsx';
 import { ArtifactsDialog } from './ArtifactsDialog.tsx';
 import { Composer } from './Composer.tsx';
@@ -27,6 +28,7 @@ import { Sidebar } from './Sidebar.tsx';
 import {
   keys,
   useConversation,
+  useArtifacts,
   useConversations,
   useCreateConversation,
   useDeleteConversation,
@@ -219,6 +221,7 @@ export function App({
   const conversationUpdatedAt = conversation.dataUpdatedAt;
   const preferences = useMyPreferences();
   const proposals = useProposals(currentId);
+  const artifacts = useArtifacts();
 
   const createConversation = useCreateConversation();
   const renameConversation = useRenameConversation();
@@ -444,6 +447,34 @@ export function App({
   const proposalsFor = useCallback(
     (messageId: string): MemoryProposalDto[] => proposalsByMessage.get(messageId) ?? [],
     [proposalsByMessage]
+  );
+
+  /*
+   * The artifacts each turn presented, keyed the way they are read.
+   *
+   * Grouped from the whole list rather than fetched per conversation: the list
+   * is already loaded for the dialog and is one query for everything this
+   * reader owns, so grouping it costs a pass where a second endpoint would
+   * cost a round trip per transcript.
+   *
+   * An artifact whose `messageId` is absent — imported rather than generated,
+   * or left by a turn since edited away — belongs to no turn here and is
+   * reachable where it always was, in the dialog.
+   */
+  const artifactsByMessage = useMemo(() => {
+    const grouped = new Map<string, ArtifactDto[]>();
+    for (const artifact of artifacts.data ?? []) {
+      if (artifact.messageId === undefined) continue;
+      const existing = grouped.get(artifact.messageId);
+      if (existing === undefined) grouped.set(artifact.messageId, [artifact]);
+      else existing.push(artifact);
+    }
+    return grouped;
+  }, [artifacts.data]);
+
+  const artifactsFor = useCallback(
+    (messageId: string): ArtifactDto[] => artifactsByMessage.get(messageId) ?? [],
+    [artifactsByMessage]
   );
 
   /**
@@ -1069,6 +1100,11 @@ export function App({
                       onDelete={(id) => setDialog({ kind: 'delete-message', id })}
                       onRegenerate={() => void onRegenerate()}
                     />
+                    {/* Under the turn that made them, so the reply and the
+                        files it produced are read as one thing. */}
+                    {artifactsFor(message.id).length > 0 && (
+                      <ArtifactCards artifacts={artifactsFor(message.id)} onOpen={setArtifact} />
+                    )}
                     {/* Under the turn that asked, so the answer is given with
                         the conversation it came out of still in view. */}
                     {currentId !== null && proposalsFor(message.id).length > 0 && (

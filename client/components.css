@@ -178,6 +178,23 @@
   padding: 1rem;
 }
 
+/*
+ * The same mat, when something was typed beside the picture.
+ *
+ * The rule above only reaches a bubble the attachment has to itself, so adding
+ * a word put the picture back on the text figure: 10px above it and 16 to
+ * either side, an uneven frame on the one element that shows it. The top edge
+ * is against a picture whichever it is, so it takes the picture's figure.
+ *
+ * The bottom is left alone on purpose — that edge is against text, and text
+ * brings its own rhythm, which is the whole reason the two figures differ.
+ * Lower specificity than the rule above, so a lone attachment still squares
+ * all four sides rather than being caught by this one.
+ */
+.msg__bubble:has(> .attachments) {
+  padding-top: 1rem;
+}
+
 .msg--user .msg__body {
   white-space: pre-wrap;
   word-break: break-word;
@@ -2945,6 +2962,94 @@ button.linkish:hover {
 }
 
 /* --- artifacts ----------------------------------------------------------- */
+
+/*
+ * The files a reply produced, under that reply.
+ *
+ * Pulled up by the transcript's own row gap, exactly as `.proposals` is, so a
+ * card reads as belonging to the message above it rather than floating between
+ * two turns. Both are consequences of a turn and neither is a turn, so they
+ * space the same way.
+ */
+.artifact-cards {
+  list-style: none;
+  align-self: stretch;
+  margin: -1.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: rise-in var(--motion) var(--ease-out);
+}
+
+/*
+ * A bordered card rather than the filled row the dialog uses.
+ *
+ * The dialog's rows sit on the dialog's own surface, where a fill is what
+ * separates one from the next. Here the neighbours are messages — some of
+ * which are filled bubbles — and another fill would read as one more of those.
+ * An outline says "a thing, not a thing said".
+ */
+.artifact-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  text-align: left;
+  color: inherit;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.artifact-card:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.artifact-card__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.artifact-card__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.artifact-card__name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/*
+ * One line, clipped.
+ *
+ * A description comes from a tool call in somebody's export and has no length
+ * anybody promised; allowed to wrap, a verbose one would make the card taller
+ * than the reply it belongs to.
+ */
+.artifact-card__meta {
+  overflow: hidden;
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
 /*
  * The panel's own header.
