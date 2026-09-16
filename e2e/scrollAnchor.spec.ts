@@ -294,3 +294,49 @@ test('the transcript comes back where the reader left it', async ({ app, page })
     .poll(async () => Math.round((await questionY(page)) ?? -1))
     .toBe(Math.round(before as number));
 });
+
+/**
+ * A long answer is read from the top, and a reload does not lose the place.
+ *
+ * Once a reply outgrows its reserve the transcript is released and the view
+ * stays where the reader is reading — several screens above the end of it.
+ * Nothing recorded that, and a transcript nobody has scrolled starts at the
+ * bottom, so a refresh in the middle of a long answer threw the reader past
+ * everything they had not read yet: measured at 5,713px on a 3,000-word reply.
+ */
+test('a reload in the middle of a long answer keeps the place', async ({ app, page }) => {
+  await signIn(page, app.baseUrl);
+  await withHistory(page, app);
+
+  const composer = composerField(page);
+  await composer.fill('explain the whole architecture at length');
+  await composer.press('Enter');
+  await app.provider.waitForStream();
+  // Several screens of it, arriving a chunk at a time the way a reply really
+  // does: the reserve runs out part way through, the transcript is released
+  // there, and the view stays in the middle rather than at either end. Sent in
+  // one burst it never releases, and the test would prove nothing.
+  for (let paragraph = 1; paragraph <= 30; paragraph += 1) {
+    app.provider.send(
+      `Paragraph ${paragraph}. The transcript is canonical Markdown on disk and the index is derived from it, so the file is the truth and everything else is a cache that can be rebuilt.\n\n`
+    );
+    await page.waitForTimeout(25);
+  }
+  app.provider.finish();
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
+
+  const transcript = page.locator('[data-testid="transcript"]');
+  const before = await transcript.evaluate((node) => Math.round(node.scrollTop));
+  const height = await transcript.evaluate((node) => node.scrollHeight - node.clientHeight);
+  // The premise: the reader is genuinely not at the end of it.
+  expect(before).toBeLessThan(height - 200);
+
+  await page.reload();
+  await expect(page.getByText('Paragraph 30.')).toBeVisible();
+
+  await expect
+    .poll(async () => transcript.evaluate((node) => Math.round(node.scrollTop)))
+    .toBeCloseTo(before, -1);
+  // And it is still the reader's view, with the way back down on offer.
+  await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeVisible();
+});

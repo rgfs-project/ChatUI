@@ -46,6 +46,7 @@ import { IDLE_GENERATION, useGeneration, type LiveGeneration } from './useGenera
 import { GenerationAnnouncer } from './GenerationAnnouncer.tsx';
 import { useNarrowViewport } from './useNarrowViewport.ts';
 import { useScrollPin } from './useScrollPin.ts';
+import { useScrollMemory } from './useScrollMemory.ts';
 import { useTailSpace } from './useTailSpace.ts';
 import { useAttachments } from './useAttachments.ts';
 
@@ -532,6 +533,13 @@ export function App({
   useLayoutEffect(() => {
     resetScroll();
   }, [currentId, resetScroll]);
+
+  /*
+   * And then back to where the reader actually was, if they were not at the
+   * bottom. Declared after the reset on purpose: the reset is the position a
+   * transcript starts at, and this is the one the reader left it at.
+   */
+  useScrollMemory({ port: scroll.ref, content: transcriptRef, conversationId: currentId });
 
   const { onContentChange } = scroll;
   // Content changed: follow the bottom, or leave the reader where they are.
