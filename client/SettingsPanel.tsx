@@ -1,7 +1,16 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Brain, Database, KeyRound, Plus, SlidersHorizontal, Trash2, Upload, X } from 'lucide-react';
+import {
+  Brain,
+  Database,
+  KeyRound,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
 import type { UserDto } from '@shared/auth';
 import {
   ApiError,
