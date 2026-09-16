@@ -37,6 +37,10 @@ docker compose run --rm -i app create-admin --username you --admin
 
 The last command prompts for a password on stdin. Open <http://localhost:3001> and sign in.
 
+That URL works as written **from the host only**. Before reaching this from any other
+machine, read [TLS is not optional in production](#tls-is-not-optional-in-production) — over
+plain HTTP on a LAN address, sign-in fails for a reason the error messages do not name.
+
 Under Podman, substitute `podman-compose` for `docker compose` throughout — or `podman
 compose`, which is a thin wrapper over the same. The one place the two differ is stdin, and
 it is called out under [Podman](#podman) below.
@@ -100,9 +104,79 @@ shared budget and the first caller to trip it locks out everybody. It is a count
 never `true` — see [`SECURITY.md`](SECURITY.md) E-2. Publishing on
 `127.0.0.1:3001:3001` instead of `3001:3001` keeps everything but that proxy off the port.
 
-For TLS, either terminate it at the proxy and leave this on plain HTTP behind it, or mount a
-certificate and set `TLS_CERT_FILE` / `TLS_KEY_FILE` (both or neither — see the commented
-lines in `docker-compose.yml`). The health check follows whichever you choose.
+### TLS is not optional in production
+
+**With `NODE_ENV=production`, the session cookie is marked `Secure`, and a browser will not
+send a `Secure` cookie back over plain HTTP.** Sign-in then fails in a way that looks like
+nothing to do with TLS: the login request succeeds, the server logs `Account created` or a
+successful sign-in, and every request after it is `UNAUTHENTICATED` because the cookie was
+accepted and immediately discarded. The client bounces back to the sign-in page, retries, and
+the retries trip the login rate limiter — so the visible symptom is usually a stack of
+_Too many requests_, several layers removed from the cause.
+
+The server warns about this at boot:
+
+```text
+Serving plain HTTP in production. Terminate TLS at a proxy, or set TLS_CERT_FILE and TLS_KEY_FILE.
+```
+
+This is easy to miss, because it does not happen on the machine you are testing from:
+browsers treat `http://localhost` and `http://127.0.0.1` as secure origins and will send a
+`Secure` cookie to them anyway. A LAN address such as `http://192.168.1.50:3001` is not a
+secure origin and gets no such exemption — so a deployment that signs in perfectly from the
+host fails the moment somebody opens it from another machine.
+
+Take it literally. There are two ways to satisfy it, and the health check follows whichever
+you choose.
+
+**Terminate at a reverse proxy.** The proxy serves HTTPS, this stays on plain HTTP behind it,
+and you set `TRUST_PROXY_HOPS=1` (see above). Publish on `127.0.0.1:3001:3001` so nothing but
+the proxy can reach the port.
+
+**Or terminate in the container**, which needs no second service and suits a single host on a
+LAN. Generate a certificate — self-signed is fine for a private network — naming the address
+you will actually browse to:
+
+```bash
+mkdir -p ~/chatui-tls
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+  -keyout ~/chatui-tls/key.pem -out ~/chatui-tls/cert.pem \
+  -subj "/CN=192.168.1.50" \
+  -addext "subjectAltName=IP:192.168.1.50"
+```
+
+Mount it and point the server at it:
+
+```yaml
+services:
+  app:
+    volumes:
+      - chatui-data:/data
+      - /home/you/chatui-tls:/tls:ro,Z # :Z for SELinux; see Podman below
+    environment:
+      TLS_CERT_FILE: /tls/cert.pem
+      TLS_KEY_FILE: /tls/key.pem
+```
+
+**The container reads those files as uid 1000, not as you**, so ownership is not enough — the
+mounted directory needs `o+rx` and the files `o+r`:
+
+```bash
+chmod 755 ~/chatui-tls
+chmod 644 ~/chatui-tls/cert.pem ~/chatui-tls/key.pem
+```
+
+That looks like a world-readable private key and is not one, provided the directory stays
+inside a home directory of mode `700`: the bind mount is resolved by the engine, so the
+container never traverses the parent, while another local user still cannot path their way in.
+If you would rather not rely on that, keep the certificate outside `$HOME` under a directory
+you control and restrict it there.
+
+Then browse to `https://…`, not `http://`. A self-signed certificate is untrusted by
+definition, so the browser will interrupt once; accept it and the cookie will persist from
+then on.
+
+Boot logs should show `"transport":"https"` and no plain-HTTP warning.
 
 ### Running it
 
@@ -176,21 +250,29 @@ Store it the way you would store a password database.
 
 ### Troubleshooting
 
-| What you see                                                          | What it is                                                                                                                                                                                                                                                  |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No models, provider shows _unavailable_                               | `LLAMA_BASE_URL` points somewhere the container cannot reach. See [Pointing it at a model](#pointing-it-at-a-model). Check with `docker compose exec app node -e "fetch('<url>/v1/models').then(r=>console.log(r.status)).catch(e=>console.log(e.cause))"`. |
-| `Invalid environment configuration` and a restart loop                | A variable in `.env` is malformed. The message names it; the container never starts with a bad configuration.                                                                                                                                               |
-| Container is `unhealthy`                                              | `docker compose logs app`. The probe follows `PORT` and the TLS variables, so it is a real failure, not a mismatch.                                                                                                                                         |
-| Port already in use                                                   | Set `RGFSCHAT_PORT` in `.env`.                                                                                                                                                                                                                              |
-| `restore: /data is not empty`                                         | Deliberate. `docker compose down -v` first — restoring on top of existing data is not something to do by accident.                                                                                                                                          |
-| Signed out constantly behind a proxy, or everyone locked out of login | `TRUST_PROXY_HOPS` is unset. See above.                                                                                                                                                                                                                     |
-| Everything looks right but the page is blank                          | `docker compose logs app` — and check you are on the published port, not 3001, if you changed it.                                                                                                                                                           |
+| What you see                                                                                   | What it is                                                                                                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No models, provider shows _unavailable_                                                        | `LLAMA_BASE_URL` points somewhere the container cannot reach. See [Pointing it at a model](#pointing-it-at-a-model). Check with `docker compose exec app node -e "fetch('<url>/v1/models').then(r=>console.log(r.status)).catch(e=>console.log(e.cause))"`. |
+| `Invalid environment configuration` and a restart loop                                         | A variable in `.env` is malformed. The message names it; the container never starts with a bad configuration.                                                                                                                                               |
+| Container is `unhealthy`                                                                       | `docker compose logs app`. The probe follows `PORT` and the TLS variables, so it is a real failure, not a mismatch.                                                                                                                                         |
+| Port already in use                                                                            | Set `RGFSCHAT_PORT` in `.env`.                                                                                                                                                                                                                              |
+| `restore: /data is not empty`                                                                  | Deliberate. `docker compose down -v` first — restoring on top of existing data is not something to do by accident.                                                                                                                                          |
+| Signed out constantly behind a proxy, or everyone locked out of login                          | `TRUST_PROXY_HOPS` is unset. See above.                                                                                                                                                                                                                     |
+| Everything looks right but the page is blank                                                   | `docker compose logs app` — and check you are on the published port, not 3001, if you changed it.                                                                                                                                                           |
+| Sign-in succeeds, then every request is `UNAUTHENTICATED` and you are back at the sign-in page | Plain HTTP with `NODE_ENV=production`. The session cookie is `Secure` and the browser is discarding it. See [TLS is not optional in production](#tls-is-not-optional-in-production).                                                                        |
+| `Too many requests. Please wait and try again.`                                                | The login limiter: 20 attempts per address and 10 per username, per 15 minutes. Usually a **symptom** — something made the first attempt fail and the client retried. Fix that, then wait out the window; retrying only re-arms it.                         |
+| `EACCES: permission denied, open '/tls/cert.pem'`                                              | The certificate is mounted but not readable by uid 1000. `chmod 755` the directory and `644` the files. Ownership alone is not enough.                                                                                                                      |
+| `ENOENT: no such file or directory, open '/tls/cert.pem'`                                      | `TLS_CERT_FILE` names a path _inside_ the container and nothing is mounted there. Add the `volumes:` entry as well as the variable.                                                                                                                         |
+| `EACCES: permission denied, mkdir '/data:ro,Z'`                                                | Mount options pasted into `DATA_DIR`. It is a plain path (`/data`); `:ro`, `:z` and `:Z` belong only on the `volumes:` line.                                                                                                                                |
+| `Failed sign-in attempt` — the password you believe you set is refused                         | Reset it rather than guessing — `reset-password` under [Operator commands](#operator-commands). Usernames are case-insensitive, so capitalisation is never the cause.                                                                                       |
 
 ### Podman
 
-Rootless Podman is supported and needs no privileged mode, no `--userns` flag and no SELinux
-relabelling, because the state lives in a **named volume** rather than a bind mount: the
-engine owns it and gives it to the container's user. The two things that do differ:
+Rootless Podman is supported and needs no privileged mode and no `--userns` flag. The state
+lives in a **named volume** rather than a bind mount, so the engine owns it and gives it to
+the container's user — which is what spares you the ownership and SELinux questions that a
+bind mount raises. Mount anything of your own, such as a TLS certificate, and those questions
+come back; see the end of this section. What differs from Docker:
 
 - **Stdin.** `podman-compose run` does not attach stdin the way `docker compose run` does. For
   the commands above that read a password, pipe it and use `-T`, or use `podman run -i`
@@ -205,9 +287,22 @@ engine owns it and gives it to the container's user. The two things that do diff
   compose file declares the health check itself as well as the image carrying one. Build with
   `podman build --format docker` if you want it in the image too.
 
-If you mount anything else from the host — a TLS certificate, a models directory — add `:z`
-to the mount so SELinux allows the container to read it. The commented examples in the
-compose file already do.
+- **Tearing down.** `podman-compose down` can fail part-way when several services share a
+  pod, leaving containers running and the network undeletable. To restart one service, prefer
+  `podman-compose up -d --force-recreate app` over a full `down` and `up`.
+
+If you mount anything else from the host — a TLS certificate, a models directory — two
+separate things have to be right, and only the first is about SELinux:
+
+- Add `:z` (shared) or `:Z` (private) to the mount, so SELinux allows the container to read
+  it. The commented examples in the compose file already do.
+- Make it readable by **uid 1000 inside the container**, which is not your user. Under
+  rootless Podman your uid maps to container root and the application's uid 1000 maps to a
+  subuid that owns nothing of yours, so a file that is `600 you:you` is unreadable however
+  correct it looks on the host. The mounted directory needs `o+rx` and the files `o+r`.
+
+A mount that is missing the relabel and a mount that is missing the permission bits both fail
+with `EACCES`, which is why it is worth checking both before changing either.
 
 ### The published image
 
