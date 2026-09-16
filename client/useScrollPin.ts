@@ -142,10 +142,38 @@ export function useScrollPin(): ScrollPin {
   /** Set while a viewport resize could still be producing scroll events. */
   const resizeUntil = useRef(0);
 
+
   const isAtBottom = useCallback((element: HTMLElement): boolean => {
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
     return distance <= PIN_THRESHOLD_PX;
   }, []);
+
+  /**
+   * The reader reaching for the view, heard as it happens.
+   *
+   * `scroll` is dispatched a frame after the scroll that caused it, so for one
+   * frame the pinned flag still says the transcript is following the bottom
+   * when the reader has already left it — and a token landing in that frame was
+   * followed down, taking the view straight back off them. That is the one bug
+   * this whole file exists to prevent, and no amount of inspecting `scrollTop`
+   * afterwards sorts it out: a reflow moves the view too, and it moves it in
+   * the same direction.
+   *
+   * The gesture itself does not have that delay. A wheel, a drag, or a key that
+   * scrolls is intent, reported before anything has moved, so the flags can be
+   * set while it is still true that nothing else has happened.
+   */
+  const onReaderIntent = useCallback((): void => {
+    const element = ref.current;
+    if (element === null) return;
+    // Except where that key or wheel lands them back at the end, which is the
+    // reader handing the view back rather than taking it.
+    if (isAtBottom(element)) return;
+
+    pinnedRef.current = false;
+    userScrolled.current = true;
+    setPinned(false);
+  }, [isAtBottom]);
 
   /** Re-reads whether this transcript overflows its viewport at all. */
   const measureScrollable = useCallback((element: HTMLElement): void => {
@@ -250,15 +278,21 @@ export function useScrollPin(): ScrollPin {
     measureScrollable(element);
 
     element.addEventListener('scroll', onScroll, { passive: true });
+    element.addEventListener('wheel', onReaderIntent, { passive: true });
+    element.addEventListener('touchmove', onReaderIntent, { passive: true });
+    element.addEventListener('keydown', onReaderIntent, { passive: true });
     window.addEventListener('resize', markResize);
     window.visualViewport?.addEventListener('resize', markResize);
 
     return () => {
       element.removeEventListener('scroll', onScroll);
+      element.removeEventListener('wheel', onReaderIntent);
+      element.removeEventListener('touchmove', onReaderIntent);
+      element.removeEventListener('keydown', onReaderIntent);
       window.removeEventListener('resize', markResize);
       window.visualViewport?.removeEventListener('resize', markResize);
     };
-  }, [isAtBottom, measureScrollable, scrollToBottom]);
+  }, [isAtBottom, measureScrollable, scrollToBottom, onReaderIntent]);
 
   useEffect(
     () => () => {

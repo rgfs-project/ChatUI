@@ -56,16 +56,38 @@ test.describe('transcript scrolling', () => {
     await startGeneration(page, 'tell me something long');
     await app.provider.waitForStream();
 
-    app.provider.send('first chunk of the answer. ');
-    await expect(page.locator('.msg--assistant')).toContainText('first chunk');
+    /*
+     * Enough of an answer to scroll back through, which takes more than a few
+     * chunks: the room reserved under the last turn shrinks by exactly what
+     * the answer grows, so the transcript does not become scrollable at all
+     * until the answer has outgrown the reserve. Short of that the top of it
+     * is still inside the slack that counts as the bottom, "scrolled up" never
+     * happens, and the test proves nothing.
+     */
+    for (let i = 0; i < 30; i += 1) {
+      app.provider.send(
+        `Paragraph ${i} of the first pass, long enough to take a line or two of its own on the way to filling the reserve.\n\n`
+      );
+    }
+    await expect(page.locator('.msg--assistant')).toContainText('Paragraph 29');
 
-    // Scroll away from the bottom, as a reader going back over the answer would.
+    // Scroll away from the bottom, as a reader going back over the answer
+    // would — with the wheel, which is what says it was the reader. Moving
+    // `scrollTop` from script is indistinguishable from the transcript's own
+    // corrections until the scroll event lands a frame later.
     const box = transcript(page);
-    await box.evaluate((el) => el.scrollTo({ top: 0 }));
+    await box.hover();
+    await page.mouse.wheel(0, -4000);
+    await page.waitForTimeout(150);
     const parked = await box.evaluate((el) => el.scrollTop);
+    // Genuinely away from it, rather than within the slack that still counts
+    // as the end.
+    expect(
+      await box.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)
+    ).toBeGreaterThan(48);
 
     for (let i = 0; i < 40; i += 1) app.provider.send(`more text chunk ${i}. `);
-    await expect(page.locator('.msg--assistant')).toContainText('chunk 39');
+    await expect(page.locator('.msg--assistant')).toContainText('more text chunk 39');
 
     // Content grew underneath, but the viewport stayed where it was put.
     expect(await box.evaluate((el) => el.scrollTop)).toBe(parked);

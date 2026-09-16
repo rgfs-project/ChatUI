@@ -170,9 +170,13 @@ export function useTailSpace({ port, content, anchorId, adjustBy }: TailSpaceOpt
      * and taking height from the transcript. Taking the difference back out of
      * `scrollTop` leaves the question where the reader was reading it.
      *
+     * Measured down the screen, because that is where the drift is: the
+     * composer growing shortens the transcript without changing a pixel of the
+     * content in it, and the question still slides. Which of these moves is the
+     * reader's own scroll is not a question this measurement can answer, and it
+     * does not try — `adjustBy` refuses one it did not cause.
+     *
      * Downwards only, because up is what a long answer legitimately does to it.
-     * And never once the reader has scrolled somewhere themselves — `adjustBy`
-     * refuses then, because from that point the position is theirs.
      */
     const top = anchor.getBoundingClientRect().top;
     const before = previous.current;

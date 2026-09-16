@@ -2457,12 +2457,13 @@ button.linkish:hover {
    * became a band as tall as a line of the message, spaced far wider apart
    * than the row they belong to, and it read as chrome rather than as the
    * message's own footnote. It keeps the size it has everywhere else.
+   *
+   * The composer's own controls are not an exception, for all that they were
+   * once listed as one. Attach was 28px square and send 36px in the one bar a
+   * thumb reaches for on every turn — the smallest targets on the screen in the
+   * place with the most traffic, and the 65px bar has the room for both.
    */
-  .icon-button:not(
-    .msg__actions .icon-button,
-    .main__header .icon-button,
-    .composer__bar .icon-button
-  ) {
+  .icon-button:not(.msg__actions .icon-button, .main__header .icon-button) {
     width: 2.75rem;
     height: 2.75rem;
   }
@@ -2501,6 +2502,13 @@ button.linkish:hover {
    */
   .composer textarea {
     min-height: 2.75rem;
+  }
+
+  /* Send carries its own size rather than the icon button's, so the rule above
+     never reaches it: the one control that ends every turn was 36px. */
+  .composer__send {
+    width: 2.75rem;
+    height: 2.75rem;
   }
 }
 

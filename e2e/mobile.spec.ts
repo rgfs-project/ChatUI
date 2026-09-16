@@ -251,7 +251,20 @@ test.describe('phone (390x844)', () => {
           if (element.getAttribute('aria-hidden') === 'true') return false;
           if (element.tabIndex < 0) return false;
 
-          return box.width < 44 || box.height < 44;
+          /*
+           * Two controls are held to WCAG 2.2 AA's 24px floor rather than to
+           * this 44, because growing them to 44 breaks the layout they sit in
+           * and `components.css` says so at both of them: the header's control
+           * pushed the title 12px off the column the sidebar's header puts it
+           * on, and the model trigger became a pill half the height of the
+           * composer it sits inline in. They keep a full 44 on the other axis.
+           */
+          const relaxed =
+            element.closest('.main__header') !== null ||
+            element.classList.contains('model-trigger');
+          const floor = relaxed ? 24 : 44;
+
+          return box.width < floor || box.height < floor;
         })
         .map((element) => ({
           what: element.getAttribute('aria-label') ?? element.className,
@@ -378,14 +391,36 @@ test.describe('desktop (1440x900)', () => {
     await page.locator('.conversation__open').first().click();
 
     const transcript = page.getByTestId('transcript');
-    await transcript.evaluate((element) => element.scrollTo({ top: 0 }));
-    const parked = await transcript.evaluate((element) => element.scrollTop);
 
+    /*
+     * The reader scrolls away *after* asking, not before.
+     *
+     * Sending is not a passive act: asking a question means wanting to see it,
+     * so the composer re-pins the transcript and takes the view to the new
+     * turn wherever it had got to. Scrolling up first and then sending
+     * therefore measures that deliberate jump rather than what this is about,
+     * which is a reply arriving under a reader who has gone back up.
+     */
     const composer = composerField(page);
     await composer.fill('tell me something');
     await composer.press('Enter');
     await app.provider.waitForStream();
-    app.provider.send('a reply that arrives while the reader is elsewhere');
+    app.provider.send('the first part of a reply. ');
+    await expect(page.locator('.msg--assistant')).toContainText('first part');
+
+    // With the wheel rather than from script: a scroll the reader makes is
+    // reported as intent before anything moves, which is what tells it from
+    // the transcript's own corrections.
+    await transcript.hover();
+    await page.mouse.wheel(0, -4000);
+    await page.waitForTimeout(150);
+    const parked = await transcript.evaluate((element) => element.scrollTop);
+    expect(
+      await transcript.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)
+    ).toBeGreaterThan(48);
+
+    app.provider.send('and the rest of it, arriving while the reader is elsewhere. ');
+    await expect(page.locator('.msg--assistant')).toContainText('the rest of it');
     await page.waitForTimeout(300);
 
     expect(await transcript.evaluate((element) => element.scrollTop)).toBe(parked);
