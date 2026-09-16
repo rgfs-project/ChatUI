@@ -3065,8 +3065,16 @@ button.linkish:hover {
   padding: 1.125rem 1.25rem 0.875rem;
 }
 
+/*
+ * The top padding is the gap under the heading's rule.
+ *
+ * At `0` the first row's hover highlight met the border exactly, so a rounded
+ * fill appeared welded to a square line — the one place in the dialog where
+ * two shapes touch without either being the other's edge. The rest of the
+ * inset is the settings panel's, per the note above.
+ */
 .palette--artifacts .palette__list {
-  padding: 0 1.25rem 1.5rem;
+  padding: 0.5rem 1.25rem 1.5rem;
 }
 
 /*

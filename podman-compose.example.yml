@@ -1,0 +1,174 @@
+# A worked rootless-Podman deployment, on one host, over TLS.
+#
+# `docker-compose.yml` is the supported file and builds from source. This one is
+# a copyable example of the other common shape: the published image, a model
+# server as a sibling service, and HTTPS served by the container itself because
+# nothing in front of it is terminating TLS.
+#
+#   cp podman-compose.example.yml compose.yml
+#   $EDITOR compose.yml            # the four marked spots
+#   podman-compose up -d
+#
+# There are no accounts to begin with. Registration opens by itself while none
+# exists and closes the moment the first is made, so the first person to reach
+# the page becomes the administrator — claim it immediately, or set
+# ADMIN_PASSWORD in .env and have it made at boot instead.
+name: chatui
+
+services:
+  # --- the model server ----------------------------------------------------
+  #
+  # Here so `LLAMA_BASE_URL` can be a service name. Delete this whole service if
+  # yours runs elsewhere and point the variable at it instead.
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+    container_name: llamacpp
+
+    # EDIT: the host address to publish on, or drop `ports:` entirely — the
+    # application reaches this over `private_net` either way, and not publishing
+    # it is the tighter posture.
+    ports:
+      - '192.168.1.50:8081:8081'
+    networks: [private_net]
+
+    # `:ro` because it only reads them, `:Z` so SELinux allows it to. See the
+    # note on the certificate mount below for the permissions that `:Z` does
+    # *not* solve.
+    volumes:
+      - /home/you/llama/models:/models:ro,Z
+      - /home/you/llama/secrets/api-key:/run/api-key:ro,Z
+
+    environment:
+      - LD_LIBRARY_PATH=/app
+
+    # EDIT: your GPU's render node, or delete both lines for CPU inference.
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card1:/dev/dri/card1
+
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 24g
+    pids_limit: 256
+    restart: always
+
+    # `--host 0.0.0.0`, not the default loopback: bound to 127.0.0.1 it would be
+    # listening only inside its own container, invisible to the application.
+    command: >
+      --models-dir /models/
+      --models-max 1
+      --models-preset /models/config.ini
+      --port 8081
+      --host 0.0.0.0
+      --api-key-file /run/api-key
+
+  # --- the application -----------------------------------------------------
+  chatui:
+    image: ghcr.io/rgfs-project/chatui:latest
+    container_name: chatui
+    networks: [private_net]
+
+    # EDIT: the host address to publish on. A bare `3001:3001` listens on every
+    # interface, which on a machine with a public address means the internet.
+    ports:
+      - '192.168.1.50:3001:3001'
+
+    volumes:
+      # The whole persistent boundary. A named volume rather than a bind mount,
+      # so the engine owns it and no host uid has to line up with the
+      # container's user.
+      - chatui-data:/data
+
+      # The certificate, which IS a bind mount and therefore does need that uid
+      # to line up. Two separate things must be true and only the first is
+      # SELinux:
+      #
+      #   chmod 755 /home/you/chatui-tls
+      #   chmod 644 /home/you/chatui-tls/cert.pem /home/you/chatui-tls/key.pem
+      #
+      # The container reads these as uid 1000, which under rootless Podman is a
+      # subuid owning nothing of yours — so `600 you:you` is unreadable however
+      # right it looks on the host, and fails with EACCES exactly as a missing
+      # `:Z` does. Keeping the directory inside a home directory of mode 700
+      # means those bits do not expose the key: the mount is resolved by the
+      # engine, so the container never traverses the parent, while another local
+      # user still cannot path their way in.
+      - /home/you/chatui-tls:/tls:ro,Z
+
+    env_file: .env
+
+    environment:
+      NODE_ENV: production
+      PORT: '3001'
+
+      # A plain path. Mount options (`:ro`, `:z`, `:Z`) belong on the volumes
+      # line above and nowhere near this value — pasted in here they become part
+      # of the directory name and the server fails trying to create it.
+      DATA_DIR: /data
+
+      # The service name is the hostname, on the shared network below.
+      #
+      # Read ONCE, on the first start of a fresh volume, and written into
+      # /data/_system/providers.json. After that the file is authoritative and
+      # the admin panel edits it, so changing this later does nothing — by
+      # design: a restart must not undo a provider somebody configured in the UI.
+      LLAMA_BASE_URL: http://llamacpp:8081
+
+      # TLS, served directly. Both or neither.
+      #
+      # Not optional here. With NODE_ENV=production the session cookie is marked
+      # Secure, and a browser will not send a Secure cookie back over plain
+      # HTTP — so sign-in appears to succeed and every request after it is
+      # UNAUTHENTICATED. It works from the host, because localhost is a secure
+      # origin, and fails from every other machine. Generate a certificate for
+      # the address you actually browse to:
+      #
+      #   openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+      #     -keyout key.pem -out cert.pem \
+      #     -subj "/CN=192.168.1.50" -addext "subjectAltName=IP:192.168.1.50"
+      #
+      # Self-signed is untrusted by definition, so the browser interrupts once.
+      # Unset both of these instead if a reverse proxy terminates TLS, and set
+      # TRUST_PROXY_HOPS=1 in .env when you do.
+      TLS_CERT_FILE: /tls/cert.pem
+      TLS_KEY_FILE: /tls/key.pem
+
+      # LLAMA_API_KEY and ADMIN_PASSWORD are deliberately absent: a secret in a
+      # committed file is a published secret. Both belong in .env, which is
+      # git-ignored.
+
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: always
+    stop_grace_period: 30s
+
+    # The default driver keeps every request line forever, which on a long-lived
+    # deployment is a disk that fills for no reason anybody notices until it is
+    # full.
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+    # Declared here as well as in the image, because Podman's default image
+    # format drops the HEALTHCHECK instruction. It follows PORT and the TLS
+    # variables, so it does not need telling which scheme is being served.
+    healthcheck:
+      test: ['CMD', 'entrypoint', 'healthcheck']
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+# Both services share this and nothing else does, so the provider is reachable
+# by name from the application and by nothing on the host that was not published
+# above.
+networks:
+  private_net:
+
+volumes:
+  chatui-data:
