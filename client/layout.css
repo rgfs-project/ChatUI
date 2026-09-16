@@ -282,7 +282,7 @@ body {
 
 /*
  * Pulled back by its own padding, so the glyph — not the box around it — sits
- * on the gutter. Without this the control drew 7px right of where the title
+ * on the bar inset. Without this the control drew 7px right of where the title
  * starts when the sidebar has taken it, and the two states disagreed about
  * where the bar begins.
  */
