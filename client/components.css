@@ -2697,6 +2697,31 @@ button.linkish:hover {
     color: var(--text);
   }
 
+  /*
+   * And the words in a popup are read at arm's length, not at a desk.
+   *
+   * The title of a dialog was 14px, the sentence under it 14px, a field's
+   * label 12px, a menu row 13.5px — sizes that sit under a pointer on a large
+   * screen, on a card that now takes nearly the whole of a small one. The
+   * question a dialog asks is the reason it interrupted; it reads as a
+   * heading, and its answer is the size of body text rather than of a caption.
+   */
+  .modal__card h2 {
+    font-size: 1.0625rem;
+  }
+
+  .modal__card .small {
+    font-size: 0.9375rem;
+  }
+
+  .modal__card .field > span {
+    font-size: 0.8125rem;
+  }
+
+  .menu__item {
+    font-size: 0.9375rem;
+  }
+
   /* Panels fill the available room at this width, but stay a floating card —
      the surrounding `.panel` padding means corners are still visible, so they
      keep the same rounding as the desktop card instead of squaring off. */
