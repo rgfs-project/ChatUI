@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { FORMAT_VERSION, type Conversation, type Message } from '@shared/conversation.ts';
-import { assemblePrompt, estimateTokens } from './prompt.ts';
+import type { ChatMessage } from '@shared/generation.ts';
+import { assemblePrompt, estimateTokens, messageText, type ResolvedAttachment } from './prompt.ts';
 
 function conversation(messages: Message[]): Conversation {
   return {
@@ -224,5 +225,159 @@ describe('image cost', () => {
         modalities,
       })
     ).toThrowError(/1 image accounts for/i);
+  });
+});
+
+/**
+ * Capping how many earlier images are sent up again.
+ *
+ * A limit on re-processing rather than on what one message may carry: the
+ * provider encodes every image in the prompt on each request, so a
+ * conversation holding five screenshots pays five vision encodes per reply,
+ * for pictures answered several turns ago. The turn being answered keeps its
+ * own images and does not spend the allowance.
+ */
+describe('maxHistoryImages', () => {
+  /** `count` user turns, each carrying one image and its own line of text. */
+  function withImages(count: number) {
+    const messages: Message[] = [];
+    const attachments = new Map<string, ResolvedAttachment>();
+
+    for (let i = 0; i < count; i += 1) {
+      const id = `1111111${String(i)}-2222-4333-8444-555555555555`;
+      messages.push({
+        type: 'user',
+        id: randomUUID(),
+        attachments: [id],
+        body: `picture ${String(i)}`,
+      });
+      attachments.set(id, {
+        id,
+        filename: `shot-${String(i)}.png`,
+        kind: 'image' as const,
+        mediaType: 'image/png',
+        content: `data:image/png;base64,AAAA${String(i)}`,
+        truncated: false,
+        pixels: 1_000_000,
+      });
+    }
+
+    return { conversation: conversation(messages), attachments, modalities: ['image'] };
+  }
+
+  function imagesIn(prompt: ReturnType<typeof assemblePrompt>): number {
+    return prompt.messages.flatMap((message) =>
+      typeof message.content === 'string'
+        ? []
+        : message.content.filter((part) => part.type === 'image_url')
+    ).length;
+  }
+
+  it('re-sends every image when unset, which is what it did before', () => {
+    const { conversation: convo, attachments, modalities } = withImages(5);
+
+    const prompt = assemblePrompt(convo, { ...ROOMY, attachments, modalities });
+
+    expect(imagesIn(prompt)).toBe(5);
+    expect(prompt.imagesDropped).toBe(0);
+  });
+
+  it('re-sends only the newest earlier images, on top of the current turn', () => {
+    const { conversation: convo, attachments, modalities } = withImages(5);
+
+    const prompt = assemblePrompt(convo, {
+      ...ROOMY,
+      attachments,
+      modalities,
+      maxHistoryImages: 2,
+    });
+
+    // Two out of the four earlier images, plus the current turn's own, which
+    // is not history and does not count against the limit.
+    expect(imagesIn(prompt)).toBe(3);
+    expect(prompt.imagesDropped).toBe(2);
+  });
+
+  it("does not let the current turn's images spend the allowance", () => {
+    const { conversation: convo, attachments, modalities } = withImages(3);
+
+    const prompt = assemblePrompt(convo, {
+      ...ROOMY,
+      attachments,
+      modalities,
+      maxHistoryImages: 2,
+    });
+
+    // Both earlier images survive: the newest turn's picture is not one of them.
+    expect(imagesIn(prompt)).toBe(3);
+    expect(prompt.imagesDropped).toBe(0);
+  });
+
+  it('keeps the words of a turn whose image it dropped', () => {
+    const { conversation: convo, attachments, modalities } = withImages(3);
+
+    const prompt = assemblePrompt(convo, {
+      ...ROOMY,
+      attachments,
+      modalities,
+      maxHistoryImages: 1,
+    });
+
+    // Every turn is still there, oldest included — only its picture is not.
+    expect(prompt.messages).toHaveLength(3);
+    expect(prompt.dropped).toBe(0);
+    expect(messageText(prompt.messages[0] as ChatMessage)).toContain('picture 0');
+  });
+
+  it('says an image was omitted rather than leaving a silent gap', () => {
+    const { conversation: convo, attachments, modalities } = withImages(3);
+
+    const prompt = assemblePrompt(convo, {
+      ...ROOMY,
+      attachments,
+      modalities,
+      maxHistoryImages: 1,
+    });
+
+    expect(messageText(prompt.messages[0] as ChatMessage)).toContain('1 earlier image omitted');
+  });
+
+  it('never strips the turn being answered, whose pictures are the question', () => {
+    const { conversation: convo, attachments, modalities } = withImages(3);
+
+    // Even at a limit of zero — re-send nothing from before — the current turn
+    // keeps its own image.
+    const prompt = assemblePrompt(convo, {
+      ...ROOMY,
+      attachments,
+      modalities,
+      maxHistoryImages: 0,
+    });
+
+    const newest = prompt.messages.at(-1) as ChatMessage;
+    expect(typeof newest.content === 'string' ? [] : newest.content).toContainEqual(
+      expect.objectContaining({ type: 'image_url' })
+    );
+    expect(imagesIn(prompt)).toBe(1);
+    expect(prompt.imagesDropped).toBe(2);
+  });
+
+  it('frees budget that older text then uses, rather than dropping whole turns', () => {
+    const { conversation: convo, attachments, modalities } = withImages(4);
+    // Room for the text of every turn, but not for four megapixel images.
+    const TIGHT = { contextTokens: 2_400, maxOutputTokens: 100 };
+
+    const uncapped = assemblePrompt(convo, { ...TIGHT, attachments, modalities });
+    const capped = assemblePrompt(convo, {
+      ...TIGHT,
+      attachments,
+      modalities,
+      maxHistoryImages: 0,
+    });
+
+    // Uncapped, the images crowd out whole turns; capped, the turns survive.
+    expect(uncapped.dropped).toBeGreaterThan(0);
+    expect(capped.dropped).toBe(0);
+    expect(capped.messages).toHaveLength(4);
   });
 });

@@ -366,6 +366,7 @@ it is invalid — never with a stack trace, and never echoing the offending valu
 | `PROVIDER_TIMEOUT_MS`    | `120000`                | Generous: a cold model load can take ~12 s           |
 | `DEFAULT_CONTEXT_TOKENS` | `8192`                  | Fallback when a model's real context is unknown      |
 | `MAX_OUTPUT_TOKENS`      | `2048`                  | Per-generation output cap                            |
+| `MAX_HISTORY_IMAGES`     | _(unset)_               | Older images re-sent per request; `0` re-sends none  |
 | `TLS_CERT_FILE`          | _(unset)_               | PEM cert; with the key below, serves HTTPS directly  |
 | `TLS_KEY_FILE`           | _(unset)_               | PEM private key; both or neither                     |
 | `TRUST_PROXY_HOPS`       | `0`                     | Reverse proxies in front; see below                  |

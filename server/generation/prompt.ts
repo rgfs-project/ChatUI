@@ -65,6 +65,20 @@ export interface BudgetOptions {
    * questions ago.
    */
   modalities?: readonly string[];
+  /**
+   * How many images from *earlier* turns are sent up again, newest first.
+   * Unset means all of them, which is the default and the previous behaviour;
+   * `0` means none, re-sending only the images of the turn being answered.
+   *
+   * This is a limit on re-processing, not on what a message may contain. Every
+   * image in a prompt is encoded by the provider on every request, so a
+   * conversation carrying five screenshots pays for five vision encodes per
+   * reply — for pictures that were answered several turns ago and are not what
+   * is being asked about now. The turn being answered always keeps its own
+   * images and does not spend the allowance; only the history behind it is
+   * trimmed, oldest first, and the words of those turns stay.
+   */
+  maxHistoryImages?: number;
 }
 
 /**
@@ -172,10 +186,110 @@ function costOf(message: ChatMessage, imageCosts: readonly number[] = []): numbe
   return total;
 }
 
+/**
+ * What is left in place of an image that was not sent.
+ *
+ * A marker rather than silence, because an attachment-only turn reads as
+ * `PROMPT_FOR_MEDIA_ONLY` — "please look at the attached file" with nothing
+ * attached is a question the model cannot answer and has no way to recognise
+ * as incomplete. Saying the picture was dropped at least makes the gap
+ * legible, and it costs a few tokens against the thousand-odd it just saved.
+ */
+function omittedMarker(count: number): string {
+  return `[${String(count)} earlier image${count === 1 ? '' : 's'} omitted]`;
+}
+
+/**
+ * Keeps the newest `limit` images out of the history, oldest-first out.
+ *
+ * Walks newest to oldest so "most recent" is decided across the whole
+ * conversation rather than per message, and within a message keeps the images
+ * in the order they were attached. The turn being answered is skipped
+ * entirely — it is not history, and its pictures are the question.
+ *
+ * Runs before the token budget, not after: an image released here is budget
+ * the older *text* can then use, which is the whole point. Doing it afterwards
+ * would drop the turns first and cap what survived.
+ */
+function capImages(turns: ChatMessage[], costs: Map<ChatMessage, number[]>, limit: number): number {
+  let seen = 0;
+  let dropped = 0;
+
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const message = turns[index] as ChatMessage;
+    if (typeof message.content === 'string') continue;
+
+    const exempt = index === turns.length - 1;
+    const imageCosts = costs.get(message) ?? [];
+    const parts: ContentPart[] = [];
+    const keptCosts: number[] = [];
+    let image = 0;
+    let removed = 0;
+
+    for (const part of message.content) {
+      if (part.type !== 'image_url') {
+        parts.push(part);
+        continue;
+      }
+
+      const cost = imageCosts[image] ?? IMAGE_TOKENS_ESTIMATE;
+      image += 1;
+
+      /* The turn being answered is not history and does not spend the
+         allowance: the limit is how many *earlier* pictures get sent up again,
+         not how many the request may contain. */
+      if (exempt) {
+        parts.push(part);
+        keptCosts.push(cost);
+        continue;
+      }
+
+      seen += 1;
+      if (seen <= limit) {
+        parts.push(part);
+        keptCosts.push(cost);
+        continue;
+      }
+      removed += 1;
+    }
+
+    if (removed === 0) continue;
+    dropped += removed;
+
+    /* The marker joins the turn's own words rather than becoming a second text
+       part: some servers only read the first. */
+    const marker = omittedMarker(removed);
+    let noted = false;
+    const annotated = parts.map((part): ContentPart => {
+      if (noted || part.type !== 'text') return part;
+      noted = true;
+      const text = part.text === PROMPT_FOR_MEDIA_ONLY ? marker : `${part.text}\n\n${marker}`;
+      return { type: 'text', text };
+    });
+    if (!noted) annotated.unshift({ type: 'text', text: marker });
+
+    /* A turn with nothing but text left is sent as a plain string, which is
+       what it would have been had it never carried an attachment. */
+    const onlyText = annotated.length === 1 && annotated[0]?.type === 'text';
+    const replacement: ChatMessage =
+      onlyText && annotated[0]?.type === 'text'
+        ? { role: message.role, content: annotated[0].text }
+        : { role: message.role, content: annotated };
+
+    turns[index] = replacement;
+    costs.delete(message);
+    if (keptCosts.length > 0) costs.set(replacement, keptCosts);
+  }
+
+  return dropped;
+}
+
 export interface AssembledPrompt {
   messages: ChatMessage[];
   /** How many non-system messages were dropped to fit the budget. */
   dropped: number;
+  /** How many older images were left out under `maxHistoryImages`. */
+  imagesDropped: number;
   estimatedTokens: number;
 }
 
@@ -196,7 +310,14 @@ export interface AssembledPrompt {
  */
 export function assemblePrompt(
   conversation: Conversation,
-  { contextTokens, maxOutputTokens, systemPrompt, attachments, modalities = [] }: BudgetOptions
+  {
+    contextTokens,
+    maxOutputTokens,
+    systemPrompt,
+    attachments,
+    modalities = [],
+    maxHistoryImages,
+  }: BudgetOptions
 ): AssembledPrompt {
   const system: ChatMessage[] = [];
   const turns: ChatMessage[] = [];
@@ -237,6 +358,10 @@ export function assemblePrompt(
       turns.push({ role: 'assistant', content: message.body });
     }
   }
+
+  /* Before the budget: an image released here is room the older text can use. */
+  const imagesDropped =
+    maxHistoryImages === undefined ? 0 : capImages(turns, costs, maxHistoryImages);
 
   const budget = contextTokens - maxOutputTokens;
   if (budget <= 0) {
@@ -290,6 +415,7 @@ export function assemblePrompt(
   return {
     messages: [...system, ...kept],
     dropped: turns.length - kept.length,
+    imagesDropped,
     estimatedTokens: used,
   };
 }

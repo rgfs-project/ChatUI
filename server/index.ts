@@ -104,6 +104,7 @@ async function main(): Promise<void> {
     logger,
     defaultContextTokens: config.provider.defaultContextTokens,
     maxOutputTokens: config.provider.maxOutputTokens,
+    maxHistoryImages: config.provider.maxHistoryImages,
     settings,
     memories,
     proposals,

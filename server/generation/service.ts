@@ -82,6 +82,8 @@ export interface GenerationServiceOptions {
   logger: Logger;
   defaultContextTokens: number;
   maxOutputTokens: number;
+  /** Images from earlier turns re-sent, newest first. Unset: all; `0`: none. */
+  maxHistoryImages?: number | undefined;
   /**
    * Per-model sampler and system prompt, applied here rather than accepted
    * from the browser: these are an administrator's settings for everyone, and
@@ -148,6 +150,7 @@ export class GenerationService {
   readonly #logger: Logger;
   readonly #defaultContextTokens: number;
   readonly #maxOutputTokens: number;
+  readonly #maxHistoryImages: number | undefined;
   readonly #attachments: GenerationServiceOptions['attachments'];
   readonly #maxInlineChars: number;
   readonly #settings: GenerationServiceOptions['settings'];
@@ -171,6 +174,7 @@ export class GenerationService {
     this.#logger = options.logger;
     this.#defaultContextTokens = options.defaultContextTokens;
     this.#maxOutputTokens = options.maxOutputTokens;
+    this.#maxHistoryImages = options.maxHistoryImages;
     this.#settings = options.settings;
     this.#memories = options.memories;
     this.#proposals = options.proposals;
@@ -348,6 +352,9 @@ export class GenerationService {
         contextTokens:
           client.contextLength(model) ?? entry.contextTokens ?? this.#defaultContextTokens,
         maxOutputTokens: this.#maxOutputTokens,
+        ...(this.#maxHistoryImages === undefined
+          ? {}
+          : { maxHistoryImages: this.#maxHistoryImages }),
         ...(systemPrompt === undefined ? {} : { systemPrompt }),
         attachments: resolved,
         modalities,
@@ -533,6 +540,9 @@ export class GenerationService {
         contextTokens:
           client.contextLength(model) ?? entry.contextTokens ?? this.#defaultContextTokens,
         maxOutputTokens: this.#maxOutputTokens,
+        ...(this.#maxHistoryImages === undefined
+          ? {}
+          : { maxHistoryImages: this.#maxHistoryImages }),
         ...(systemPrompt === undefined ? {} : { systemPrompt }),
         attachments: resolved,
         modalities,

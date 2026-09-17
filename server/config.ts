@@ -126,6 +126,17 @@ const envSchema = z.object({
   PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
   DEFAULT_CONTEXT_TOKENS: z.coerce.number().int().min(512).max(2_000_000).default(8_192),
   MAX_OUTPUT_TOKENS: z.coerce.number().int().min(16).max(1_000_000).default(2_048),
+  /*
+   * How many images from earlier turns are sent up again, newest first. Unset,
+   * the default, sends all of them; `0` sends none.
+   *
+   * The provider encodes every image in a prompt on every request, so a
+   * conversation holding five screenshots pays five vision encodes per reply,
+   * for pictures answered several turns ago. Set this and the older ones stop
+   * being re-processed while the words of their turns stay. The message being
+   * answered always keeps its own images.
+   */
+  MAX_HISTORY_IMAGES: z.coerce.number().int().min(0).max(100).optional(),
 
   /*
    * Attachments (Phase 11).
@@ -263,6 +274,15 @@ export interface ProviderConfig {
   /** Used when the provider does not disclose a model's context length. */
   defaultContextTokens: number;
   maxOutputTokens: number;
+  /**
+   * Images from earlier turns that are re-sent, newest first. Unset re-sends
+   * all of them; `0` re-sends none.
+   *
+   * Optional so that a caller assembling this config by hand — the tests, and
+   * anything embedding the server — keeps the previous behaviour by saying
+   * nothing, rather than having to opt out of a limit it does not want.
+   */
+  maxHistoryImages?: number | undefined;
 }
 
 /**
@@ -301,6 +321,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     PROVIDER_TIMEOUT_MS,
     DEFAULT_CONTEXT_TOKENS,
     MAX_OUTPUT_TOKENS,
+    MAX_HISTORY_IMAGES,
     ATTACHMENT_MAX_BYTES,
     ATTACHMENT_MAX_TOTAL_BYTES_PER_USER,
     ATTACHMENT_PENDING_TTL_MS,
@@ -345,6 +366,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       timeoutMs: PROVIDER_TIMEOUT_MS,
       defaultContextTokens: DEFAULT_CONTEXT_TOKENS,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
+      maxHistoryImages: MAX_HISTORY_IMAGES,
     },
   };
 }
