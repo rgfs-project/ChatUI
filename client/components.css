@@ -1208,6 +1208,17 @@ button.linkish:hover {
   position: fixed;
   inset: 0;
   /*
+   * `100dvh` rather than a bottom edge of 0.
+   *
+   * A fixed layer inset to 0 is the size of the *layout* viewport, and on a
+   * phone that stays the height of the whole screen while the browser's own
+   * toolbar sits over the bottom of it. Centring in that box puts the card
+   * below the middle of what can actually be seen, which is where every dialog
+   * on Android was drawing. The dynamic unit is the visible height, and the
+   * rest of the shell is already measured in it.
+   */
+  height: 100dvh;
+  /*
    * Above the admin panel, which is itself an overlay a dialog can be opened
    * *from*. At 200 against its 300 the confirmation before clearing a user's
    * history rendered behind the panel that asked for it: the click appeared to
@@ -1718,6 +1729,8 @@ button.linkish:hover {
 .panel {
   position: fixed;
   inset: 0;
+  /* The visible height, not the layout viewport's — see `.modal` above. */
+  height: 100dvh;
   z-index: 300;
   display: grid;
   place-items: center;
@@ -2576,15 +2589,22 @@ button.linkish:hover {
    */
 
   /*
-   * Dialogs sit against the bottom too, for the same reason, but keep their
-   * side margins: a confirmation that fills the screen edge to edge reads as a
-   * new page rather than as a question about the one behind it.
+   * Dialogs take the width, but stay in the middle of the screen rather than
+   * sitting against the bottom as a sheet.
+   *
+   * A sheet is the right shape for a menu, which is a list of places to go
+   * from the control that opened it, and it is where a thumb already is. A
+   * confirmation is not that: it is a question that stops the page, and a
+   * question is asked in the middle of what it is asking about. Against the
+   * bottom it also lands in the browser's own furniture — the toolbar, the
+   * gesture bar — which is what a reader's thumb is aiming past, not at.
+   *
+   * The side margins stay: a dialog that fills the screen edge to edge reads
+   * as a new page rather than as a question about the one behind it.
    */
   .modal .modal__card {
-    align-self: end;
     width: 100%;
     max-width: none;
-    margin-bottom: max(0.5rem, var(--safe-bottom));
   }
 
   /* Panels fill the available room at this width, but stay a floating card —
