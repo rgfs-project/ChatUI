@@ -1,6 +1,7 @@
 import {
   composerField,
   expect,
+  scrollUpAwayFromEnd,
   seedConversations,
   seedMessages,
   signIn,
@@ -71,20 +72,9 @@ test.describe('transcript scrolling', () => {
     }
     await expect(page.locator('.msg--assistant')).toContainText('Paragraph 29');
 
-    // Scroll away from the bottom, as a reader going back over the answer
-    // would — with the wheel, which is what says it was the reader. Moving
-    // `scrollTop` from script is indistinguishable from the transcript's own
-    // corrections until the scroll event lands a frame later.
+    // Scroll away from the bottom, as a reader going back over the answer would.
     const box = transcript(page);
-    await box.hover();
-    await page.mouse.wheel(0, -4000);
-    await page.waitForTimeout(150);
-    const parked = await box.evaluate((el) => el.scrollTop);
-    // Genuinely away from it, rather than within the slack that still counts
-    // as the end.
-    expect(
-      await box.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)
-    ).toBeGreaterThan(48);
+    const parked = await scrollUpAwayFromEnd(page, box);
 
     for (let i = 0; i < 40; i += 1) app.provider.send(`more text chunk ${i}. `);
     await expect(page.locator('.msg--assistant')).toContainText('more text chunk 39');

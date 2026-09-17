@@ -5,7 +5,7 @@ import { createServer as createNetServer } from 'node:net';
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test as base, type Page } from '@playwright/test';
+import { test as base, type Locator, type Page } from '@playwright/test';
 
 /**
  * End-to-end fixtures.
@@ -20,6 +20,10 @@ import { test as base, type Page } from '@playwright/test';
  * change, so a pass means the packaged image behaves like the tree it was built
  * from. See `startContainer` for the two things that mode has to arrange.
  */
+
+/** The slack the transcript allows around its end before it counts as scrolled
+    away — `PIN_THRESHOLD_PX` in `useScrollPin`. */
+const PIN_SLACK_PX = 48;
 
 export const ADMIN_USERNAME = 'e2e';
 export const ADMIN_PASSWORD = 'correct horse battery';
@@ -570,4 +574,42 @@ async function findOnlyConversationFile(dataDir: string): Promise<string> {
     if (first !== undefined) return join(chats, first);
   }
   throw new Error('seed: no conversation file found');
+}
+
+/**
+ * Scrolls the transcript away from its end the way a reader does.
+ *
+ * With the wheel, not by assigning `scrollTop`: a scroll the reader makes is
+ * reported as intent before anything moves, and that is what tells it apart
+ * from the transcript's own corrections — assigning the property looks
+ * identical to those until the scroll event lands a frame later.
+ *
+ * In a loop, because one tick is not a fixed distance. How far a wheel notch
+ * carries, and whether it animates there over several frames, is the browser's
+ * business and changes between versions of it: a single `wheel` of a chosen
+ * delta moved nothing at all on the Chromium CI installs, while moving plenty
+ * on the one this was written against. Asking for the outcome rather than for
+ * a number is the same test on both.
+ *
+ * Returns where it came to rest, having checked it really did leave the end.
+ */
+export async function scrollUpAwayFromEnd(page: Page, transcript: Locator): Promise<number> {
+  const distance = (): Promise<number> =>
+    transcript.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+
+  const range = await transcript.evaluate((el) => el.scrollHeight - el.clientHeight);
+  if (range <= PIN_SLACK_PX) {
+    throw new Error(
+      `the transcript has ${range}px of range, so there is nowhere to scroll back to`
+    );
+  }
+
+  await transcript.hover();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ((await distance()) > PIN_SLACK_PX) return transcript.evaluate((el) => el.scrollTop);
+    await page.mouse.wheel(0, -600);
+    await page.waitForTimeout(80);
+  }
+
+  throw new Error('the wheel never moved the transcript away from its end');
 }

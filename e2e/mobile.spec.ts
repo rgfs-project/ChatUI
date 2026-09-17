@@ -1,4 +1,11 @@
-import { composerField, expect, seedConversations, signIn, test } from './fixtures.ts';
+import {
+  composerField,
+  expect,
+  scrollUpAwayFromEnd,
+  seedConversations,
+  signIn,
+  test,
+} from './fixtures.ts';
 import type { Page } from '@playwright/test';
 
 /**
@@ -408,16 +415,7 @@ test.describe('desktop (1440x900)', () => {
     app.provider.send('the first part of a reply. ');
     await expect(page.locator('.msg--assistant')).toContainText('first part');
 
-    // With the wheel rather than from script: a scroll the reader makes is
-    // reported as intent before anything moves, which is what tells it from
-    // the transcript's own corrections.
-    await transcript.hover();
-    await page.mouse.wheel(0, -4000);
-    await page.waitForTimeout(150);
-    const parked = await transcript.evaluate((element) => element.scrollTop);
-    expect(
-      await transcript.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)
-    ).toBeGreaterThan(48);
+    const parked = await scrollUpAwayFromEnd(page, transcript);
 
     app.provider.send('and the rest of it, arriving while the reader is elsewhere. ');
     await expect(page.locator('.msg--assistant')).toContainText('the rest of it');
