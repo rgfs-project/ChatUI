@@ -2758,6 +2758,42 @@ button.linkish:hover {
     --button-font-size: 0.875rem;
   }
 
+  /*
+   * And they take the width, the way a dialog's answers do.
+   *
+   * A control tucked into the end of a row is a pointer's idea of tidy: it
+   * costs nothing to travel to the far corner with a mouse. A thumb pays for
+   * that, and the row it sits in is already the width of the screen — so the
+   * controls drop below the text that describes them and fill the line, one
+   * of them taking all of it and two of them taking half each.
+   */
+  .panel__row-control {
+    flex: 1 0 100%;
+    justify-content: stretch;
+  }
+
+  .panel__row-control > * {
+    flex: 1;
+  }
+
+  .panel__actions button,
+  .panel__form-actions button,
+  .panel__row-control button,
+  .panel__row-control .select {
+    justify-content: center;
+    min-height: 2.75rem;
+  }
+
+  .panel__actions,
+  .panel__form-actions {
+    justify-content: stretch;
+  }
+
+  .panel__actions button,
+  .panel__form-actions button {
+    flex: 1;
+  }
+
   /* Panels fill the available room at this width, but stay a floating card —
      the surrounding `.panel` padding means corners are still visible, so they
      keep the same rounding as the desktop card instead of squaring off. */
