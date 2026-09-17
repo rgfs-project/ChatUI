@@ -77,12 +77,28 @@ const modelPairSchema = z.strictObject({
  * keeps whatever is stored. The three cases are mutually exclusive so an edit
  * can never be ambiguous about what happens to a credential.
  */
+/**
+ * A base URL with any trailing slashes removed.
+ *
+ * Request paths are appended directly (`${baseUrl}/v1/models`), so a stored
+ * trailing slash produces `host//v1/models` — which a llama-server answers with
+ * a 404, surfacing as "discovery failed" rather than as a bad address. The env
+ * path has always trimmed (see `config.ts`); this keeps a provider added from
+ * the admin panel identical to one configured by `LLAMA_BASE_URL`.
+ */
+const baseUrlSchema = z
+  .string()
+  .min(1)
+  .max(2048)
+  .transform((value) => value.replace(/\/+$/, ''))
+  .refine((value) => value.length > 0, 'A base URL cannot be only slashes.');
+
 const providerBodySchema = z
   .strictObject({
     id: z.string().min(1).max(64).optional(),
     name: z.string().min(1).max(128),
     kind: z.literal('openai-compatible'),
-    baseUrl: z.string().min(1).max(2048),
+    baseUrl: baseUrlSchema,
     apiKey: z.string().min(1).max(4096).optional(),
     clearApiKey: z.literal(true).optional(),
     timeoutMs: z.number().int().min(1_000).max(600_000),
@@ -97,7 +113,7 @@ const providerBodySchema = z
   );
 
 const testProviderSchema = z.strictObject({
-  baseUrl: z.string().min(1).max(2048),
+  baseUrl: baseUrlSchema,
   apiKey: z.string().min(1).max(4096).optional(),
   timeoutMs: z.number().int().min(1_000).max(600_000).optional(),
 });

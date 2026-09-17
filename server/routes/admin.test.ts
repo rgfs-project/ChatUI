@@ -596,6 +596,25 @@ describe('providers (INV-25, INV-19)', () => {
     expect((await res.json()).error.code).toBe('ENDPOINT_NOT_ALLOWED');
   });
 
+  it('stores a base URL without its trailing slash', async () => {
+    // Paths are appended directly, so a kept slash makes `host//v1/models`,
+    // which a llama-server 404s — discovery then fails for what looks like no
+    // reason. The env path trims; a provider added here must match it.
+    const res = await admin.fetch('/api/admin/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Trailing',
+        kind: 'openai-compatible',
+        baseUrl: 'http://127.0.0.1:8080/',
+        timeoutMs: 5_000,
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    expect((await res.json()).provider.baseUrl).toBe('http://127.0.0.1:8080');
+  });
+
   it('refuses a test connection to a blocked address', async () => {
     const res = await admin.fetch('/api/admin/providers/test', {
       method: 'POST',
