@@ -2722,6 +2722,42 @@ button.linkish:hover {
     font-size: 0.9375rem;
   }
 
+  /*
+   * The settings and admin panes, on the same reasoning.
+   *
+   * These are the smallest sizes in the application — an 11px line explaining
+   * what a control does, under a 13px label naming it, beside a 12px button —
+   * and they were chosen for a pane sitting in a desktop's spare room. On a
+   * phone the pane is the screen, and the sentence that says what a switch
+   * will do is the one thing a reader most needs to be able to read before
+   * touching it.
+   */
+  .panel__row-label {
+    font-size: 0.9375rem;
+  }
+
+  .panel__row-desc {
+    font-size: 0.8125rem;
+  }
+
+  .memories__item {
+    font-size: 0.9375rem;
+  }
+
+  .panel__rail-item {
+    font-size: 0.875rem;
+  }
+
+  .panel__pane .field > span {
+    font-size: 0.8125rem;
+  }
+
+  /* The buttons in a pane read at the size of the rows they act on, rather
+     than a step under the labels beside them. */
+  .panel__pane {
+    --button-font-size: 0.875rem;
+  }
+
   /* Panels fill the available room at this width, but stay a floating card —
      the surrounding `.panel` padding means corners are still visible, so they
      keep the same rounding as the desktop card instead of squaring off. */
