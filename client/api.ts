@@ -331,6 +331,11 @@ export interface MePreferences {
    * instance setting; `0` re-sends none.
    */
   historyImages: number | null;
+  /**
+   * Long edge, in pixels, that a picture is reduced to before upload. `null`
+   * uses the built-in default; `0` sends pictures untouched.
+   */
+  imageMaxEdge: number | null;
 }
 
 export async function fetchMyPreferences(signal?: AbortSignal): Promise<MePreferences> {
@@ -359,6 +364,15 @@ export function setMyHistoryImages(historyImages: number | null): Promise<MePref
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ historyImages }),
+  });
+}
+
+/** Sets, or clears back to the default, the size pictures are sent at. */
+export function setMyImageMaxEdge(imageMaxEdge: number | null): Promise<MePreferences> {
+  return request<MePreferences>('/api/me/preferences', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageMaxEdge }),
   });
 }
 

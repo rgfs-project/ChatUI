@@ -511,6 +511,7 @@ describe("a reader's own settings", () => {
     expect(await (await me('/preferences')).json()).toEqual({
       defaultModel: null,
       historyImages: null,
+      imageMaxEdge: null,
     });
 
     const set = await me('/preferences', {
@@ -522,6 +523,7 @@ describe("a reader's own settings", () => {
     expect(await (await me('/preferences')).json()).toEqual({
       defaultModel: { providerId: 'local', modelId: 'GPT' },
       historyImages: null,
+      imageMaxEdge: null,
     });
 
     // Clearing returns the reader to the instance default.
@@ -529,7 +531,17 @@ describe("a reader's own settings", () => {
     expect(await (await me('/preferences')).json()).toEqual({
       defaultModel: null,
       historyImages: null,
+      imageMaxEdge: null,
     });
+  });
+
+  it('remembers the size pictures are sent at, including never shrinking', async () => {
+    await me('/preferences', { method: 'PATCH', body: JSON.stringify({ imageMaxEdge: 2048 }) });
+    expect(await (await me('/preferences')).json()).toMatchObject({ imageMaxEdge: 2048 });
+
+    // `0` is "send it as it was taken", and must not read back as unset.
+    await me('/preferences', { method: 'PATCH', body: JSON.stringify({ imageMaxEdge: 0 }) });
+    expect(await (await me('/preferences')).json()).toMatchObject({ imageMaxEdge: 0 });
   });
 
   it('remembers how many earlier images to re-send, zero included', async () => {
@@ -562,6 +574,7 @@ describe("a reader's own settings", () => {
     expect(await (await me('/preferences')).json()).toEqual({
       defaultModel: { providerId: 'local', modelId: 'GPT' },
       historyImages: 2,
+      imageMaxEdge: null,
     });
   });
 

@@ -29,8 +29,8 @@
  * pixels nothing will ever look at.
  */
 
-/** The long edge a picture is reduced to, in pixels. */
-const MAX_EDGE = 1_536;
+/** The long edge a picture is reduced to, in pixels, when nobody has chosen one. */
+export const DEFAULT_MAX_EDGE = 1_536;
 
 /** Below this there is nothing to gain, whatever the dimensions say. */
 const MIN_BYTES = 256 * 1_024;
@@ -74,7 +74,12 @@ async function encode(canvas: HTMLCanvasElement): Promise<{ blob: Blob; type: st
  * Never throws: a picture that cannot be decoded, drawn or encoded here is one
  * the server will judge for itself, which is where the real limits live.
  */
-export async function shrinkImage(file: File): Promise<File> {
+/**
+ * @param maxEdge The long edge to reduce to. `0` sends the file untouched, for
+ * a reader who would rather spend the tokens than lose the detail.
+ */
+export async function shrinkImage(file: File, maxEdge = DEFAULT_MAX_EDGE): Promise<File> {
+  if (maxEdge <= 0) return file;
   if (!isRaster(file) || file.size < MIN_BYTES) return file;
   if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return file;
 
@@ -87,9 +92,9 @@ export async function shrinkImage(file: File): Promise<File> {
 
   try {
     const longest = Math.max(bitmap.width, bitmap.height);
-    if (longest <= MAX_EDGE) return file;
+    if (longest <= maxEdge) return file;
 
-    const scale = MAX_EDGE / longest;
+    const scale = maxEdge / longest;
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));

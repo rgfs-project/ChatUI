@@ -36,7 +36,12 @@ export interface AttachmentTray {
   remaining: number;
 }
 
-export function useAttachments(): AttachmentTray {
+/**
+ * @param maxEdge Long edge for outgoing pictures; `0` sends them untouched and
+ * `undefined` uses the built-in default, which is what a reader who has never
+ * touched the setting gets.
+ */
+export function useAttachments(maxEdge?: number): AttachmentTray {
   const [items, setItems] = useState<PendingAttachment[]>([]);
 
   /**
@@ -69,7 +74,7 @@ export function useAttachments(): AttachmentTray {
            * either for the re-encoded one would make the row twitch for a
            * step that is over in a frame or two.
            */
-          void shrinkImage(file)
+          void shrinkImage(file, maxEdge)
             .then((sending) =>
               uploadAttachment(sending, {
                 signal: controller.signal,
@@ -123,7 +128,9 @@ export function useAttachments(): AttachmentTray {
         return [...current, ...started, ...refused];
       });
     },
-    [replace]
+    // `maxEdge` belongs here: without it, a reader changing the setting keeps
+    // uploading at the size this callback closed over until it is rebuilt.
+    [replace, maxEdge]
   );
 
   const remove = useCallback((localId: string) => {

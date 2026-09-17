@@ -233,7 +233,9 @@ export function App({
   const sendMessage = useSendMessage();
   const regenerate = useRegenerate();
 
-  const attachments = useAttachments();
+  /* `?? undefined` rather than `?? DEFAULT`: the hook's own default is the one
+     place that figure lives, and `0` — never shrink — must survive the trip. */
+  const attachments = useAttachments(preferences.data?.imageMaxEdge ?? undefined);
   const [generation, setGeneration] = useState<ActiveGeneration | null>(readActive);
   const generationId = generation?.id ?? null;
   const [error, setError] = useState<string | null>(null);

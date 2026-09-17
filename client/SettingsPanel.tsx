@@ -20,9 +20,11 @@ import {
   saveMyMemory,
   setMyDefaultModel,
   setMyHistoryImages,
+  setMyImageMaxEdge,
   updateMyAccount,
   type ImportReport,
 } from './api.ts';
+import { DEFAULT_MAX_EDGE } from './shrinkImage.ts';
 import { Dialog } from './Dialog.tsx';
 import { ModelSelect, type ModelChoice } from './ModelSelect.tsx';
 import { Select } from './Select.tsx';
@@ -103,6 +105,7 @@ export function SettingsPanel({
             <>
               <DefaultModel />
               <HistoryImages />
+              <ImageSize />
             </>
           )}
           {section === 'history' && <ChatHistory user={user} />}
@@ -334,6 +337,69 @@ function HistoryImages(): React.JSX.Element {
         onKeyDown={(event) => {
           if (event.key === 'Enter') event.currentTarget.blur();
         }}
+      />
+    </Row>
+  );
+}
+
+/* --- picture size --------------------------------------------------------- */
+
+/** Long edges offered, in pixels. The first is the built-in default. */
+const EDGES = [
+  { value: '1536', label: '1536 px — default' },
+  { value: '2048', label: '2048 px — more detail' },
+  { value: '1024', label: '1024 px — cheaper' },
+  { value: '768', label: '768 px — cheapest' },
+];
+
+/**
+ * How large a picture goes up.
+ *
+ * A model is charged for an image by area, and past the resolution it tiles to
+ * the extra pixels are re-sampled away upstream and paid for on the way — so
+ * the default is not a compromise for most pictures, it is free. It is worth
+ * turning off for the case where the detail is the point: a dense screenshot,
+ * a scan, a photograph of small print.
+ */
+function ImageSize(): React.JSX.Element {
+  const client = useQueryClient();
+  const preferences = useMyPreferences();
+  const stored = preferences.data?.imageMaxEdge ?? null;
+
+  const save = useMutation({
+    mutationFn: (edge: number | null) => setMyImageMaxEdge(edge),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.preferences() }),
+    onError: (err) => showToast('error', message(err, 'Could not save that setting.')),
+  });
+
+  /* `0` is off; `null` is "never chosen", which shrinks at the default. */
+  const shrinking = stored !== 0;
+  const edge = stored === null || stored === 0 ? DEFAULT_MAX_EDGE : stored;
+
+  return (
+    <Row
+      label="Shrink pictures before sending"
+      description="A model is charged for an image by its area, and past the size it works at the extra pixels are thrown away upstream and billed on the way. Turn this off when the detail is the point — a dense screenshot, or small print worth reading."
+    >
+      <label className="switch">
+        <input
+          type="checkbox"
+          checked={shrinking}
+          disabled={preferences.isPending || save.isPending}
+          onChange={(event) => save.mutate(event.target.checked ? DEFAULT_MAX_EDGE : 0)}
+        />
+        <span className="switch__track" aria-hidden="true">
+          <span className="switch__thumb" />
+        </span>
+        <span className="sr-only">Shrink pictures before sending</span>
+      </label>
+
+      <Select
+        label="Longest edge"
+        value={String(edge)}
+        options={EDGES}
+        disabled={!shrinking || save.isPending}
+        onChange={(value) => save.mutate(Number(value))}
       />
     </Row>
   );

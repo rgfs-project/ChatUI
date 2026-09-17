@@ -19,12 +19,20 @@ type Api = typeof ApiModule;
 
 const fetchMyPreferences = vi.fn<Api['fetchMyPreferences']>();
 const setMyHistoryImages = vi.fn<Api['setMyHistoryImages']>();
+const setMyImageMaxEdge = vi.fn<Api['setMyImageMaxEdge']>();
 const fetchModels = vi.fn<Api['fetchModels']>();
 const fetchMyMemories = vi.fn<Api['fetchMyMemories']>();
 
 vi.mock('./api.ts', async () => {
   const actual = await vi.importActual<Api>('./api.ts');
-  return { ...actual, fetchMyPreferences, setMyHistoryImages, fetchModels, fetchMyMemories };
+  return {
+    ...actual,
+    fetchMyPreferences,
+    setMyHistoryImages,
+    setMyImageMaxEdge,
+    fetchModels,
+    fetchMyMemories,
+  };
 });
 
 const { SettingsPanel } = await import('./SettingsPanel.tsx');
@@ -38,9 +46,13 @@ const USER: UserDto = {
   createdAt: new Date().toISOString(),
 };
 
-async function openModelPane(historyImages: number | null): Promise<void> {
-  fetchMyPreferences.mockResolvedValue({ defaultModel: null, historyImages });
-  setMyHistoryImages.mockResolvedValue({ defaultModel: null, historyImages });
+async function openModelPane(
+  historyImages: number | null,
+  imageMaxEdge: number | null = null
+): Promise<void> {
+  fetchMyPreferences.mockResolvedValue({ defaultModel: null, historyImages, imageMaxEdge });
+  setMyHistoryImages.mockResolvedValue({ defaultModel: null, historyImages, imageMaxEdge });
+  setMyImageMaxEdge.mockResolvedValue({ defaultModel: null, historyImages, imageMaxEdge });
   fetchModels.mockResolvedValue({ providers: [], defaultModel: null });
   fetchMyMemories.mockResolvedValue([]);
 
@@ -121,5 +133,53 @@ describe('the re-sent images setting', () => {
     await userEvent.tab();
 
     expect(setMyHistoryImages).toHaveBeenCalledWith(5);
+  });
+});
+
+function shrinkToggle(): HTMLInputElement {
+  return screen.getByRole('checkbox', { name: /shrink pictures before sending/i });
+}
+
+describe('the picture size setting', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('is on for a reader who has never set it', async () => {
+    await openModelPane(null, null);
+
+    await waitFor(() => {
+      expect(shrinkToggle().checked).toBe(true);
+    });
+  });
+
+  it('is off when pictures are set to go up untouched', async () => {
+    await openModelPane(null, 0);
+
+    await waitFor(() => {
+      expect(shrinkToggle().checked).toBe(false);
+    });
+  });
+
+  it('stores zero when switched off, which is what stops the shrinking', async () => {
+    await openModelPane(null, null);
+    await waitFor(() => {
+      expect(shrinkToggle().checked).toBe(true);
+    });
+
+    await userEvent.click(shrinkToggle());
+
+    expect(setMyImageMaxEdge).toHaveBeenCalledWith(0);
+  });
+
+  it('turns back on at the default edge', async () => {
+    await openModelPane(null, 0);
+    await waitFor(() => {
+      expect(shrinkToggle().checked).toBe(false);
+    });
+
+    await userEvent.click(shrinkToggle());
+
+    expect(setMyImageMaxEdge).toHaveBeenCalledWith(1536);
   });
 });

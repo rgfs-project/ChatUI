@@ -53,6 +53,15 @@ const fileSchema = z.strictObject({
    * absent and present; the number is this value.
    */
   historyImages: z.number().int().min(0).max(100).optional(),
+  /**
+   * The long edge, in pixels, that a picture is reduced to before it is sent.
+   *
+   * Absent means the built-in default. `0` means never shrink: the file goes
+   * up as it was taken, which is a real choice — a reader who cares more about
+   * the model seeing fine detail than about the tokens it costs — and not the
+   * same as having no opinion.
+   */
+  imageMaxEdge: z.number().int().min(0).max(8_192).optional(),
 });
 
 export interface Preferences {
@@ -60,6 +69,8 @@ export interface Preferences {
   defaultModel: DefaultModel | null;
   /** `null` means the instance setting decides. */
   historyImages: number | null;
+  /** Long edge a sent picture is reduced to; `0` never shrinks, `null` default. */
+  imageMaxEdge: number | null;
 }
 
 export class PreferencesStore {
@@ -80,7 +91,7 @@ export class PreferencesStore {
     try {
       raw = await readFile(file, 'utf8');
     } catch {
-      return { pinned: new Set(), defaultModel: null, historyImages: null };
+      return { pinned: new Set(), defaultModel: null, historyImages: null, imageMaxEdge: null };
     }
 
     try {
@@ -91,10 +102,11 @@ export class PreferencesStore {
         pinned: new Set(parsed.pinned.filter((id) => isCanonicalUuid(id))),
         defaultModel: parsed.defaultModel ?? null,
         historyImages: parsed.historyImages ?? null,
+        imageMaxEdge: parsed.imageMaxEdge ?? null,
       };
     } catch {
       this.#logger.warn('Preferences file is unreadable; ignoring it', { userId });
-      return { pinned: new Set(), defaultModel: null, historyImages: null };
+      return { pinned: new Set(), defaultModel: null, historyImages: null, imageMaxEdge: null };
     }
   }
 
@@ -131,6 +143,14 @@ export class PreferencesStore {
     });
   }
 
+  /** Sets, or clears back to the default, the long edge pictures are sent at. */
+  async setImageMaxEdge(userId: string, edge: number | null): Promise<void> {
+    await this.#locks.run(`preferences:${userId}`, async () => {
+      const current = await this.read(userId);
+      await this.#write(userId, { ...current, imageMaxEdge: edge });
+    });
+  }
+
   /**
    * Pins or unpins one conversation.
    *
@@ -158,6 +178,7 @@ export class PreferencesStore {
           pinned: [...next.pinned],
           ...(next.defaultModel === null ? {} : { defaultModel: next.defaultModel }),
           ...(next.historyImages === null ? {} : { historyImages: next.historyImages }),
+          ...(next.imageMaxEdge === null ? {} : { imageMaxEdge: next.imageMaxEdge }),
         },
         null,
         2

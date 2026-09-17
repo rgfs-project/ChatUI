@@ -44,6 +44,8 @@ const preferencesSchema = z.strictObject({
    * clearing a model choice because the reader moved a number.
    */
   historyImages: z.number().int().min(0).max(100).nullable().optional(),
+  /** Long edge a picture is sent at. `null` is the default, `0` never shrinks. */
+  imageMaxEdge: z.number().int().min(0).max(8_192).nullable().optional(),
 });
 
 const clearSchema = z.strictObject({
@@ -190,8 +192,8 @@ export function meRouter({
   });
 
   router.get('/me/preferences', async (req, res) => {
-    const { defaultModel, historyImages } = await preferences.read(caller(req));
-    res.json({ defaultModel, historyImages });
+    const { defaultModel, historyImages, imageMaxEdge } = await preferences.read(caller(req));
+    res.json({ defaultModel, historyImages, imageMaxEdge });
   });
 
   router.patch('/me/preferences', validateBody(preferencesSchema), async (req, res) => {
@@ -204,11 +206,14 @@ export function meRouter({
     if (body.historyImages !== undefined) {
       await preferences.setHistoryImages(userId, body.historyImages);
     }
+    if (body.imageMaxEdge !== undefined) {
+      await preferences.setImageMaxEdge(userId, body.imageMaxEdge);
+    }
 
     /* Read back rather than echoed: the response is then what is on disk,
        including the fields this request did not touch. */
-    const { defaultModel, historyImages } = await preferences.read(userId);
-    res.json({ defaultModel, historyImages });
+    const { defaultModel, historyImages, imageMaxEdge } = await preferences.read(userId);
+    res.json({ defaultModel, historyImages, imageMaxEdge });
   });
 
   /**
