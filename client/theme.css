@@ -150,6 +150,19 @@
    * and there is no need to branch on device. Naming them here keeps the
    * `max(padding, inset)` pattern from being spelled out at each use site.
    */
+  /*
+   * The height of what can actually be seen.
+   *
+   * `dvh` is the whole of it wherever the keyboard shortens the layout
+   * viewport, which is what the viewport tag's `interactive-widget` hint asks
+   * for; where that hint is not implemented — Safari — `--keyboard-inset`
+   * carries what the keys are covering, measured from the visual viewport by
+   * `useKeyboardInset`. Anything that fills the screen, or centres itself in
+   * it, is sized by this rather than by `dvh` directly, so that neither the
+   * composer nor a dialog's field ends up underneath the keyboard.
+   */
+  --viewport-height: calc(100dvh - var(--keyboard-inset, 0px));
+
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);

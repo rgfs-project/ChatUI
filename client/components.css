@@ -1044,7 +1044,7 @@
 /* --- sign in and dialogs -------------------------------------------------- */
 
 .signin {
-  min-height: 100dvh;
+  min-height: var(--viewport-height);
   display: grid;
   place-items: center;
   padding: 1.5rem;
@@ -1208,7 +1208,7 @@ button.linkish:hover {
   position: fixed;
   inset: 0;
   /*
-   * `100dvh` rather than a bottom edge of 0.
+   * The visible height rather than a bottom edge of 0.
    *
    * A fixed layer inset to 0 is the size of the *layout* viewport, and on a
    * phone that stays the height of the whole screen while the browser's own
@@ -1217,7 +1217,7 @@ button.linkish:hover {
    * on Android was drawing. The dynamic unit is the visible height, and the
    * rest of the shell is already measured in it.
    */
-  height: 100dvh;
+  height: var(--viewport-height);
   /*
    * Above the admin panel, which is itself an overlay a dialog can be opened
    * *from*. At 200 against its 300 the confirmation before clearing a user's
@@ -1507,7 +1507,7 @@ button.linkish:hover {
 .booting {
   display: grid;
   place-items: center;
-  height: 100dvh;
+  height: var(--viewport-height);
   background: var(--bg);
 }
 
@@ -1730,7 +1730,7 @@ button.linkish:hover {
   position: fixed;
   inset: 0;
   /* The visible height, not the layout viewport's — see `.modal` above. */
-  height: 100dvh;
+  height: var(--viewport-height);
   z-index: 300;
   display: grid;
   place-items: center;
@@ -2856,7 +2856,7 @@ button.linkish:hover {
    ========================================================================== */
 
 .page {
-  height: 100dvh;
+  height: var(--viewport-height);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 2rem max(1.25rem, var(--safe-right)) max(2rem, var(--safe-bottom))

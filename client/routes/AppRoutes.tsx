@@ -5,6 +5,7 @@ import { LoginRoute } from './LoginRoute.tsx';
 import { AdminRoute, SettingsRoute } from './OverlayRoutes.tsx';
 import { RequireAuth } from './RequireAuth.tsx';
 import { patterns, paths } from './paths.ts';
+import { useKeyboardInset } from '../useKeyboardInset.ts';
 import type { Location } from 'react-router';
 
 /**
@@ -53,6 +54,13 @@ export function AppRoutes({ draft, onDraftChange }: AppRoutesProps): React.JSX.E
   const location = useLocation();
   const state = location.state as BackgroundState | null;
   const background = state?.background;
+
+  /*
+   * Keeps whatever is on screen above the keys where the viewport tag cannot.
+   * Here rather than in the chat, because signing in is typing too and its
+   * field is just as far down the page.
+   */
+  useKeyboardInset();
 
   const chat = <ChatRoute draft={draft} onDraftChange={onDraftChange} />;
 

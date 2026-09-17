@@ -435,3 +435,45 @@ test.describe('desktop (1440x900)', () => {
     app.provider.finish();
   });
 });
+
+/**
+ * The keyboard, where the viewport tag cannot help.
+ *
+ * `interactive-widget=resizes-content` makes the keyboard shorten the layout
+ * viewport, and everything is sized from that — but Safari does not implement
+ * the hint. There the keyboard changes only the visual viewport: `dvh` stays
+ * the height of the whole screen, the composer is left underneath the keys,
+ * and Safari scrolls the page to reveal the field, which takes the header off
+ * the top. So the same number is measured from `visualViewport` instead, and
+ * this is that path: the layout viewport is left alone and only the visual one
+ * shrinks, which is exactly what an iPhone does.
+ */
+test.describe('an iOS keyboard', () => {
+  test.use({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
+
+  test('leaves the composer above the keys', async ({ app, page }) => {
+    await signIn(page, app.baseUrl);
+    const composer = page.locator('.composer-region');
+    await expect(composer).toBeVisible();
+
+    const bottom = async (): Promise<number> =>
+      composer.evaluate((el) => Math.round(el.getBoundingClientRect().bottom));
+
+    expect(await bottom()).toBe(852);
+
+    const KEYS = 336;
+    await page.evaluate((keys) => {
+      const viewport = window.visualViewport;
+      if (viewport === null) throw new Error('no visual viewport to shrink');
+      Object.defineProperty(viewport, 'height', {
+        value: window.innerHeight - keys,
+        configurable: true,
+      });
+      viewport.dispatchEvent(new Event('resize'));
+    }, KEYS);
+
+    // Above the keys, not behind them, and the header is still on screen.
+    await expect.poll(bottom).toBe(852 - KEYS);
+    await expect(page.locator('.main__header')).toBeInViewport();
+  });
+});

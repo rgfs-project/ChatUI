@@ -71,7 +71,7 @@ body {
  */
 .shell {
   position: relative;
-  height: 100dvh;
+  height: var(--viewport-height);
   overflow: hidden;
 }
 
@@ -261,7 +261,7 @@ body {
 }
 
 .main {
-  height: 100dvh;
+  height: var(--viewport-height);
 }
 
 .main__header {
@@ -469,14 +469,15 @@ body {
 }
 
 /*
- * The composer sits at the bottom of the shell, and the shell is `100dvh`.
+ * The composer sits at the bottom of the shell, and the shell is the viewport
+ * less what the keyboard covers.
  *
- * With `interactive-widget=resizes-content` the keyboard shortens the layout
- * viewport, so `dvh` resolves to the space left above the keys and the composer
- * follows it up with no measurement at all. This is the whole of the
- * keyboard-avoidance strategy: there is no `visualViewport` listener, because
- * CSS already expresses it and a JS one would have to fight the same reflow it
- * was reacting to.
+ * With `interactive-widget=resizes-content` that is all CSS: the keyboard
+ * shortens the layout viewport, `dvh` resolves to the room left above the keys,
+ * and the composer follows it up with nothing measured. Safari does not
+ * implement the hint, so there `--keyboard-inset` carries the same number from
+ * the visual viewport — one listener, publishing one figure, rather than
+ * positions written on every reflow. See `useKeyboardInset`.
  */
 .composer-region {
   flex: none;
