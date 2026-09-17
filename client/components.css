@@ -626,6 +626,12 @@
  * target it was worse still: a third of the height of the box it sits in, hard
  * against the corner, with the 10px of padding that reads as air around it
  * gone. The bar is the full width of the screen and nothing crowds it.
+ *
+ * This is the figure for a pointer, though, and only that. On a coarse one the
+ * touch block near the end of this file takes it to 44 regardless: 28px is a
+ * quarter of the area a thumb needs, in the one control a reader reaches for
+ * to attach anything at all, and a target that cannot be hit has no alignment
+ * to preserve.
  */
 .composer__bar .icon-button {
   width: 1.75rem;
