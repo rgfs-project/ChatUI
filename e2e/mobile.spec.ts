@@ -234,6 +234,37 @@ test.describe('phone (390x844)', () => {
     expect(await horizontalOverflow(page)).toBe(false);
   });
 
+  /*
+   * The settings pane, which the sweep above never reaches.
+   *
+   * That test opens the navigation drawer and measures what is on screen, so
+   * every control behind a panel is unmeasured — and a switch is exactly the
+   * shape of control that gets drawn at its visual size and left there. The
+   * track is 34x20 by design; the label around it is what a thumb aims at.
+   */
+  test('a switch in settings is a 44px target, whatever the track looks like', async ({
+    app,
+    page,
+  }) => {
+    await signIn(page, app.baseUrl);
+    await page.goto(`${app.baseUrl}/settings`);
+    // Scoped to the rail: "Model" also names the default-model trigger inside
+    // the pane the rail opens.
+    await page.locator('.panel__rail').getByRole('button', { name: 'Model' }).click();
+
+    const switches = page.locator('.switch');
+    await expect(switches.first()).toBeVisible();
+
+    const undersized = await switches.evaluateAll((elements) =>
+      elements
+        .map((element) => element.getBoundingClientRect())
+        .filter((box) => box.width < 44 || box.height < 44)
+        .map((box) => ({ width: Math.round(box.width), height: Math.round(box.height) }))
+    );
+
+    expect(undersized, JSON.stringify(undersized)).toEqual([]);
+  });
+
   test('every interactive control is at least 44x44', async ({ app, page }) => {
     await seedConversations(app.dataDir, 2);
     await signIn(page, app.baseUrl);

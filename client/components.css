@@ -2890,6 +2890,63 @@ button.linkish:hover {
     flex: 1;
   }
 
+  /*
+   * Except a switch, which has one size and is not improved by any other.
+   *
+   * Stretching it made the row read as a wide empty band with a track at one
+   * end and its value stranded at the other, the two things that belong
+   * together being the two furthest apart on the line. It keeps its own width
+   * and its partner takes the rest.
+   */
+  .panel__row-control > .switch {
+    flex: 0 0 auto;
+  }
+
+  /*
+   * The track stays 34x20; the thing a thumb aims at does not.
+   *
+   * The label is what takes the tap, so it carries the 44px target while the
+   * switch it draws keeps its own proportions — growing the track instead
+   * would make a control that reads as twice the weight of everything beside
+   * it, to solve a problem that is about reach rather than about drawing.
+   */
+  .switch {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    justify-content: center;
+  }
+
+  /*
+   * The number beside a switch is a control, so it looks like one here.
+   *
+   * On a pointer it can be a bare figure that grows a border when approached;
+   * a thumb has no hover to discover that with, and a right-aligned number at
+   * the end of a full-width row reads as a stray label rather than as a thing
+   * to tap. It takes a fixed, tappable box next to the switch instead.
+   */
+  .panel__row-control > .sampler__number {
+    flex: 0 0 4.5rem;
+    min-height: 2.75rem;
+    border-color: var(--border);
+    text-align: center;
+  }
+
+  /*
+   * Rows breathe, because there is nothing else on the line.
+   *
+   * A pane on a phone is one column of settings with a paragraph under each
+   * label, and at the desktop's spacing the description of one ran into the
+   * label of the next.
+   */
+  .panel__row {
+    gap: 0.75rem 1.25rem;
+    padding: 0.9375rem 0;
+  }
+
+  .panel__row-desc {
+    margin-top: 0.25rem;
+  }
+
   .panel__actions button,
   .panel__form-actions button,
   .panel__row-control button,
