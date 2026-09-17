@@ -142,7 +142,6 @@ export function useScrollPin(): ScrollPin {
   /** Set while a viewport resize could still be producing scroll events. */
   const resizeUntil = useRef(0);
 
-
   const isAtBottom = useCallback((element: HTMLElement): boolean => {
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
     return distance <= PIN_THRESHOLD_PX;

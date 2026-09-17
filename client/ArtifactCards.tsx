@@ -36,11 +36,7 @@ export function ArtifactCards({ artifacts, onOpen }: ArtifactCardsProps): React.
         const Icon = artifactIconFor(artifact.mediaType);
         return (
           <li key={artifact.id} className="artifact-card">
-            <button
-              type="button"
-              className="artifact-card__open"
-              onClick={() => onOpen(artifact)}
-            >
+            <button type="button" className="artifact-card__open" onClick={() => onOpen(artifact)}>
               <span className="artifact-card__icon" aria-hidden="true">
                 <Icon size={18} />
               </span>
