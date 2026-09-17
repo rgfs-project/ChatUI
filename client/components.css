@@ -2694,6 +2694,39 @@ button.linkish:hover {
     --button-font-size: 0.9375rem;
   }
 
+  /*
+   * Sign in is the whole screen, and on a phone it was a 320px card of 12px
+   * controls adrift in it: a 28px button to start the session, fields 36px
+   * tall, a label smaller than anything else on screen. Nothing is competing
+   * for the room, so it takes it — the card to the width the overlays use,
+   * and the things a thumb touches to the size a thumb needs.
+   */
+  .signin {
+    padding: 1rem;
+  }
+
+  .signin__card {
+    max-width: none;
+    --button-font-size: 0.9375rem;
+  }
+
+  .signin__card h1 {
+    font-size: 1.75rem;
+  }
+
+  .signin__head .muted {
+    font-size: 0.9375rem;
+  }
+
+  .signin__card .field > span {
+    font-size: 0.8125rem;
+  }
+
+  .signin__card input,
+  .signin__card button[type='submit'] {
+    min-height: 2.75rem;
+  }
+
   .modal__actions button {
     flex: 1;
     min-height: 2.75rem;
