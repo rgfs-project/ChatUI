@@ -3097,6 +3097,12 @@ button.linkish:hover {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+  /*
+   * Sit above everything in the stacking context so the label tap reaches it.
+   * Without this Android browsers cover the clipped input behind other elements
+   * and the file dialog never opens on a tap.
+   */
+  z-index: 1;
 }
 
 /* The composer while a file is over it. A ring rather than a fill: the field
