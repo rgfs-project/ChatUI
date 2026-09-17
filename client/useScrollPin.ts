@@ -186,6 +186,20 @@ export function useScrollPin(): ScrollPin {
       smoothTimer.current = window.setTimeout(() => {
         smoothUntil.current = 0;
         smoothTimer.current = null;
+
+        /*
+         * And land it, if the animation did not.
+         *
+         * Where it was aimed is worked out when it starts, so a reply that
+         * arrives on the way there, or a reserve that is remeasured, moves the
+         * end after the fact — and a reader who asked to be taken to the
+         * latest is left a screen short of it with nothing further coming.
+         * Only when the view is still ours: a reader who scrolled during the
+         * animation has said where they want to be.
+         */
+        if (!pinnedRef.current || userScrolled.current || isAtBottom(element)) return;
+        programmaticTop.current = Math.max(0, element.scrollHeight - element.clientHeight);
+        element.scrollTo({ top: element.scrollHeight, behavior: 'auto' });
       }, SMOOTH_GUARD_MS);
 
       element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
@@ -197,7 +211,7 @@ export function useScrollPin(): ScrollPin {
     // that smaller number is what the event will report.
     programmaticTop.current = Math.max(0, element.scrollHeight - element.clientHeight);
     element.scrollTo({ top: element.scrollHeight, behavior: 'auto' });
-  }, []);
+  }, [isAtBottom]);
 
   /** Attaches the scroll listener that decides pinned/unpinned. */
   useEffect(() => {
@@ -349,6 +363,18 @@ export function useScrollPin(): ScrollPin {
     // growing under them is not a reason to move it, which is the whole of
     // "streaming while scrolled up does not move the viewport".
     if (userScrolled.current) return;
+
+    /*
+     * Nor while a jump to the latest is on its way there.
+     *
+     * That scroll is animated, and assigning `scrollTop` cancels an animation
+     * in flight — so a correction landing in the middle of one stopped the
+     * jump and parked the view at whatever the correction had computed, short
+     * of the end by however far the animation had got. Which is why it was a
+     * different distance every time. The destination is already known here,
+     * and nothing needs correcting on the way to it.
+     */
+    if (Date.now() < smoothUntil.current) return;
 
     const limit = Math.max(0, element.scrollHeight - element.clientHeight);
     const next = Math.max(0, Math.min(limit, element.scrollTop + delta));

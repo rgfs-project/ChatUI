@@ -1,4 +1,11 @@
-import { expect, signIn, startGeneration, composerField, test } from './fixtures.ts';
+import {
+  expect,
+  signIn,
+  startGeneration,
+  composerField,
+  scrollUpAwayFromEnd,
+  test,
+} from './fixtures.ts';
 import type { Page } from '@playwright/test';
 
 /**
@@ -339,4 +346,44 @@ test('a reload in the middle of a long answer keeps the place', async ({ app, pa
     .toBeCloseTo(before, -1);
   // And it is still the reader's view, with the way back down on offer.
   await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeVisible();
+});
+
+/**
+ * Jump to latest arrives at the latest, not near it.
+ *
+ * The jump is animated, and assigning `scrollTop` cancels an animation in
+ * flight — so the correction that holds the question still, firing while the
+ * jump was on its way, stopped it and parked the view at whatever the
+ * correction had computed. The reader was left short of the end by however far
+ * the animation had got, which is a different distance every time.
+ */
+test('the jump control goes all the way to the bottom', async ({ app, page }) => {
+  await signIn(page, app.baseUrl);
+  await withHistory(page, app);
+
+  const composer = composerField(page);
+  await composer.fill('a question with a long answer');
+  await composer.press('Enter');
+  await app.provider.waitForStream();
+  for (let paragraph = 1; paragraph <= 25; paragraph += 1) {
+    app.provider.send(`Paragraph ${paragraph}, long enough to take a line or two of its own.\n\n`);
+    await page.waitForTimeout(20);
+  }
+  app.provider.finish();
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
+
+  const transcript = page.locator('[data-testid="transcript"]');
+  await scrollUpAwayFromEnd(page, transcript);
+
+  const jump = page.getByRole('button', { name: 'Jump to latest' });
+  await expect(jump).toBeVisible();
+  await jump.click();
+
+  // At the end, not merely nearer to it. Polled because the scroll is animated.
+  await expect
+    .poll(async () =>
+      transcript.evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight))
+    )
+    .toBe(0);
+  await expect(jump).toBeHidden();
 });
