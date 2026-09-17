@@ -19,6 +19,7 @@ const GROUPS = [
     providerName: 'Local',
     status: 'ready' as const,
     stale: false,
+    lastError: null,
     models: [{ id: 'model-a', loaded: true, inputModalities: ['text'] }],
   },
 ];

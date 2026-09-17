@@ -35,6 +35,8 @@ export interface GroupedModels {
   providerName: string;
   status: ProviderModels['status'];
   stale: boolean;
+  /** Why the last discovery attempt failed, or `null` when it succeeded. */
+  lastError: string | null;
   models: {
     id: string;
     inputModalities: string[];
@@ -208,6 +210,7 @@ export class ProviderHub {
         providerName: entry.name,
         status: models.status,
         stale: models.stale,
+        lastError: models.lastError,
         models: models.models.map((model) => ({
           id: model.id,
           inputModalities: model.inputModalities,

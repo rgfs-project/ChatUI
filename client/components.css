@@ -2082,6 +2082,21 @@ button.linkish:hover {
   min-width: 6rem;
 }
 
+/*
+ * A provider that could not be reached, stated in its own row.
+ *
+ * Sized to the 6rem column above so it sits under the Refresh button rather
+ * than beside it, and coloured as a warning: the row it labels is the reason
+ * the model list below is short or empty.
+ */
+.panel__status {
+  min-width: 6rem;
+  text-align: center;
+  color: var(--danger);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
 /* A row of actions that belong to the pane rather than to one of its rows. */
 .panel__actions {
   display: flex;

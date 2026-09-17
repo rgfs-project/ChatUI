@@ -593,6 +593,31 @@ function ModelsSection(): React.JSX.Element {
         </button>
       </Row>
 
+      {/*
+        A provider whose discovery failed contributes no rows below, so without
+        this the panel is simply empty — the same picture as a provider that
+        genuinely serves no models. The refresh request itself succeeds in that
+        case (a failed fetch keeps the last known list by design), so there is
+        no mutation error to report either, and the only account of it is the
+        server log. Say it here instead, with the reason.
+      */}
+      {(models.data?.providers ?? [])
+        .filter((group) => group.status === 'unavailable' || group.stale)
+        .map((group) => (
+          <Row
+            key={`problem/${group.providerId}`}
+            label={group.providerName}
+            description={
+              group.lastError ??
+              'The last discovery attempt failed. The model list may be out of date.'
+            }
+          >
+            <span className="panel__status" role="status">
+              {group.status === 'unavailable' ? 'Unavailable' : 'Stale'}
+            </span>
+          </Row>
+        ))}
+
       {(models.data?.providers ?? []).flatMap((group) =>
         group.models.map((model) => {
           const isHidden = hidden.has(`${group.providerId} ${model.id}`);

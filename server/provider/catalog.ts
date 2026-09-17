@@ -27,6 +27,14 @@ export interface ProviderModels {
   /** The list is from a previous successful fetch; the latest attempt failed. */
   stale: boolean;
   fetchedAt: string | null;
+  /**
+   * Why the most recent attempt failed, or `null` when it succeeded.
+   *
+   * Kept so the admin panel can say what went wrong. Without it a provider that
+   * 404s and a provider that genuinely serves no models are the same empty
+   * list on screen, and the only account of the failure is the server log.
+   */
+  lastError: string | null;
 }
 
 interface CacheEntry {
@@ -35,6 +43,7 @@ interface CacheEntry {
   stale: boolean;
   /** Never succeeded, so there is nothing to fall back to. */
   everSucceeded: boolean;
+  lastError: string | null;
   inFlight: Promise<void> | null;
 }
 
@@ -62,7 +71,14 @@ export class ModelCatalog {
   #entry(providerId: string): CacheEntry {
     let entry = this.#entries.get(providerId);
     if (entry === undefined) {
-      entry = { models: [], fetchedAt: null, stale: false, everSucceeded: false, inFlight: null };
+      entry = {
+        models: [],
+        fetchedAt: null,
+        stale: false,
+        everSucceeded: false,
+        lastError: null,
+        inFlight: null,
+      };
       this.#entries.set(providerId, entry);
     }
     return entry;
@@ -89,9 +105,12 @@ export class ModelCatalog {
         entry.fetchedAt = this.#now();
         entry.stale = false;
         entry.everSucceeded = true;
+        entry.lastError = null;
       } catch (err) {
         // Only a success replaces the list.
         entry.stale = true;
+        entry.lastError =
+          err instanceof Error ? err.message : 'The model provider could not be reached.';
         this.#logger.warn('Model discovery failed; keeping the last known list', {
           providerId: config.id,
           everSucceeded: entry.everSucceeded,
@@ -134,6 +153,7 @@ export class ModelCatalog {
       status: entry.everSucceeded ? 'ready' : 'unavailable',
       stale: entry.stale,
       fetchedAt: entry.fetchedAt === null ? null : new Date(entry.fetchedAt).toISOString(),
+      lastError: entry.lastError,
     };
   }
 

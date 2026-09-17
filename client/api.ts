@@ -154,6 +154,8 @@ export interface ProviderModelGroup {
   status: 'ready' | 'unavailable';
   /** The list is from an earlier successful fetch; the latest attempt failed. */
   stale: boolean;
+  /** Why the last discovery attempt failed, or `null` when it succeeded. */
+  lastError: string | null;
   models: {
     id: string;
     inputModalities: string[];

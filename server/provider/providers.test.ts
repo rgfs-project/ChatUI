@@ -228,6 +228,22 @@ describe('model catalog', () => {
     expect(recovered.models).toHaveLength(2);
   });
 
+  it('reports why the last attempt failed, and forgets it on recovery', async () => {
+    // Without a reason, a provider that 404s and one that serves no models are
+    // the same empty list in the admin panel.
+    const provider = new EchoProvider();
+    const catalog = new ModelCatalog({ logger, ttlMs: 0 });
+
+    expect((await catalog.refresh(entry(), provider)).lastError).toBeNull();
+
+    provider.setFailing(true);
+    const failed = await catalog.refresh(entry(), provider);
+    expect(failed.lastError).not.toBeNull();
+
+    provider.setFailing(false);
+    expect((await catalog.refresh(entry(), provider)).lastError).toBeNull();
+  });
+
   it('coalesces concurrent refreshes into one upstream call', async () => {
     const provider = new EchoProvider();
     const catalog = new ModelCatalog({ logger });
