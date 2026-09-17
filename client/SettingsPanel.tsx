@@ -495,8 +495,13 @@ function ImportChats(): React.JSX.Element {
     onSuccess: (result) => {
       const summary = summarizeImport(result);
       showToast(summary.tone, summary.message);
+      // Everything an export can carry, not only the conversations it is named
+      // for. An import that brought artifacts in while the artifact list was
+      // already cached left that list showing "nothing here yet" until a
+      // reload — the data was on disk, and only the browser disagreed.
       void client.invalidateQueries({ queryKey: keys.conversations() });
       void client.invalidateQueries({ queryKey: keys.memories() });
+      void client.invalidateQueries({ queryKey: keys.artifacts() });
     },
     onError: (err) => showToast('error', message(err, 'Could not import any data.')),
   });
