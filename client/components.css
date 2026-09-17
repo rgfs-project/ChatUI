@@ -2667,6 +2667,36 @@ button.linkish:hover {
     font-size: 0.9375rem;
   }
 
+  /*
+   * The two ways out of a dialog are a pair of targets, not a line of text and
+   * a button at the end of a row.
+   *
+   * Beside a pointer they are a row of controls read left to right and clicked
+   * precisely, and the quiet one can afford to be quiet. On a phone they are
+   * the whole question: the answer is given with a thumb, at the bottom of a
+   * card that is nearly the width of the screen, and a 28px word of muted text
+   * in the corner is neither a target nor an obvious half of a choice. So they
+   * split the width between them and stand at the height a finger needs.
+   *
+   * Cancel keeps its lower weight — an outline against the confirm's fill —
+   * rather than becoming a second button of equal pull. Which of the two is
+   * the way forward should still be legible at a glance.
+   */
+  .modal__actions {
+    margin-top: 0.5rem;
+  }
+
+  .modal__actions button {
+    flex: 1;
+    min-height: 2.75rem;
+    font-size: 0.9375rem;
+  }
+
+  .modal__actions button.linkish {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+
   /* Panels fill the available room at this width, but stay a floating card —
      the surrounding `.panel` padding means corners are still visible, so they
      keep the same rounding as the desktop card instead of squaring off. */
