@@ -2686,10 +2686,17 @@ button.linkish:hover {
     margin-top: 0.5rem;
   }
 
+  /* Set through the variable both buttons already read, rather than on the
+     pair of them: a rule naming the row loses to the one naming the submit
+     button by type, so the confirm kept 12px while cancel beside it took the
+     larger size — two halves of one choice at two different sizes. */
+  .modal__card {
+    --button-font-size: 0.9375rem;
+  }
+
   .modal__actions button {
     flex: 1;
     min-height: 2.75rem;
-    font-size: 0.9375rem;
   }
 
   .modal__actions button.linkish {
