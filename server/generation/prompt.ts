@@ -253,7 +253,26 @@ export function assemblePrompt(
   // floor. If that alone does not fit, nothing can be dropped to help.
   const floor = systemCost + (newest !== undefined ? costFor(newest) : 0);
   if (floor > budget) {
-    throw new AppError('CONTEXT_TOO_LARGE', 'This message is too large for the selected model.');
+    /*
+     * Said with the numbers in it.
+     *
+     * "Too large for the selected model" is true and tells the reader nothing
+     * they can act on: they cannot see the window, and an image's cost is its
+     * area rather than the file size they can see. Most of the time this is a
+     * few screenshots against a small window, and the remedy — one fewer
+     * picture, or a model with more room — follows from the two figures.
+     */
+    const images = costs.get(newest as ChatMessage) ?? [];
+    const pictures =
+      images.length === 0
+        ? ''
+        : ` ${String(images.length)} image${images.length === 1 ? ' accounts' : 's account'} for about ${String(
+            images.reduce((total, cost) => total + cost, 0)
+          )} of them.`;
+    throw new AppError(
+      'CONTEXT_TOO_LARGE',
+      `This message needs about ${String(floor)} tokens and the selected model leaves ${String(budget)}.${pictures}`
+    );
   }
 
   // Keep the newest turns and walk backwards while they fit; whole messages only.

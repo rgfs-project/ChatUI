@@ -204,7 +204,9 @@ describe('image cost', () => {
     const { conversation: convo, attachments, modalities } = withImage(10_000 * 10_000);
 
     // 100 MP is ~31,900 tokens. Against an 8k context it cannot be sent, and
-    // saying so here is what stops it being a reply that dies part-way.
+    // saying so here is what stops it being a reply that dies part-way — with
+    // the two figures in it, since neither the window nor an image's cost is
+    // something the reader can see for themselves.
     expect(() =>
       assemblePrompt(convo, {
         contextTokens: 8_192,
@@ -212,6 +214,15 @@ describe('image cost', () => {
         attachments,
         modalities,
       })
-    ).toThrowError(/too large/i);
+    ).toThrowError(/needs about 31[,.]?898 tokens and the selected model leaves 6[,.]?144/i);
+
+    expect(() =>
+      assemblePrompt(convo, {
+        contextTokens: 8_192,
+        maxOutputTokens: 2_048,
+        attachments,
+        modalities,
+      })
+    ).toThrowError(/1 image accounts for/i);
   });
 });

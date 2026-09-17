@@ -239,3 +239,63 @@ test.describe('on a phone', () => {
     await expect(composerField(page)).toBeInViewport();
   });
 });
+
+/**
+ * A screenshot is shrunk before it is sent anywhere.
+ *
+ * An image costs the model tokens by area: roughly one per 3,136 pixels, so a
+ * 4000x2356 capture from a high-density display is about 3,000 tokens and
+ * three of them are 9,000 — more than an 8k model has room for once a reply is
+ * reserved. What the reader saw was a message refused for being too large,
+ * after the upload had already finished. Past the resolution a vision model
+ * tiles to, those pixels are re-sampled away upstream anyway.
+ */
+test('a high-resolution screenshot is reduced before upload', async ({ app, page }) => {
+  await signIn(page, app.baseUrl);
+  await chooseVisionModel(page);
+
+  const original = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 4000;
+    canvas.height = 2356;
+    const context = canvas.getContext('2d');
+    if (context === null) throw new Error('no 2d context to draw the screenshot with');
+
+    // Busy enough that it does not compress to nothing on its own.
+    const gradient = context.createLinearGradient(0, 0, 4000, 2356);
+    gradient.addColorStop(0, '#101010');
+    gradient.addColorStop(1, '#f0f0f0');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 4000, 2356);
+    context.fillStyle = '#ffffff';
+    context.font = '48px sans-serif';
+    for (let line = 0; line < 20; line += 1) {
+      context.fillText('Some interface text to keep it busy', 100, 200 + line * 100);
+    }
+
+    const png = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/png');
+    });
+    if (png === null) throw new Error('the screenshot could not be encoded');
+    const file = new File([png], 'Screenshot 2026-09-16 at 11.47.24 PM.png', { type: 'image/png' });
+
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    document
+      .querySelector('textarea')
+      ?.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true }));
+
+    return file.size;
+  });
+
+  await expect(page.locator('.chip--ready')).toHaveCount(1, { timeout: 20_000 });
+
+  // The long edge is capped, and the file that made the trip is a fraction of
+  // what was pasted.
+  const thumbnail = await page
+    .locator('.chip img')
+    .evaluate((img: HTMLImageElement) => img.naturalWidth);
+  expect(thumbnail).toBe(1536);
+  await expect(page.locator('.chip__name')).toContainText(/\.webp$/);
+  expect(original).toBeGreaterThan(1_000_000);
+});

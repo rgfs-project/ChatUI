@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { MAX_ATTACHMENTS_PER_MESSAGE, type AttachmentDto } from '@shared/attachment';
+import { shrinkImage } from './shrinkImage.ts';
 import { ApiError, deleteAttachment, uploadAttachment } from './api.ts';
 
 /**
@@ -60,18 +61,29 @@ export function useAttachments(): AttachmentTray {
           const controller = new AbortController();
           controllers.current.set(localId, controller);
 
-          void uploadAttachment(file, {
-            signal: controller.signal,
-            onProgress: (progress) => {
-              setItems((now) =>
-                now.map((item) =>
-                  item.localId === localId && item.status === 'uploading'
-                    ? { ...item, progress }
-                    : item
-                )
-              );
-            },
-          })
+          /*
+           * Shrunk first, when it is a picture worth shrinking.
+           *
+           * The tray shows the file the reader chose while this happens: the
+           * chip is already on screen with its name and size, and swapping
+           * either for the re-encoded one would make the row twitch for a
+           * step that is over in a frame or two.
+           */
+          void shrinkImage(file)
+            .then((sending) =>
+              uploadAttachment(sending, {
+                signal: controller.signal,
+                onProgress: (progress) => {
+                  setItems((now) =>
+                    now.map((item) =>
+                      item.localId === localId && item.status === 'uploading'
+                        ? { ...item, progress }
+                        : item
+                    )
+                  );
+                },
+              })
+            )
             .then((attachment) => {
               controllers.current.delete(localId);
               replace(localId, { status: 'ready', localId, attachment });
