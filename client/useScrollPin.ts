@@ -179,39 +179,42 @@ export function useScrollPin(): ScrollPin {
     setScrollable(element.scrollHeight - element.clientHeight > SCROLLABLE_EPSILON_PX);
   }, []);
 
-  const scrollToBottom = useCallback((element: HTMLElement, smooth: boolean): void => {
-    if (smooth) {
-      if (smoothTimer.current !== null) window.clearTimeout(smoothTimer.current);
-      smoothUntil.current = Date.now() + SMOOTH_GUARD_MS;
-      smoothTimer.current = window.setTimeout(() => {
-        smoothUntil.current = 0;
-        smoothTimer.current = null;
+  const scrollToBottom = useCallback(
+    (element: HTMLElement, smooth: boolean): void => {
+      if (smooth) {
+        if (smoothTimer.current !== null) window.clearTimeout(smoothTimer.current);
+        smoothUntil.current = Date.now() + SMOOTH_GUARD_MS;
+        smoothTimer.current = window.setTimeout(() => {
+          smoothUntil.current = 0;
+          smoothTimer.current = null;
 
-        /*
-         * And land it, if the animation did not.
-         *
-         * Where it was aimed is worked out when it starts, so a reply that
-         * arrives on the way there, or a reserve that is remeasured, moves the
-         * end after the fact — and a reader who asked to be taken to the
-         * latest is left a screen short of it with nothing further coming.
-         * Only when the view is still ours: a reader who scrolled during the
-         * animation has said where they want to be.
-         */
-        if (!pinnedRef.current || userScrolled.current || isAtBottom(element)) return;
-        programmaticTop.current = Math.max(0, element.scrollHeight - element.clientHeight);
-        element.scrollTo({ top: element.scrollHeight, behavior: 'auto' });
-      }, SMOOTH_GUARD_MS);
+          /*
+           * And land it, if the animation did not.
+           *
+           * Where it was aimed is worked out when it starts, so a reply that
+           * arrives on the way there, or a reserve that is remeasured, moves the
+           * end after the fact — and a reader who asked to be taken to the
+           * latest is left a screen short of it with nothing further coming.
+           * Only when the view is still ours: a reader who scrolled during the
+           * animation has said where they want to be.
+           */
+          if (!pinnedRef.current || userScrolled.current || isAtBottom(element)) return;
+          programmaticTop.current = Math.max(0, element.scrollHeight - element.clientHeight);
+          element.scrollTo({ top: element.scrollHeight, behavior: 'auto' });
+        }, SMOOTH_GUARD_MS);
 
-      element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
-      return;
-    }
+        element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' });
+        return;
+      }
 
-    // Recorded before the scroll, and clamped the way the browser will clamp
-    // it: asking for `scrollHeight` lands at `scrollHeight - clientHeight`, and
-    // that smaller number is what the event will report.
-    programmaticTop.current = Math.max(0, element.scrollHeight - element.clientHeight);
-    element.scrollTo({ top: element.scrollHeight, behavior: 'auto' });
-  }, [isAtBottom]);
+      // Recorded before the scroll, and clamped the way the browser will clamp
+      // it: asking for `scrollHeight` lands at `scrollHeight - clientHeight`, and
+      // that smaller number is what the event will report.
+      programmaticTop.current = Math.max(0, element.scrollHeight - element.clientHeight);
+      element.scrollTo({ top: element.scrollHeight, behavior: 'auto' });
+    },
+    [isAtBottom]
+  );
 
   /** Attaches the scroll listener that decides pinned/unpinned. */
   useEffect(() => {
