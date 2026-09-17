@@ -2607,6 +2607,66 @@ button.linkish:hover {
     max-width: none;
   }
 
+  /*
+   * Every overlay scales to the phone the way the model menu does.
+   *
+   * That menu is the one that already got this right: `calc(100vw - 1rem)`,
+   * so it takes the screen less a thumb's width at each edge and stays a card
+   * over the page rather than becoming the page. The rest were each holding a
+   * desktop's margin — and a dialog, a panel and a palette are all the same
+   * kind of thing over the same screen, so they take the same figure.
+   *
+   * Inside the panel it compounds: a padded pane inside a padded card inside
+   * that margin brought a settings field down to 258px on a 375px phone.
+   */
+  .modal {
+    padding: 0.5rem;
+  }
+
+  .panel {
+    padding: max(0.5rem, var(--safe-top)) max(0.5rem, var(--safe-right))
+      max(0.5rem, var(--safe-bottom)) max(0.5rem, var(--safe-left));
+  }
+
+  .panel__pane {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .panel__form {
+    padding: 0.875rem;
+  }
+
+  /*
+   * A list reads at the size of the field above it.
+   *
+   * Every field on a phone is 16px, because the touch block forces it there so
+   * that focusing one does not zoom the page. The rows under it kept the sizes
+   * they carry beside a mouse — a 13px title over an 11px snippet — so the one
+   * list had two type scales in it, and the half that is content came out
+   * smaller than the half that is chrome. Which is also where the empty space
+   * in each row was coming from: the row is sized for a finger and the text in
+   * it was not.
+   *
+   * A step under the field rather than level with it. These are titles in a
+   * list of them, not the thing being typed.
+   */
+  .palette__title {
+    font-size: 0.9375rem;
+  }
+
+  .palette__snippet {
+    font-size: 0.8125rem;
+  }
+
+  .palette__label {
+    font-size: 0.75rem;
+  }
+
+  .model-option__name {
+    font-size: 0.9375rem;
+  }
+
   /* Panels fill the available room at this width, but stay a floating card —
      the surrounding `.panel` padding means corners are still visible, so they
      keep the same rounding as the desktop card instead of squaring off. */
