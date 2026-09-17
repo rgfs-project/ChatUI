@@ -1,5 +1,5 @@
 import { hasSendableContent } from '@shared/conversation';
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowUp, Plus, Square } from 'lucide-react';
 import type { ProviderModelGroup } from './api.ts';
 import { AttachmentChips } from './AttachmentChips.tsx';
@@ -124,6 +124,8 @@ export function Composer({
   const placeholder = selection === null ? 'Message…' : `Message ${selection.modelId}`;
 
   const canAttach = attachments !== undefined && !disabled;
+  /** Ties the label to its own input, for however many composers are mounted. */
+  const filePickerId = useId();
   const hasImage =
     attachments?.items.some(
       (item) => item.status === 'ready' && item.attachment.kind === 'image'
@@ -205,8 +207,18 @@ export function Composer({
       <div className="composer__bar">
         {attachments !== undefined && (
           <>
+            {/*
+              The control is the input itself, reached through its own label,
+              rather than a button that scripts a click into a hidden one.
+              A label activates the control it names in the browser, with no
+              script and no user-activation rule to satisfy — and the scripted
+              version is what a phone would not open: every other control in
+              this bar answered a tap, and this one, alone in doing its work
+              from JavaScript, did nothing in more than one browser.
+            */}
             <input
               ref={filePicker}
+              id={filePickerId}
               type="file"
               multiple
               className="visually-hidden"
@@ -216,19 +228,16 @@ export function Composer({
                 // a change event the second time.
                 event.target.value = '';
               }}
-              tabIndex={-1}
-              aria-hidden="true"
-            />
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => filePicker.current?.click()}
               disabled={!canAttach || busy || attachments.remaining === 0}
               aria-label="Attach files"
+            />
+            <label
+              htmlFor={filePickerId}
+              className="icon-button composer__attach"
               title={attachments.remaining === 0 ? 'Attachment limit reached' : 'Attach files'}
             >
-              <Plus size={18} />
-            </button>
+              <Plus size={18} aria-hidden="true" />
+            </label>
           </>
         )}
 

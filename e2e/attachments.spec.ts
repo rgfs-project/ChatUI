@@ -229,7 +229,7 @@ test.describe('on a phone', () => {
     // finger can hit, which is the Phase 10 rule applied to Phase 11's UI.
     const undersized = await page.evaluate(
       () =>
-        [...document.querySelectorAll<HTMLElement>('.chip__remove, [aria-label="Attach files"]')]
+        [...document.querySelectorAll<HTMLElement>('.chip__remove, .composer__attach')]
           .map((element) => element.getBoundingClientRect())
           .filter((box) => box.width < 44 || box.height < 44).length
     );

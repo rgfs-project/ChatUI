@@ -38,7 +38,8 @@ const JUST_NARROW = { width: 895, height: 900 };
 const JUST_WIDE = { width: 897, height: 900 };
 
 /** Every element a finger is expected to hit. */
-const INTERACTIVE = 'button, a[href], input, textarea, [role="button"], [role="menuitem"]';
+const INTERACTIVE =
+  'button, a[href], input, textarea, label.icon-button, [role="button"], [role="menuitem"]';
 
 async function horizontalOverflow(page: Page): Promise<boolean> {
   return page.evaluate(
@@ -257,6 +258,15 @@ test.describe('phone (390x844)', () => {
            */
           if (element.getAttribute('aria-hidden') === 'true') return false;
           if (element.tabIndex < 0) return false;
+
+          /*
+           * Nor a control that is deliberately not the thing being aimed at.
+           * The composer's file input is one: it carries the name and takes
+           * the focus, while the label beside it is what is drawn and what a
+           * finger lands on — and that label is measured here like any other
+           * target, being in the list above.
+           */
+          if (element.classList.contains('visually-hidden')) return false;
 
           /*
            * Two controls are held to WCAG 2.2 AA's 24px floor rather than to

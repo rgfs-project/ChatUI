@@ -42,12 +42,17 @@ body {
    * would have frozen the transcript, the conversation list, every code block
    * and the panel rail's own sideways strip along with the page.
    *
-   * What it does suppress is pinch and double-tap zoom, and with them the
-   * gestures iOS reads out of an ordinary two-finger scroll or a quick second
-   * tap on a message — an app that answers a tap by zooming into it does not
-   * read as an application.
+   * `pinch-zoom` is named alongside them because leaving it out is what
+   * actually blocks zooming, whatever the viewport meta says: dropping
+   * `user-scalable=no` from that tag satisfies the checker, which reads the
+   * tag, while this line went on refusing the gesture the checker was standing
+   * up for. A reader with low vision enlarges the text with exactly this.
+   *
+   * Double-tap zoom is still suppressed, and with it the gesture iOS reads out
+   * of a quick second tap on a message — an app that answers a tap by zooming
+   * into it does not read as an application.
    */
-  touch-action: pan-x pan-y;
+  touch-action: pan-x pan-y pinch-zoom;
 
   /* Landscape on iOS otherwise reflows body copy a size larger on its own,
      which moves every line of a conversation for a rotation. */

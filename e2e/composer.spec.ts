@@ -104,7 +104,9 @@ test('keeps the controls aligned and the send button a real target', async ({ ap
   await composerField(page).fill('one\ntwo\nthree\nfour\nfive');
 
   const send = await page.getByRole('button', { name: 'Send message' }).boundingBox();
-  const attach = await page.getByRole('button', { name: 'Attach files' }).boundingBox();
+  // The label, which is what is drawn: the input it names is the control, and
+  // it is visually hidden.
+  const attach = await page.locator('.composer__attach').boundingBox();
 
   // Same row: their centres line up vertically.
   const sendCentre = (send?.y ?? 0) + (send?.height ?? 0) / 2;

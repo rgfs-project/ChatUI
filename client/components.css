@@ -638,6 +638,29 @@
   height: 1.75rem;
 }
 
+/*
+ * The attach control is a label for the file input beside it, so the states a
+ * button would have carried are taken from the input's own.
+ *
+ * A label for a disabled control does nothing when it is activated, which is
+ * the behaviour wanted; this is only what that looks like. The focus ring is
+ * drawn here too, because the thing that takes focus is the input, and the
+ * input is the one that cannot be seen.
+ */
+.composer__attach {
+  cursor: pointer;
+}
+
+.visually-hidden:disabled + .composer__attach {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.visually-hidden:focus-visible + .composer__attach {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .composer__send {
   margin-left: auto;
 }
