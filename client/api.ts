@@ -326,6 +326,11 @@ export async function downloadConversation(id: string, title: string): Promise<v
 
 export interface MePreferences {
   defaultModel: { providerId: string; modelId: string } | null;
+  /**
+   * Images from earlier turns re-sent with each message. `null` follows the
+   * instance setting; `0` re-sends none.
+   */
+  historyImages: number | null;
 }
 
 export async function fetchMyPreferences(signal?: AbortSignal): Promise<MePreferences> {
@@ -339,6 +344,21 @@ export function setMyDefaultModel(
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ defaultModel }),
+  });
+}
+
+/**
+ * Sets, or clears back to the instance setting, how many earlier images are
+ * re-sent.
+ *
+ * `null` is the cleared state and `0` is a real choice, so the parameter is
+ * nullable rather than optional — there is no value that means "leave it".
+ */
+export function setMyHistoryImages(historyImages: number | null): Promise<MePreferences> {
+  return request<MePreferences>('/api/me/preferences', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ historyImages }),
   });
 }
 

@@ -44,11 +44,22 @@ const fileSchema = z.strictObject({
    * every generation regardless (INV-18).
    */
   defaultModel: modelSchema.optional(),
+  /**
+   * How many images from earlier turns this reader's generations re-send.
+   *
+   * Absent means "follow the instance setting", which is the state a reader
+   * who has never touched it is in — not the same as `0`, which is a deliberate
+   * choice to re-send none. The toggle in settings is the difference between
+   * absent and present; the number is this value.
+   */
+  historyImages: z.number().int().min(0).max(100).optional(),
 });
 
 export interface Preferences {
   pinned: Set<string>;
   defaultModel: DefaultModel | null;
+  /** `null` means the instance setting decides. */
+  historyImages: number | null;
 }
 
 export class PreferencesStore {
@@ -69,7 +80,7 @@ export class PreferencesStore {
     try {
       raw = await readFile(file, 'utf8');
     } catch {
-      return { pinned: new Set(), defaultModel: null };
+      return { pinned: new Set(), defaultModel: null, historyImages: null };
     }
 
     try {
@@ -79,10 +90,11 @@ export class PreferencesStore {
         // that is not an id into a path later on.
         pinned: new Set(parsed.pinned.filter((id) => isCanonicalUuid(id))),
         defaultModel: parsed.defaultModel ?? null,
+        historyImages: parsed.historyImages ?? null,
       };
     } catch {
       this.#logger.warn('Preferences file is unreadable; ignoring it', { userId });
-      return { pinned: new Set(), defaultModel: null };
+      return { pinned: new Set(), defaultModel: null, historyImages: null };
     }
   }
 
@@ -101,10 +113,21 @@ export class PreferencesStore {
   async setDefaultModel(userId: string, model: DefaultModel | null): Promise<void> {
     await this.#locks.run(`preferences:${userId}`, async () => {
       const current = await this.read(userId);
-      await this.#write(userId, {
-        pinned: current.pinned,
-        defaultModel: model,
-      });
+      await this.#write(userId, { ...current, defaultModel: model });
+    });
+  }
+
+  /**
+   * Sets this reader's image-history limit, or clears it back to the instance
+   * setting.
+   *
+   * Shares the lock with the other writers for the same reason they share it
+   * with each other: all three rewrite the one file.
+   */
+  async setHistoryImages(userId: string, limit: number | null): Promise<void> {
+    await this.#locks.run(`preferences:${userId}`, async () => {
+      const current = await this.read(userId);
+      await this.#write(userId, { ...current, historyImages: limit });
     });
   }
 
@@ -134,6 +157,7 @@ export class PreferencesStore {
           version: PREFERENCES_VERSION,
           pinned: [...next.pinned],
           ...(next.defaultModel === null ? {} : { defaultModel: next.defaultModel }),
+          ...(next.historyImages === null ? {} : { historyImages: next.historyImages }),
         },
         null,
         2

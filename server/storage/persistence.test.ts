@@ -508,7 +508,10 @@ describe("a reader's own settings", () => {
     });
 
   it('remembers a default model and gives it back', async () => {
-    expect(await (await me('/preferences')).json()).toEqual({ defaultModel: null });
+    expect(await (await me('/preferences')).json()).toEqual({
+      defaultModel: null,
+      historyImages: null,
+    });
 
     const set = await me('/preferences', {
       method: 'PATCH',
@@ -518,11 +521,48 @@ describe("a reader's own settings", () => {
 
     expect(await (await me('/preferences')).json()).toEqual({
       defaultModel: { providerId: 'local', modelId: 'GPT' },
+      historyImages: null,
     });
 
     // Clearing returns the reader to the instance default.
     await me('/preferences', { method: 'PATCH', body: JSON.stringify({ defaultModel: null }) });
-    expect(await (await me('/preferences')).json()).toEqual({ defaultModel: null });
+    expect(await (await me('/preferences')).json()).toEqual({
+      defaultModel: null,
+      historyImages: null,
+    });
+  });
+
+  it('remembers how many earlier images to re-send, zero included', async () => {
+    const set = await me('/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify({ historyImages: 3 }),
+    });
+    expect(set.status).toBe(200);
+    expect(await set.json()).toMatchObject({ historyImages: 3 });
+
+    expect(await (await me('/preferences')).json()).toMatchObject({ historyImages: 3 });
+
+    // Zero is a choice — re-send none — and must survive as itself.
+    await me('/preferences', { method: 'PATCH', body: JSON.stringify({ historyImages: 0 }) });
+    expect(await (await me('/preferences')).json()).toMatchObject({ historyImages: 0 });
+
+    // Null hands the decision back to the instance setting.
+    await me('/preferences', { method: 'PATCH', body: JSON.stringify({ historyImages: null }) });
+    expect(await (await me('/preferences')).json()).toMatchObject({ historyImages: null });
+  });
+
+  /* The two fields are written by separate calls from separate controls. */
+  it('changing one preference leaves the other alone', async () => {
+    await me('/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify({ defaultModel: { providerId: 'local', modelId: 'GPT' } }),
+    });
+    await me('/preferences', { method: 'PATCH', body: JSON.stringify({ historyImages: 2 }) });
+
+    expect(await (await me('/preferences')).json()).toEqual({
+      defaultModel: { providerId: 'local', modelId: 'GPT' },
+      historyImages: 2,
+    });
   });
 
   it('keeps a default model and a pin in the same file without losing either', async () => {

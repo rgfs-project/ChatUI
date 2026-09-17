@@ -18,6 +18,7 @@ import { ProviderHub } from '../provider/hub.ts';
 import { DEFAULT_HOST_POLICY } from '../provider/ssrf.ts';
 import { startMockProvider, type MockProvider } from '../provider/mockServer.ts';
 import { ConversationStore } from '../storage/conversations.ts';
+import { PreferencesStore } from '../storage/preferences.ts';
 import { ChatIndex } from '../storage/index.ts';
 import { StoragePaths } from '../storage/paths.ts';
 
@@ -48,6 +49,7 @@ let base: string;
 let mock: MockProvider | undefined;
 let store: ConversationStore;
 let attachments: AttachmentStore;
+let preferences: PreferencesStore;
 let reader: TestClient;
 
 /** `Qwen Mini` is the model the mock advertises as taking text and images. */
@@ -87,6 +89,7 @@ async function boot(historyImages?: number): Promise<void> {
   });
 
   store = new ConversationStore({ paths, logger });
+  preferences = new PreferencesStore(paths, logger);
   const index = new ChatIndex({ store, logger });
   attachments = new AttachmentStore(paths, {
     maxBytes: 1_000_000,
@@ -124,6 +127,7 @@ async function boot(historyImages?: number): Promise<void> {
     defaultContextTokens: 8_192,
     maxOutputTokens: 128,
     attachments,
+    preferences,
     ...(historyImages === undefined ? {} : { maxHistoryImages: historyImages }),
   });
 
@@ -286,5 +290,39 @@ describe('MAX_HISTORY_IMAGES, over real HTTP', () => {
     expect(text).toContain('look at shot 0');
     expect(text).toContain('look at shot 1');
     expect(text).toContain('earlier image omitted');
+  });
+});
+
+describe("a reader's own setting", () => {
+  it('overrides the instance setting', async () => {
+    // The instance re-sends everything; this reader has asked for one.
+    await boot();
+    await preferences.setHistoryImages(reader.userId, 1);
+    const conversationId = await newConversation();
+
+    await pictureTurns(conversationId, 4);
+
+    expect(imagesSentUpstream()).toBe(2);
+  });
+
+  it('can ask for none even where the instance sets a limit', async () => {
+    await boot(3);
+    await preferences.setHistoryImages(reader.userId, 0);
+    const conversationId = await newConversation();
+
+    await pictureTurns(conversationId, 4);
+
+    // `0` is a choice, not an absence: it must not read as "unset" and fall
+    // back to the instance's 3.
+    expect(imagesSentUpstream()).toBe(1);
+  });
+
+  it('falls back to the instance setting when the reader has none', async () => {
+    await boot(1);
+    const conversationId = await newConversation();
+
+    await pictureTurns(conversationId, 4);
+
+    expect(imagesSentUpstream()).toBe(2);
   });
 });

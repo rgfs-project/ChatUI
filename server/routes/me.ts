@@ -33,7 +33,17 @@ const preferencesSchema = z.strictObject({
   /** `null` clears the choice and returns the reader to the instance default. */
   defaultModel: z
     .strictObject({ providerId: z.string().min(1).max(200), modelId: z.string().min(1).max(400) })
-    .nullable(),
+    .nullable()
+    .optional(),
+  /**
+   * Images from earlier turns to re-send. `null` follows the instance setting,
+   * `0` re-sends none.
+   *
+   * Both fields are optional so that changing one does not require restating
+   * the other — a PATCH that omits a field leaves it as it was, rather than
+   * clearing a model choice because the reader moved a number.
+   */
+  historyImages: z.number().int().min(0).max(100).nullable().optional(),
 });
 
 const clearSchema = z.strictObject({
@@ -180,14 +190,25 @@ export function meRouter({
   });
 
   router.get('/me/preferences', async (req, res) => {
-    const { defaultModel } = await preferences.read(caller(req));
-    res.json({ defaultModel });
+    const { defaultModel, historyImages } = await preferences.read(caller(req));
+    res.json({ defaultModel, historyImages });
   });
 
   router.patch('/me/preferences', validateBody(preferencesSchema), async (req, res) => {
-    const { defaultModel } = req.body as z.infer<typeof preferencesSchema>;
-    await preferences.setDefaultModel(caller(req), defaultModel);
-    res.json({ defaultModel });
+    const body = req.body as z.infer<typeof preferencesSchema>;
+    const userId = caller(req);
+
+    if (body.defaultModel !== undefined) {
+      await preferences.setDefaultModel(userId, body.defaultModel);
+    }
+    if (body.historyImages !== undefined) {
+      await preferences.setHistoryImages(userId, body.historyImages);
+    }
+
+    /* Read back rather than echoed: the response is then what is on disk,
+       including the fields this request did not touch. */
+    const { defaultModel, historyImages } = await preferences.read(userId);
+    res.json({ defaultModel, historyImages });
   });
 
   /**

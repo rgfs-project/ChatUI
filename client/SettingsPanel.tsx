@@ -19,6 +19,7 @@ import {
   importExport,
   saveMyMemory,
   setMyDefaultModel,
+  setMyHistoryImages,
   updateMyAccount,
   type ImportReport,
 } from './api.ts';
@@ -98,7 +99,12 @@ export function SettingsPanel({
           <h2 className="panel__title">{SECTIONS.find((s) => s.id === section)?.label}</h2>
 
           {section === 'account' && <Account user={user} />}
-          {section === 'model' && <DefaultModel />}
+          {section === 'model' && (
+            <>
+              <DefaultModel />
+              <HistoryImages />
+            </>
+          )}
           {section === 'history' && <ChatHistory user={user} />}
           {section === 'memory' && <Memory />}
           {section === 'import' && <ImportChats />}
@@ -248,6 +254,86 @@ function DefaultModel(): React.JSX.Element {
         value={preferences.data?.defaultModel ?? null}
         onChange={(choice) => save.mutate(choice)}
         disabled={preferences.isPending || models.isPending}
+      />
+    </Row>
+  );
+}
+
+/* --- re-sent images ------------------------------------------------------- */
+
+/** What the toggle turns on to, and what the stepper offers. */
+const HISTORY_IMAGES_DEFAULT = 2;
+const HISTORY_IMAGES_MAX = 20;
+
+/**
+ * How many earlier images go back up with each message.
+ *
+ * Two controls for one value because the value has two independent parts: it
+ * is either "whatever the server decides" or a number this reader chose, and
+ * `0` is one of the numbers they can choose. A stepper alone could not express
+ * the difference between "re-send none" and "I have no opinion", which is why
+ * the cleared state is a separate switch rather than a sentinel in the number.
+ */
+function HistoryImages(): React.JSX.Element {
+  const client = useQueryClient();
+  const preferences = useMyPreferences();
+  const stored = preferences.data?.historyImages ?? null;
+
+  /* Held while typing so a half-typed number is not saved on every keystroke;
+     dropped on blur, when the stored value takes over again. */
+  const [draft, setDraft] = useState<string | undefined>(undefined);
+
+  const save = useMutation({
+    mutationFn: (limit: number | null) => setMyHistoryImages(limit),
+    onSuccess: () => void client.invalidateQueries({ queryKey: keys.preferences() }),
+    onError: (err) => showToast('error', message(err, 'Could not save that setting.')),
+  });
+
+  const enabled = stored !== null;
+  const shown = stored ?? HISTORY_IMAGES_DEFAULT;
+
+  const commit = (raw: string): void => {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    const clamped = Math.min(HISTORY_IMAGES_MAX, Math.max(0, Math.round(parsed)));
+    if (clamped !== stored) save.mutate(clamped);
+  };
+
+  return (
+    <Row
+      label="Limit re-sent images"
+      description="Each reply re-sends the images from earlier messages, and your provider encodes every one of them again. Limiting how many are re-sent makes replies faster in a conversation with several pictures in it. The images on the message you are sending now are always included."
+    >
+      <label className="switch">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={preferences.isPending || save.isPending}
+          onChange={(event) => save.mutate(event.target.checked ? HISTORY_IMAGES_DEFAULT : null)}
+        />
+        <span className="switch__track" aria-hidden="true">
+          <span className="switch__thumb" />
+        </span>
+        <span className="sr-only">Limit how many earlier images are re-sent</span>
+      </label>
+
+      <input
+        className="sampler__number"
+        type="number"
+        min={0}
+        max={HISTORY_IMAGES_MAX}
+        step={1}
+        value={draft ?? String(shown)}
+        aria-label="Earlier images to re-send"
+        disabled={!enabled || save.isPending}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={(event) => {
+          setDraft(undefined);
+          if (event.target.value !== String(shown)) commit(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+        }}
       />
     </Row>
   );

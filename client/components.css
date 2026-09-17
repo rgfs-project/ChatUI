@@ -2089,6 +2089,65 @@ button.linkish:hover {
  * than beside it, and coloured as a warning: the row it labels is the reason
  * the model list below is short or empty.
  */
+/*
+ * An on/off switch.
+ *
+ * A real checkbox with the box hidden and a track drawn beside it, rather than
+ * a styled div with a click handler: the input keeps the label association, the
+ * space bar, and the checked state a screen reader reads out, none of which a
+ * repainted div gets back without reimplementing them badly.
+ */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch__track {
+  display: block;
+  width: 2.125rem;
+  height: 1.25rem;
+  padding: 0.125rem;
+  background: var(--border-strong);
+  border-radius: 999px;
+  transition: background 120ms ease;
+}
+
+.switch__thumb {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  background: var(--bg);
+  border-radius: 50%;
+  transition: transform 120ms ease;
+}
+
+.switch input:checked + .switch__track {
+  background: var(--accent);
+}
+
+.switch input:checked + .switch__track .switch__thumb {
+  transform: translateX(0.875rem);
+}
+
+/* Focus lands on the hidden input, so the ring has to be drawn on the track. */
+.switch input:focus-visible + .switch__track {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.switch input:disabled + .switch__track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .panel__status {
   min-width: 6rem;
   text-align: center;

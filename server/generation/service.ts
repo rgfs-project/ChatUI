@@ -85,6 +85,14 @@ export interface GenerationServiceOptions {
   /** Images from earlier turns re-sent, newest first. Unset: all; `0`: none. */
   maxHistoryImages?: number | undefined;
   /**
+   * This reader's own image-history limit, overriding the instance setting.
+   *
+   * Read here rather than passed in by the route, for the same reason
+   * `memories` is: it belongs to one account, and a caller that could supply
+   * it would be choosing how another reader's prompt is built.
+   */
+  preferences?: { read: (userId: string) => Promise<{ historyImages: number | null }> };
+  /**
    * Per-model sampler and system prompt, applied here rather than accepted
    * from the browser: these are an administrator's settings for everyone, and
    * a client that could send its own would be setting policy for itself.
@@ -151,6 +159,7 @@ export class GenerationService {
   readonly #defaultContextTokens: number;
   readonly #maxOutputTokens: number;
   readonly #maxHistoryImages: number | undefined;
+  readonly #preferences: GenerationServiceOptions['preferences'];
   readonly #attachments: GenerationServiceOptions['attachments'];
   readonly #maxInlineChars: number;
   readonly #settings: GenerationServiceOptions['settings'];
@@ -175,6 +184,7 @@ export class GenerationService {
     this.#defaultContextTokens = options.defaultContextTokens;
     this.#maxOutputTokens = options.maxOutputTokens;
     this.#maxHistoryImages = options.maxHistoryImages;
+    this.#preferences = options.preferences;
     this.#settings = options.settings;
     this.#memories = options.memories;
     this.#proposals = options.proposals;
@@ -191,6 +201,21 @@ export class GenerationService {
    * the memories are about *who it is answering* — and because an
    * administrator's instruction reads better as the last word.
    */
+
+  /**
+   * How many earlier images to re-send for this reader.
+   *
+   * The reader's own setting wins when they have one; `0` is a choice and not
+   * an absence, so the check is against `null` rather than falsiness. A
+   * preferences file that cannot be read falls back to the instance setting,
+   * which is what `read` already returns for one that is missing.
+   */
+  async #historyImagesFor(userId: string): Promise<number | undefined> {
+    if (this.#preferences === undefined) return this.#maxHistoryImages;
+    const { historyImages } = await this.#preferences.read(userId);
+    return historyImages ?? this.#maxHistoryImages;
+  }
+
   async #systemPromptFor(
     userId: string,
     sampler: SamplerSettings,
@@ -348,13 +373,12 @@ export class GenerationService {
               modalities,
             });
 
+      const historyImages = await this.#historyImagesFor(userId);
       const prompt = assemblePrompt(next, {
         contextTokens:
           client.contextLength(model) ?? entry.contextTokens ?? this.#defaultContextTokens,
         maxOutputTokens: this.#maxOutputTokens,
-        ...(this.#maxHistoryImages === undefined
-          ? {}
-          : { maxHistoryImages: this.#maxHistoryImages }),
+        ...(historyImages === undefined ? {} : { maxHistoryImages: historyImages }),
         ...(systemPrompt === undefined ? {} : { systemPrompt }),
         attachments: resolved,
         modalities,
@@ -536,13 +560,12 @@ export class GenerationService {
               modalities,
             });
 
+      const historyImages = await this.#historyImagesFor(userId);
       const prompt = assemblePrompt(next, {
         contextTokens:
           client.contextLength(model) ?? entry.contextTokens ?? this.#defaultContextTokens,
         maxOutputTokens: this.#maxOutputTokens,
-        ...(this.#maxHistoryImages === undefined
-          ? {}
-          : { maxHistoryImages: this.#maxHistoryImages }),
+        ...(historyImages === undefined ? {} : { maxHistoryImages: historyImages }),
         ...(systemPrompt === undefined ? {} : { systemPrompt }),
         attachments: resolved,
         modalities,
