@@ -1,4 +1,11 @@
-import { composerField, expect, signIn, startGeneration, test } from './fixtures.ts';
+import {
+  composerField,
+  expect,
+  scrollUpAwayFromEnd,
+  signIn,
+  startGeneration,
+  test,
+} from './fixtures.ts';
 import type { Page } from '@playwright/test';
 
 /**
@@ -188,4 +195,52 @@ test.describe('on a phone', () => {
     expect(box.y).toBeGreaterThan(0);
     expect(box.y + box.height).toBeLessThanOrEqual(420);
   });
+});
+
+/**
+ * Pasting into the composer does not lose the end of the conversation.
+ *
+ * The composer grows to fit what was pasted and the transcript gives up that
+ * height from the bottom — the same move the on-screen keyboard makes, and as
+ * quiet: `scrollTop` does not change and no scroll event is fired. A reader
+ * who was at the end was left above it with the newest lines behind the
+ * composer, which reads as the conversation having jumped.
+ */
+test('a long paste keeps the end of the transcript in view', async ({ app, page }) => {
+  await signIn(page, app.baseUrl);
+
+  await startGeneration(page, 'a question');
+  await app.provider.waitForStream();
+  for (let paragraph = 0; paragraph < 12; paragraph += 1) {
+    app.provider.send(
+      `Paragraph ${paragraph} of an answer that fills the screen and then some.\n\n`
+    );
+    await page.waitForTimeout(15);
+  }
+  app.provider.finish();
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
+
+  const transcript = page.locator('[data-testid="transcript"]');
+  const distance = (): Promise<number> =>
+    transcript.evaluate((el) => Math.round(el.scrollHeight - el.scrollTop - el.clientHeight));
+
+  await expect.poll(distance).toBe(0);
+
+  const composer = composerField(page);
+  const LONG = Array.from({ length: 40 }, (_, line) => `line ${line} of pasted code`).join('\n');
+  await composer.fill(LONG);
+
+  // Still at the end, with the composer taller than it was.
+  await expect.poll(distance).toBe(0);
+  expect(
+    await page.locator('.composer').evaluate((el) => Math.round(el.getBoundingClientRect().height))
+  ).toBeGreaterThan(150);
+
+  // And a reader who has gone back up is left exactly where they are.
+  await composer.fill('');
+  await page.waitForTimeout(200);
+  const parked = await scrollUpAwayFromEnd(page, transcript);
+  await composer.fill(LONG);
+  await page.waitForTimeout(300);
+  expect(await transcript.evaluate((el) => Math.round(el.scrollTop))).toBe(parked);
 });

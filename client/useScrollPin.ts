@@ -293,6 +293,28 @@ export function useScrollPin(): ScrollPin {
     // to before the first scroll event that might never come.
     measureScrollable(element);
 
+    /*
+     * The transcript's own box, not only the window's.
+     *
+     * The composer grows as a reply is typed or pasted into it and the
+     * transcript gives up that height from the bottom — the same move the
+     * keyboard makes, and the same silence: `scrollTop` does not change, no
+     * `scroll` event is fired, and a reader who was at the end is left above
+     * it with the newest lines behind the composer. `markResize` already knows
+     * what to do about a bottom that moved; this is the other way it moves.
+     */
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      let height = element.clientHeight;
+      observer = new ResizeObserver(() => {
+        if (element.clientHeight === height) return;
+        height = element.clientHeight;
+        markResize();
+        measureScrollable(element);
+      });
+      observer.observe(element);
+    }
+
     element.addEventListener('scroll', onScroll, { passive: true });
     element.addEventListener('wheel', onReaderIntent, { passive: true });
     element.addEventListener('touchmove', onReaderIntent, { passive: true });
@@ -301,6 +323,7 @@ export function useScrollPin(): ScrollPin {
     window.visualViewport?.addEventListener('resize', markResize);
 
     return () => {
+      observer?.disconnect();
       element.removeEventListener('scroll', onScroll);
       element.removeEventListener('wheel', onReaderIntent);
       element.removeEventListener('touchmove', onReaderIntent);
