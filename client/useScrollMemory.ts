@@ -32,8 +32,23 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 /** How long after a conversation loads a position may still be restored. */
 const RESTORE_WINDOW_MS = 2000;
 
-/** Nearer the bottom than this is not a place, it is just the end. */
-const BOTTOM_EPSILON_PX = 48;
+/**
+ * Nearer the bottom than this is the end, rather than a place near it.
+ *
+ * A pixel or two of rounding, and nothing more. It used to be 48, which is the
+ * distance the *pin* treats as "following the bottom" — a different question,
+ * and borrowing the answer meant a reader stopped forty pixels short of the end
+ * had no position saved at all. A reload then started at the bottom and their
+ * view jumped up by exactly the distance they had chosen to sit at.
+ *
+ * What that 48 was defending against is a stale record of the bottom being
+ * restored against a transcript that has since grown. A position is anchored to
+ * a *turn* rather than to an offset, so that case is already covered: the
+ * reader is put back on the line they were reading, a reply that arrived below
+ * it leaves them above the end rather than at it, and the jump-to-latest
+ * control is offered — which is the same place a deliberate scroll leaves them.
+ */
+const AT_BOTTOM_EPSILON_PX = 2;
 
 /** Smaller corrections than this are the rounding of a reflow. */
 const EPSILON_PX = 1;
@@ -129,10 +144,9 @@ export function useScrollMemory({ port, content, conversationId }: ScrollMemoryO
    * they were rather than the last place the transcript happened to be when
    * something thought to save it.
    *
-   * Sitting at the bottom is not saved at all — it is deleted. The bottom is
-   * where a reload starts anyway, and a stale record of it would be restored
-   * against a transcript that has since grown, putting the reader above a reply
-   * that arrived while they were gone.
+   * Sitting *at* the bottom is not saved at all — it is deleted, because the
+   * bottom is where a reload starts anyway. Stopping just short of it is a
+   * position like any other and is kept.
    */
   useEffect(() => {
     const scroller = port.current;
@@ -146,13 +160,14 @@ export function useScrollMemory({ port, content, conversationId }: ScrollMemoryO
       if (list === null) return;
 
       const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-      if (distance <= BOTTOM_EPSILON_PX) {
+      if (distance <= AT_BOTTOM_EPSILON_PX) {
         write(conversationId, null);
         return;
       }
 
       const top = scroller.getBoundingClientRect().top;
       const turns = list.querySelectorAll<HTMLElement>('[data-message-id]');
+
       for (const turn of turns) {
         const box = turn.getBoundingClientRect();
         // The first turn whose bottom is still below the top edge: the one the
@@ -200,7 +215,9 @@ export function useScrollMemory({ port, content, conversationId }: ScrollMemoryO
     const list = content.current;
     if (scroller === null || list === null) return;
 
-    const turn = list.querySelector<HTMLElement>(`[data-message-id="${target.id}"]`);
+    const turns = [...list.querySelectorAll<HTMLElement>('[data-message-id]')];
+
+    const turn = turns.find((node) => node.dataset['messageId'] === target.id) ?? null;
     // Not rendered yet, or gone. Either way there is nothing to aim at on this
     // pass; the window is still open for the next one.
     if (turn === null) return;

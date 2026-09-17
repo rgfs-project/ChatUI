@@ -303,6 +303,53 @@ test('the transcript comes back where the reader left it', async ({ app, page })
 });
 
 /**
+ * Stopping just short of the end is a place too.
+ *
+ * Scroll memory used to treat anything within 48px of the bottom as "the
+ * bottom" and delete the saved position outright — a figure borrowed from the
+ * scroll pin, which uses it to answer a different question. A reader who
+ * stopped forty pixels short had nothing saved, the reload started at the
+ * bottom, and the whole transcript jumped up by exactly the distance they had
+ * chosen to sit at. Small, repeatable, and entirely on refresh, which is what
+ * made it look like a layout bug.
+ */
+test('a reader stopped just short of the bottom is put back there', async ({ app, page }) => {
+  await signIn(page, app.baseUrl);
+  await withHistory(page, app);
+
+  const composer = composerField(page);
+  await composer.fill('the last question');
+  await composer.press('Enter');
+  await app.provider.waitForStream();
+  app.provider.send('Stored under `data/<user-uuid>/`, as before.');
+  app.provider.finish();
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
+
+  const transcript = page.locator('[data-testid="transcript"]');
+
+  // Inside the old 48px window, and far enough in to be unmistakably deliberate.
+  const OFFSET_PX = 40;
+  await transcript.evaluate((node, offset) => {
+    node.scrollTop = node.scrollHeight - node.clientHeight - offset;
+  }, OFFSET_PX);
+
+  const distance = async (): Promise<number> =>
+    transcript.evaluate((node) =>
+      Math.round(node.scrollHeight - node.scrollTop - node.clientHeight)
+    );
+
+  // The premise: this is a position the reader can actually hold.
+  await expect.poll(distance).toBe(OFFSET_PX);
+
+  await page.reload();
+  await expect(page.getByText('as before.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeVisible();
+
+  // Settled rather than first painted: the reserve is rebuilt asynchronously.
+  await expect.poll(distance).toBe(OFFSET_PX);
+});
+
+/**
  * A long answer is read from the top, and a reload does not lose the place.
  *
  * Once a reply outgrows its reserve the transcript is released and the view
