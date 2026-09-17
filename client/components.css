@@ -1911,8 +1911,22 @@ button.linkish:hover {
 }
 
 .memories__item {
+  /*
+   * Centred, so the control sits on the middle of whatever the text came to.
+   *
+   * `flex-start` lined the two boxes up by their tops, and the control is a
+   * 2rem square against a 1.5em line — so the glyphs drawn in them sat five
+   * pixels apart on a row of one line. Aligning to the *first* line instead
+   * fixes that one and breaks the next: text that wraps, which at a phone's
+   * width is most of it, leaves the cross up by the first line with the rest
+   * of the row below it.
+   *
+   * Centring is right for both and is arithmetic-free — it follows the
+   * control growing under a finger and the type scale changing at the
+   * breakpoint without being told either figure.
+   */
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.625rem 0.75rem;
   background: var(--surface-2);
