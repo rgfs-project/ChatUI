@@ -2,10 +2,15 @@ import { Router, type Request, type Response } from "express";
 import type { z } from "zod";
 import type { HealthDto } from "@shared/api";
 import type { ConversationDto } from "@shared/conversations";
+import { ErrorCode } from "@shared/errors";
+import type { AuthContext, AuthService } from "./auth/service.ts";
 import type { SendService } from "./chat/send-service.ts";
+import { AppError } from "./errors.ts";
 import type { ModelCatalog } from "./generations/catalog.ts";
 import type { GenerationManager } from "./generations/manager.ts";
-import type { SseOptions } from "./generations/sse.ts";
+import type { SseConnections, SseOptions } from "./generations/sse.ts";
+import type { PreferencesStore } from "./storage/preferences.ts";
+import type { UserStore } from "./storage/users.ts";
 import type { Logger } from "./logger.ts";
 import type { ConversationStore } from "./storage/conversations.ts";
 import type { OperationStore } from "./storage/operations.ts";
@@ -27,41 +32,41 @@ export interface RouteServices {
   conversations: ConversationStore;
   operations: OperationStore;
   send: SendService;
-  /** Loads a conversation DTO for the acting user (SSR loaders and API). */
-  conversationDto: (id: string) => Promise<ConversationDto>;
-  /**
-   * The acting user. Phase 3: LOCAL_USER_ID from configuration; from Phase 4
-   * the authenticated session. Never from headers, query, body or params (INV-14).
-   */
-  userId: string;
+  /** Loads a conversation DTO owned by `userId` (SSR loaders and API). */
+  conversationDto: (userId: string, id: string) => Promise<ConversationDto>;
+  auth: AuthService;
+  users: UserStore;
+  preferences: PreferencesStore;
+  sseConnections: SseConnections;
   sse: SseOptions;
   logger: Logger;
-  /**
-   * The pre-auth chat demo (Phases 2–3) is available only on the
-   * loopback-guarded host process, never in the container (contracts §9.2b).
-   */
-  chatDemoEnabled: boolean;
 }
 
 export interface RouteContext {
   req: Request;
   res: Response;
   services: RouteServices;
+  /** The session identity, resolved server-side (INV-14); null when signed out. */
+  auth: AuthContext | null;
+}
+
+/** The signed-in user of a `user` route (the registry guarantees it). */
+export function userOf(ctx: RouteContext): AuthContext {
+  if (!ctx.auth) throw new AppError(ErrorCode.UNAUTHENTICATED, "Sign in to continue");
+  return ctx.auth;
 }
 
 interface RouteBase<S extends RequestSchemas> {
   method: HttpMethod;
   /** Express path, always under /api. */
   path: `/api/${string}`;
-  /** Authentication policy. Only `public` exists before Phase 4. */
-  auth: "public";
-  /** CSRF policy. Only `none` exists before Phase 4. */
-  csrf: "none";
+  /** `public` routes work signed out; `user` routes require a session (401). */
+  auth: "public" | "user";
   /**
-   * `chat-demo` routes are registered only when the pre-auth chat demo is
-   * enabled; otherwise they do not exist (404).
+   * `none` for safe methods; `token`: synchronizer token + X-Expected-User
+   * (contracts §5); `origin`: same-origin check for login/registration.
    */
-  availability?: "always" | "chat-demo";
+  csrf: "none" | "token" | "origin";
   request: S;
   /**
    * Request used by the registry coverage tests, and the status it must
@@ -119,18 +124,28 @@ export function buildApiRouter(routes: readonly AnyApiRoute[], services: RouteSe
     const key = `${route.method.toUpperCase()} ${route.path}`;
     if (seen.has(key)) throw new Error(`Duplicate API route registration: ${key}`);
     seen.add(key);
-    if (route.availability === "chat-demo" && !services.chatDemoEnabled) continue;
     // Paths are relative to the /api mount point.
     const mountedPath = route.path.slice("/api".length);
+    // Policies run before validation and before the handler, for every route.
+    const guard = async (req: Request, res: Response): Promise<RouteContext> => {
+      const auth = await services.auth.resolve(req);
+      if (route.auth === "user" && !auth)
+        throw new AppError(ErrorCode.UNAUTHENTICATED, "Sign in to continue");
+      if (route.csrf === "token") services.auth.checkMutation(req, auth);
+      if (route.csrf === "origin") services.auth.checkOrigin(req);
+      return { req, res, services, auth };
+    };
     if (route.kind === "sse") {
-      router[route.method](mountedPath, (req, res) => {
-        route.handler(parseRequest(route.request, req), { req, res, services });
+      router[route.method](mountedPath, async (req, res) => {
+        const ctx = await guard(req, res);
+        route.handler(parseRequest(route.request, req), ctx);
       });
       continue;
     }
     router[route.method](mountedPath, async (req, res) => {
+      const ctx = await guard(req, res);
       const input = parseRequest(route.request, req);
-      const output: unknown = await route.handler(input, { req, res, services });
+      const output: unknown = await route.handler(input, ctx);
       const dto: unknown = route.response.parse(output);
       res
         .status(route.status ?? 200)

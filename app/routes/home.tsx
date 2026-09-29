@@ -8,9 +8,9 @@ export function meta(): Route.MetaDescriptors {
 }
 
 /** Uses the internal health service directly, never an HTTP self-call. */
-export function loader({ context }: Route.LoaderArgs): { health: HealthDto; chatDemo: boolean } {
-  const { services } = context.get(appContext);
-  return { health: services.health(), chatDemo: services.chatDemoEnabled };
+export function loader({ context }: Route.LoaderArgs): { health: HealthDto; signedIn: boolean } {
+  const { services, auth } = context.get(appContext);
+  return { health: services.health(), signedIn: auth !== null };
 }
 
 /** Lightweight guard: keeps the schema library out of the client bundle. */
@@ -83,11 +83,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {check.kind === "failed" ? "The server could not be reached." : ""}
         </span>
       </p>
-      {loaderData.chatDemo ? (
-        <p>
-          <a href="/chat">Open the local chat demo</a> (this computer only; nothing is saved).
-        </p>
-      ) : null}
+      <p>
+        {loaderData.signedIn ? <a href="/chat">Open your chats</a> : <a href="/login">Sign in</a>}
+      </p>
     </main>
   );
 }

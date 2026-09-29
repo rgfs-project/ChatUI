@@ -303,3 +303,27 @@ button.secondary {
     border-bottom: 1px solid var(--border);
   }
 }
+
+.auth-form {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 24rem;
+}
+
+.auth-form input {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+}
+
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}

@@ -82,4 +82,27 @@ export class DataPaths {
   systemDir(): string {
     return this.inside(SYSTEM_DIR);
   }
+
+  userFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "user.json");
+  }
+
+  preferencesFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "preferences.json");
+  }
+
+  /** Derived username → user id map (rebuildable from user.json files). */
+  usersIndexFile(): string {
+    return this.inside(SYSTEM_DIR, "users.index.json");
+  }
+
+  sessionsDir(): string {
+    return this.inside(SYSTEM_DIR, "sessions");
+  }
+
+  /** Sessions are named by the SHA-256 of their token; the token is never stored. */
+  sessionFile(tokenHash: string): string {
+    if (!isSha256Hex(tokenHash)) throw new PathError("session name must be lowercase SHA-256 hex");
+    return this.inside(SYSTEM_DIR, "sessions", `${tokenHash}.json`);
+  }
 }

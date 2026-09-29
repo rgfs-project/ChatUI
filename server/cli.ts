@@ -7,10 +7,12 @@
 import { ConfigError, loadConfig } from "./config.ts";
 import { ChatIndex } from "./storage/chat-index.ts";
 import { DataPaths } from "./storage/paths.ts";
-import { userIds } from "./storage/recovery.ts";
+import { PASSWORD_MAX, PASSWORD_MIN, PasswordHasher } from "./auth/passwords.ts";
+import { KeyedLocks } from "./storage/locks.ts";
+import { accountIds } from "./storage/recovery.ts";
+import { UserError, UserStore } from "./storage/users.ts";
 
 const PLANNED: Readonly<Record<string, string>> = {
-  "user:create": "Phase 4 (initial admin creation via stdin)",
   "user:reset-password": "Phase 4",
   backup: "Phase 16",
   restore: "Phase 16",
@@ -21,6 +23,9 @@ const USAGE = `Usage: node server/cli.ts <command>
 Commands:
   serve         Start the HTTP server (default container command)
   healthcheck     Exit 0 if GET /api/health on this container answers {"status":"ok"}
+  user:create --username <name> [--admin]
+                  Create an account. The password is read from an interactive
+                  prompt, or from stdin when piped (never from the command line)
   index:rebuild   Rebuild every derived conversation index from the canonical
                   Markdown in DATA_DIR (stop the server first: single process)
   provider:check  Check that LLAMA_BASE_URL is reachable from here (DNS, routing,
@@ -96,6 +101,98 @@ async function providerCheck(): Promise<number> {
   }
 }
 
+/** Reads a password without echo from a terminal, or all of stdin when piped. */
+async function readPassword(): Promise<string> {
+  if (!process.stdin.isTTY) {
+    let data = "";
+    process.stdin.setEncoding("utf8");
+    for await (const chunk of process.stdin) data += String(chunk);
+    return data.replace(/\r?\n$/, "");
+  }
+  const ask = (prompt: string) =>
+    new Promise<string>((resolve) => {
+      process.stdout.write(prompt);
+      const stdin = process.stdin;
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.setEncoding("utf8");
+      let value = "";
+      const onData = (key: string) => {
+        for (const char of key) {
+          if (char === "\r" || char === "\n") {
+            stdin.setRawMode(false);
+            stdin.pause();
+            stdin.off("data", onData);
+            process.stdout.write("\n");
+            resolve(value);
+            return;
+          }
+          if (char === "\u0003") process.exit(130);
+          if (char === "\u007f") value = value.slice(0, -1);
+          else value += char;
+        }
+      };
+      stdin.on("data", onData);
+    });
+  const first = await ask("Password: ");
+  const second = await ask("Repeat password: ");
+  if (first !== second) throw new Error("The passwords do not match.");
+  return first;
+}
+
+async function userCreate(args: string[]): Promise<number> {
+  if (args.some((arg) => arg.startsWith("--password"))) {
+    process.stderr.write(
+      "Passwords are never accepted as arguments; enter it at the prompt or pipe it on stdin.\n",
+    );
+    return 2;
+  }
+  const at = args.indexOf("--username");
+  const username = at >= 0 ? args[at + 1] : undefined;
+  const admin = args.includes("--admin");
+  const known = new Set(["--username", "--admin", username]);
+  if (!username || args.some((arg) => !known.has(arg))) {
+    process.stderr.write("Usage: node server/cli.ts user:create --username <name> [--admin]\n");
+    return 2;
+  }
+  let dataDir: string;
+  try {
+    ({ dataDir } = loadConfig(process.env));
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof ConfigError ? error.message : "Invalid configuration"}\n`,
+    );
+    return 1;
+  }
+  let password: string;
+  try {
+    password = await readPassword();
+  } catch (error) {
+    process.stderr.write(`${(error as Error).message}\n`);
+    return 1;
+  }
+  if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
+    process.stderr.write(
+      `Passwords are ${String(PASSWORD_MIN)}-${String(PASSWORD_MAX)} characters.\n`,
+    );
+    return 1;
+  }
+  const paths = new DataPaths(dataDir);
+  const users = new UserStore({ paths, locks: new KeyedLocks() });
+  const passwordHash = await new PasswordHasher({ concurrency: 1, queue: 0 }).hash(password);
+  try {
+    const user = await users.create({ username, passwordHash, role: admin ? "admin" : "user" });
+    process.stdout.write(`Created ${user.role} "${user.username}" (${user.id}).\n`);
+    return 0;
+  } catch (error) {
+    if (error instanceof UserError) {
+      process.stderr.write(`${error.message}\n`);
+      return 1;
+    }
+    throw error;
+  }
+}
+
 /** Rebuilds derived indexes from canonical Markdown (contracts §1, INV-11). */
 async function indexRebuild(): Promise<number> {
   let dataDir: string;
@@ -112,7 +209,7 @@ async function indexRebuild(): Promise<number> {
     process.stdout.write(`${JSON.stringify({ level, msg, ...obj })}\n`);
   };
   const index = new ChatIndex(paths, { info: log("info"), warn: log("warn") });
-  const users = await userIds(paths);
+  const users = await accountIds(paths);
   for (const userId of users) {
     const entries = await index.rebuild(userId);
     process.stdout.write(`${userId}: ${String(entries.length)} conversation(s) indexed\n`);
@@ -129,6 +226,9 @@ switch (command) {
     break;
   case "healthcheck":
     process.exitCode = await healthcheck();
+    break;
+  case "user:create":
+    process.exitCode = await userCreate(process.argv.slice(3));
     break;
   case "index:rebuild":
     process.exitCode = await indexRebuild();

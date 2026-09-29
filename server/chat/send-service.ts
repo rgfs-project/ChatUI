@@ -197,7 +197,7 @@ export class SendService {
         if ((current?.revision ?? null) !== (snapshot?.revision ?? null)) return "changed" as const;
         const again = await this.checkKey(userId, request, payloadHash);
         if (again) return { response: again, launch: undefined };
-        const reservation = this.o.generations.reserve(conversationKey);
+        const reservation = this.o.generations.reserve(userId, conversationKey);
         return this.commit(userId, {
           request,
           payloadHash,

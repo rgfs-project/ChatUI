@@ -14,8 +14,9 @@ export default function handleRequest(
   routerContext: EntryContext,
   loadContext: RouterContextProvider,
 ): Response | Promise<Response> {
-  // Documents reflect live server state and are never cached by shared caches.
-  if (!responseHeaders.has("Cache-Control")) responseHeaders.set("Cache-Control", "no-store");
+  // Documents can carry private, user-scoped markup and the CSRF bootstrap:
+  // never stored by any cache (contracts §9.2a).
+  responseHeaders.set("Cache-Control", "private, no-store");
 
   if (request.method.toUpperCase() === "HEAD") {
     return new Response(null, { status: responseStatusCode, headers: responseHeaders });

@@ -9,6 +9,7 @@
   "dependencies": {
     "@react-router/express": "8.4.0",
     "@react-router/node": "8.4.0",
+    "argon2": "0.45.1",
     "express": "5.2.1",
     "helmet": "8.3.0",
     "isbot": "5.2.2",
@@ -56,6 +57,7 @@
     "format:check": "prettier --check .",
     "verify": "npm run build && node scripts/verify.ts",
     "verify:compose": "node scripts/verify-compose.ts",
-    "index:rebuild": "node server/cli.ts index:rebuild"
+    "index:rebuild": "node server/cli.ts index:rebuild",
+    "user:create": "node server/cli.ts user:create"
   }
 }

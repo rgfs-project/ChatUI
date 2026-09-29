@@ -16,7 +16,15 @@ import { createServer, type AddressInfo } from "node:net";
 import { networkInterfaces, tmpdir } from "node:os";
 import path from "node:path";
 import { startMockLlama } from "../tests/support/mock-llama.ts";
-import { browserChecks, chatDisabledChecks, check, httpChecks, results } from "./lib/checks.ts";
+import {
+  apiLogin,
+  browserChecks,
+  chatDisabledChecks,
+  check,
+  httpChecks,
+  results,
+  sessionHeaders,
+} from "./lib/checks.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -29,21 +37,22 @@ interface RunResult {
 function run(
   cmd: string,
   args: string[],
-  options: { env?: Record<string, string>; quiet?: boolean } = {},
+  options: { env?: Record<string, string>; quiet?: boolean; input?: string } = {},
 ): Promise<RunResult> {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
       cwd: ROOT,
       env: { ...process.env, ...options.env },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
     });
+    if (options.input !== undefined) child.stdin?.end(options.input);
     let stdout = "";
     let stderr = "";
-    child.stdout.on("data", (chunk: Buffer) => {
+    child.stdout?.on("data", (chunk: Buffer) => {
       stdout += chunk.toString();
       if (!options.quiet) process.stdout.write(chunk);
     });
-    child.stderr.on("data", (chunk: Buffer) => {
+    child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
       if (!options.quiet) process.stderr.write(chunk);
     });
@@ -124,6 +133,7 @@ async function main(): Promise<void> {
     HOST_PORT: String(hostPort),
     CHATUI_VOLUME: `${project}-data`,
     CHATUI_IMAGE: `localhost/chatui:verify-${id}`,
+    PUBLIC_ORIGIN: `http://127.0.0.1:${String(hostPort)}`,
   };
   const compose = (args: string[], quiet = false, files: string[] = ["compose.yaml"]) =>
     run(engine, ["compose", "-p", project, ...files.flatMap((f) => ["-f", f]), ...args], {
@@ -228,18 +238,57 @@ async function main(): Promise<void> {
     );
     check("CLI healthcheck exits 0", cliHealth.code === 0);
     const planned = await compose(
-      ["exec", "-T", "chatui", "node", "server/cli.ts", "user:create"],
+      ["exec", "-T", "chatui", "node", "server/cli.ts", "backup"],
       true,
     );
     check(
       "planned CLI commands fail clearly instead of succeeding",
-      planned.code === 2 && planned.stderr.includes("Phase 4"),
+      planned.code === 2 && planned.stderr.includes("Phase 16"),
     );
 
     // Application behaviour inside the container.
     await httpChecks(base);
     await browserChecks(base);
     await chatDisabledChecks(base);
+
+    // Operator-first admin boot path inside the container (password on stdin).
+    const password = "compose admin password";
+    const created = await run(
+      engine,
+      [
+        "compose",
+        "-p",
+        project,
+        "-f",
+        "compose.yaml",
+        "exec",
+        "-T",
+        "chatui",
+        "node",
+        "server/cli.ts",
+        "user:create",
+        "--username",
+        "admin",
+        "--admin",
+      ],
+      { env, quiet: true, input: `${password}\n` },
+    );
+    check(
+      "container: first admin created with user:create via stdin",
+      created.code === 0,
+      created.stderr.trim(),
+    );
+    const session = await apiLogin(base, "admin", password);
+    const page = session
+      ? await fetch(`${base}/chat`, { headers: sessionHeaders(session) })
+      : undefined;
+    const pageHtml = page ? await page.text() : "";
+    check(
+      "container: the admin can sign in and gets the private chat shell",
+      page?.status === 200 &&
+        page.headers.get("cache-control") === "private, no-store" &&
+        pageHtml.includes('id="message"'),
+    );
     const healthJson = (await (await fetch(`${base}/api/health`)).json()) as { version?: string };
     check("container serves this build's version", healthJson.version === version);
 

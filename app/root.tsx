@@ -9,12 +9,20 @@ import {
   type LinksFunction,
 } from "react-router";
 import type { Route } from "./+types/root";
+import { appContext } from "./context";
+import { setSession } from "./lib/api";
 import stylesheet from "./app.css?url";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: stylesheet },
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
 ];
+
+/** Browser-safe session bootstrap, rendered into private no-store HTML (§5). */
+export function loader({ context }: Route.LoaderArgs) {
+  const { services, auth } = context.get(appContext);
+  return { session: services.auth.sessionDto(auth) };
+}
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
@@ -45,8 +53,12 @@ function useHydrationMarker() {
   }, []);
 }
 
-export default function App() {
+export default function App({ loaderData }: Route.ComponentProps) {
   useHydrationMarker();
+  // Client-only: the shared fetch wrapper learns the session after hydration.
+  useEffect(() => {
+    setSession(loaderData.session);
+  }, [loaderData.session]);
   return <Outlet />;
 }
 

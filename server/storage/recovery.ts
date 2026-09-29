@@ -28,6 +28,18 @@ export async function userIds(paths: DataPaths): Promise<string[]> {
 }
 
 /**
+ * Account directories: a UUID directory holding user.json. Anything else
+ * (e.g. an old pre-auth demo directory) is never read or written (§6).
+ */
+export async function accountIds(paths: DataPaths): Promise<string[]> {
+  const ids: string[] = [];
+  for (const id of await userIds(paths)) {
+    if ((await readOrNull(paths.userFile(id))) !== null) ids.push(id);
+  }
+  return ids;
+}
+
+/**
  * Decides one pending acceptance record by hashes (contracts §4.1 step 5).
  * Also used in-process when acceptance fails part-way.
  */
@@ -114,15 +126,12 @@ export async function recoverStorage(options: {
   operations: OperationStore;
   index: ChatIndex;
   logger: IndexLogger;
-  localUserId: string;
   retentionMs: number;
   startedAt: Date;
   now?: Date;
 }): Promise<RecoveryReport> {
   const { paths, logger } = options;
   await ensureDir(paths.root);
-  // Phase 3 identity: the local user's root exists before any writer runs.
-  await ensureDir(paths.userDir(options.localUserId));
   const tempFilesRemoved = await cleanupTempFiles(paths.root, options.startedAt);
   const unexpectedEntries = await unexpectedTopLevel(paths);
   for (const name of unexpectedEntries)
@@ -133,7 +142,7 @@ export async function recoverStorage(options: {
     operationConflicts: 0,
     operationsExpired: 0,
   };
-  const users = await userIds(paths);
+  const users = await accountIds(paths);
   for (const userId of users) {
     const r = await resolveOperations(
       paths,

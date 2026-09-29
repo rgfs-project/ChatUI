@@ -1,0 +1,68 @@
+## Phase 4 report
+
+- **Scope completed (files/features):**
+  - Accounts:
+    - `server/storage/users.ts`: canonical `user.json`, derived `_system/users.index.json`, case-insensitive uniqueness under the registry lock.
+    - `server/auth/passwords.ts`: Argon2id with OWASP parameters, a bounded semaphore and queue, dummy verification for unknown users.
+    - `npm run user:create` / `node server/cli.ts user:create`: password from a no-echo prompt or stdin, never argv. Also works in the container.
+  - Sessions (`server/auth/sessions.ts`):
+    - hashed token at rest
+    - absolute and idle expiry, sweeps
+    - revocation hooks
+    - rotation at login
+    - revoke-all on password change, disable and role change
+  - Auth service (`server/auth/service.ts`): session resolution with the user reloaded per request, login, registration (`REGISTRATION_MODE`), logout, change password, cookie flags per transport, origin check, CSRF + `X-Expected-User` check, per-address and per-username login limits.
+  - Transport (`server/config.ts`): `PUBLIC_ORIGIN` (https, or http://localhost only; any other http origin refuses to start), `TRUST_PROXY`. A non-loopback host listener is allowed only behind https. `LOCAL_USER_ID` was removed.
+  - Registry (`server/registry.ts`): `auth: public|user` and `csrf: none|token|origin` enforced before validation for every route; `userOf(ctx)` identity. All chat routes are `user`, and all mutations are `token`.
+  - Ownership: generations record their owner (404 for others); per-user generation cap. SSE is bound to its session (closed on revocation, re-validated at heartbeats) with per-user and global caps.
+  - Routes: `/api/auth/{session,login,register,logout,password}`, `/api/preferences` (GET/PATCH). Preferences (`server/storage/preferences.ts`) are canonical and per-user locked.
+  - SSR: the session is resolved for every document request, `/chat` and `/account` redirect to `/login?returnTo=…`, all documents are `private, no-store`, and the root loader provides the browser-safe `SessionDto`.
+  - Client:
+    - pages: `/login`, `/register`, `/account`, and sign out in the chat sidebar
+    - `app/lib/api.ts`: CSRF + expected-user headers, a single same-user retry with authentication epoch, account-change discard and state clearing
+    - `safeReturnTo` validation
+  - Docs: README (first admin, Caddy/Tailscale HTTPS for LAN and phones, data layout), ARCHITECTURE (auth model, sessions, CSRF, transport, INV-14/15/16/17/34/54/55/59/62), `.env.example`.
+- **Acceptance / required tests (where):**
+  - `tests/server/auth.test.ts`:
+    - cross-user read/write/delete/send/observe/cancel/operation lookup → 404
+    - logout; rotation at login (fixation); uniform answers for unknown users and wrong passwords
+    - absolute and idle expiry; disable and role change revoke on the next request
+    - password change (current password required, revokes all sessions); cookie flags for both origins; `X-Forwarded-Proto` ignored
+    - no password or session hash in any response; sessions store only hashes
+    - registration closed/open; concurrent case-variant registration yields exactly one account; username and password rules
+    - login limits with `Retry-After`; `X-Forwarded-For` ignored without `TRUST_PROXY`
+    - full hashing queue → `RATE_LIMITED` (deterministic gated hasher)
+    - per-user generation cap and SSE cap
+    - an open stream closes on logout, on password change and on expiry while the generation continues
+    - two tabs recovering with one refetch and retry; stale `X-Expected-User` → `SESSION_CHANGED` with no mutation
+    - a legacy pre-auth demo directory is never read or modified
+  - `tests/server/registry.test.ts` enumerates the registry: every protected route → 401 signed out; every `token` route rejects a missing token, a wrong token and a stale expected user; `origin` routes reject cross-site and missing origins; no identity in any request schema and no `req.*` reads in route files (INV-14 code check).
+  - `tests/client/api.test.ts` (INV-59): header attachment, same-user retry, account switch mid-flight (discarded, never executed as B, state cleared), superseded requests, SESSION_CHANGED, return-to validation.
+  - `tests/server/preferences.test.ts` (INV-34). `tests/server/config.test.ts`: transport rules, including startup refusal of non-loopback http origins.
+  - `verify` (production build, 68/68):
+    - admin via CLI stdin (argv refused), then browser sign-in with validated return-to
+    - the full chat flow and the persistence scenario, now signed in
+    - signed-out redirect and 401; `private, no-store`; cross-user HTML and API isolation
+    - 20 concurrent documents across two identities never mixed; open-redirect attempt blocked
+    - logout → 401; a disabled account (test-only `user.json` edit) → 401
+  - `verify:compose`: `/chat` redirects to sign-in in the container, the API requires a session, the admin is created in the container via stdin and can sign in to the private shell.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (16 files, 281 tests; 5 consecutive runs)
+  - `build`: PASS
+  - `verify`: PASS (68/68)
+  - `verify:compose`: PASS on Docker and rootless Podman (CI)
+  - `npm audit`: 0 vulnerabilities
+- **Security, SSR, data and performance observations:**
+  - Tests found that the fixture loop must not call logout (it revoked its own session). The slow-SSE-observer test was made robust under parallel load (6 MiB queue, larger flood).
+  - Login and registration are the only public mutations and are origin-checked; everything else needs the synchronizer token and expected user.
+  - The Argon2 `memoryCost` of 19 MiB per hash is bounded by `PASSWORD_HASH_CONCURRENCY=2`.
+- **Dependencies and why approved:** `argon2` 0.45.1: maintained Argon2id binding with prebuilt binaries (contracts §6: no custom crypto).
+- **Deviations / limitations / unverified items:**
+  - Disabling an account uses a test-only `user.json` edit; the admin UI and routes arrive in Phase 10.
+  - Password reset by an operator (`user:reset-password`) is also Phase 10.
+  - Rate limiting is in-process (single-process deployment).
+  - Browser-level two-tab account switching is covered by server tests plus fetch-wrapper unit tests, not by a real two-tab browser run.
+  - Podman SELinux: still NOT RUN.
+- **Commit/tag status:** commit `feat(phase-4): authentication, sessions, authorization, and multiuser isolation` and tag `phase-4`, pushed to `origin/main`.
+- **Questions needing approval:** none.

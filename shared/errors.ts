@@ -1,7 +1,7 @@
 /**
  * Canonical API error contract (contracts §5). Each phase adds only the codes it
  * uses: Phase 1a the four foundation codes, Phase 2 provider/generation codes,
- * Phase 3 persistence and send-acceptance codes.
+ * Phase 3 persistence and send-acceptance codes, Phase 4 auth codes.
  */
 export const ErrorCode = {
   VALIDATION: "VALIDATION",
@@ -20,6 +20,11 @@ export const ErrorCode = {
   OPERATION_KEY_MISMATCH: "OPERATION_KEY_MISMATCH",
   OPERATION_EXPIRED: "OPERATION_EXPIRED",
   CONFLICT: "CONFLICT",
+  UNAUTHENTICATED: "UNAUTHENTICATED",
+  FORBIDDEN: "FORBIDDEN",
+  CSRF_INVALID: "CSRF_INVALID",
+  REGISTRATION_CLOSED: "REGISTRATION_CLOSED",
+  SESSION_CHANGED: "SESSION_CHANGED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -41,6 +46,11 @@ export const ERROR_HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   OPERATION_KEY_MISMATCH: 409,
   OPERATION_EXPIRED: 409,
   CONFLICT: 409,
+  UNAUTHENTICATED: 401,
+  FORBIDDEN: 403,
+  CSRF_INVALID: 403,
+  REGISTRATION_CLOSED: 403,
+  SESSION_CHANGED: 409,
 };
 
 /** `details` never contains stack traces, paths, upstream bodies or secrets. */

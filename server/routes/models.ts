@@ -5,9 +5,8 @@ import { defineRoute } from "../registry.ts";
 export const listModelsRoute = defineRoute({
   method: "get",
   path: "/api/models",
-  auth: "public",
+  auth: "user",
   csrf: "none",
-  availability: "chat-demo",
   request: { query: z.strictObject({ refresh: z.enum(["1"]).optional() }) },
   response: modelListDtoSchema,
   handler: async ({ query }, { services }) => ({

@@ -50,16 +50,21 @@ const envSchema = z.object({
   PROVIDER_MAX_RESPONSE_BYTES: intFrom(1_024, 1_073_741_824).default(16 * 1024 * 1024),
 
   // Persistence (Phase 3).
-  LOCAL_USER_ID: z
-    .string()
-    .regex(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      "must be a canonical lowercase UUID",
-    )
-    .default("5f0c6a3e-9d0b-4c1e-8f2a-3b6d7e8f9a01"),
   OPERATION_RETENTION_MS: intFrom(2 * 86_400_000, 365 * 86_400_000).default(7 * 86_400_000),
   CONTEXT_TRIM_STEP: intFrom(1, 10_000_000).optional(),
   TEMPLATE_OVERHEAD_TOKENS: intFrom(0, 10_000).default(16),
+
+  // Authentication (Phase 4).
+  PUBLIC_ORIGIN: z.string().optional(),
+  TRUST_PROXY: intFrom(0, 10).default(0),
+  REGISTRATION_MODE: z.enum(["closed", "open"]).default("closed"),
+  SESSION_ABSOLUTE_TTL: intFrom(60_000, 365 * 86_400_000).default(30 * 86_400_000),
+  SESSION_IDLE_TTL: intFrom(60_000, 365 * 86_400_000).default(7 * 86_400_000),
+  MAX_ACTIVE_GENERATIONS_PER_USER: intFrom(1, 100).default(2),
+  MAX_SSE_PER_USER: intFrom(1, 1_000).default(8),
+  MAX_SSE_TOTAL: intFrom(1, 100_000).default(256),
+  PASSWORD_HASH_CONCURRENCY: intFrom(1, 64).default(2),
+  PASSWORD_HASH_QUEUE: intFrom(0, 10_000).default(16),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -79,14 +84,27 @@ export interface Config {
   inContainer: boolean;
   provider: ProviderConfig;
   storage: StorageConfig;
+  auth: AuthConfig;
+}
+
+export interface AuthConfig {
+  /** The URL users open. https (behind a TLS proxy) or http://localhost only. */
+  publicOrigin: string;
+  /** Cookies are `Secure` exactly when the public origin is https. */
+  secureCookies: boolean;
+  /** Reverse-proxy hops to trust for the client address (never for the protocol). */
+  trustProxy: number;
+  registrationMode: "closed" | "open";
+  sessionAbsoluteTtlMs: number;
+  sessionIdleTtlMs: number;
+  maxActiveGenerationsPerUser: number;
+  maxSsePerUser: number;
+  maxSseTotal: number;
+  hashConcurrency: number;
+  hashQueue: number;
 }
 
 export interface StorageConfig {
-  /**
-   * Temporary identity until Phase 4 (INV-14): the only source of the user
-   * directory segment. Never taken from a request.
-   */
-  localUserId: string;
   /** Committed operation records are kept this long (contracts §4.1). */
   operationRetentionMs: number;
   /** Anchor step for prefix-stable truncation; undefined = 25% of the budget. */
@@ -113,6 +131,68 @@ export interface ProviderConfig {
 
 export class ConfigError extends Error {
   override name = "ConfigError";
+}
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Exactly two transports are supported (contracts §6): an https origin behind
+ * a TLS-terminating proxy (Secure cookies), or http://localhost for the host
+ * machine only. Any other http origin fails at startup; there is no
+ * insecure-LAN mode. The protocol is never inferred from X-Forwarded-Proto.
+ */
+function authConfig(
+  env: {
+    PUBLIC_ORIGIN?: string | undefined;
+    TRUST_PROXY: number;
+    REGISTRATION_MODE: "closed" | "open";
+    SESSION_ABSOLUTE_TTL: number;
+    SESSION_IDLE_TTL: number;
+    MAX_ACTIVE_GENERATIONS_PER_USER: number;
+    MAX_SSE_PER_USER: number;
+    MAX_SSE_TOTAL: number;
+    PASSWORD_HASH_CONCURRENCY: number;
+    PASSWORD_HASH_QUEUE: number;
+  },
+  port: number,
+): AuthConfig {
+  const raw = env.PUBLIC_ORIGIN ?? `http://localhost:${String(port === 0 ? 3000 : port)}`;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new ConfigError(
+      "Invalid configuration:\n  - PUBLIC_ORIGIN: must be a URL like https://chat.example.com",
+    );
+  }
+  if (url.origin !== raw.replace(/\/+$/, "") || (url.pathname !== "/" && url.pathname !== "")) {
+    throw new ConfigError(
+      "Invalid configuration:\n  - PUBLIC_ORIGIN: must be an origin only (scheme, host, optional port)",
+    );
+  }
+  if (url.protocol === "http:" && !LOCAL_HOSTS.has(url.hostname)) {
+    throw new ConfigError(
+      "Invalid configuration:\n  - PUBLIC_ORIGIN: plain http is only supported for http://localhost or " +
+        "http://127.0.0.1 (this computer). For LAN or phone access put ChatUI behind an https TLS proxy " +
+        "(e.g. Caddy or Tailscale HTTPS) and set PUBLIC_ORIGIN to that https URL.",
+    );
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new ConfigError("Invalid configuration:\n  - PUBLIC_ORIGIN: must be http(s)");
+  }
+  return {
+    publicOrigin: url.origin,
+    secureCookies: url.protocol === "https:",
+    trustProxy: env.TRUST_PROXY,
+    registrationMode: env.REGISTRATION_MODE,
+    sessionAbsoluteTtlMs: env.SESSION_ABSOLUTE_TTL,
+    sessionIdleTtlMs: env.SESSION_IDLE_TTL,
+    maxActiveGenerationsPerUser: env.MAX_ACTIVE_GENERATIONS_PER_USER,
+    maxSsePerUser: env.MAX_SSE_PER_USER,
+    maxSseTotal: env.MAX_SSE_TOTAL,
+    hashConcurrency: env.PASSWORD_HASH_CONCURRENCY,
+    hashQueue: env.PASSWORD_HASH_QUEUE,
+  };
 }
 
 /**
@@ -149,12 +229,14 @@ export function loadConfig(
   }
 
   const inContainer = parsed.data.CHATUI_CONTAINER === "1";
-  // Pre-authentication boundary (contracts §9.2b): on the host, never listen
-  // beyond loopback. Removed only when authentication exists (Phase 4).
-  if (!inContainer && !isLoopbackAddress(parsed.data.LISTEN_HOST)) {
+  const auth = authConfig(parsed.data, parsed.data.PORT);
+  // Cookie transport (contracts §6): an http origin is host-only, so the
+  // host process must listen on loopback. Behind a TLS proxy (https origin)
+  // it may listen more widely; the container listens on its own interface.
+  if (!inContainer && !auth.secureCookies && !isLoopbackAddress(parsed.data.LISTEN_HOST)) {
     throw new ConfigError(
-      "Invalid configuration:\n  - LISTEN_HOST: must be a loopback address (127.0.0.1 or ::1) " +
-        "until authentication is available; use the Compose deployment to publish on 127.0.0.1",
+      "Invalid configuration:\n  - LISTEN_HOST: must be loopback (127.0.0.1 or ::1) when PUBLIC_ORIGIN is " +
+        "http://localhost; serve LAN or phone access through an https TLS proxy instead",
     );
   }
 
@@ -175,8 +257,8 @@ export function loadConfig(
       maxActiveGenerations: parsed.data.MAX_ACTIVE_GENERATIONS,
       maxResponseBytes: parsed.data.PROVIDER_MAX_RESPONSE_BYTES,
     },
+    auth,
     storage: {
-      localUserId: parsed.data.LOCAL_USER_ID,
       operationRetentionMs: parsed.data.OPERATION_RETENTION_MS,
       contextTrimStep: parsed.data.CONTEXT_TRIM_STEP,
       templateOverheadTokens: parsed.data.TEMPLATE_OVERHEAD_TOKENS,

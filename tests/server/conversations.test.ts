@@ -13,7 +13,8 @@ import type { Provider } from "../../server/providers/types.ts";
 import { MOCK_MODELS, startMockLlama, type MockLlama } from "../support/mock-llama.ts";
 import { readSse } from "../support/sse-client.ts";
 import {
-  LOCAL_USER,
+  signIn,
+  type TestSession,
   providerConfig,
   storageConfig,
   tempDataDir,
@@ -34,6 +35,7 @@ interface Running {
   chatui: ChatUiApp;
   dataDir: string;
   logs: ReturnType<typeof testApp>["logs"];
+  session: TestSession;
 }
 const servers: { server: Server; chatui: ChatUiApp }[] = [];
 afterEach(async () => {
@@ -69,12 +71,8 @@ async function start(
   const server = createServer(chatui.handler);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   servers.push({ server, chatui });
-  return {
-    base: `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`,
-    chatui,
-    dataDir,
-    logs,
-  } satisfies Running;
+  const base = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
+  return { base, chatui, dataDir, logs, session: await signIn(base, chatui) } satisfies Running;
 }
 
 async function stop(run: Running) {
@@ -93,7 +91,10 @@ async function stop(run: Running) {
 async function api(run: Running, method: string, url: string, body?: unknown) {
   const res = await fetch(`${run.base}${url}`, {
     method,
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    headers: {
+      ...run.session.headers(method !== "GET"),
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return {
@@ -113,7 +114,7 @@ function sendBody(content: string, extra: Record<string, unknown> = {}) {
 }
 
 const chatFile = (run: Running, id: string) =>
-  path.join(run.dataDir, LOCAL_USER, "chats", `${id}.md`);
+  path.join(run.dataDir, run.session.userId, "chats", `${id}.md`);
 const readModel = (run: Running, id: string) => {
   const parsed = parseConversation(readFileSync(chatFile(run, id), "utf8"));
   if (!parsed.ok) throw new Error(parsed.reason);
@@ -184,7 +185,7 @@ describe("conversations API", () => {
 
   it("INV-12: path-like ids are rejected before touching storage", async () => {
     const run = await start();
-    for (const bad of ["..%2F..%2Fetc", "NOT-A-UUID", LOCAL_USER.toUpperCase()]) {
+    for (const bad of ["..%2F..%2Fetc", "NOT-A-UUID", run.session.userId.toUpperCase()]) {
       const res = await api(run, "GET", `/api/conversations/${bad}`);
       expect(res.status, bad).toBe(400);
       expect(res.body.error?.code).toBe("VALIDATION");
@@ -199,7 +200,7 @@ describe("conversations API", () => {
     writeFileSync(chatFile(run, bad), "---\nnot: valid\n---\n");
     const restarted = await start({ dataDir: run.dataDir });
     // Force a rebuild the way startup does when the index is dirty.
-    writeFileSync(path.join(run.dataDir, LOCAL_USER, "index", "chats.dirty"), "");
+    writeFileSync(path.join(run.dataDir, run.session.userId, "index", "chats.dirty"), "");
     await stop(restarted);
     const again = await start({ dataDir: run.dataDir });
     const entries = (await api(again, "GET", "/api/conversations")).body.conversations as {
@@ -281,6 +282,7 @@ describe("send and persistence", () => {
     );
     const sse = await readSse(
       `${run.base}/api/generations/${res.body.generationId as string}/stream`,
+      { headers: run.session.headers() },
     );
     const terminal = sse.frames.at(-1);
     expect(terminal?.event).toBe("terminal");
@@ -356,7 +358,7 @@ describe("send and persistence", () => {
     expect(tooLong.body.error?.code).toBe("CONTEXT_TOO_LARGE");
     expect((await api(run, "GET", "/api/conversations")).body.conversations).toEqual([]);
     expect(
-      readdirSync(path.join(run.dataDir, LOCAL_USER)).filter(
+      readdirSync(path.join(run.dataDir, run.session.userId)).filter(
         (n) => n === "chats" || n === "operations",
       ),
     ).toEqual([]);
@@ -412,7 +414,11 @@ describe("send and persistence", () => {
     const created = (await api(run, "POST", "/api/conversations", {})).body.id as string;
     let n = 0;
     target.rename = () =>
-      run.chatui.services.conversations.rename(LOCAL_USER, created, `renamed ${String(n++)}`);
+      run.chatui.services.conversations.rename(
+        run.session.userId,
+        created,
+        `renamed ${String(n++)}`,
+      );
 
     changes = 1;
     const once = await api(
@@ -464,7 +470,7 @@ describe("send and persistence", () => {
     await waitTerminal(run, res.body.generationId as string);
     await stop(run);
     const { rmSync } = await import("node:fs");
-    rmSync(path.join(run.dataDir, LOCAL_USER, "index"), { recursive: true, force: true });
+    rmSync(path.join(run.dataDir, run.session.userId, "index"), { recursive: true, force: true });
     const again = await start({ dataDir: run.dataDir });
     const list = (await api(again, "GET", "/api/conversations")).body.conversations as {
       title: string;
@@ -669,7 +675,7 @@ describe("INV-58: operation keys", () => {
     const created = (await api(run, "POST", "/api/conversations", {})).body.id as string;
     const file = chatFile(run, created);
     const bytes = readFileSync(file);
-    const opsDir = path.join(run.dataDir, LOCAL_USER, "operations");
+    const opsDir = path.join(run.dataDir, run.session.userId, "operations");
     const { mkdirSync } = await import("node:fs");
     mkdirSync(opsDir, { recursive: true });
     const record = (
@@ -695,7 +701,7 @@ describe("INV-58: operation keys", () => {
     });
     const write = (key: string, value: object) => {
       writeFileSync(
-        path.join(opsDir, `${sha256Hex(`${LOCAL_USER}:${key}`)}.json`),
+        path.join(opsDir, `${sha256Hex(`${run.session.userId}:${key}`)}.json`),
         JSON.stringify(value),
       );
     };
@@ -718,7 +724,7 @@ describe("INV-58: operation keys", () => {
     expect((await api(again, "GET", `/api/operations/${committedKey}`)).status).toBe(200);
     expect((await api(again, "GET", `/api/operations/${rolledKey}`)).status).toBe(404);
     expect(readFileSync(file)).toEqual(bytes); // never overwritten
-    expect(readdirSync(path.join(run.dataDir, LOCAL_USER, "chats"))).toHaveLength(1); // nothing recreated
+    expect(readdirSync(path.join(run.dataDir, run.session.userId, "chats"))).toHaveLength(1); // nothing recreated
   });
 
   it("expired committed records are removed by the retention sweep at startup", async () => {
@@ -731,16 +737,6 @@ describe("INV-58: operation keys", () => {
       now: () => new Date(Date.now() + 8 * 86_400_000),
     });
     expect(await later.chatui.ready).toMatchObject({ operationsExpired: 1 });
-  });
-});
-
-describe("container mode", () => {
-  it("writes nothing to DATA_DIR", async () => {
-    const dataDir = tempDataDir();
-    const { chatui } = testApp({ config: { inContainer: true, dataDir } });
-    expect(await chatui.ready).toBeNull();
-    expect(readdirSync(dataDir)).toEqual([]);
-    await chatui.shutdown();
   });
 });
 

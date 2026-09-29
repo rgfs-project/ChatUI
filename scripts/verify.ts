@@ -7,32 +7,77 @@
  *   - hydration in a real browser under the production CSP with no warnings
  *   - clean shutdown; persistence across restarts, index rebuild, hand edits,
  *     malformed isolation and deletion (Phase 3)
+ *   - accounts via the CLI (password on stdin), sign-in, protected SSR with
+ *     private no-store documents, cross-user isolation (also under concurrent
+ *     requests), validated return-to, logout and disabled accounts (Phase 4)
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type ConsoleMessage } from "@playwright/test";
 import { MOCK_MODELS, startMockLlama } from "../tests/support/mock-llama.ts";
 import {
+  apiLogin,
   browserChecks,
   chatChecks,
   check,
   httpChecks,
   results,
   sendAndWait,
+  sessionHeaders,
+  type ApiSession,
 } from "./lib/checks.ts";
-import { readFileSync, writeFileSync } from "node:fs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 type Mode = "production" | "development";
+const PASSWORD = "verify password 1234";
 
-function startServer(
+/** A free loopback port, so PUBLIC_ORIGIN can name the exact origin. */
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo;
+      server.close(() => {
+        resolve(port);
+      });
+    });
+  });
+}
+
+/** Creates an account with the operator CLI; the password goes to stdin, never argv. */
+function createUser(
+  dataDir: string,
+  username: string,
+  admin = false,
+): Promise<{ code: number | null; out: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      process.execPath,
+      ["server/cli.ts", "user:create", "--username", username, ...(admin ? ["--admin"] : [])],
+      { cwd: ROOT, env: { ...process.env, DATA_DIR: dataDir }, stdio: ["pipe", "pipe", "pipe"] },
+    );
+    let out = "";
+    child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    child.stdin.end(`${PASSWORD}\n`);
+    child.once("exit", (code) => {
+      resolve({ code, out });
+    });
+  });
+}
+
+async function startServer(
   dataDir: string,
   mode: Mode,
   extraEnv: Record<string, string> = {},
-): Promise<{ child: ChildProcess; port: number; logs: string[] }> {
+): Promise<{ child: ChildProcess; port: number; base: string; logs: string[] }> {
+  const port = await freePort();
+  const base = `http://127.0.0.1:${String(port)}`;
   const args =
     mode === "development" ? ["--conditions=development", "server/main.ts"] : ["server/main.ts"];
   const child = spawn(process.execPath, args, {
@@ -40,7 +85,8 @@ function startServer(
     env: {
       ...process.env,
       NODE_ENV: mode,
-      PORT: "0",
+      PORT: String(port),
+      PUBLIC_ORIGIN: base,
       DATA_DIR: dataDir,
       LOG_LEVEL: "info",
       ...extraEnv,
@@ -65,7 +111,7 @@ function startServer(
           clearTimeout(timer);
           child.removeAllListeners("exit");
           check(`${mode}: server binds to loopback only`, entry.host === "127.0.0.1", entry.host);
-          resolve({ child, port: entry.port, logs });
+          resolve({ child, port: entry.port, base, logs });
         }
       } catch {
         // non-JSON line
@@ -90,12 +136,12 @@ async function developmentHydrationCheck(dataDir: string, llamaUrl: string): Pro
       }
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
-    for (const path of ["/", "/chat"]) {
+    for (const path of ["/", "/login"]) {
       await page.goto(`http://127.0.0.1:${String(port)}${path}`);
       await page.waitForSelector('html[data-hydrated="true"]', { timeout: 30_000 });
     }
     check(
-      "INV-56: development build: / and /chat hydrate without mismatch or console warnings",
+      "INV-56: development build: / and /login hydrate without mismatch or console warnings",
       problems.length === 0,
       problems.map((p) => p.slice(0, 300)).join(" | "),
     );
@@ -106,8 +152,6 @@ async function developmentHydrationCheck(dataDir: string, llamaUrl: string): Pro
     await exited;
   }
 }
-
-const LOCAL_USER = "5f0c6a3e-9d0b-4c1e-8f2a-3b6d7e8f9a01";
 
 async function stopServer(child: ChildProcess): Promise<void> {
   const exited = new Promise((resolve) => child.once("exit", resolve));
@@ -122,20 +166,30 @@ async function stopServer(child: ChildProcess): Promise<void> {
 async function persistenceChecks(llamaUrl: string): Promise<void> {
   const dataDir = mkdtempSync(path.join(tmpdir(), "chatui-verify-persist-"));
   const env = { LLAMA_BASE_URL: llamaUrl };
-  const chats = path.join(dataDir, LOCAL_USER, "chats");
+  await createUser(dataDir, "persist");
+  let session: ApiSession | undefined;
   const get = async (base: string, url: string) => {
-    const res = await fetch(`${base}${url}`);
+    const res = await fetch(`${base}${url}`, { headers: session ? sessionHeaders(session) : {} });
     return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+  };
+  const signIn = async (base: string): Promise<ApiSession> => {
+    const s = await apiLogin(base, "persist", PASSWORD);
+    if (!s) throw new Error("persistence: sign-in failed");
+    session = s;
+    return s;
   };
   try {
     let server = await startServer(dataDir, "production", env);
-    let base = `http://127.0.0.1:${String(server.port)}`;
-    const first = await sendAndWait(base, MOCK_MODELS.chat, "remember me");
-    const second = await sendAndWait(base, MOCK_MODELS.chat, "other conversation");
+    let base = server.base;
+    const me = await signIn(base);
+    const chats = path.join(dataDir, me.userId, "chats");
+    const first = await sendAndWait(base, me, MOCK_MODELS.chat, "remember me");
+    const second = await sendAndWait(base, me, MOCK_MODELS.chat, "other conversation");
     await stopServer(server.child);
 
     server = await startServer(dataDir, "production", env);
-    base = `http://127.0.0.1:${String(server.port)}`;
+    base = server.base;
+    await signIn(base);
     const after = await get(base, `/api/conversations/${first.conversationId}`);
     check(
       "persistence: the conversation survives a restart",
@@ -143,13 +197,14 @@ async function persistenceChecks(llamaUrl: string): Promise<void> {
     );
     await stopServer(server.child);
 
-    rmSync(path.join(dataDir, LOCAL_USER, "index"), { recursive: true, force: true });
+    rmSync(path.join(dataDir, me.userId, "index"), { recursive: true, force: true });
     server = await startServer(dataDir, "production", env);
-    base = `http://127.0.0.1:${String(server.port)}`;
+    base = server.base;
+    await signIn(base);
     const listed = (await get(base, "/api/conversations")).body.conversations as { id: string }[];
     check(
       "INV-11: deleting the index and restarting rebuilds it",
-      listed.length === 2 && existsSync(path.join(dataDir, LOCAL_USER, "index", "chats.json")),
+      listed.length === 2 && existsSync(path.join(dataDir, me.userId, "index", "chats.json")),
     );
     await stopServer(server.child);
 
@@ -163,7 +218,8 @@ async function persistenceChecks(llamaUrl: string): Promise<void> {
       "---\nthis is: not a conversation\n",
     );
     server = await startServer(dataDir, "production", env);
-    base = `http://127.0.0.1:${String(server.port)}`;
+    base = server.base;
+    await signIn(base);
     const entries = (await get(base, "/api/conversations")).body.conversations as {
       id: string;
       title: string;
@@ -181,6 +237,7 @@ async function persistenceChecks(llamaUrl: string): Promise<void> {
     );
     const stillWorks = await sendAndWait(
       base,
+      await signIn(base),
       MOCK_MODELS.chat,
       "still fine",
       first.conversationId,
@@ -188,6 +245,7 @@ async function persistenceChecks(llamaUrl: string): Promise<void> {
     check("another conversation keeps working next to a malformed one", stillWorks.status === 202);
     const deleted = await fetch(`${base}/api/conversations/${second.conversationId}`, {
       method: "DELETE",
+      headers: sessionHeaders(session ?? me, true),
     });
     const afterDelete = (await get(base, "/api/conversations")).body.conversations as {
       id: string;
@@ -204,6 +262,105 @@ async function persistenceChecks(llamaUrl: string): Promise<void> {
   }
 }
 
+/**
+ * Phase 4: protected SSR and API, cross-user isolation, validated return-to,
+ * logout and disabled accounts, on the production build.
+ */
+async function authChecks(base: string, dataDir: string, admin: ApiSession): Promise<void> {
+  const anon = await fetch(`${base}/chat?c=00000000-0000-4000-8000-000000000000`, {
+    redirect: "manual",
+  });
+  await anon.arrayBuffer();
+  check(
+    "INV-54: signed out, /chat redirects to sign-in with a validated return-to",
+    anon.status === 302 &&
+      anon.headers.get("location") ===
+        "/login?returnTo=%2Fchat%3Fc%3D00000000-0000-4000-8000-000000000000",
+    `${String(anon.status)} ${anon.headers.get("location") ?? ""}`,
+  );
+  const anonApi = await fetch(`${base}/api/conversations`);
+  await anonApi.arrayBuffer();
+  check("signed out, protected API routes return 401", anonApi.status === 401);
+
+  const created = await createUser(dataDir, "bob");
+  check("second account created with the CLI", created.code === 0, created.out);
+  const bob = await apiLogin(base, "bob", PASSWORD);
+  if (!bob) return;
+  const secret = await sendAndWait(base, admin, MOCK_MODELS.chat, "admin-only secret");
+  const doc = await fetch(`${base}/chat?c=${secret.conversationId}`, {
+    headers: sessionHeaders(admin),
+  });
+  const docHtml = await doc.text();
+  check(
+    "INV-55: authenticated documents are private, no-store and contain the owner's transcript",
+    doc.status === 200 &&
+      doc.headers.get("cache-control") === "private, no-store" &&
+      docHtml.includes("admin-only secret"),
+  );
+  const cross = await fetch(`${base}/chat?c=${secret.conversationId}`, {
+    headers: sessionHeaders(bob),
+  });
+  const crossHtml = await cross.text();
+  const crossApi = await fetch(`${base}/api/conversations/${secret.conversationId}`, {
+    headers: sessionHeaders(bob),
+  });
+  await crossApi.arrayBuffer();
+  check(
+    "INV-15: another user's conversation looks like not-found (HTML and API)",
+    !crossHtml.includes("admin-only secret") &&
+      crossHtml.includes("does not exist") &&
+      crossApi.status === 404,
+  );
+  // Concurrent requests with two identities never mix.
+  const mixed = await Promise.all(
+    Array.from({ length: 20 }, (_, i) => {
+      const who = i % 2 === 0 ? admin : bob;
+      return fetch(`${base}/chat`, { headers: sessionHeaders(who) }).then(async (r) => ({
+        who,
+        html: await r.text(),
+      }));
+    }),
+  );
+  check(
+    "INV-55: concurrent documents for two users never mix identities",
+    mixed.every(({ who, html }) => {
+      const other = who === admin ? bob : admin;
+      return (
+        html.includes(`data-testid="signed-in-user">${who.username}<`) &&
+        !html.includes(`data-testid="signed-in-user">${other.username}<`) &&
+        (who === bob ? !html.includes("admin-only secret") : true)
+      );
+    }),
+  );
+  const returnTo = await fetch(`${base}/login?returnTo=%2F%2Fevil.example%2F`, {
+    headers: sessionHeaders(bob),
+    redirect: "manual",
+  });
+  await returnTo.arrayBuffer();
+  check(
+    "login return-to is validated (no open redirect)",
+    returnTo.status === 302 && returnTo.headers.get("location") === "/chat",
+    returnTo.headers.get("location") ?? "",
+  );
+  const out = await fetch(`${base}/api/auth/logout`, {
+    method: "POST",
+    headers: sessionHeaders(bob, true),
+  });
+  await out.arrayBuffer();
+  const afterLogout = await fetch(`${base}/api/conversations`, { headers: sessionHeaders(bob) });
+  await afterLogout.arrayBuffer();
+  check("after logout the session gets 401", out.status === 200 && afterLogout.status === 401);
+
+  const bob2 = await apiLogin(base, "bob", PASSWORD);
+  if (!bob2) return;
+  const userFile = path.join(dataDir, bob2.userId, "user.json");
+  const record = JSON.parse(readFileSync(userFile, "utf8")) as Record<string, unknown>;
+  writeFileSync(userFile, JSON.stringify({ ...record, status: "disabled" })); // test-only helper
+  const disabled = await fetch(`${base}/api/conversations`, { headers: sessionHeaders(bob2) });
+  await disabled.arrayBuffer();
+  check("a disabled account's session is rejected", disabled.status === 401);
+}
+
 async function main(): Promise<void> {
   if (
     !existsSync(path.join(ROOT, "build/server/index.js")) ||
@@ -214,16 +371,39 @@ async function main(): Promise<void> {
     );
   }
   const dataDir = mkdtempSync(path.join(tmpdir(), "chatui-verify-"));
+  const created = await createUser(dataDir, "admin", true);
+  const noArgv = await new Promise<number | null>((resolve) => {
+    const child = spawn(
+      process.execPath,
+      ["server/cli.ts", "user:create", "--username", "x", "--password", "y"],
+      {
+        cwd: ROOT,
+        env: { ...process.env, DATA_DIR: dataDir },
+        stdio: "ignore",
+      },
+    );
+    child.once("exit", resolve);
+  });
+  check(
+    "first admin created with the CLI (password on stdin, never argv)",
+    created.code === 0 && noArgv === 2,
+    created.out,
+  );
   // Deterministic provider for the chat demo; paced so streaming is observable.
   const llama = await startMockLlama({ chatChunkDelayMs: 40, chunkDelayMs: 100, slowChunks: 30 });
-  const { child, port, logs } = await startServer(dataDir, "production", {
+  const { child, base, logs } = await startServer(dataDir, "production", {
     LLAMA_BASE_URL: llama.url,
   });
-  const base = `http://127.0.0.1:${String(port)}`;
   try {
     await httpChecks(base);
     await browserChecks(base);
-    await chatChecks(base, { chat: MOCK_MODELS.chat, slow: MOCK_MODELS.slow });
+    await chatChecks(
+      base,
+      { chat: MOCK_MODELS.chat, slow: MOCK_MODELS.slow },
+      { username: "admin", password: PASSWORD },
+    );
+    const admin = await apiLogin(base, "admin", PASSWORD);
+    if (admin) await authChecks(base, dataDir, admin);
   } finally {
     const exited = new Promise<number | null>((resolve) =>
       child.once("exit", (code) => {
@@ -245,10 +425,11 @@ async function main(): Promise<void> {
       "shutdown logged",
       logs.some((line) => line.includes('"shutdown complete"')),
     );
+    const entries = readdirSync(dataDir);
     check(
-      "DATA_DIR holds only the local user's directory",
-      JSON.stringify(readdirSync(dataDir)) === JSON.stringify([LOCAL_USER]),
-      readdirSync(dataDir).join(","),
+      "DATA_DIR holds only account directories and _system",
+      entries.every((name) => name === "_system" || /^[0-9a-f-]{36}$/.test(name)),
+      entries.join(","),
     );
   }
   try {

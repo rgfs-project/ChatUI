@@ -53,7 +53,10 @@ export async function httpChecks(base: string): Promise<string[]> {
     "server HTML is not an empty client-side shell",
     !/<body>\s*<div id="root"><\/div>/.test(html) && html.length > 1000,
   );
-  check("document is not cacheable", doc.headers.get("cache-control") === "no-store");
+  check(
+    "document is not cacheable (private, no-store)",
+    doc.headers.get("cache-control") === "private, no-store",
+  );
   check("CSP header present with a script nonce", Boolean(nonce), csp ?? "missing");
   check(
     "CSP has no unsafe-inline/unsafe-eval",
@@ -191,6 +194,42 @@ export async function browserChecks(base: string): Promise<void> {
   }
 }
 
+/** A signed-in API client (cookie + CSRF token + expected user). */
+export interface ApiSession {
+  userId: string;
+  username: string;
+  cookie: string;
+  csrfToken: string;
+}
+
+export function sessionHeaders(session: ApiSession, mutation = false): Record<string, string> {
+  return {
+    Cookie: session.cookie,
+    ...(mutation ? { "X-CSRF-Token": session.csrfToken, "X-Expected-User": session.userId } : {}),
+  };
+}
+
+/** Signs in over HTTP like a same-origin browser would. */
+export async function apiLogin(
+  base: string,
+  username: string,
+  password: string,
+): Promise<ApiSession | undefined> {
+  const res = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: base },
+    body: JSON.stringify({ username, password }),
+  });
+  if (res.status !== 200) return undefined;
+  const body = (await res.json()) as { user: { id: string }; csrfToken: string };
+  return {
+    userId: body.user.id,
+    username,
+    cookie: (res.headers.get("set-cookie") ?? "").split(";")[0] ?? "",
+    csrfToken: body.csrfToken,
+  };
+}
+
 function sendPayload(model: string, content: string, conversationId?: string) {
   return JSON.stringify({
     ...(conversationId ? { conversationId } : {}),
@@ -204,18 +243,21 @@ function sendPayload(model: string, content: string, conversationId?: string) {
 /** Sends over HTTP and follows the SSE stream to its terminal event. */
 export async function sendAndWait(
   base: string,
+  session: ApiSession,
   model: string,
   content: string,
   conversationId?: string,
 ): Promise<{ status: number; conversationId: string; sse: string }> {
   const start = await fetch(`${base}/api/generations`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...sessionHeaders(session, true) },
     body: sendPayload(model, content, conversationId),
   });
   const started = (await start.json()) as { conversationId?: string; generationId?: string };
   if (start.status !== 202) return { status: start.status, conversationId: "", sse: "" };
-  const stream = await fetch(`${base}/api/generations/${started.generationId ?? ""}/stream`);
+  const stream = await fetch(`${base}/api/generations/${started.generationId ?? ""}/stream`, {
+    headers: sessionHeaders(session),
+  });
   return { status: 202, conversationId: started.conversationId ?? "", sse: await stream.text() };
 }
 
@@ -223,9 +265,13 @@ export async function sendAndWait(
 export async function chatChecks(
   base: string,
   models: { chat: string; slow: string },
+  account: { username: string; password: string },
 ): Promise<void> {
+  const session = await apiLogin(base, account.username, account.password);
+  check("API sign-in with the CLI-created account", session !== undefined);
+  if (!session) return;
   // Raw server HTML, no JavaScript executed.
-  const res = await fetch(`${base}/chat`);
+  const res = await fetch(`${base}/chat`, { headers: sessionHeaders(session) });
   const html = await res.text();
   check(
     "INV-54: /chat server HTML contains the native textarea",
@@ -241,7 +287,7 @@ export async function chatChecks(
   );
 
   // API send over real HTTP + SSE, persisted canonically.
-  const sent = await sendAndWait(base, models.chat, "over http");
+  const sent = await sendAndWait(base, session, models.chat, "over http");
   check(
     "POST /api/generations returns 202 and the SSE stream ends with one terminal event",
     sent.status === 202 &&
@@ -249,7 +295,9 @@ export async function chatChecks(
       (sent.sse.match(/event: terminal/g) ?? []).length === 1,
   );
   const conversation = (await (
-    await fetch(`${base}/api/conversations/${sent.conversationId}`)
+    await fetch(`${base}/api/conversations/${sent.conversationId}`, {
+      headers: sessionHeaders(session),
+    })
   ).json()) as {
     messages?: { role: string; content: string }[];
   };
@@ -264,7 +312,10 @@ export async function chatChecks(
 
   const browser = await chromium.launch();
   try {
+    const [cookieName, cookieValue] = session.cookie.split("=");
+    const cookie = { name: cookieName ?? "", value: cookieValue ?? "", url: base };
     const noJs = await browser.newContext({ javaScriptEnabled: false });
+    await noJs.addCookies([cookie]);
     const staticPage = await noJs.newPage();
     await staticPage.goto(`${base}/chat?c=${sent.conversationId}`);
     check(
@@ -284,6 +335,16 @@ export async function chatChecks(
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
     page.on("dialog", (dialog) => void dialog.accept());
+
+    // Sign in through the real login page (validated return-to).
+    await page.goto(`${base}/chat`);
+    await page.waitForURL(/\/login\?returnTo=%2Fchat$/);
+    await page.waitForSelector('html[data-hydrated="true"]');
+    await page.locator("#username").fill(account.username);
+    await page.locator("#password").fill(account.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL(/\/chat$/);
+    check("browser sign-in redirects back to the protected page", true);
 
     // Hold back every script so the user types before hydration.
     let release: () => void = () => undefined;
@@ -371,20 +432,17 @@ export async function chatChecks(
   }
 }
 
-/** Container (pre-auth): the chat demo must not exist. */
+/** Container: private surfaces require a session (no pre-auth chat). */
 export async function chatDisabledChecks(base: string): Promise<void> {
-  const page = await fetch(`${base}/chat`);
+  const page = await fetch(`${base}/chat`, { redirect: "manual" });
   await page.arrayBuffer();
-  const api = await fetch(`${base}/api/generations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "x", messages: [{ role: "user", content: "x" }] }),
-  });
-  const models = await fetch(`${base}/api/models`);
-  await Promise.all([api.arrayBuffer(), models.arrayBuffer()]);
+  const api = await fetch(`${base}/api/conversations`);
+  await api.arrayBuffer();
   check(
-    "pre-auth chat demo is disabled in the container (§9.2b)",
-    page.status === 404 && api.status === 404 && models.status === 404,
-    `${String(page.status)} ${String(api.status)} ${String(models.status)}`,
+    "container: /chat redirects to sign-in and the API requires a session",
+    page.status === 302 &&
+      (page.headers.get("location") ?? "").startsWith("/login") &&
+      api.status === 401,
+    `${String(page.status)} ${String(api.status)}`,
   );
 }

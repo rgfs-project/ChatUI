@@ -11,7 +11,7 @@ import {
 } from "@shared/conversations";
 import { ErrorCode } from "@shared/errors";
 import { AppError } from "../errors.ts";
-import { defineRoute, type RouteServices } from "../registry.ts";
+import { defineRoute, userOf, type RouteServices } from "../registry.ts";
 import { StorageError, type LoadedConversation } from "../storage/conversations.ts";
 
 const idParams = z.strictObject({ id: canonicalUuid });
@@ -43,6 +43,7 @@ async function mapStorage<T>(fn: () => Promise<T>): Promise<T> {
 export function toConversationDto(
   conversation: LoadedConversation,
   services: RouteServices,
+  userId: string,
 ): ConversationDto {
   const messages: MessageDto[] = [];
   let pendingReasoning: string | null = null;
@@ -64,7 +65,7 @@ export function toConversationDto(
     });
     pendingReasoning = null;
   }
-  const active = services.generations.activeFor(`${services.userId}/${conversation.id}`);
+  const active = services.generations.activeFor(`${userId}/${conversation.id}`);
   return {
     id: conversation.id,
     title: conversation.model.title,
@@ -79,13 +80,12 @@ export function toConversationDto(
 export const listConversationsRoute = defineRoute({
   method: "get",
   path: "/api/conversations",
-  auth: "public",
+  auth: "user",
   csrf: "none",
-  availability: "chat-demo",
   request: { query: z.strictObject({}) },
   response: conversationListSchema,
-  handler: (_input, { services }) => ({
-    conversations: services.conversations.list(services.userId).map((entry) =>
+  handler: (_input, ctx) => ({
+    conversations: ctx.services.conversations.list(userOf(ctx).userId).map((entry) =>
       conversationSummarySchema.parse({
         id: entry.id,
         title: entry.title,
@@ -102,15 +102,18 @@ export const listConversationsRoute = defineRoute({
 export const createConversationRoute = defineRoute({
   method: "post",
   path: "/api/conversations",
-  auth: "public",
-  csrf: "none",
-  availability: "chat-demo",
+  auth: "user",
+  csrf: "token",
   request: { body: createConversationSchema },
   response: conversationDtoSchema,
   status: 201,
-  handler: ({ body }, { services }) =>
+  handler: ({ body }, ctx) =>
     mapStorage(async () =>
-      toConversationDto(await services.conversations.create(services.userId, body.title), services),
+      toConversationDto(
+        await ctx.services.conversations.create(userOf(ctx).userId, body.title),
+        ctx.services,
+        userOf(ctx).userId,
+      ),
     ),
   fixture: { body: {} },
 });
@@ -118,14 +121,17 @@ export const createConversationRoute = defineRoute({
 export const getConversationRoute = defineRoute({
   method: "get",
   path: "/api/conversations/:id",
-  auth: "public",
+  auth: "user",
   csrf: "none",
-  availability: "chat-demo",
   request: { params: idParams },
   response: conversationDtoSchema,
-  handler: ({ params }, { services }) =>
+  handler: ({ params }, ctx) =>
     mapStorage(async () =>
-      toConversationDto(await services.conversations.get(services.userId, params.id), services),
+      toConversationDto(
+        await ctx.services.conversations.get(userOf(ctx).userId, params.id),
+        ctx.services,
+        userOf(ctx).userId,
+      ),
     ),
   fixture: { params: unknownId, expectStatus: 404 },
 });
@@ -133,21 +139,21 @@ export const getConversationRoute = defineRoute({
 export const renameConversationRoute = defineRoute({
   method: "patch",
   path: "/api/conversations/:id",
-  auth: "public",
-  csrf: "none",
-  availability: "chat-demo",
+  auth: "user",
+  csrf: "token",
   request: { params: idParams, body: renameConversationSchema },
   response: conversationDtoSchema,
-  handler: ({ params, body }, { services }) =>
+  handler: ({ params, body }, ctx) =>
     mapStorage(async () =>
       toConversationDto(
-        await services.conversations.rename(
-          services.userId,
+        await ctx.services.conversations.rename(
+          userOf(ctx).userId,
           params.id,
           body.title,
           body.expectedRevision,
         ),
-        services,
+        ctx.services,
+        userOf(ctx).userId,
       ),
     ),
   fixture: { params: unknownId, body: { title: "Renamed" }, expectStatus: 404 },
@@ -156,14 +162,13 @@ export const renameConversationRoute = defineRoute({
 export const deleteConversationRoute = defineRoute({
   method: "delete",
   path: "/api/conversations/:id",
-  auth: "public",
-  csrf: "none",
-  availability: "chat-demo",
+  auth: "user",
+  csrf: "token",
   request: { params: idParams },
   response: z.strictObject({ deleted: z.literal(true) }),
-  handler: ({ params }, { services }) =>
+  handler: ({ params }, ctx) =>
     mapStorage(async () => {
-      await services.conversations.delete(services.userId, params.id);
+      await ctx.services.conversations.delete(userOf(ctx).userId, params.id);
       return { deleted: true as const };
     }),
   fixture: { params: unknownId, expectStatus: 404 },

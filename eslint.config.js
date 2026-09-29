@@ -25,6 +25,10 @@ export default defineConfig(
     },
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
+      ],
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
     },
   },
@@ -36,7 +40,12 @@ export default defineConfig(
       // React Router loaders throw `data()` responses to set HTTP status.
       "@typescript-eslint/only-throw-error": [
         "error",
-        { allow: [{ from: "package", package: "react-router", name: "DataWithResponseInit" }] },
+        {
+          allow: [
+            { from: "package", package: "react-router", name: "DataWithResponseInit" },
+            { from: "lib", name: "Response" },
+          ],
+        },
       ],
     },
   },

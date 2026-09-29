@@ -5,16 +5,26 @@ import { ErrorCode } from "@shared/errors";
 import type { Config } from "./config.ts";
 import { ModelCatalog } from "./generations/catalog.ts";
 import { GenerationManager } from "./generations/manager.ts";
-import { DEFAULT_SSE_OPTIONS, type SseOptions } from "./generations/sse.ts";
+import { DEFAULT_SSE_OPTIONS, SseConnections, type SseOptions } from "./generations/sse.ts";
 import { createLlamaCppProvider } from "./providers/llamacpp.ts";
 import type { Provider } from "./providers/types.ts";
+import { PasswordHasher } from "./auth/passwords.ts";
+import { AuthService, type AuthContext } from "./auth/service.ts";
+import { SessionStore } from "./auth/sessions.ts";
+import { PreferencesStore } from "./storage/preferences.ts";
+import { UserStore } from "./storage/users.ts";
 import { SendService, type SendServiceOptions } from "./chat/send-service.ts";
 import { ChatIndex } from "./storage/chat-index.ts";
 import { ConversationStore } from "./storage/conversations.ts";
 import { KeyedLocks } from "./storage/locks.ts";
 import { OperationStore } from "./storage/operations.ts";
 import { DataPaths } from "./storage/paths.ts";
-import { recoverStorage, resolveOperations, type RecoveryReport } from "./storage/recovery.ts";
+import {
+  accountIds,
+  recoverStorage,
+  resolveOperations,
+  type RecoveryReport,
+} from "./storage/recovery.ts";
 import { toConversationDto } from "./routes/conversations.ts";
 import { securityHeaders, type CspMode } from "./csp.ts";
 import { AppError, apiErrorHandler, apiNotFound, sendError } from "./errors.ts";
@@ -30,10 +40,12 @@ export const JSON_BODY_LIMIT = "256kb";
 export interface DocumentRequestValues {
   nonce: string;
   services: RouteServices;
+  /** The document request's session, resolved server-side (INV-54, INV-55). */
+  auth: AuthContext | null;
 }
 
 export interface AppOptions {
-  config: Pick<Config, "nodeEnv" | "inContainer" | "provider" | "storage" | "dataDir">;
+  config: Pick<Config, "nodeEnv" | "inContainer" | "provider" | "storage" | "dataDir" | "auth">;
   logger: Logger;
   version: string;
   /** Builds the React Router document handler; receives per-request values. */
@@ -52,6 +64,8 @@ export interface AppOptions {
   generationRetention?: { retentionMs?: number; maxRetained?: number };
   /** Send-acceptance crash-simulation hooks and token counting (tests only). */
   send?: Pick<SendServiceOptions, "hooks" | "counterFor">;
+  /** Password hasher (tests use cheap Argon2 parameters). */
+  hasher?: PasswordHasher;
   /** Clock (tests only). */
   now?: () => Date;
   /** Process start, for temp-file cleanup (defaults to now). */
@@ -62,7 +76,7 @@ export interface ChatUiApp {
   handler: Express;
   services: RouteServices;
   /** Startup recovery (contracts §2); requests must not be served before it resolves. */
-  ready: Promise<RecoveryReport | null>;
+  ready: Promise<RecoveryReport>;
   /** Ends generations (persisting their outcomes) and closes SSE observers. */
   shutdown: () => Promise<void>;
 }
@@ -77,7 +91,7 @@ export function createApp(options: AppOptions): ChatUiApp {
   const now = options.now ?? (() => new Date());
   const providerConfig = options.config.provider;
   const storageConfig = options.config.storage;
-  const chatDemoEnabled = !options.config.inContainer;
+  const authConfig = options.config.auth;
   const provider = options.provider ?? createLlamaCppProvider(providerConfig);
   const models = new ModelCatalog(provider, providerConfig.defaultContextTokens);
   const generations = new GenerationManager({
@@ -87,14 +101,11 @@ export function createApp(options: AppOptions): ChatUiApp {
     generationMaxMs: providerConfig.generationMaxMs,
     // Until discovery reports the provider's parallel slots, admit one (contracts §4).
     maxActiveGenerations: providerConfig.maxActiveGenerations ?? 1,
+    maxActivePerUser: authConfig.maxActiveGenerationsPerUser,
     now,
     ...options.generationRetention,
   });
-  if (
-    providerConfig.maxActiveGenerations === undefined &&
-    providerConfig.baseUrl &&
-    chatDemoEnabled
-  ) {
+  if (providerConfig.maxActiveGenerations === undefined && providerConfig.baseUrl) {
     provider.discoverSlots().then(
       (slots) => {
         if (slots !== undefined) generations.setMaxActiveGenerations(slots);
@@ -128,57 +139,88 @@ export function createApp(options: AppOptions): ChatUiApp {
     now,
     ...options.send,
   });
-  // The container (pre-auth) writes nothing: storage exists only with the demo.
-  const ready: Promise<RecoveryReport | null> = chatDemoEnabled
-    ? recoverStorage({
-        paths,
-        operations,
-        index,
-        logger,
-        localUserId: storageConfig.localUserId,
-        retentionMs: storageConfig.operationRetentionMs,
-        startedAt: options.startedAt ?? now(),
-        now: now(),
-      })
-    : Promise.resolve(null);
-  // Committed operation records expire after OPERATION_RETENTION_MS.
-  const retentionTimer = setInterval(() => {
-    void resolveOperations(
+  const users = new UserStore({ paths, locks, now });
+  const sessions = new SessionStore({
+    paths,
+    absoluteTtlMs: authConfig.sessionAbsoluteTtlMs,
+    idleTtlMs: authConfig.sessionIdleTtlMs,
+    now,
+  });
+  const hasher =
+    options.hasher ??
+    new PasswordHasher({ concurrency: authConfig.hashConcurrency, queue: authConfig.hashQueue });
+  const auth = new AuthService({ users, sessions, hasher, config: authConfig, logger });
+  const sseConnections = new SseConnections({
+    maxPerUser: authConfig.maxSsePerUser,
+    maxTotal: authConfig.maxSseTotal,
+  });
+  // A revoked session's streams close immediately (logout, password change).
+  sessions.onRevoked((tokenHash) => {
+    sseConnections.closeSession(tokenHash);
+  });
+
+  // Startup recovery (contracts §2) and account/session housekeeping.
+  const ready: Promise<RecoveryReport> = (async () => {
+    const report = await recoverStorage({
       paths,
       operations,
-      storageConfig.localUserId,
+      index,
       logger,
-      storageConfig.operationRetentionMs,
-      now(),
-    ).catch((error: unknown) => {
-      logger.warn({ err: error }, "operation retention sweep failed");
+      retentionMs: storageConfig.operationRetentionMs,
+      startedAt: options.startedAt ?? now(),
+      now: now(),
+    });
+    await users.rebuildIndex();
+    await sessions.sweep();
+    return report;
+  })();
+  // Expired sessions and committed operation records are removed hourly.
+  const retentionTimer = setInterval(() => {
+    void (async () => {
+      await sessions.sweep();
+      for (const userId of await accountIds(paths)) {
+        await resolveOperations(
+          paths,
+          operations,
+          userId,
+          logger,
+          storageConfig.operationRetentionMs,
+          now(),
+        );
+      }
+    })().catch((error: unknown) => {
+      logger.warn({ err: error }, "housekeeping sweep failed");
     });
   }, 3_600_000);
   retentionTimer.unref();
 
   const services: RouteServices = {
-    conversationDto: async (id) =>
-      toConversationDto(await conversations.get(storageConfig.localUserId, id), services),
+    conversationDto: async (userId, id) =>
+      toConversationDto(await conversations.get(userId, id), services, userId),
+    auth,
+    users,
+    preferences: new PreferencesStore(paths, locks),
+    sseConnections,
     health: createHealthService(options.version),
     models,
     generations,
     conversations,
     operations,
     send,
-    userId: storageConfig.localUserId,
     sse: { ...DEFAULT_SSE_OPTIONS, ...options.sse },
     logger,
-    chatDemoEnabled,
   };
   const cspMode: CspMode = options.config.nodeEnv === "development" ? "development" : "production";
 
   const app = express();
   app.disable("x-powered-by");
-  app.set("trust proxy", false);
+  // Trusted hops for the client address only; the protocol is never taken
+  // from X-Forwarded-Proto (cookie security follows PUBLIC_ORIGIN).
+  app.set("trust proxy", authConfig.trustProxy > 0 ? authConfig.trustProxy : false);
 
-  if (!options.config.inContainer) {
-    // Host mode before authentication: serve loopback peers only, judged by the
-    // socket address, never by forwarded headers (contracts §9.2b).
+  if (!options.config.inContainer && !authConfig.secureCookies) {
+    // http://localhost origin: host-only transport. Serve loopback peers only,
+    // judged by the socket address, never by forwarded headers (§6, §9.2b).
     app.use((req, _res, next) => {
       if (isLoopbackAddress(req.socket.remoteAddress)) {
         next();
@@ -240,9 +282,23 @@ export function createApp(options: AppOptions): ChatUiApp {
     );
   }
 
+  // Every document request resolves the real session before rendering, so no
+  // private markup is produced for anonymous, expired or disabled sessions.
+  app.use((req, res, next) => {
+    auth.resolve(req).then(
+      (resolved) => {
+        res.locals.auth = resolved;
+        next();
+      },
+      (error: unknown) => {
+        next(error);
+      },
+    );
+  });
   const documentHandler = options.createDocumentHandler((res) => ({
     nonce: res.locals.cspNonce as string,
     services,
+    auth: (res.locals.auth as AuthContext | null | undefined) ?? null,
   }));
   app.use(documentHandler);
 

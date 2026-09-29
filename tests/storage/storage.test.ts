@@ -6,9 +6,9 @@ import { ConversationStore } from "../../server/storage/conversations.ts";
 import { atomicWrite, cleanupTempFiles } from "../../server/storage/fs.ts";
 import { KeyedLocks } from "../../server/storage/locks.ts";
 import { DataPaths, PathError } from "../../server/storage/paths.ts";
-import { captureLogger, LOCAL_USER, tempDataDir } from "../server/helpers.ts";
+import { captureLogger, tempDataDir } from "../server/helpers.ts";
 
-const U = LOCAL_USER;
+const U = "5f0c6a3e-9d0b-4c1e-8f2a-3b6d7e8f9a01";
 const C = "0b7e7c2a-1111-4a1a-8a1a-111111111111";
 
 function setup() {

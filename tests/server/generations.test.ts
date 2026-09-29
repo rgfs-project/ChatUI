@@ -11,7 +11,13 @@ import {
   type MockLlama,
 } from "../support/mock-llama.ts";
 import { readSse, type SseFrame } from "../support/sse-client.ts";
-import { providerConfig, testApp, type TestAppOptions } from "./helpers.ts";
+import {
+  providerConfig,
+  signIn,
+  testApp,
+  type TestAppOptions,
+  type TestSession,
+} from "./helpers.ts";
 
 const API_KEY = "sk-test-provider-key-123";
 let llama: MockLlama;
@@ -30,6 +36,7 @@ interface Running {
   logs: ReturnType<typeof testApp>["logs"];
   /** Every HTTP response body seen by the test client (for leak checks). */
   seen: string[];
+  session: TestSession;
 }
 
 const servers: { server: Server; chatui: ChatUiApp }[] = [];
@@ -58,18 +65,17 @@ async function start(
   const server = createServer(chatui.handler);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   servers.push({ server, chatui });
-  return {
-    base: `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`,
-    chatui,
-    logs,
-    seen: [],
-  };
+  const base = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
+  return { base, chatui, logs, seen: [], session: await signIn(base, chatui) };
 }
 
 async function api(run: Running, method: string, path: string, body?: unknown) {
   const res = await fetch(`${run.base}${path}`, {
     method,
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    headers: {
+      ...run.session.headers(method !== "GET"),
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
@@ -186,7 +192,9 @@ describe("generations", () => {
     const paced = await startMockLlama({ chatChunkDelayMs: 30 });
     const run = await start({ baseUrl: paced.url, apiKey: undefined });
     const { body } = await startGeneration(run, MOCK_MODELS.chat, "separate");
-    const sse = await readSse(`${run.base}/api/generations/${body.generationId as string}/stream`);
+    const sse = await readSse(`${run.base}/api/generations/${body.generationId as string}/stream`, {
+      headers: run.session.headers(),
+    });
     await paced.close();
     const deltas = sse.frames
       .filter((f) => f.event === "delta")
@@ -383,7 +391,9 @@ describe("generations", () => {
     ]) {
       const { body } = await startGeneration(run, model);
       const id = body.generationId as string;
-      const sse = await readSse(`${run.base}/api/generations/${id}/stream`);
+      const sse = await readSse(`${run.base}/api/generations/${id}/stream`, {
+        headers: run.session.headers(),
+      });
       run.seen.push(sse.raw);
       await waitTerminal(run, id);
     }
@@ -403,7 +413,9 @@ describe("SSE observation", () => {
   it("uses the contract headers, a snapshot first and monotonically increasing ids", async () => {
     const run = await start();
     const { body } = await startGeneration(run, MOCK_MODELS.slow);
-    const sse = await readSse(`${run.base}/api/generations/${body.generationId as string}/stream`);
+    const sse = await readSse(`${run.base}/api/generations/${body.generationId as string}/stream`, {
+      headers: run.session.headers(),
+    });
     expect(sse.status).toBe(200);
     expect(sse.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
     expect(sse.headers.get("cache-control")).toBe("no-cache");
@@ -427,7 +439,9 @@ describe("SSE observation", () => {
   it("sends heartbeat comments", async () => {
     const run = await start({}, { sse: { heartbeatMs: 20 } });
     const { body } = await startGeneration(run, MOCK_MODELS.slow);
-    const sse = await readSse(`${run.base}/api/generations/${body.generationId as string}/stream`);
+    const sse = await readSse(`${run.base}/api/generations/${body.generationId as string}/stream`, {
+      headers: run.session.headers(),
+    });
     expect(sse.comments).toBeGreaterThan(0);
     expect(sse.raw).toContain(": ping\n\n");
   });
@@ -438,13 +452,16 @@ describe("SSE observation", () => {
     const id = body.generationId as string;
     const controller = new AbortController();
     const first = await readSse(`${run.base}/api/generations/${id}/stream`, {
+      headers: run.session.headers(),
       signal: controller.signal,
       until: (_frame, frames) => frames.filter((f) => f.event === "delta").length >= 2,
     });
     controller.abort();
     const lastSeen = first.frames.at(-1)?.id ?? 0;
 
-    const second = await readSse(`${run.base}/api/generations/${id}/stream`);
+    const second = await readSse(`${run.base}/api/generations/${id}/stream`, {
+      headers: run.session.headers(),
+    });
     const snapshot = second.frames[0];
     expect(snapshot?.event).toBe("snapshot");
     expect(snapshot?.id).toBeGreaterThanOrEqual(lastSeen);
@@ -459,29 +476,31 @@ describe("SSE observation", () => {
     const run = await start();
     const { body } = await startGeneration(run, MOCK_MODELS.chat);
     await waitTerminal(run, body.generationId as string);
-    const sse = await readSse(`${run.base}/api/generations/${body.generationId as string}/stream`);
+    const sse = await readSse(`${run.base}/api/generations/${body.generationId as string}/stream`, {
+      headers: run.session.headers(),
+    });
     expect(sse.frames).toHaveLength(1);
     expect((sse.frames[0]?.data as GenerationSnapshot).state).toBe("completed");
   });
 
   it("INV-62: a slow observer is disconnected while the generation and a normal observer continue", async () => {
-    const flood = await startMockLlama({ floodChunks: 300, floodChunkBytes: 32 * 1024 });
+    const flood = await startMockLlama({ floodChunks: 600, floodChunkBytes: 32 * 1024 });
     try {
       const run = await start(
         { baseUrl: flood.url, apiKey: undefined, maxResponseBytes: 64 * 1024 * 1024 },
-        { sse: { maxQueuedBytes: 2 * 1024 * 1024 } },
+        { sse: { maxQueuedBytes: 6 * 1024 * 1024 } },
       );
       const { body } = await startGeneration(run, MOCK_MODELS.flood);
       const id = body.generationId as string;
       const url = `${run.base}/api/generations/${id}/stream`;
 
       // Slow observer: opens the stream and never reads it.
-      const slow = await fetch(url);
-      const normal = await readSse(url);
+      const slow = await fetch(url, { headers: run.session.headers() });
+      const normal = await readSse(url, { headers: run.session.headers() });
       expect(normal.frames.at(-1)?.event).toBe("terminal");
       const snapshot = await waitTerminal(run, id);
       expect(snapshot.state).toBe("completed");
-      expect(snapshot.content.length).toBe(300 * 32 * 1024);
+      expect(snapshot.content.length).toBe(600 * 32 * 1024);
       await vi.waitFor(() => {
         expect(JSON.stringify(run.logs.lines())).toContain("disconnecting slow SSE observer");
       });

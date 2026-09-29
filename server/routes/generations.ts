@@ -6,7 +6,7 @@ import {
   startGenerationResponseSchema,
 } from "@shared/generations";
 import { openSse } from "../generations/sse.ts";
-import { defineRoute, defineSseRoute } from "../registry.ts";
+import { defineRoute, defineSseRoute, userOf } from "../registry.ts";
 
 const idParams = z.strictObject({ id: canonicalUuid });
 const unknownId = { id: "00000000-0000-4000-8000-000000000000" };
@@ -14,13 +14,12 @@ const unknownId = { id: "00000000-0000-4000-8000-000000000000" };
 export const startGenerationRoute = defineRoute({
   method: "post",
   path: "/api/generations",
-  auth: "public",
-  csrf: "none",
-  availability: "chat-demo",
+  auth: "user",
+  csrf: "token",
   request: { body: startGenerationRequestSchema },
   response: startGenerationResponseSchema,
   status: 202,
-  handler: ({ body }, { services }) => services.send.send(services.userId, body),
+  handler: ({ body }, ctx) => ctx.services.send.send(userOf(ctx).userId, body),
   fixture: {
     body: {
       model: "fixture-missing-model",
@@ -37,24 +36,23 @@ export const startGenerationRoute = defineRoute({
 export const getGenerationRoute = defineRoute({
   method: "get",
   path: "/api/generations/:id",
-  auth: "public",
+  auth: "user",
   csrf: "none",
-  availability: "chat-demo",
   request: { params: idParams },
   response: generationSnapshotSchema,
-  handler: ({ params }, { services }) => services.generations.snapshot(params.id),
+  handler: ({ params }, ctx) => ctx.services.generations.snapshot(params.id, userOf(ctx).userId),
   fixture: { params: unknownId, expectStatus: 404 },
 });
 
 export const cancelGenerationRoute = defineRoute({
   method: "post",
   path: "/api/generations/:id/cancel",
-  auth: "public",
-  csrf: "none",
-  availability: "chat-demo",
+  auth: "user",
+  csrf: "token",
   request: { params: idParams },
   response: generationSnapshotSchema,
-  handler: async ({ params }, { services }) => services.generations.cancel(params.id),
+  handler: async ({ params }, ctx) =>
+    ctx.services.generations.cancel(params.id, userOf(ctx).userId),
   fixture: { params: unknownId, expectStatus: 404 },
 });
 
@@ -62,18 +60,33 @@ export const streamGenerationRoute = defineSseRoute({
   kind: "sse",
   method: "get",
   path: "/api/generations/:id/stream",
-  auth: "public",
+  auth: "user",
   csrf: "none",
-  availability: "chat-demo",
   request: { params: idParams },
-  handler: ({ params }, { req, res, services }) => {
-    // Throws GENERATION_NOT_FOUND (a JSON error) before any stream bytes.
-    services.generations.snapshot(params.id);
+  handler: ({ params }, ctx) => {
+    const { req, res, services } = ctx;
+    const auth = userOf(ctx);
+    // Ownership (404) and connection caps (429) are decided before any stream bytes.
+    services.generations.snapshot(params.id, auth.userId);
+    services.sseConnections.assertCapacity(auth.userId);
     let unsubscribe: () => void = () => undefined;
-    const observer = openSse(req, res, services.sse, services.logger, () => {
-      unsubscribe();
+    let untrack: () => void = () => undefined;
+    const observer = openSse(
+      req,
+      res,
+      services.sse,
+      services.logger,
+      () => {
+        unsubscribe();
+        untrack();
+      },
+      // Bound to the opening session: closed once it is revoked or expires.
+      async () => (await services.auth.resolveHash(auth.tokenHash))?.userId === auth.userId,
+    );
+    untrack = services.sseConnections.add(auth.userId, auth.tokenHash, () => {
+      observer.terminate();
     });
-    unsubscribe = services.generations.observe(params.id, observer);
+    unsubscribe = services.generations.observe(params.id, observer, auth.userId);
   },
   fixture: { params: unknownId, expectStatus: 404 },
 });

@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import { ErrorCode } from "@shared/errors";
+import { AppError } from "../errors.ts";
 import type { GenerationEvent } from "@shared/generations";
 import type { Logger } from "../logger.ts";
 import type { GenerationObserver } from "./manager.ts";
@@ -28,7 +30,9 @@ export function openSse(
   options: SseOptions,
   logger: Logger,
   onDisconnect: () => void,
-): GenerationObserver {
+  /** Re-checked at every heartbeat; a false result ends the stream (contracts §5). */
+  validate?: () => Promise<boolean>,
+): GenerationObserver & { terminate: () => void } {
   res.status(200);
   res.set({
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -83,8 +87,27 @@ export function openSse(
     }
   });
 
+  const terminate = () => {
+    if (finished) return;
+    queue.length = 0;
+    cleanup();
+    res.end();
+  };
+
   const heartbeat = setInterval(() => {
-    if (!backpressured) write(": ping\n\n");
+    if (!validate) {
+      if (!backpressured) write(": ping\n\n");
+      return;
+    }
+    void validate().then(
+      (ok) => {
+        if (!ok) terminate();
+        else if (!backpressured) write(": ping\n\n");
+      },
+      () => {
+        terminate();
+      },
+    );
   }, options.heartbeatMs);
   heartbeat.unref();
 
@@ -92,6 +115,7 @@ export function openSse(
   res.on("close", cleanup);
 
   return {
+    terminate,
     send: (event) => {
       write(formatEvent(event));
     },
@@ -104,4 +128,51 @@ export function openSse(
       }
     },
   };
+}
+
+/**
+ * Open SSE connections by user and session: enforces the per-user and global
+ * caps (INV-62) and closes a session's streams when it is revoked.
+ */
+export class SseConnections {
+  private readonly open = new Map<
+    symbol,
+    { userId: string; tokenHash: string; close: () => void }
+  >();
+  private readonly maxPerUser: number;
+  private readonly maxTotal: number;
+
+  constructor(options: { maxPerUser: number; maxTotal: number }) {
+    this.maxPerUser = options.maxPerUser;
+    this.maxTotal = options.maxTotal;
+  }
+
+  get size(): number {
+    return this.open.size;
+  }
+
+  /** Throws RATE_LIMITED before any stream bytes when a cap is reached. */
+  assertCapacity(userId: string): void {
+    const mine = [...this.open.values()].filter((c) => c.userId === userId).length;
+    if (this.open.size >= this.maxTotal || mine >= this.maxPerUser) {
+      throw new AppError(ErrorCode.RATE_LIMITED, "Too many open streams", undefined, {
+        "Retry-After": "5",
+      });
+    }
+  }
+
+  add(userId: string, tokenHash: string, close: () => void): () => void {
+    const key = Symbol("sse");
+    this.open.set(key, { userId, tokenHash, close });
+    return () => this.open.delete(key);
+  }
+
+  closeSession(tokenHash: string): void {
+    for (const [key, conn] of this.open) {
+      if (conn.tokenHash === tokenHash) {
+        this.open.delete(key);
+        conn.close();
+      }
+    }
+  }
 }

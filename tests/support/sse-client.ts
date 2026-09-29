@@ -15,10 +15,14 @@ export interface SseResult {
 
 export async function readSse(
   url: string,
-  options: { signal?: AbortSignal; until?: (frame: SseFrame, frames: SseFrame[]) => boolean } = {},
+  options: {
+    signal?: AbortSignal;
+    headers?: Record<string, string>;
+    until?: (frame: SseFrame, frames: SseFrame[]) => boolean;
+  } = {},
 ): Promise<SseResult> {
   const res = await fetch(url, {
-    headers: { Accept: "text/event-stream" },
+    headers: { Accept: "text/event-stream", ...options.headers },
     signal: options.signal,
   });
   const result: SseResult = {

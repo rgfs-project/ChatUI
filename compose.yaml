@@ -1,8 +1,10 @@
 # ChatUI — supported production runtime (Docker Compose or rootless Podman Compose).
 #
-# Until authentication ships (Phase 4) the port is published on 127.0.0.1 ONLY.
-# Do not change the published address, attach this service to other networks,
-# or put it behind a remote proxy before then.
+# The port is published on 127.0.0.1 only. PUBLIC_ORIGIN defaults to
+# http://localhost:3000 (this computer). For LAN or phone access, put an
+# https TLS proxy (e.g. Caddy or Tailscale HTTPS) in front, set PUBLIC_ORIGIN to
+# its https URL and TRUST_PROXY to the number of proxy hops. Plain-http LAN
+# access is not supported.
 name: chatui
 
 services:
@@ -14,6 +16,10 @@ services:
     restart: unless-stopped
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Set this when HOST_PORT is not 3000 or when serving through a TLS proxy.
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-closed}
       # llama.cpp server as seen from INSIDE the container (not localhost):
       # a LAN address, host.containers.internal (Podman), or host.docker.internal
       # with the extra_hosts entry below (Docker Engine on Linux).

@@ -6,7 +6,7 @@ import {
   useSyncExternalStore,
   type SyntheticEvent,
 } from "react";
-import { data, Link, useNavigate, useRevalidator } from "react-router";
+import { Link, redirect, useNavigate, useRevalidator } from "react-router";
 import type { ConversationDto, ConversationSummary, MessageDto } from "@shared/conversations";
 import {
   isTerminalState,
@@ -20,6 +20,7 @@ import type {
   StartGenerationResponse,
 } from "@shared/generations";
 import { appContext } from "../context";
+import { ACCOUNT_CHANGED_EVENT, AccountChangedError, apiFetch } from "../lib/api";
 import type { Route } from "./+types/chat";
 
 /** SSR waits this long for model discovery before rendering without it. */
@@ -39,11 +40,12 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
 }
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { services } = context.get(appContext);
-  // Pre-auth chat exists only on the loopback-guarded host process (§9.2b).
-  if (!services.chatDemoEnabled) throw data("Not found", { status: 404 });
+  const { services, auth } = context.get(appContext);
+  const url = new URL(request.url);
+  // Private surface: identity from the server-side session only (INV-54).
+  if (!auth) throw redirect(`/login?returnTo=${encodeURIComponent(url.pathname + url.search)}`);
 
-  const id = new URL(request.url).searchParams.get("c");
+  const id = url.searchParams.get("c");
   const modelsPromise = Promise.race([
     services.models.list().then((models) => ({ models, modelError: null })),
     new Promise<{ models: ModelDto[]; modelError: string }>((resolve) => {
@@ -61,7 +63,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     if (!UUID.test(id)) conversationError = "This conversation does not exist.";
     else {
       try {
-        conversation = await services.conversationDto(id);
+        conversation = await services.conversationDto(auth.userId, id);
       } catch (error) {
         conversationError =
           (error as { code?: string }).code === "CONVERSATION_MALFORMED"
@@ -72,7 +74,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   }
   // Public summary fields only (the index also stores file stamps).
   const conversations: ConversationSummary[] = services.conversations
-    .list(services.userId)
+    .list(auth.userId)
     .map((entry) => ({
       id: entry.id,
       title: entry.title,
@@ -82,7 +84,15 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       malformed: entry.malformed,
     }));
   const { models, modelError } = await modelsPromise;
-  return { conversations, conversation, conversationError, selectedId: id, models, modelError };
+  return {
+    conversations,
+    conversation,
+    conversationError,
+    selectedId: id,
+    models,
+    modelError,
+    username: auth.username,
+  };
 }
 
 const noopSubscribe = () => () => undefined;
@@ -224,6 +234,27 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [observedId]);
 
+  // Another tab signed in as someone else, or this session ended: drop all
+  // user-bound state (draft, live view) and go to sign-in (INV-59).
+  useEffect(() => {
+    const onChange = () => {
+      if (textareaRef.current) textareaRef.current.value = "";
+      setLive(null);
+      setStatus(null);
+      void navigate("/login", { replace: true });
+    };
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, onChange);
+    return () => {
+      window.removeEventListener(ACCOUNT_CHANGED_EVENT, onChange);
+    };
+  }, [navigate]);
+
+  async function logout() {
+    await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    if (textareaRef.current) textareaRef.current.value = "";
+    await navigate("/login", { replace: true });
+  }
+
   const refreshModels = useCallback(async () => {
     setModelError(null);
     const response = await fetch("/api/models?refresh=1");
@@ -257,12 +288,13 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
       for (let attempt = 0; attempt <= SEND_RETRIES; attempt++) {
         let response: Response | undefined;
         try {
-          response = await fetch("/api/generations", {
+          response = await apiFetch("/api/generations", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body,
           });
-        } catch {
+        } catch (error) {
+          if (error instanceof AccountChangedError) return; // discarded, never re-sent
           response = undefined; // network error: outcome unknown, resend with the same key
         }
         if (response?.status === 202) {
@@ -305,7 +337,7 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
 
   async function cancel() {
     if (!observedId) return;
-    await fetch(`/api/generations/${observedId}/cancel`, { method: "POST" });
+    await apiFetch(`/api/generations/${observedId}/cancel`, { method: "POST" });
   }
 
   async function rename(event: SyntheticEvent<HTMLFormElement>) {
@@ -313,7 +345,7 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
     if (!conversation) return;
     const title = new FormData(event.currentTarget).get("title");
     if (typeof title !== "string" || title.trim() === "") return;
-    const response = await fetch(`/api/conversations/${conversation.id}`, {
+    const response = await apiFetch(`/api/conversations/${conversation.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: title.trim(), expectedRevision: conversation.revision }),
@@ -324,7 +356,7 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
 
   async function remove(id: string) {
     if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
-    const response = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+    const response = await apiFetch(`/api/conversations/${id}`, { method: "DELETE" });
     if (!response.ok) {
       setStatus((await errorOf(response)).message);
       return;
@@ -359,7 +391,16 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
           ))}
         </ul>
         <p className="hint">
-          <a href="/">Status</a> · loopback-only
+          <span data-testid="signed-in-user">{loaderData.username}</span> ·{" "}
+          <a href="/account">Account</a> ·{" "}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => void logout()}
+            disabled={!hydrated}
+          >
+            Sign out
+          </button>
         </p>
       </nav>
 

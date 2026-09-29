@@ -35,8 +35,20 @@ describe("configuration", () => {
         maxActiveGenerations: undefined,
         maxResponseBytes: 16 * 1024 * 1024,
       },
+      auth: {
+        publicOrigin: "http://localhost:3000",
+        secureCookies: false,
+        trustProxy: 0,
+        registrationMode: "closed",
+        sessionAbsoluteTtlMs: 30 * 86_400_000,
+        sessionIdleTtlMs: 7 * 86_400_000,
+        maxActiveGenerationsPerUser: 2,
+        maxSsePerUser: 8,
+        maxSseTotal: 256,
+        hashConcurrency: 2,
+        hashQueue: 16,
+      },
       storage: {
-        localUserId: "5f0c6a3e-9d0b-4c1e-8f2a-3b6d7e8f9a01",
         operationRetentionMs: 7 * 86_400_000,
         contextTrimStep: undefined,
         templateOverheadTokens: 16,
@@ -132,10 +144,45 @@ describe("configuration", () => {
     );
   });
 
-  it("rejects a LOCAL_USER_ID that is not a canonical lowercase UUID", () => {
-    for (const value of ["not-a-uuid", "5F0C6A3E-9D0B-4C1E-8F2A-3B6D7E8F9A01", "../etc"]) {
-      expect(() => loadConfig({ DATA_DIR: root, LOCAL_USER_ID: value })).toThrow(/LOCAL_USER_ID/);
-    }
+  it("accepts http://localhost and https origins; https enables Secure cookies", () => {
+    expect(
+      loadConfig({ DATA_DIR: root, PUBLIC_ORIGIN: "http://127.0.0.1:8080" }).auth,
+    ).toMatchObject({
+      publicOrigin: "http://127.0.0.1:8080",
+      secureCookies: false,
+    });
+    expect(
+      loadConfig({ DATA_DIR: root, PUBLIC_ORIGIN: "https://chat.example.com" }).auth,
+    ).toMatchObject({
+      publicOrigin: "https://chat.example.com",
+      secureCookies: true,
+    });
+  });
+
+  it.each(["http://192.168.1.10:3000", "http://chat.local", "http://example.com"])(
+    "refuses a non-loopback http PUBLIC_ORIGIN (%s): there is no insecure-LAN mode",
+    (origin) => {
+      expect(() => loadConfig({ DATA_DIR: root, PUBLIC_ORIGIN: origin })).toThrow(/TLS proxy/);
+    },
+  );
+
+  it.each(["https://chat.example.com/path", "ftp://x", "not a url"])(
+    "refuses PUBLIC_ORIGIN=%s",
+    (origin) => {
+      expect(() => loadConfig({ DATA_DIR: root, PUBLIC_ORIGIN: origin })).toThrow(/PUBLIC_ORIGIN/);
+    },
+  );
+
+  it("allows a non-loopback listener on the host only behind an https origin", () => {
+    expect(() => loadConfig({ DATA_DIR: root, LISTEN_HOST: "0.0.0.0" })).toThrow(/loopback/);
+    expect(
+      loadConfig({
+        DATA_DIR: root,
+        LISTEN_HOST: "0.0.0.0",
+        PUBLIC_ORIGIN: "https://chat.example.com",
+        TRUST_PROXY: "1",
+      }).listenHost,
+    ).toBe("0.0.0.0");
   });
 
   it("treats empty values as unset", () => {

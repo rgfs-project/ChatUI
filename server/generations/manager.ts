@@ -43,6 +43,8 @@ export interface GenerationManagerOptions {
   generationMaxMs: number;
   /** Global admission limit (contracts §4). */
   maxActiveGenerations: number;
+  /** Per-user admission limit (Phase 4, INV-62). */
+  maxActivePerUser?: number;
   /** Terminal generations are kept this long for re-observation, then evicted. */
   retentionMs?: number;
   /** At most this many terminal generations are retained (oldest evicted first). */
@@ -54,6 +56,8 @@ export interface GenerationManagerOptions {
 
 interface Generation {
   id: string;
+  /** Owner: other users get GENERATION_NOT_FOUND (INV-15). */
+  userId: string;
   assistantMessageId: string;
   conversationKey: string;
   conversationId: string;
@@ -84,6 +88,7 @@ type AbortReason = "cancel" | "max" | "shutdown";
 /** A held admission slot for one conversation, taken under its lock. */
 export interface Reservation {
   readonly conversationKey: string;
+  readonly userId: string;
   release(): void;
 }
 
@@ -96,7 +101,7 @@ export interface Reservation {
 export class GenerationManager {
   private readonly generations = new Map<string, Generation>();
   /** conversationKey → generation id or a reservation marker. */
-  private readonly active = new Map<string, string>();
+  private readonly active = new Map<string, { id: string; userId: string }>();
   private readonly options: GenerationManagerOptions;
   private readonly retentionMs: number;
   private readonly maxRetained: number;
@@ -130,12 +135,23 @@ export class GenerationManager {
 
   /** The non-terminal generation (or reservation) for a conversation, if any. */
   activeFor(conversationKey: string): string | undefined {
-    return this.active.get(conversationKey);
+    return this.active.get(conversationKey)?.id;
+  }
+
+  private activeForUser(userId: string): number {
+    let count = 0;
+    for (const entry of this.active.values()) if (entry.userId === userId) count++;
+    return count;
   }
 
   /** Throws RATE_LIMITED when no admission slot is free (checked before any work). */
-  assertAdmission(): void {
-    if (this.closed || this.active.size >= this.maxActive) {
+  assertAdmission(userId?: string): void {
+    const perUser = this.options.maxActivePerUser ?? Number.POSITIVE_INFINITY;
+    if (
+      this.closed ||
+      this.active.size >= this.maxActive ||
+      (userId !== undefined && this.activeForUser(userId) >= perUser)
+    ) {
       throw new AppError(
         ErrorCode.RATE_LIMITED,
         "Too many generations are running; try again shortly",
@@ -156,18 +172,19 @@ export class GenerationManager {
   }
 
   /** Reserves the conversation's single slot and a global slot (contracts §4.1 step 4). */
-  reserve(conversationKey: string): Reservation {
+  reserve(userId: string, conversationKey: string): Reservation {
     this.assertIdle(conversationKey);
-    this.assertAdmission();
+    this.assertAdmission(userId);
     const marker = `reserved:${conversationKey}`;
-    this.active.set(conversationKey, marker);
+    this.active.set(conversationKey, { id: marker, userId });
     let released = false;
     return {
       conversationKey,
+      userId,
       release: () => {
         if (released) return;
         released = true;
-        if (this.active.get(conversationKey) === marker) this.active.delete(conversationKey);
+        if (this.active.get(conversationKey)?.id === marker) this.active.delete(conversationKey);
       },
     };
   }
@@ -190,6 +207,7 @@ export class GenerationManager {
     });
     const generation: Generation = {
       id: input.generationId,
+      userId: reservation.userId,
       assistantMessageId: input.assistantMessageId,
       conversationKey: reservation.conversationKey,
       conversationId: input.conversationId,
@@ -213,7 +231,7 @@ export class GenerationManager {
       settle,
     };
     this.generations.set(generation.id, generation);
-    this.active.set(reservation.conversationKey, generation.id);
+    this.active.set(reservation.conversationKey, { id: generation.id, userId: reservation.userId });
     generation.maxTimer = setTimeout(() => {
       this.abort(generation, "max");
     }, this.options.generationMaxMs);
@@ -342,8 +360,9 @@ export class GenerationManager {
       generation.finishReason = outcome.finishReason;
       generation.finishedAt = outcome.finishedAt;
       generation.revision = revision;
-      if (this.active.get(generation.conversationKey) === generation.id)
+      if (this.active.get(generation.conversationKey)?.id === generation.id) {
         this.active.delete(generation.conversationKey);
+      }
       this.emit(generation, {
         type: "terminal",
         data: { state, finishReason: outcome.finishReason, error, revision },
@@ -373,14 +392,17 @@ export class GenerationManager {
     }
   }
 
-  private require(id: string): Generation {
+  /** Looks up a generation; another owner's generation is indistinguishable from none. */
+  private require(id: string, userId?: string): Generation {
     const generation = this.generations.get(id);
-    if (!generation) throw new AppError(ErrorCode.GENERATION_NOT_FOUND, "Generation not found");
+    if (!generation || (userId !== undefined && generation.userId !== userId)) {
+      throw new AppError(ErrorCode.GENERATION_NOT_FOUND, "Generation not found");
+    }
     return generation;
   }
 
-  snapshot(id: string): GenerationSnapshot {
-    const g = this.require(id);
+  snapshot(id: string, userId?: string): GenerationSnapshot {
+    const g = this.require(id, userId);
     return {
       generationId: g.id,
       assistantMessageId: g.assistantMessageId,
@@ -404,8 +426,8 @@ export class GenerationManager {
   }
 
   /** Explicit user cancellation. Idempotent; resolves once the outcome is persisted. */
-  async cancel(id: string): Promise<GenerationSnapshot> {
-    const generation = this.require(id);
+  async cancel(id: string, userId?: string): Promise<GenerationSnapshot> {
+    const generation = this.require(id, userId);
     this.abort(generation, "cancel");
     await generation.settled;
     return this.snapshot(id);
@@ -416,8 +438,8 @@ export class GenerationManager {
    * live events. Returns an unsubscribe function, which never affects the
    * generation itself (INV-06).
    */
-  observe(id: string, observer: GenerationObserver): () => void {
-    const generation = this.require(id);
+  observe(id: string, observer: GenerationObserver, userId?: string): () => void {
+    const generation = this.require(id, userId);
     observer.send({ type: "snapshot", id: generation.seq, data: this.snapshot(id) });
     if (isTerminalState(generation.state)) {
       observer.close();
