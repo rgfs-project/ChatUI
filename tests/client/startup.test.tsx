@@ -153,6 +153,46 @@ describe("INV-29 groundwork: startup dependency graph", () => {
     expect(elapsed).toBeLessThan(290);
   });
 
+  it("a hanging model endpoint never holds the document past its budget; the conversation still renders", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      const services = {
+        // Discovery that never answers (a cold, stuck provider).
+        models: { listModels: () => new Promise(() => undefined) },
+        conversationDto: () => Promise.resolve(conversation([message(1, "user", "still here")])),
+        conversations: { list: () => [] },
+      };
+      const handler = createStaticHandler(routes());
+      let settled = false;
+      const pending = handler
+        .query(new Request(`http://localhost/chat/${CONV}`), {
+          requestContext: context(services),
+        })
+        .then((r) => {
+          settled = true;
+          return r as StaticHandlerContext;
+        });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(600);
+      const result = await pending;
+      expect(settled).toBe(true);
+      const layout = result.loaderData["routes/app-layout"] as {
+        dehydratedState: { queries: unknown[] };
+      };
+      const chat = result.loaderData["routes/chat-conversation"] as {
+        dehydratedState: { queries: { queryKey: unknown[] }[] };
+      };
+      // Models are omitted (the browser fetches them); the transcript is not.
+      expect(layout.dehydratedState.queries).toEqual([]);
+      expect(chat.dehydratedState.queries.map((q) => q.queryKey)).toEqual([
+        ["user", USER, "conversation", CONV],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("signed out: the guard redirects before any private read starts", async () => {
     const listModels = vi.fn();
     const conversationDto = vi.fn();

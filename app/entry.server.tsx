@@ -69,3 +69,12 @@ export default function handleRequest(
     );
   });
 }
+
+/**
+ * Route data for client navigations (`<path>.data`) carries the same private,
+ * dehydrated state as the document, so it is never cacheable either.
+ */
+export function handleDataRequest(response: Response): Response {
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+}

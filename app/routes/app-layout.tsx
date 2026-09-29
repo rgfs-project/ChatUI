@@ -1,4 +1,4 @@
-import { HydrationBoundary } from "@tanstack/react-query";
+import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query";
 import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { useState } from "react";
 import {
@@ -16,9 +16,10 @@ import { SignedOutShell } from "../components/SignedOutShell";
 import { appContext } from "../context";
 import { useAuth } from "../lib/auth-store";
 import { documentPathOf, paths, type OverlayState } from "../lib/paths";
-import { queryKeys } from "../lib/query";
+import { getQueryClient, queryKeys } from "../lib/query";
 import { prefetchForRequest } from "../lib/server-query";
 import { ShellProvider } from "../lib/shell-context";
+import { useAccountBoundary } from "../lib/use-account-boundary";
 import type { Route } from "./+types/app-layout";
 
 /** Model state is critical (it validates the selection) but gets a time budget. */
@@ -76,7 +77,23 @@ export function shouldRevalidate({
   return false;
 }
 
-export default function AppLayout({ loaderData }: Route.ComponentProps) {
+/**
+ * The chat shell owns TanStack Query: the page's one browser QueryClient (a
+ * module singleton, so it survives the shell remounting) or, on the server, a
+ * fresh client per request.
+ */
+export default function AppLayout(props: Route.ComponentProps) {
+  const [queryClient] = useState(getQueryClient);
+  // Account boundary: a changed account purges the previous user's cache.
+  useAccountBoundary(queryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Shell {...props} />
+    </QueryClientProvider>
+  );
+}
+
+function Shell({ loaderData }: Route.ComponentProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const matches = useMatches();
@@ -129,6 +146,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
                 </span>
                 <Link
                   to={paths.settings()}
+                  prefetch="intent"
                   state={
                     { background: overlay ? background : location.pathname } satisfies OverlayState
                   }

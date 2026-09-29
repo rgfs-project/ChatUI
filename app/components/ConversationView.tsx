@@ -6,7 +6,7 @@ import {
   type Mutation,
 } from "@tanstack/react-query";
 import { ArrowDown } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import type { ConversationDto } from "@shared/conversations";
 import { isTerminalState, type GenerationState } from "@shared/generation-state";
@@ -14,6 +14,7 @@ import type { StartGenerationResponse } from "@shared/generations";
 import { AccountChangedError } from "../lib/api";
 import { authStore } from "../lib/auth-store";
 import { paths } from "../lib/paths";
+import { markAccepted, markGeneration, markOnce } from "../lib/perf";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
 import {
   lookUpOperation,
@@ -27,9 +28,11 @@ import { NEW_DRAFT, useShell } from "../lib/shell-context";
 import { useLiveGeneration } from "../lib/use-live-generation";
 import { useScrollPin } from "../lib/use-scroll-pin";
 import { Composer, type ModelChoice } from "./Composer";
-import { ConfirmDialog } from "./Dialogs";
 import { Markdown } from "./Markdown";
 import { Message } from "./Message";
+
+// Only the (rare) malformed state needs a dialog: load it on demand.
+const ConfirmDialog = lazy(() => import("./Dialogs").then((m) => ({ default: m.ConfirmDialog })));
 
 const noopSubscribe = () => () => undefined;
 function useHydrated(): boolean {
@@ -93,6 +96,7 @@ export function ConversationView(props: {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmUsed, setConfirmUsed] = useState(false);
 
   const conversationQuery = useQuery({
     ...queries.conversation(userId, conversationId ?? ""),
@@ -135,11 +139,30 @@ export function ConversationView(props: {
         shell.setDraft(vars.conversationKey, vars.content);
     },
     onSuccess: (result, vars) => {
+      markAccepted(result.generationId, result.conversationId);
       shell.setModel(result.conversationId, [vars.providerId, vars.model]);
       void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
     },
   });
   const pending = usePendingSends(userId, draftKey, conversationId);
+
+  // The requested conversation's transcript is on screen.
+  const visibleId = props.inert ? undefined : conversation?.id;
+  useEffect(() => {
+    if (visibleId)
+      markOnce("chatui:conversation-visible", visibleId, { conversationId: visibleId });
+  }, [visibleId]);
+  // The first streamed assistant output has been painted (next frame).
+  const liveOutputId = live && (live.content || live.reasoning) ? live.generationId : null;
+  useEffect(() => {
+    if (!liveOutputId) return;
+    const frame = requestAnimationFrame(() => {
+      markGeneration("chatui:first-assistant-paint", liveOutputId);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [liveOutputId]);
 
   // Keep the live reply on screen until the stored copy is in the transcript.
   const storedIds = new Set(conversation?.messages.map((m) => m.id));
@@ -238,20 +261,25 @@ export function ConversationView(props: {
           type="button"
           className="danger"
           onClick={() => {
+            setConfirmUsed(true);
             setConfirmDelete(true);
           }}
           disabled={!hydrated}
         >
           Delete conversation
         </button>
-        <ConfirmDialog
-          open={confirmDelete}
-          onOpenChange={setConfirmDelete}
-          title="Delete this conversation?"
-          description="The unreadable file will be permanently deleted."
-          confirmLabel="Delete"
-          onConfirm={() => void deleteMalformed()}
-        />
+        {confirmUsed ? (
+          <Suspense fallback={null}>
+            <ConfirmDialog
+              open={confirmDelete}
+              onOpenChange={setConfirmDelete}
+              title="Delete this conversation?"
+              description="The unreadable file will be permanently deleted."
+              confirmLabel="Delete"
+              onConfirm={() => void deleteMalformed()}
+            />
+          </Suspense>
+        ) : null}
       </main>
     );
   }

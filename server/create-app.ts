@@ -36,6 +36,7 @@ import { isLoopbackAddress } from "./loopback.ts";
 import { buildApiRouter, type AnyApiRoute, type RouteServices } from "./registry.ts";
 import { apiRoutes } from "./routes/index.ts";
 import { createHealthService } from "./services/health.ts";
+import { precompressedAssets } from "./static-compressed.ts";
 
 export const JSON_BODY_LIMIT = "256kb";
 
@@ -320,6 +321,7 @@ export function createApp(options: AppOptions): ChatUiApp {
 
   const assets = express.Router();
   if (options.clientDir) {
+    assets.use(precompressedAssets(path.join(options.clientDir, "assets")));
     assets.use(
       express.static(path.join(options.clientDir, "assets"), {
         immutable: true,
@@ -354,6 +356,7 @@ export function createApp(options: AppOptions): ChatUiApp {
 
   // Every document request resolves the real session before rendering, so no
   // private markup is produced for anonymous, expired or disabled sessions.
+  // (HTML and `.data` route data are marked private, no-store in entry.server.)
   app.use((req, res, next) => {
     auth.resolve(req).then(
       (resolved) => {

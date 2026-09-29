@@ -12,13 +12,22 @@
  *     requests), validated return-to, logout and disabled accounts (Phase 4)
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type ConsoleMessage } from "@playwright/test";
 import { MOCK_MODELS, startMockLlama } from "../tests/support/mock-llama.ts";
+import { check as checkBudget, measure, type Budget } from "./perf-check.ts";
 import {
   apiLogin,
   browserChecks,
@@ -332,6 +341,50 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
       );
     }),
   );
+  // Adversarial sentinel (Phase 9): the owner's private text must never reach
+  // the other user through documents, route data (single fetch) or error
+  // pages, even when both users' requests interleave.
+  const targets = [
+    `/chat/${secret.conversationId}`,
+    `/chat/${secret.conversationId}.data`,
+    "/no/such/page",
+    "/chat/new",
+  ];
+  const interleaved = await Promise.all(
+    Array.from({ length: 32 }, (_, i) => {
+      const who = i % 2 === 0 ? admin : bob;
+      const url = targets[Math.floor(i / 2) % targets.length] ?? "/chat/new";
+      return fetch(`${base}${url}`, { headers: sessionHeaders(who), redirect: "manual" }).then(
+        async (r) => ({
+          who,
+          url,
+          body: await r.text(),
+          headers: JSON.stringify(Object.fromEntries(r.headers)),
+          cache: r.headers.get("cache-control") ?? "",
+        }),
+      );
+    }),
+  );
+  const leaks = interleaved.filter(
+    (r) =>
+      r.who === bob &&
+      (r.body.includes("admin-only secret") || r.headers.includes("admin-only secret")),
+  );
+  check(
+    "INV-55: interleaved A/B documents, route data and error pages never leak A's sentinel to B",
+    leaks.length === 0 &&
+      interleaved.some(
+        (r) => r.who === admin && r.url.endsWith(".data") && r.body.includes("admin-only secret"),
+      ),
+    leaks.map((l) => l.url).join(", "),
+  );
+  check(
+    "INV-55: private route data (.data) and documents are never cacheable",
+    interleaved
+      .filter((r) => r.url.startsWith("/chat/"))
+      .every((r) => r.cache.includes("no-store") && r.cache.includes("private")),
+    [...new Set(interleaved.map((r) => `${r.url} ${r.cache}`))].join(" | "),
+  );
   const returnTo = await fetch(`${base}/login?returnTo=%2F%2Fevil.example%2F`, {
     headers: sessionHeaders(bob),
     redirect: "manual",
@@ -361,6 +414,44 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
   check("a disabled account's session is rejected", disabled.status === 401);
 }
 
+/** Bundle budget (contracts §9.5): the real budget passes, a lowered one fails. */
+function budgetChecks(): void {
+  const sizes = measure();
+  const budget = JSON.parse(
+    readFileSync(path.join(ROOT, "performance-budget.json"), "utf8"),
+  ) as Budget;
+  const real = checkBudget(sizes, budget);
+  check(
+    "perf:check: the production build is within performance-budget.json",
+    real.ok,
+    real.lines.join(" | "),
+  );
+  const lowered: Budget = {
+    ...budget,
+    budgets: Object.fromEntries(
+      Object.entries(budget.budgets).map(([k, v]) => [k, Math.floor(v * 0.5)]),
+    ),
+  };
+  check("perf:check: an intentionally lowered budget fails", !checkBudget(sizes, lowered).ok);
+  const assets = readdirSync(path.join(ROOT, "build/client/assets")).filter((f) =>
+    /\.(js|css)$/.test(f),
+  );
+  check(
+    "every JS/CSS asset name is content-hashed (a content change changes its URL)",
+    assets.length > 0 && assets.every((f) => /-[\w-]{8,}\.(js|css)$/.test(f)),
+    assets.filter((f) => !/-[\w-]{8,}\.(js|css)$/.test(f)).join(", "),
+  );
+  check(
+    "every compressible asset has Brotli and gzip variants",
+    assets.every(
+      (f) =>
+        statSync(path.join(ROOT, "build/client/assets", f)).size < 1024 ||
+        (existsSync(path.join(ROOT, "build/client/assets", `${f}.br`)) &&
+          existsSync(path.join(ROOT, "build/client/assets", `${f}.gz`))),
+    ),
+  );
+}
+
 async function main(): Promise<void> {
   if (
     !existsSync(path.join(ROOT, "build/server/index.js")) ||
@@ -370,6 +461,7 @@ async function main(): Promise<void> {
       "Production build missing: run `npm run build` first (npm run verify does this).",
     );
   }
+  budgetChecks();
   const dataDir = mkdtempSync(path.join(tmpdir(), "chatui-verify-"));
   const created = await createUser(dataDir, "admin", true);
   const noArgv = await new Promise<number | null>((resolve) => {

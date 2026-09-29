@@ -1,0 +1,11 @@
+{
+  "compression": "gzip-9",
+  "tolerance": 0.1,
+  "budgets": {
+    "critical-chat-js": 183637,
+    "new-chat-js": 183219,
+    "login-js": 115534,
+    "critical-css": 2197,
+    "all-client-js": 222462
+  }
+}

@@ -2,7 +2,7 @@ import { Check, Copy } from "lucide-react";
 import { memo, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
-import remarkGfm from "remark-gfm";
+import { remarkGfmParse } from "../lib/remark-gfm-parse";
 
 /**
  * Safe Markdown (INV-22): raw HTML is dropped (never executed), output is
@@ -64,7 +64,7 @@ function MarkdownImpl({ text }: { text: string }) {
     <div className="markdown">
       <ReactMarkdown
         skipHtml
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfmParse]}
         rehypePlugins={[rehypeSanitize]}
         urlTransform={safeUrl}
         components={{

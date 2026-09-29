@@ -10,11 +10,8 @@ import {
 } from "react-router";
 import type { Route } from "./+types/root";
 import { appContext } from "./context";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { useState as useClientState } from "react";
 import { setSession } from "./lib/api";
-import { createQueryClient } from "./lib/query";
-import { useAccountBoundary } from "./lib/use-account-boundary";
+import { markDocumentStart, markOnce, perfSummary } from "./lib/perf";
 import stylesheet from "./app.css?url";
 
 export const links: LinksFunction = () => [
@@ -50,28 +47,27 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 }
 
-/** Marks the document once React has hydrated; used by `verify` and tests. */
+/** Marks the document once React has hydrated; used by `verify`, tests and perf marks. */
 function useHydrationMarker() {
   useEffect(() => {
     document.documentElement.dataset.hydrated = "true";
+    markDocumentStart();
+    markOnce("chatui:hydration-complete");
+    // Development diagnostic: `chatuiPerf()` in the console lists marks and measures.
+    if (import.meta.env.DEV)
+      (window as unknown as { chatuiPerf?: typeof perfSummary }).chatuiPerf = perfSummary;
   }, []);
 }
 
 export default function App({ loaderData }: Route.ComponentProps) {
   useHydrationMarker();
-  // One browser QueryClient per page load (the server uses one per request).
-  const [queryClient] = useClientState(createQueryClient);
   // Client-only: the shared fetch wrapper learns the session after hydration.
   useEffect(() => {
     setSession(loaderData.session);
   }, [loaderData.session]);
-  // Account boundary: a changed account purges the previous user's cache.
-  useAccountBoundary(queryClient);
-  return (
-    <QueryClientProvider client={queryClient}>
-      <Outlet />
-    </QueryClientProvider>
-  );
+  // TanStack Query lives in the chat shell (routes/app-layout): public and
+  // sign-in pages don't download it.
+  return <Outlet />;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

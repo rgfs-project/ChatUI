@@ -11,6 +11,7 @@ import type {
   StartGenerationResponse,
 } from "@shared/generations";
 import { refreshSession } from "./api";
+import { markGeneration } from "./perf";
 import { queryKeys } from "./query";
 
 export interface LiveGeneration {
@@ -49,9 +50,14 @@ export function useLiveGeneration(options: {
       });
       void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
     };
+    const id = observedId;
+    source.addEventListener("open", () => {
+      markGeneration("chatui:stream-open", id);
+    });
     const onFullState = (event: MessageEvent<string>) => {
       const s = JSON.parse(event.data) as GenerationSnapshot;
       if (s.generationId !== observedId) return;
+      if (s.content || s.reasoning) markGeneration("chatui:first-assistant-event", id);
       setLive({
         generationId: s.generationId,
         assistantMessageId: s.assistantMessageId,
@@ -73,6 +79,7 @@ export function useLiveGeneration(options: {
     });
     source.addEventListener("delta", (event: MessageEvent<string>) => {
       const delta = JSON.parse(event.data) as { content?: string; reasoning?: string };
+      if (delta.content || delta.reasoning) markGeneration("chatui:first-assistant-event", id);
       setLive((v) =>
         v?.generationId === observedId
           ? {
@@ -85,6 +92,7 @@ export function useLiveGeneration(options: {
     });
     source.addEventListener("terminal", (event: MessageEvent<string>) => {
       const t = JSON.parse(event.data) as { state: TerminalState; error: GenerationError | null };
+      markGeneration("chatui:generation-complete", id);
       setLive((v) =>
         v?.generationId === observedId ? { ...v, state: t.state, error: t.error } : v,
       );

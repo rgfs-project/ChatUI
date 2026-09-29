@@ -1,7 +1,8 @@
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { RefreshCw, Send, Square } from "lucide-react";
-import { useState, type RefObject } from "react";
+import { useEffect, useState, type RefObject } from "react";
 import type { ModelListDto } from "@shared/generations";
+import { markOnce } from "../lib/perf";
 import { fetchers, queryKeys } from "../lib/query";
 import { useShell } from "../lib/shell-context";
 
@@ -86,6 +87,12 @@ export function Composer({
   const selectedValue =
     selected ?? (preferred ? pairKey([preferred.providerId, preferred.id]) : "");
   const canSend = hydrated && state.kind === "ready" && !running && !sending && !inert;
+
+  // Send controls are usable (hydrated, a server-known model): ComposerTTI ends.
+  const interactive = hydrated && state.kind === "ready" && !inert;
+  useEffect(() => {
+    if (interactive) markOnce("chatui:composer-interactive");
+  }, [interactive]);
 
   function refreshModels() {
     setRefreshing(true);

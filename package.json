@@ -19,6 +19,8 @@
     "ipaddr.js": "2.5.0",
     "isbot": "5.2.2",
     "lucide-react": "1.48.0",
+    "mdast-util-gfm": "3.1.0",
+    "micromark-extension-gfm": "3.0.0",
     "pino": "10.3.1",
     "pino-http": "11.0.0",
     "react": "19.3.0",
@@ -27,7 +29,6 @@
     "react-markdown": "10.1.0",
     "react-router": "8.4.0",
     "rehype-sanitize": "6.0.0",
-    "remark-gfm": "4.0.1",
     "undici": "8.11.2",
     "yaml": "2.9.1",
     "zod": "4.6.5"
@@ -50,6 +51,7 @@
     "globals": "17.12.0",
     "jsdom": "30.1.1",
     "prettier": "3.9.9",
+    "remark-parse": "11.0.0",
     "supertest": "7.3.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0",
@@ -60,7 +62,7 @@
     "dev": "node scripts/dev.ts",
     "dev:server": "node --conditions=development --watch-path=server --watch-path=shared server/main.ts",
     "dev:client": "react-router typegen --watch",
-    "build": "react-router build",
+    "build": "react-router build && node scripts/compress-assets.ts",
     "preview": "npm run build && npm start",
     "start": "NODE_ENV=production node server/main.ts",
     "test": "vitest run",
@@ -73,6 +75,8 @@
     "verify:compose": "node scripts/verify-compose.ts",
     "index:rebuild": "node server/cli.ts index:rebuild",
     "user:create": "node server/cli.ts user:create",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "perf:check": "node scripts/perf-check.ts",
+    "perf:trace": "npm run build && node scripts/perf-trace.ts"
   }
 }

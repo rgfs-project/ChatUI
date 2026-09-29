@@ -1,13 +1,18 @@
-import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { AlertTriangle, MoreHorizontal, Plus } from "lucide-react";
+import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import type { ConversationSummary } from "@shared/conversations";
 import { paths } from "../lib/paths";
+import { endIntent, prefetchIntent } from "../lib/prefetch";
 import { apiJson, queries, queryKeys } from "../lib/query";
 import { count } from "../lib/render-counters";
-import { ConfirmDialog, RenameDialog } from "./Dialogs";
+
+// Interaction-only UI loads on demand (Phase 9): never in the critical bundle.
+const ConversationMenu = lazy(() => import("./ConversationMenu"));
+const loadDialogs = () => import("./Dialogs");
+const RenameDialog = lazy(() => loadDialogs().then((m) => ({ default: m.RenameDialog })));
+const ConfirmDialog = lazy(() => loadDialogs().then((m) => ({ default: m.ConfirmDialog })));
 
 function SidebarImpl({ userId, hidden }: { userId: string; hidden: boolean }) {
   count("sidebarRenders");
@@ -22,6 +27,10 @@ function SidebarImpl({ userId, hidden }: { userId: string; hidden: boolean }) {
   const conversations = list.data ?? [];
   const [renaming, setRenaming] = useState<ConversationSummary | null>(null);
   const [deleting, setDeleting] = useState<ConversationSummary | null>(null);
+  // Dialogs mount on first use, then stay mounted (Radix restores focus on close).
+  const [dialogsUsed, setDialogsUsed] = useState(false);
+  // A trigger activated before the menu chunk arrived opens once it has.
+  const [openRequest, setOpenRequest] = useState<string | null>(null);
   // The menu trigger that opened a dialog: focus returns there (INV-47).
   const menuTrigger = useRef<HTMLElement | null>(null);
   const returnFocus = () => menuTrigger.current;
@@ -76,78 +85,90 @@ function SidebarImpl({ userId, hidden }: { userId: string; hidden: boolean }) {
             <Link
               to={paths.chat(item.id)}
               aria-current={item.id === conversationId ? "page" : undefined}
+              // Route chunk on intent; the data through the shared query cache.
+              prefetch="intent"
+              onPointerEnter={(event) => {
+                if (event.pointerType === "mouse") prefetchIntent(client, userId, item.id);
+              }}
+              onPointerLeave={endIntent}
+              onFocus={() => {
+                prefetchIntent(client, userId, item.id, 0);
+              }}
+              onBlur={endIntent}
             >
               {item.malformed ? <AlertTriangle size={14} aria-label="Unreadable" /> : null}
               <span className="conversation-title">
                 {item.malformed ? `${item.title} (unreadable)` : item.title}
               </span>
             </Link>
-            <Menu.Root>
-              <Menu.Trigger asChild>
+            <Suspense
+              fallback={
                 <button
                   type="button"
                   className="icon-button"
                   aria-label={`Actions for ${item.title}`}
                   title="Actions"
-                  onFocus={(event) => {
-                    menuTrigger.current = event.currentTarget;
+                  onClick={() => {
+                    setOpenRequest(item.id);
                   }}
                 >
                   <MoreHorizontal size={16} aria-hidden />
                 </button>
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Content className="menu-content" align="end" sideOffset={4}>
-                  {item.malformed ? null : (
-                    <Menu.Item
-                      className="menu-item"
-                      onSelect={() => {
-                        setRenaming(item);
-                      }}
-                    >
-                      <Pencil size={14} aria-hidden /> Rename
-                    </Menu.Item>
-                  )}
-                  <Menu.Item
-                    className="menu-item danger"
-                    onSelect={() => {
-                      setDeleting(item);
-                    }}
-                  >
-                    <Trash2 size={14} aria-hidden /> Delete
-                  </Menu.Item>
-                </Menu.Content>
-              </Menu.Portal>
-            </Menu.Root>
+              }
+            >
+              <ConversationMenu
+                item={item}
+                defaultOpen={openRequest === item.id}
+                onTriggerFocus={(element) => {
+                  menuTrigger.current = element;
+                }}
+                onOpen={() => {
+                  // Intent: fetch the dialog chunk before it is needed.
+                  void loadDialogs();
+                }}
+                onRename={() => {
+                  setDialogsUsed(true);
+                  setRenaming(item);
+                }}
+                onDelete={() => {
+                  setDialogsUsed(true);
+                  setDeleting(item);
+                }}
+              />
+            </Suspense>
           </li>
         ))}
       </ul>
-      {/* Keyed so the field starts from the chosen conversation's title. */}
-      <RenameDialog
-        key={renaming?.id ?? "none"}
-        open={renaming !== null}
-        onOpenChange={(open) => {
-          if (!open) setRenaming(null);
-        }}
-        initial={renaming?.title ?? ""}
-        returnFocus={returnFocus}
-        onRename={(title) => {
-          if (renaming) rename.mutate({ id: renaming.id, title });
-        }}
-      />
-      <ConfirmDialog
-        open={deleting !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleting(null);
-        }}
-        title="Delete conversation?"
-        description={`"${deleting?.title ?? ""}" will be permanently deleted. This cannot be undone.`}
-        confirmLabel="Delete"
-        returnFocus={returnFocus}
-        onConfirm={() => {
-          if (deleting) remove.mutate(deleting.id);
-        }}
-      />
+      {dialogsUsed ? (
+        <Suspense fallback={null}>
+          {/* Keyed so the field starts from the chosen conversation's title. */}
+          <RenameDialog
+            key={renaming?.id ?? "none"}
+            open={renaming !== null}
+            onOpenChange={(open) => {
+              if (!open) setRenaming(null);
+            }}
+            initial={renaming?.title ?? ""}
+            returnFocus={returnFocus}
+            onRename={(title) => {
+              if (renaming) rename.mutate({ id: renaming.id, title });
+            }}
+          />
+          <ConfirmDialog
+            open={deleting !== null}
+            onOpenChange={(open) => {
+              if (!open) setDeleting(null);
+            }}
+            title="Delete conversation?"
+            description={`"${deleting?.title ?? ""}" will be permanently deleted. This cannot be undone.`}
+            confirmLabel="Delete"
+            returnFocus={returnFocus}
+            onConfirm={() => {
+              if (deleting) remove.mutate(deleting.id);
+            }}
+          />
+        </Suspense>
+      ) : null}
     </nav>
   );
 }
