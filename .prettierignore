@@ -1,0 +1,7 @@
+build/
+.react-router/
+node_modules/
+data/
+test-results/
+playwright-report/
+package-lock.json

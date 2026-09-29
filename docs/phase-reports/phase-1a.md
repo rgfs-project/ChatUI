@@ -1,0 +1,62 @@
+## Phase 1a report
+
+- **Scope completed (files/features):**
+  - React 19 + React Router 8.4 Framework Mode with runtime SSR (`ssr: true`) and hydration from the first commit: `react-router.config.ts`, `vite.config.ts`, `app/root.tsx`, `app/routes.ts`, `app/routes/home.tsx`, `app/entry.server.tsx` (nonce-aware streaming), `app/entry.client.tsx`, `app/context.ts` (per-request router context).
+  - One Express 5 process: `server/main.ts` (process entry; production loads the Vite SSR bundle, development embeds Vite), `server/app.ts` (SSR bundle entry), `server/create-app.ts` (ordered `/assets` → `/api` → static → documents boundary).
+  - Validated config (`server/config.ts`, `.env.example`), structured logging with redaction (`server/logger.ts`), per-response nonce CSP (`server/csp.ts`), canonical error contract (`shared/errors.ts`, `server/errors.ts`), strict request validation (`server/validation.ts`), declarative API route registry with DTO-parsed responses (`server/registry.ts`, `server/routes/`), and the internal health service shared by API and SSR loader (`server/services/health.ts`).
+  - `GET /api/health` → `{ status: "ok", version }`; public SSR status page `/`.
+  - Tooling: all required scripts, strict TS, ESLint 10 flat config (type-aware, plus the route-inventory bypass rule), Prettier 3, Vitest + Supertest, and the Playwright-based `verify`.
+  - `README.md`, `ARCHITECTURE.md` (with the full INV-01…INV-62 register), `.gitignore` (`data/*` except `.gitkeep`).
+- **Acceptance criteria with test evidence:**
+  - `npm ci` from a clean checkout succeeds and every script works (clean-copy run: format:check, lint, typecheck, test, verify all pass).
+  - Useful server HTML without JS: `verify` inspects raw HTML (heading, server-rendered health result, not an empty shell) and loads the page in a JS-disabled browser.
+  - Hydration without warnings under the production CSP: `verify` runs a Chromium hydration check on the production build and, because React's production build suppresses attribute mismatch reports, on the development build too. Zero console errors or warnings, zero CSP violations.
+  - The API returns health JSON independently: `tests/server/registry.test.ts`, `verify`.
+  - `/api/unknown` and missing assets get non-HTML 404s, and unknown documents get a framework-rendered HTML 404: `tests/server/boundary.test.ts`, `tests/server/errors.test.ts`, `verify`.
+  - Error mapping, unknown-field rejection, health shape, 404 shape, oversized body → `PAYLOAD_TOO_LARGE`, malformed JSON → `VALIDATION`, DTO leak → `INTERNAL`: `tests/server/errors.test.ts`.
+  - `npm audit`: 0 vulnerabilities.
+  - No secrets committed (tracked files scanned).
+- **Quality gates:**
+  - `npm run format:check`: PASS
+  - `npm run lint`: PASS
+  - `npm run typecheck`: PASS
+  - `npm test`: PASS (6 files, 38 tests)
+  - `npm run build`: PASS
+  - `npm run verify`: PASS (31/31 checks)
+  - `test:e2e`, `perf:check`, `verify:compose`: not applicable in Phase 1a (introduced in Phases 6, 9 and 1b).
+- **Invariants (ID → enforcement → test):**
+  - INV-01 → `server/errors.ts` → `tests/server/errors.test.ts`
+  - INV-02 → `server/validation.ts` → `tests/server/errors.test.ts`
+  - INV-03 → `server/registry.ts` DTO parse → `tests/server/errors.test.ts`, `tests/server/registry.test.ts`
+  - INV-54 (1a portion) → SSR loader + streaming entry → `scripts/verify.ts`
+  - INV-56 (1a portion) → `useHydrated`, `<Links nonce="">` → `scripts/verify.ts`
+  - INV-57 (1a portion) → `server/create-app.ts` ordering, `server/csp.ts` → `tests/server/boundary.test.ts`, `tests/server/csp.test.ts`, `scripts/verify.ts`
+  - INV-49 is pending Phase 1b.
+- **Security, SSR, data and performance observations:**
+  - CSP has no `unsafe-inline`/`unsafe-eval`. Each response gets a fresh nonce that reaches every `<script>` and modulepreload. `frame-ancestors 'none'`, `base-uri 'none'`, `object-src 'none'`.
+  - Found and fixed a latent hydration mismatch: React Router's `<Links>` inherits the server nonce, but browsers hide nonce values from the DOM. Only React's development build reports this, so `verify` now checks both builds.
+  - Development requires `--conditions=development`, so Node-loaded `@react-router/express` and Vite-loaded modules share one React Router instance.
+  - The listener binds to `127.0.0.1`. `DATA_DIR` is validated but never written (verified by `verify`).
+  - Critical client JS is about 113 kB gzip (React + React Router runtime). Zod is kept out of the client bundle. Formal budgets arrive in Phase 9.
+- **Dependencies and why approved** (project owner instruction: latest versions):
+  - react / react-dom 19.3: UI runtime.
+  - react-router, @react-router/node, @react-router/express, @react-router/dev 8.4: Framework Mode SSR, Express adapter and build.
+  - express 5.2: the single HTTP server.
+  - zod 4.6: strict request/response schemas.
+  - pino 10 / pino-http 11: structured logging with redaction.
+  - helmet 8.3: standard security headers (our CSP directives).
+  - isbot 5: bot detection for the streaming mode in the standard SSR entry.
+  - vite 8.3: bundler.
+  - typescript 6.0: type checking.
+  - eslint 10 + @eslint/js + typescript-eslint + eslint-plugin-react-hooks + eslint-config-prettier + globals: linting.
+  - prettier 3.9: formatting.
+  - vitest 5 / supertest 7: tests.
+  - @playwright/test 1.63: browser hydration checks in `verify`.
+  - @types/*: typings.
+- **Deviations / limitations / unverified items:**
+  - React Router 8.4 instead of the specified 7.x, Node 24 LTS instead of 22.x, and TypeScript 6.0 (TS 7 isn't supported by typescript-eslint). Rationale is in `ARCHITECTURE.md`.
+  - `dev:client` is route type generation in watch mode. A client-only dev server isn't meaningful for an SSR app whose loaders need Express-provided context.
+  - The `npm start` script uses POSIX env syntax. The supported production path is Compose (Phase 1b).
+  - Workflow: the project owner authorized autonomous execution, commit to `main` and push to GitHub, replacing the spec's plan-approval pause and local-only rule.
+- **Local commit/tag status:** commit `feat(phase-1a): SSR application foundation, health endpoint, verification toolchain` and tag `phase-1a`, pushed to `origin/main` per the project owner's instruction.
+- **Questions needing approval:** none.

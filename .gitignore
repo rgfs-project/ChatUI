@@ -1,0 +1,13 @@
+node_modules/
+build/
+.react-router/
+test-results/
+playwright-report/
+coverage/
+.env
+.env.*
+!.env.example
+data/*
+!data/.gitkeep
+*.log
+.DS_Store
