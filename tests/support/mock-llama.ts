@@ -24,6 +24,8 @@ export const MOCK_MODELS = {
 export const UPSTREAM_SECRET = "UPSTREAM-SECRET-DETAIL-7f3a";
 
 export interface MockLlamaOptions {
+  /** Simulate a server without /tokenize (forces the byte estimate). */
+  noTokenize?: boolean;
   /** Interface to listen on (default 127.0.0.1); verify:compose uses 0.0.0.0. */
   host?: string;
   apiKey?: string;
@@ -165,6 +167,26 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
             ? { role: "router" }
             : { total_slots: options.slots, default_generation_settings: { n_ctx: 32_768 } },
         );
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/tokenize") {
+        if (options.noTokenize) {
+          json(res, 404, { error: { message: "Not Found", type: "not_found_error", code: 404 } });
+          return;
+        }
+        // Deterministic stand-in tokenizer: one token per 3 UTF-8 bytes (rounded up).
+        const raw = (body as { content?: unknown } | undefined)?.content;
+        const content = typeof raw === "string" ? raw : "";
+        const count = Math.ceil(Buffer.byteLength(content) / 3);
+        json(res, 200, { tokens: Array.from({ length: count }, (_, i) => i) });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/apply-template") {
+        const messages =
+          (body as { messages?: { role: string; content: string }[] } | undefined)?.messages ?? [];
+        const prompt =
+          messages.map((m) => `<|${m.role}|>\n${m.content}<|end|>\n`).join("") + "<|assistant|>\n";
+        json(res, 200, { prompt });
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/chat/completions") {

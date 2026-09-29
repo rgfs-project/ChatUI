@@ -35,6 +35,12 @@ describe("configuration", () => {
         maxActiveGenerations: undefined,
         maxResponseBytes: 16 * 1024 * 1024,
       },
+      storage: {
+        localUserId: "5f0c6a3e-9d0b-4c1e-8f2a-3b6d7e8f9a01",
+        operationRetentionMs: 7 * 86_400_000,
+        contextTrimStep: undefined,
+        templateOverheadTokens: 16,
+      },
     });
   });
 
@@ -124,6 +130,12 @@ describe("configuration", () => {
         message: expect.stringContaining("sk-very-secret") as string,
       }) as Error,
     );
+  });
+
+  it("rejects a LOCAL_USER_ID that is not a canonical lowercase UUID", () => {
+    for (const value of ["not-a-uuid", "5F0C6A3E-9D0B-4C1E-8F2A-3B6D7E8F9A01", "../etc"]) {
+      expect(() => loadConfig({ DATA_DIR: root, LOCAL_USER_ID: value })).toThrow(/LOCAL_USER_ID/);
+    }
   });
 
   it("treats empty values as unset", () => {

@@ -48,6 +48,18 @@ const envSchema = z.object({
   MAX_OUTPUT_TOKENS: intFrom(1, 1_000_000).default(4_096),
   MAX_ACTIVE_GENERATIONS: intFrom(1, 1_000).optional(),
   PROVIDER_MAX_RESPONSE_BYTES: intFrom(1_024, 1_073_741_824).default(16 * 1024 * 1024),
+
+  // Persistence (Phase 3).
+  LOCAL_USER_ID: z
+    .string()
+    .regex(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      "must be a canonical lowercase UUID",
+    )
+    .default("5f0c6a3e-9d0b-4c1e-8f2a-3b6d7e8f9a01"),
+  OPERATION_RETENTION_MS: intFrom(2 * 86_400_000, 365 * 86_400_000).default(7 * 86_400_000),
+  CONTEXT_TRIM_STEP: intFrom(1, 10_000_000).optional(),
+  TEMPLATE_OVERHEAD_TOKENS: intFrom(0, 10_000).default(16),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -66,6 +78,21 @@ export interface Config {
    */
   inContainer: boolean;
   provider: ProviderConfig;
+  storage: StorageConfig;
+}
+
+export interface StorageConfig {
+  /**
+   * Temporary identity until Phase 4 (INV-14): the only source of the user
+   * directory segment. Never taken from a request.
+   */
+  localUserId: string;
+  /** Committed operation records are kept this long (contracts §4.1). */
+  operationRetentionMs: number;
+  /** Anchor step for prefix-stable truncation; undefined = 25% of the budget. */
+  contextTrimStep: number | undefined;
+  /** Per-message template overhead used by the pessimistic token estimate. */
+  templateOverheadTokens: number;
 }
 
 export interface ProviderConfig {
@@ -147,6 +174,12 @@ export function loadConfig(
       maxOutputTokens: parsed.data.MAX_OUTPUT_TOKENS,
       maxActiveGenerations: parsed.data.MAX_ACTIVE_GENERATIONS,
       maxResponseBytes: parsed.data.PROVIDER_MAX_RESPONSE_BYTES,
+    },
+    storage: {
+      localUserId: parsed.data.LOCAL_USER_ID,
+      operationRetentionMs: parsed.data.OPERATION_RETENTION_MS,
+      contextTrimStep: parsed.data.CONTEXT_TRIM_STEP,
+      templateOverheadTokens: parsed.data.TEMPLATE_OVERHEAD_TOKENS,
     },
   };
 }

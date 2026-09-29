@@ -1,0 +1,85 @@
+// Central path construction (contracts §1, INV-12). Loadable natively by Node.
+// Accepts only validated values: canonical lowercase UUIDs, known file names
+// and server-computed lowercase SHA-256 hex digests. Every resolved path is
+// asserted to stay inside DATA_DIR before it is returned.
+import path from "node:path";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
+
+export class PathError extends Error {
+  override name = "PathError";
+}
+
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+export function isSha256Hex(value: string): boolean {
+  return SHA256_RE.test(value);
+}
+
+export const SYSTEM_DIR = "_system";
+
+export class DataPaths {
+  readonly root: string;
+
+  constructor(dataDir: string) {
+    this.root = path.resolve(dataDir);
+  }
+
+  private inside(...segments: string[]): string {
+    const resolved = path.resolve(this.root, ...segments);
+    if (resolved !== this.root && !resolved.startsWith(this.root + path.sep)) {
+      throw new PathError("path escapes DATA_DIR");
+    }
+    return resolved;
+  }
+
+  private uuid(value: string, what: string): string {
+    if (!isUuid(value)) throw new PathError(`${what} must be a canonical lowercase UUID`);
+    return value;
+  }
+
+  userDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"));
+  }
+
+  chatsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "chats");
+  }
+
+  chatFile(userId: string, conversationId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "chats",
+      `${this.uuid(conversationId, "conversation id")}.md`,
+    );
+  }
+
+  indexDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "index");
+  }
+
+  indexFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "index", "chats.json");
+  }
+
+  /** Present while a canonical mutation may not yet be reflected in the index. */
+  indexDirtyFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "index", "chats.dirty");
+  }
+
+  operationsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "operations");
+  }
+
+  operationFile(userId: string, digest: string): string {
+    if (!isSha256Hex(digest)) throw new PathError("operation digest must be lowercase SHA-256 hex");
+    return this.inside(this.uuid(userId, "user id"), "operations", `${digest}.json`);
+  }
+
+  systemDir(): string {
+    return this.inside(SYSTEM_DIR);
+  }
+}

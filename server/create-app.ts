@@ -8,6 +8,14 @@ import { GenerationManager } from "./generations/manager.ts";
 import { DEFAULT_SSE_OPTIONS, type SseOptions } from "./generations/sse.ts";
 import { createLlamaCppProvider } from "./providers/llamacpp.ts";
 import type { Provider } from "./providers/types.ts";
+import { SendService, type SendServiceOptions } from "./chat/send-service.ts";
+import { ChatIndex } from "./storage/chat-index.ts";
+import { ConversationStore } from "./storage/conversations.ts";
+import { KeyedLocks } from "./storage/locks.ts";
+import { OperationStore } from "./storage/operations.ts";
+import { DataPaths } from "./storage/paths.ts";
+import { recoverStorage, resolveOperations, type RecoveryReport } from "./storage/recovery.ts";
+import { toConversationDto } from "./routes/conversations.ts";
 import { securityHeaders, type CspMode } from "./csp.ts";
 import { AppError, apiErrorHandler, apiNotFound, sendError } from "./errors.ts";
 import type { Logger } from "./logger.ts";
@@ -25,7 +33,7 @@ export interface DocumentRequestValues {
 }
 
 export interface AppOptions {
-  config: Pick<Config, "nodeEnv" | "inContainer" | "provider">;
+  config: Pick<Config, "nodeEnv" | "inContainer" | "provider" | "storage" | "dataDir">;
   logger: Logger;
   version: string;
   /** Builds the React Router document handler; receives per-request values. */
@@ -42,13 +50,21 @@ export interface AppOptions {
   sse?: Partial<SseOptions>;
   /** Generation retention tuning (tests only). */
   generationRetention?: { retentionMs?: number; maxRetained?: number };
+  /** Send-acceptance crash-simulation hooks and token counting (tests only). */
+  send?: Pick<SendServiceOptions, "hooks" | "counterFor">;
+  /** Clock (tests only). */
+  now?: () => Date;
+  /** Process start, for temp-file cleanup (defaults to now). */
+  startedAt?: Date;
 }
 
 export interface ChatUiApp {
   handler: Express;
   services: RouteServices;
-  /** Stops generations and closes SSE observers so the HTTP server can close. */
-  shutdown: () => void;
+  /** Startup recovery (contracts §2); requests must not be served before it resolves. */
+  ready: Promise<RecoveryReport | null>;
+  /** Ends generations (persisting their outcomes) and closes SSE observers. */
+  shutdown: () => Promise<void>;
 }
 
 /**
@@ -58,20 +74,27 @@ export interface ChatUiApp {
  */
 export function createApp(options: AppOptions): ChatUiApp {
   const { logger } = options;
+  const now = options.now ?? (() => new Date());
   const providerConfig = options.config.provider;
+  const storageConfig = options.config.storage;
+  const chatDemoEnabled = !options.config.inContainer;
   const provider = options.provider ?? createLlamaCppProvider(providerConfig);
   const models = new ModelCatalog(provider, providerConfig.defaultContextTokens);
   const generations = new GenerationManager({
     provider,
-    catalog: models,
     logger,
     maxOutputTokens: providerConfig.maxOutputTokens,
     generationMaxMs: providerConfig.generationMaxMs,
     // Until discovery reports the provider's parallel slots, admit one (contracts §4).
     maxActiveGenerations: providerConfig.maxActiveGenerations ?? 1,
+    now,
     ...options.generationRetention,
   });
-  if (providerConfig.maxActiveGenerations === undefined && providerConfig.baseUrl) {
+  if (
+    providerConfig.maxActiveGenerations === undefined &&
+    providerConfig.baseUrl &&
+    chatDemoEnabled
+  ) {
     provider.discoverSlots().then(
       (slots) => {
         if (slots !== undefined) generations.setMaxActiveGenerations(slots);
@@ -85,13 +108,67 @@ export function createApp(options: AppOptions): ChatUiApp {
       },
     );
   }
+
+  const paths = new DataPaths(options.config.dataDir);
+  const locks = new KeyedLocks();
+  const index = new ChatIndex(paths, logger);
+  const conversations = new ConversationStore({ paths, locks, index, now });
+  const operations = new OperationStore(paths);
+  const send = new SendService({
+    store: conversations,
+    operations,
+    catalog: models,
+    generations,
+    provider,
+    logger,
+    maxOutputTokens: providerConfig.maxOutputTokens,
+    operationRetentionMs: storageConfig.operationRetentionMs,
+    contextTrimStep: storageConfig.contextTrimStep,
+    templateOverheadTokens: storageConfig.templateOverheadTokens,
+    now,
+    ...options.send,
+  });
+  // The container (pre-auth) writes nothing: storage exists only with the demo.
+  const ready: Promise<RecoveryReport | null> = chatDemoEnabled
+    ? recoverStorage({
+        paths,
+        operations,
+        index,
+        logger,
+        localUserId: storageConfig.localUserId,
+        retentionMs: storageConfig.operationRetentionMs,
+        startedAt: options.startedAt ?? now(),
+        now: now(),
+      })
+    : Promise.resolve(null);
+  // Committed operation records expire after OPERATION_RETENTION_MS.
+  const retentionTimer = setInterval(() => {
+    void resolveOperations(
+      paths,
+      operations,
+      storageConfig.localUserId,
+      logger,
+      storageConfig.operationRetentionMs,
+      now(),
+    ).catch((error: unknown) => {
+      logger.warn({ err: error }, "operation retention sweep failed");
+    });
+  }, 3_600_000);
+  retentionTimer.unref();
+
   const services: RouteServices = {
+    conversationDto: async (id) =>
+      toConversationDto(await conversations.get(storageConfig.localUserId, id), services),
     health: createHealthService(options.version),
     models,
     generations,
+    conversations,
+    operations,
+    send,
+    userId: storageConfig.localUserId,
     sse: { ...DEFAULT_SSE_OPTIONS, ...options.sse },
     logger,
-    chatDemoEnabled: !options.config.inContainer,
+    chatDemoEnabled,
   };
   const cspMode: CspMode = options.config.nodeEnv === "development" ? "development" : "production";
 
@@ -186,8 +263,10 @@ export function createApp(options: AppOptions): ChatUiApp {
   return {
     handler: app,
     services,
-    shutdown: () => {
-      generations.shutdown();
+    ready,
+    shutdown: async () => {
+      clearInterval(retentionTimer);
+      await generations.shutdown();
     },
   };
 }

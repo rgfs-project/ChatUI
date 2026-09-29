@@ -5,11 +5,13 @@
  * pretending to succeed.
  */
 import { ConfigError, loadConfig } from "./config.ts";
+import { ChatIndex } from "./storage/chat-index.ts";
+import { DataPaths } from "./storage/paths.ts";
+import { userIds } from "./storage/recovery.ts";
 
 const PLANNED: Readonly<Record<string, string>> = {
   "user:create": "Phase 4 (initial admin creation via stdin)",
   "user:reset-password": "Phase 4",
-  "index:rebuild": "Phase 3",
   backup: "Phase 16",
   restore: "Phase 16",
 };
@@ -19,6 +21,8 @@ const USAGE = `Usage: node server/cli.ts <command>
 Commands:
   serve         Start the HTTP server (default container command)
   healthcheck     Exit 0 if GET /api/health on this container answers {"status":"ok"}
+  index:rebuild   Rebuild every derived conversation index from the canonical
+                  Markdown in DATA_DIR (stop the server first: single process)
   provider:check  Check that LLAMA_BASE_URL is reachable from here (DNS, routing,
                   credentials) and list how many models it reports
 
@@ -92,6 +96,31 @@ async function providerCheck(): Promise<number> {
   }
 }
 
+/** Rebuilds derived indexes from canonical Markdown (contracts §1, INV-11). */
+async function indexRebuild(): Promise<number> {
+  let dataDir: string;
+  try {
+    ({ dataDir } = loadConfig(process.env));
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof ConfigError ? error.message : "Invalid configuration"}\n`,
+    );
+    return 1;
+  }
+  const paths = new DataPaths(dataDir);
+  const log = (level: string) => (obj: object, msg: string) => {
+    process.stdout.write(`${JSON.stringify({ level, msg, ...obj })}\n`);
+  };
+  const index = new ChatIndex(paths, { info: log("info"), warn: log("warn") });
+  const users = await userIds(paths);
+  for (const userId of users) {
+    const entries = await index.rebuild(userId);
+    process.stdout.write(`${userId}: ${String(entries.length)} conversation(s) indexed\n`);
+  }
+  if (users.length === 0) process.stdout.write("No user data found.\n");
+  return 0;
+}
+
 const [command = "serve"] = process.argv.slice(2);
 
 switch (command) {
@@ -100,6 +129,9 @@ switch (command) {
     break;
   case "healthcheck":
     process.exitCode = await healthcheck();
+    break;
+  case "index:rebuild":
+    process.exitCode = await indexRebuild();
     break;
   case "provider:check":
     process.exitCode = await providerCheck();

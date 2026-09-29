@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { canonicalUuid } from "@shared/ids";
 import {
   generationSnapshotSchema,
   startGenerationRequestSchema,
@@ -7,7 +8,7 @@ import {
 import { openSse } from "../generations/sse.ts";
 import { defineRoute, defineSseRoute } from "../registry.ts";
 
-const idParams = z.strictObject({ id: z.uuid() });
+const idParams = z.strictObject({ id: canonicalUuid });
 const unknownId = { id: "00000000-0000-4000-8000-000000000000" };
 
 export const startGenerationRoute = defineRoute({
@@ -19,9 +20,14 @@ export const startGenerationRoute = defineRoute({
   request: { body: startGenerationRequestSchema },
   response: startGenerationResponseSchema,
   status: 202,
-  handler: ({ body }, { services }) => services.generations.start(body),
+  handler: ({ body }, { services }) => services.send.send(services.userId, body),
   fixture: {
-    body: { model: "fixture-missing-model", messages: [{ role: "user", content: "hi" }] },
+    body: {
+      model: "fixture-missing-model",
+      content: "hi",
+      operationKey: "00000000-0000-4000-8000-00000000f1f1",
+      operationIssuedAt: new Date().toISOString(),
+    },
     // No provider state exists for the fixture, so model validation must fail
     // before anything starts (MODEL_NOT_FOUND or a normalized provider error).
     expectStatus: 400,
@@ -48,7 +54,7 @@ export const cancelGenerationRoute = defineRoute({
   availability: "chat-demo",
   request: { params: idParams },
   response: generationSnapshotSchema,
-  handler: ({ params }, { services }) => services.generations.cancel(params.id),
+  handler: async ({ params }, { services }) => services.generations.cancel(params.id),
   fixture: { params: unknownId, expectStatus: 404 },
 });
 

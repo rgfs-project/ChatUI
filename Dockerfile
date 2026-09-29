@@ -41,6 +41,7 @@ COPY package.json ./
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
 COPY server/cli.ts server/main.ts server/config.ts server/logger.ts server/loopback.ts ./server/
+COPY server/storage ./server/storage
 # Application files are root-owned and read-only for the runtime user.
 USER node
 EXPOSE 3000

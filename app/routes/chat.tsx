@@ -6,14 +6,14 @@ import {
   useSyncExternalStore,
   type SyntheticEvent,
 } from "react";
-import { data, useNavigate, type ShouldRevalidateFunction } from "react-router";
+import { data, Link, useNavigate, useRevalidator } from "react-router";
+import type { ConversationDto, ConversationSummary, MessageDto } from "@shared/conversations";
 import {
   isTerminalState,
   type GenerationState,
   type TerminalState,
 } from "@shared/generation-state";
 import type {
-  ChatMessage,
   GenerationError,
   GenerationSnapshot,
   ModelDto,
@@ -24,19 +24,26 @@ import type { Route } from "./+types/chat";
 
 /** SSR waits this long for model discovery before rendering without it. */
 const MODEL_DISCOVERY_BUDGET_MS = 2_500;
-
-export function meta(): Route.MetaDescriptors {
-  return [{ title: "ChatUI · Local chat demo" }];
-}
-
+/** Resends of an unresolved send with the same operation key (contracts §4.1). */
+const SEND_RETRIES = 3;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
+  return [
+    {
+      title: loaderData.conversation
+        ? `${loaderData.conversation.title} · ChatUI`
+        : "ChatUI · Local chat",
+    },
+  ];
+}
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const { services } = context.get(appContext);
   // Pre-auth chat exists only on the loopback-guarded host process (§9.2b).
   if (!services.chatDemoEnabled) throw data("Not found", { status: 404 });
 
-  const generationId = new URL(request.url).searchParams.get("g");
+  const id = new URL(request.url).searchParams.get("c");
   const modelsPromise = Promise.race([
     services.models.list().then((models) => ({ models, modelError: null })),
     new Promise<{ models: ModelDto[]; modelError: string }>((resolve) => {
@@ -48,24 +55,35 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     models: [] as ModelDto[],
     modelError: error instanceof Error ? error.message : "The model server is unreachable.",
   }));
-  let generation: GenerationSnapshot | null = null;
-  if (generationId && UUID.test(generationId)) {
-    try {
-      generation = services.generations.snapshot(generationId);
-    } catch {
-      generation = null; // evicted or unknown: show an empty composer
+  let conversation: ConversationDto | null = null;
+  let conversationError: string | null = null;
+  if (id !== null) {
+    if (!UUID.test(id)) conversationError = "This conversation does not exist.";
+    else {
+      try {
+        conversation = await services.conversationDto(id);
+      } catch (error) {
+        conversationError =
+          (error as { code?: string }).code === "CONVERSATION_MALFORMED"
+            ? "This conversation file is malformed. It can be deleted, but not opened or changed."
+            : "This conversation does not exist.";
+      }
     }
   }
+  // Public summary fields only (the index also stores file stamps).
+  const conversations: ConversationSummary[] = services.conversations
+    .list(services.userId)
+    .map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+      messageCount: entry.messageCount,
+      malformed: entry.malformed,
+    }));
   const { models, modelError } = await modelsPromise;
-  return { models, modelError, generation };
+  return { conversations, conversation, conversationError, selectedId: id, models, modelError };
 }
-
-/** Only the loader's own inputs matter; `?g=` changes made by this page need no reload. */
-export const shouldRevalidate: ShouldRevalidateFunction = ({
-  currentUrl,
-  nextUrl,
-  defaultShouldRevalidate,
-}) => (currentUrl.pathname !== nextUrl.pathname ? defaultShouldRevalidate : false);
 
 const noopSubscribe = () => () => undefined;
 function useHydrated(): boolean {
@@ -76,26 +94,14 @@ function useHydrated(): boolean {
   );
 }
 
-interface View {
+interface Live {
   generationId: string;
-  model: string;
+  assistantMessageId: string;
   state: GenerationState;
   content: string;
   reasoning: string;
   finishReason: string | null;
   error: GenerationError | null;
-}
-
-function viewFrom(snapshot: GenerationSnapshot): View {
-  return {
-    generationId: snapshot.generationId,
-    model: snapshot.model,
-    state: snapshot.state,
-    content: snapshot.content,
-    reasoning: snapshot.reasoning,
-    finishReason: snapshot.finishReason,
-    error: snapshot.error,
-  };
 }
 
 const STATE_LABEL: Record<GenerationState, string> = {
@@ -107,48 +113,91 @@ const STATE_LABEL: Record<GenerationState, string> = {
   timed_out: "Timed out",
 };
 
-async function readError(response: Response): Promise<string> {
+const STATUS_LABEL: Record<NonNullable<MessageDto["status"]>, string> = {
+  complete: "",
+  cancelled: "Stopped",
+  failed: "Failed",
+  timed_out: "Timed out",
+  interrupted: "Interrupted",
+};
+
+async function errorOf(response: Response): Promise<{ code: string | null; message: string }> {
   try {
-    const body = (await response.json()) as { error?: { message?: string } };
-    return body.error?.message ?? `Request failed (${String(response.status)})`;
+    const body = (await response.json()) as { error?: { code?: string; message?: string } };
+    return {
+      code: body.error?.code ?? null,
+      message: body.error?.message ?? `Request failed (${String(response.status)})`,
+    };
   } catch {
-    return `Request failed (${String(response.status)})`;
+    return { code: null, message: `Request failed (${String(response.status)})` };
   }
 }
 
+function Message({ message }: { message: MessageDto }) {
+  const label =
+    message.role === "user" ? "You" : message.role === "assistant" ? "Assistant" : "System";
+  return (
+    <li className={`turn turn-${message.role}`} data-testid={`message-${message.role}`}>
+      <span className="turn-role">
+        {label}
+        {message.status && STATUS_LABEL[message.status] ? ` · ${STATUS_LABEL[message.status]}` : ""}
+      </span>
+      {message.reasoning ? (
+        <details className="reasoning">
+          <summary>Reasoning</summary>
+          <p>{message.reasoning}</p>
+        </details>
+      ) : null}
+      <p>{message.content}</p>
+    </li>
+  );
+}
+
 export default function Chat({ loaderData }: Route.ComponentProps) {
+  const { conversations, conversation, conversationError, models: initialModels } = loaderData;
   const hydrated = useHydrated();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelRef = useRef<HTMLSelectElement>(null);
-  const [models, setModels] = useState<ModelDto[]>(loaderData.models);
+  const [models, setModels] = useState<ModelDto[]>(initialModels);
   const [modelError, setModelError] = useState<string | null>(loaderData.modelError);
-  const [view, setView] = useState<View | null>(
-    loaderData.generation ? viewFrom(loaderData.generation) : null,
-  );
-  const [history, setHistory] = useState<ChatMessage[]>([]);
-  const [lastPrompt, setLastPrompt] = useState<string | null>(null);
-  const [requestError, setRequestError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [live, setLive] = useState<Live | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const active = view !== null && !isTerminalState(view.state);
-  const activeId = active ? view.generationId : null;
+  // The running generation: the one we just started, else the server's view.
+  const serverActive = conversation?.activeGeneration?.generationId ?? null;
+  const observedId = live && !isTerminalState(live.state) ? live.generationId : serverActive;
 
-  // Observe the active generation over SSE. Closing this never cancels it.
+  // Observe over SSE; closing this never cancels the generation (INV-06).
   useEffect(() => {
-    if (!activeId) return;
-    const source = new EventSource(`/api/generations/${activeId}/stream`);
+    if (!observedId) return;
+    const source = new EventSource(`/api/generations/${observedId}/stream`);
     source.addEventListener("snapshot", (event) => {
-      setView(viewFrom(JSON.parse(event.data as string) as GenerationSnapshot));
+      const s = JSON.parse(event.data as string) as GenerationSnapshot;
+      setLive({
+        generationId: s.generationId,
+        assistantMessageId: s.assistantMessageId,
+        state: s.state,
+        content: s.content,
+        reasoning: s.reasoning,
+        finishReason: s.finishReason,
+        error: s.error,
+      });
+      if (isTerminalState(s.state)) {
+        source.close();
+        void revalidator.revalidate();
+      }
     });
     source.addEventListener("state", (event) => {
       const { state } = JSON.parse(event.data as string) as { state: GenerationState };
-      setView((v) => (v?.generationId === activeId ? { ...v, state } : v));
+      setLive((v) => (v?.generationId === observedId ? { ...v, state } : v));
     });
     source.addEventListener("delta", (event) => {
       const delta = JSON.parse(event.data as string) as { content?: string; reasoning?: string };
-      setView((v) =>
-        v?.generationId === activeId
+      setLive((v) =>
+        v?.generationId === observedId
           ? {
               ...v,
               content: v.content + (delta.content ?? ""),
@@ -158,24 +207,28 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
       );
     });
     source.addEventListener("terminal", (event) => {
-      const terminal = JSON.parse(event.data as string) as {
+      const t = JSON.parse(event.data as string) as {
         state: TerminalState;
         finishReason: string | null;
         error: GenerationError | null;
       };
-      setView((v) => (v?.generationId === activeId ? { ...v, ...terminal } : v));
+      setLive((v) => (v?.generationId === observedId ? { ...v, ...t } : v));
       source.close();
+      // Show the canonical transcript (the reply is now stored).
+      void revalidator.revalidate();
     });
     return () => {
       source.close();
     };
-  }, [activeId]);
+    // revalidator identity changes on every render; the stream only depends on the id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [observedId]);
 
   const refreshModels = useCallback(async () => {
     setModelError(null);
     const response = await fetch("/api/models?refresh=1");
     if (!response.ok) {
-      setModelError(await readError(response));
+      setModelError((await errorOf(response)).message);
       return;
     }
     setModels(((await response.json()) as { models: ModelDto[] }).models);
@@ -190,185 +243,269 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
       textareaRef.current?.focus();
       return;
     }
-    if (!model || active || submitting) return;
-    // The previous completed exchange becomes context for this one.
-    const prior =
-      view?.state === "completed" && lastPrompt !== null
-        ? [
-            ...history,
-            { role: "user" as const, content: lastPrompt },
-            { role: "assistant" as const, content: view.content },
-          ]
-        : history;
-    setSubmitting(true);
-    setRequestError(null);
+    if (!model || observedId || busy) return;
+    setBusy(true);
+    setStatus("Sending…");
+    const body = JSON.stringify({
+      ...(conversation ? { conversationId: conversation.id } : {}),
+      model,
+      content,
+      operationKey: crypto.randomUUID(),
+      operationIssuedAt: new Date().toISOString(),
+    });
     try {
-      const response = await fetch("/api/generations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages: [...prior, { role: "user", content }] }),
-      });
-      if (response.status !== 202) {
-        setRequestError(await readError(response));
-        return;
+      for (let attempt = 0; attempt <= SEND_RETRIES; attempt++) {
+        let response: Response | undefined;
+        try {
+          response = await fetch("/api/generations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          });
+        } catch {
+          response = undefined; // network error: outcome unknown, resend with the same key
+        }
+        if (response?.status === 202) {
+          const started = (await response.json()) as StartGenerationResponse;
+          if (textareaRef.current) textareaRef.current.value = "";
+          setStatus(null);
+          setLive({
+            generationId: started.generationId,
+            assistantMessageId: started.assistantMessageId,
+            state: "pending",
+            content: "",
+            reasoning: "",
+            finishReason: null,
+            error: null,
+          });
+          if (started.conversationId !== conversation?.id) {
+            await navigate(`/chat?c=${started.conversationId}`);
+          } else {
+            await revalidator.revalidate();
+          }
+          return;
+        }
+        if (response) {
+          const error = await errorOf(response);
+          // Any contract error except INTERNAL means rejected: nothing was saved.
+          if (error.code && error.code !== "INTERNAL") {
+            setStatus(error.message);
+            return;
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1_000 * (attempt + 1)));
       }
-      const started = (await response.json()) as StartGenerationResponse;
-      setHistory(prior);
-      setLastPrompt(content);
-      setView({
-        generationId: started.generationId,
-        model,
-        state: "pending",
-        content: "",
-        reasoning: "",
-        finishReason: null,
-        error: null,
-      });
-      if (textareaRef.current) textareaRef.current.value = "";
-      void navigate(`?g=${started.generationId}`, { replace: true, preventScrollReset: true });
-    } catch {
-      setRequestError("Could not reach ChatUI. Check that the server is running.");
+      setStatus(
+        "The outcome of this send is unknown. Check the conversation, then send again if needed.",
+      );
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
   async function cancel() {
-    if (!view) return;
-    const response = await fetch(`/api/generations/${view.generationId}/cancel`, {
-      method: "POST",
+    if (!observedId) return;
+    await fetch(`/api/generations/${observedId}/cancel`, { method: "POST" });
+  }
+
+  async function rename(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!conversation) return;
+    const title = new FormData(event.currentTarget).get("title");
+    if (typeof title !== "string" || title.trim() === "") return;
+    const response = await fetch(`/api/conversations/${conversation.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: title.trim(), expectedRevision: conversation.revision }),
     });
-    if (response.ok) setView(viewFrom((await response.json()) as GenerationSnapshot));
+    setStatus(response.ok ? null : (await errorOf(response)).message);
+    await revalidator.revalidate();
+  }
+
+  async function remove(id: string) {
+    if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
+    const response = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      setStatus((await errorOf(response)).message);
+      return;
+    }
+    await navigate("/chat");
   }
 
   const defaultModel = (models.find((m) => m.status === "loaded") ?? models[0])?.id;
-  const canSend = hydrated && models.length > 0 && !active && !submitting;
+  const running = observedId !== null;
+  const canSend = hydrated && models.length > 0 && !running && !busy && conversationError === null;
+  // Keep the streamed reply on screen until the stored copy is in the transcript.
+  const showLive =
+    live !== null &&
+    (running || !conversation?.messages.some((m) => m.id === live.assistantMessageId));
 
   return (
-    <main className="chat">
-      <header className="chat-header">
-        <h1>Local chat demo</h1>
-        <p className="lede">
-          Loopback-only preview. Nothing is saved; reloading keeps watching the current reply.{" "}
-          <a href="/">Status</a>
-        </p>
-      </header>
-
-      {history.length > 0 ? (
-        <ol className="history" aria-label="Earlier messages in this session">
-          {history.map((message, index) => (
-            <li key={index} className={`turn turn-${message.role}`}>
-              <span className="turn-role">{message.role === "user" ? "You" : "Assistant"}</span>
-              <p>{message.content}</p>
+    <div className="chat-layout">
+      <nav className="sidebar" aria-label="Conversations">
+        <Link to="/chat" className="new-chat">
+          New chat
+        </Link>
+        <ul data-testid="conversation-list">
+          {conversations.map((item: ConversationSummary) => (
+            <li key={item.id} className={item.id === loaderData.selectedId ? "current" : undefined}>
+              <Link
+                to={`/chat?c=${item.id}`}
+                aria-current={item.id === loaderData.selectedId ? "page" : undefined}
+              >
+                {item.malformed ? `${item.title} (unreadable)` : item.title}
+              </Link>
             </li>
           ))}
-        </ol>
-      ) : null}
+        </ul>
+        <p className="hint">
+          <a href="/">Status</a> · loopback-only
+        </p>
+      </nav>
 
-      <section className="response" aria-label="Response" data-testid="response">
-        {lastPrompt !== null ? (
-          <p className="prompt" data-testid="prompt">
-            <span className="turn-role">You</span> {lastPrompt}
+      <main className="chat">
+        <header className="chat-header">
+          {conversation ? (
+            <form
+              className="title-form"
+              onSubmit={(event) => void rename(event)}
+              key={conversation.revision}
+            >
+              <label htmlFor="title" className="visually-hidden">
+                Conversation title
+              </label>
+              <input id="title" name="title" defaultValue={conversation.title} maxLength={200} />
+              <button type="submit" className="secondary" disabled={!hydrated}>
+                Rename
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!hydrated}
+                onClick={() => void remove(conversation.id)}
+              >
+                Delete
+              </button>
+            </form>
+          ) : (
+            <h1>{conversationError ? "Conversation unavailable" : "New chat"}</h1>
+          )}
+        </header>
+
+        {conversationError ? (
+          <p className="error" role="alert">
+            {conversationError}{" "}
+            {loaderData.selectedId && UUID.test(loaderData.selectedId) ? (
+              <button
+                type="button"
+                className="secondary"
+                disabled={!hydrated}
+                onClick={() => void remove(loaderData.selectedId ?? "")}
+              >
+                Delete it
+              </button>
+            ) : null}
           </p>
         ) : null}
-        {view ? (
-          <>
-            {view.reasoning ? (
+
+        <ol className="history" aria-label="Messages" data-testid="transcript">
+          {conversation?.messages.map((message) => (
+            <Message key={message.id} message={message} />
+          ))}
+        </ol>
+
+        {showLive ? (
+          <section className="response" aria-label="Reply in progress" data-testid="response">
+            {live.reasoning ? (
               <details className="reasoning" data-testid="reasoning">
                 <summary>Reasoning</summary>
-                <p>{view.reasoning}</p>
+                <p>{live.reasoning}</p>
               </details>
             ) : null}
             <p className="content" data-testid="content">
-              {view.content}
+              {live.content}
             </p>
-          </>
-        ) : (
-          <p className="placeholder">Responses appear here.</p>
-        )}
-        <p className="gen-status" role="status" aria-live="polite" data-testid="generation-status">
-          {view ? STATE_LABEL[view.state] : ""}
-          {view?.state === "completed" && view.finishReason === "length"
-            ? " — stopped at the output token limit"
-            : ""}
-          {view?.error ? ` — ${view.error.message}` : ""}
-        </p>
-        {active ? (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void cancel()}
-            disabled={!hydrated}
-          >
-            Stop generating
-          </button>
+            <p className="gen-status" data-testid="generation-status">
+              {STATE_LABEL[live.state]}
+              {live.error ? ` — ${live.error.message}` : ""}
+            </p>
+            {running ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void cancel()}
+                disabled={!hydrated}
+              >
+                Stop generating
+              </button>
+            ) : null}
+          </section>
         ) : null}
-      </section>
 
-      <form
-        className="composer"
-        onSubmit={(event) => void send(event)}
-        aria-label="Message composer"
-      >
-        <label htmlFor="model">Model</label>
-        <div className="model-row">
-          <select
-            id="model"
-            name="model"
-            ref={modelRef}
-            defaultValue={defaultModel}
-            disabled={models.length === 0}
-          >
-            {models.length === 0 ? <option value="">No models available</option> : null}
-            {models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.id}
-                {model.status === "unloaded" ? " (not loaded)" : ""}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void refreshModels()}
-            disabled={!hydrated}
-          >
-            Refresh
-          </button>
-        </div>
-        {modelError ? (
-          <p className="error" role="alert">
-            {modelError}
-          </p>
-        ) : null}
-        <label htmlFor="message">Message</label>
-        <textarea
-          id="message"
-          name="message"
-          ref={textareaRef}
-          rows={4}
-          placeholder="Ask anything…"
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-        />
-        <div className="composer-actions">
-          <span className="hint">
-            {hydrated ? "Enter to send, Shift+Enter for a new line" : "Loading…"}
-          </span>
-          <button type="submit" disabled={!canSend}>
-            Send
-          </button>
-        </div>
-        {requestError ? (
-          <p className="error" role="alert" data-testid="request-error">
-            {requestError}
-          </p>
-        ) : null}
-      </form>
-    </main>
+        <p className="gen-status" role="status" aria-live="polite" data-testid="status">
+          {status ?? ""}
+        </p>
+
+        <form
+          className="composer"
+          onSubmit={(event) => void send(event)}
+          aria-label="Message composer"
+        >
+          <label htmlFor="model">Model</label>
+          <div className="model-row">
+            <select
+              id="model"
+              name="model"
+              ref={modelRef}
+              defaultValue={defaultModel}
+              disabled={models.length === 0}
+            >
+              {models.length === 0 ? <option value="">No models available</option> : null}
+              {models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.id}
+                  {model.status === "unloaded" ? " (not loaded)" : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void refreshModels()}
+              disabled={!hydrated}
+            >
+              Refresh
+            </button>
+          </div>
+          {modelError ? (
+            <p className="error" role="alert">
+              {modelError}
+            </p>
+          ) : null}
+          <label htmlFor="message">Message</label>
+          <textarea
+            id="message"
+            name="message"
+            ref={textareaRef}
+            rows={4}
+            placeholder="Ask anything…"
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void send();
+              }
+            }}
+          />
+          <div className="composer-actions">
+            <span className="hint">
+              {hydrated ? "Enter to send, Shift+Enter for a new line" : "Loading…"}
+            </span>
+            <button type="submit" disabled={!canSend}>
+              Send
+            </button>
+          </div>
+        </form>
+      </main>
+    </div>
   );
 }

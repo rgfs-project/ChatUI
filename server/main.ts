@@ -45,13 +45,9 @@ async function productionHandler(config: Config, logger: Logger): Promise<Runnin
   const bundle = pathToFileURL(path.join(ROOT, "build/server/index.js")).href;
   const mod = (await import(bundle)) as AppModuleShape;
   const app = appFrom(mod, config, logger, path.join(ROOT, "build/client"));
-  return {
-    handler: app.handler,
-    close: () => {
-      app.shutdown();
-      return Promise.resolve();
-    },
-  };
+  // Startup recovery completes before any request is accepted (contracts §2).
+  await app.ready;
+  return { handler: app.handler, close: () => app.shutdown() };
 }
 
 async function developmentHandler(config: Config, logger: Logger): Promise<Running> {
@@ -69,8 +65,9 @@ async function developmentHandler(config: Config, logger: Logger): Promise<Runni
     try {
       const mod = (await devServer.ssrLoadModule("./server/app.ts")) as AppModuleShape;
       if (cached?.mod !== mod) {
-        cached?.app.shutdown();
+        await cached?.app.shutdown();
         cached = { mod, app: appFrom(mod, config, logger) };
+        await cached.app.ready;
       }
       cached.app.handler(req, res, next);
     } catch (error) {
@@ -81,7 +78,7 @@ async function developmentHandler(config: Config, logger: Logger): Promise<Runni
   return {
     handler: outer,
     close: async () => {
-      cached?.app.shutdown();
+      await cached?.app.shutdown();
       await devServer.close();
     },
   };

@@ -1,18 +1,16 @@
-import { randomUUID } from "node:crypto";
 import { ErrorCode } from "@shared/errors";
 import {
   isTerminalState,
-  type ChatMessage,
   type GenerationError,
   type GenerationEvent,
   type GenerationSnapshot,
   type GenerationState,
   type TerminalState,
 } from "@shared/generations";
+import type { PromptMessage } from "../chat/prompt.ts";
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
 import { ProviderError, type Provider } from "../providers/types.ts";
-import type { ModelCatalog } from "./catalog.ts";
 
 /** Receives events for one generation. Must never block (INV-06, INV-62). */
 export interface GenerationObserver {
@@ -21,9 +19,25 @@ export interface GenerationObserver {
   close(): void;
 }
 
+/** What the terminal sequence hands to persistence. */
+export interface GenerationOutcome {
+  state: TerminalState;
+  content: string;
+  reasoning: string;
+  finishReason: string | null;
+  error: GenerationError | null;
+  finishedAt: string;
+}
+
+/**
+ * Writes the terminal outcome to canonical storage exactly once (INV-07) and
+ * returns the new conversation revision, or null when the write was discarded
+ * (e.g. the conversation was deleted meanwhile).
+ */
+export type PersistOutcome = (outcome: GenerationOutcome) => Promise<string | null>;
+
 export interface GenerationManagerOptions {
   provider: Provider;
-  catalog: ModelCatalog;
   logger: Logger;
   maxOutputTokens: number;
   generationMaxMs: number;
@@ -41,39 +55,55 @@ export interface GenerationManagerOptions {
 interface Generation {
   id: string;
   assistantMessageId: string;
+  conversationKey: string;
+  conversationId: string;
   model: string;
   state: GenerationState;
+  /** Set by the first terminal decision; guards INV-05 while persisting. */
+  decided: boolean;
   content: string;
   reasoning: string;
   finishReason: string | null;
   error: GenerationError | null;
   createdAt: string;
   finishedAt: string | null;
+  revision: string | null;
   seq: number;
   observers: Set<GenerationObserver>;
   controller: AbortController;
   maxTimer: NodeJS.Timeout | undefined;
   evictTimer: NodeJS.Timeout | undefined;
+  persist: PersistOutcome;
+  /** Resolves once the terminal outcome is persisted and published. */
+  settled: Promise<void>;
+  settle: () => void;
 }
 
 type AbortReason = "cancel" | "max" | "shutdown";
 
+/** A held admission slot for one conversation, taken under its lock. */
+export interface Reservation {
+  readonly conversationKey: string;
+  release(): void;
+}
+
 /**
- * In-memory, server-owned generations (Phase 2). The server runs each
- * generation to exactly one terminal state (INV-05) independently of any
- * observer: closing an SSE connection never cancels it (INV-06).
+ * Server-owned generations. The server runs each generation to exactly one
+ * terminal state (INV-05) independently of any observer: closing an SSE
+ * connection never cancels it (INV-06). At most one non-terminal generation
+ * exists per conversation (INV-13).
  */
 export class GenerationManager {
   private readonly generations = new Map<string, Generation>();
+  /** conversationKey → generation id or a reservation marker. */
+  private readonly active = new Map<string, string>();
+  private readonly options: GenerationManagerOptions;
   private readonly retentionMs: number;
   private readonly maxRetained: number;
   private readonly retryAfterSeconds: number;
   private readonly now: () => Date;
-  private reserved = 0;
   private maxActive: number;
   private closed = false;
-
-  private readonly options: GenerationManagerOptions;
 
   constructor(options: GenerationManagerOptions) {
     this.options = options;
@@ -82,14 +112,6 @@ export class GenerationManager {
     this.maxRetained = options.maxRetained ?? 200;
     this.retryAfterSeconds = options.retryAfterSeconds ?? 5;
     this.now = options.now ?? (() => new Date());
-  }
-
-  get activeCount(): number {
-    let count = 0;
-    for (const generation of this.generations.values()) {
-      if (!isTerminalState(generation.state)) count++;
-    }
-    return count;
   }
 
   get maxActiveGenerations(): number {
@@ -101,8 +123,19 @@ export class GenerationManager {
     this.maxActive = Math.max(1, Math.floor(limit));
   }
 
-  private assertAdmission(): void {
-    if (this.closed || this.activeCount + this.reserved >= this.maxActive) {
+  /** Non-terminal generations plus held reservations. */
+  get activeCount(): number {
+    return this.active.size;
+  }
+
+  /** The non-terminal generation (or reservation) for a conversation, if any. */
+  activeFor(conversationKey: string): string | undefined {
+    return this.active.get(conversationKey);
+  }
+
+  /** Throws RATE_LIMITED when no admission slot is free (checked before any work). */
+  assertAdmission(): void {
+    if (this.closed || this.active.size >= this.maxActive) {
       throw new AppError(
         ErrorCode.RATE_LIMITED,
         "Too many generations are running; try again shortly",
@@ -112,52 +145,83 @@ export class GenerationManager {
     }
   }
 
-  /**
-   * Admits and starts a generation. Admission is checked before any work and
-   * again after model validation; the slot is reserved while validating.
-   */
-  async start(input: { model: string; messages: ChatMessage[] }): Promise<{
-    generationId: string;
-    assistantMessageId: string;
-  }> {
-    this.assertAdmission();
-    this.reserved++;
-    let model: string;
-    try {
-      model = (await this.options.catalog.resolve(input.model)).id;
-    } finally {
-      this.reserved--;
+  /** Throws GENERATION_IN_PROGRESS when the conversation already has a run. */
+  assertIdle(conversationKey: string): void {
+    if (this.active.has(conversationKey)) {
+      throw new AppError(
+        ErrorCode.GENERATION_IN_PROGRESS,
+        "A reply is already being generated in this conversation",
+      );
     }
-    this.assertAdmission();
+  }
 
+  /** Reserves the conversation's single slot and a global slot (contracts §4.1 step 4). */
+  reserve(conversationKey: string): Reservation {
+    this.assertIdle(conversationKey);
+    this.assertAdmission();
+    const marker = `reserved:${conversationKey}`;
+    this.active.set(conversationKey, marker);
+    let released = false;
+    return {
+      conversationKey,
+      release: () => {
+        if (released) return;
+        released = true;
+        if (this.active.get(conversationKey) === marker) this.active.delete(conversationKey);
+      },
+    };
+  }
+
+  /** Starts completion work for an accepted send, consuming the reservation. */
+  launch(
+    reservation: Reservation,
+    input: {
+      generationId: string;
+      assistantMessageId: string;
+      conversationId: string;
+      model: string;
+      messages: PromptMessage[];
+      persist: PersistOutcome;
+    },
+  ): void {
+    let settle!: () => void;
+    const settled = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
     const generation: Generation = {
-      id: randomUUID(),
-      assistantMessageId: randomUUID(),
-      model,
+      id: input.generationId,
+      assistantMessageId: input.assistantMessageId,
+      conversationKey: reservation.conversationKey,
+      conversationId: input.conversationId,
+      model: input.model,
       state: "pending",
+      decided: false,
       content: "",
       reasoning: "",
       finishReason: null,
       error: null,
       createdAt: this.now().toISOString(),
       finishedAt: null,
+      revision: null,
       seq: 0,
       observers: new Set(),
       controller: new AbortController(),
       maxTimer: undefined,
       evictTimer: undefined,
+      persist: input.persist,
+      settled,
+      settle,
     };
     this.generations.set(generation.id, generation);
+    this.active.set(reservation.conversationKey, generation.id);
     generation.maxTimer = setTimeout(() => {
       this.abort(generation, "max");
     }, this.options.generationMaxMs);
     generation.maxTimer.unref();
-
     void this.run(generation, input.messages);
-    return { generationId: generation.id, assistantMessageId: generation.assistantMessageId };
   }
 
-  private async run(generation: Generation, messages: ChatMessage[]): Promise<void> {
+  private async run(generation: Generation, messages: PromptMessage[]): Promise<void> {
     const signal = generation.controller.signal;
     try {
       const stream = this.options.provider.streamChat(
@@ -165,7 +229,7 @@ export class GenerationManager {
         signal,
       );
       for await (const event of stream) {
-        if (isTerminalState(generation.state)) break; // late chunks are dropped
+        if (generation.decided) break; // late chunks are dropped
         switch (event.type) {
           case "start":
             this.transitionToStreaming(generation);
@@ -190,7 +254,7 @@ export class GenerationManager {
       this.finish(generation, "completed");
     } catch (error) {
       if (signal.aborted) {
-        // abort() already recorded the terminal state; nothing left to do.
+        // abort() already decided the terminal state.
       } else if (error instanceof ProviderError) {
         this.finish(
           generation,
@@ -212,11 +276,11 @@ export class GenerationManager {
 
   /**
    * Ends a generation for a server-side reason and aborts the provider request.
-   * The terminal state is recorded immediately, without waiting for the
+   * The terminal state is decided immediately, without waiting for the
    * provider to notice the abort.
    */
   private abort(generation: Generation, reason: AbortReason): void {
-    if (isTerminalState(generation.state)) return;
+    if (generation.decided) return;
     generation.controller.abort(reason);
     if (reason === "max") {
       this.finish(generation, "timed_out", {
@@ -234,37 +298,61 @@ export class GenerationManager {
   }
 
   private transitionToStreaming(generation: Generation): void {
-    if (generation.state !== "pending") return;
+    if (generation.state !== "pending" || generation.decided) return;
     generation.state = "streaming";
     this.emit(generation, { type: "state", data: { state: "streaming" } });
   }
 
   /**
-   * The single guarded terminal transition (INV-05): the first caller wins;
+   * The single guarded terminal decision (INV-05): the first caller wins and
    * every later call is a no-op, so cancel/complete races produce exactly one
-   * terminal state and one terminal event.
+   * terminal state. The outcome is persisted (INV-07) before the terminal
+   * state and event are published, so the event can carry the new revision.
    */
   private finish(
     generation: Generation,
     state: TerminalState,
     error: GenerationError | null = null,
-  ): boolean {
-    if (isTerminalState(generation.state)) return false;
-    generation.state = state;
-    generation.error = error;
-    if (state !== "completed") generation.finishReason = null;
-    generation.finishedAt = this.now().toISOString();
+  ): void {
+    if (generation.decided) return;
+    generation.decided = true;
     clearTimeout(generation.maxTimer);
     if (!generation.controller.signal.aborted)
       generation.controller.abort("cancel" satisfies AbortReason);
-    this.emit(generation, {
-      type: "terminal",
-      data: { state, finishReason: generation.finishReason, error },
-    });
-    for (const observer of generation.observers) observer.close();
-    generation.observers.clear();
-    this.scheduleEviction(generation);
-    return true;
+    const outcome: GenerationOutcome = {
+      state,
+      content: generation.content,
+      reasoning: generation.reasoning,
+      finishReason: state === "completed" ? generation.finishReason : null,
+      error,
+      finishedAt: this.now().toISOString(),
+    };
+    void (async () => {
+      let revision: string | null = null;
+      try {
+        revision = await generation.persist(outcome);
+      } catch (persistError) {
+        this.options.logger.error(
+          { err: persistError, generationId: generation.id },
+          "persisting the reply failed",
+        );
+      }
+      generation.state = state;
+      generation.error = error;
+      generation.finishReason = outcome.finishReason;
+      generation.finishedAt = outcome.finishedAt;
+      generation.revision = revision;
+      if (this.active.get(generation.conversationKey) === generation.id)
+        this.active.delete(generation.conversationKey);
+      this.emit(generation, {
+        type: "terminal",
+        data: { state, finishReason: outcome.finishReason, error, revision },
+      });
+      for (const observer of generation.observers) observer.close();
+      generation.observers.clear();
+      this.scheduleEviction(generation);
+      generation.settle();
+    })();
   }
 
   private emit(generation: Generation, event: DistributiveOmit<GenerationEvent, "id">): void {
@@ -296,6 +384,7 @@ export class GenerationManager {
     return {
       generationId: g.id,
       assistantMessageId: g.assistantMessageId,
+      conversationId: g.conversationId,
       model: g.model,
       state: g.state,
       content: g.content,
@@ -304,14 +393,21 @@ export class GenerationManager {
       error: g.error,
       createdAt: g.createdAt,
       finishedAt: g.finishedAt,
+      revision: g.revision,
       lastEventId: g.seq,
     };
   }
 
-  /** Explicit user cancellation. Idempotent: a terminal generation is returned unchanged. */
-  cancel(id: string): GenerationSnapshot {
+  /** Waits until a generation's terminal outcome is persisted (tests, cancel). */
+  async settled(id: string): Promise<void> {
+    await this.require(id).settled;
+  }
+
+  /** Explicit user cancellation. Idempotent; resolves once the outcome is persisted. */
+  async cancel(id: string): Promise<GenerationSnapshot> {
     const generation = this.require(id);
     this.abort(generation, "cancel");
+    await generation.settled;
     return this.snapshot(id);
   }
 
@@ -333,14 +429,19 @@ export class GenerationManager {
     };
   }
 
-  /** Stops admitting, ends active generations and closes all observers. */
-  shutdown(): void {
+  /** Stops admitting, ends active generations and waits for their outcomes to persist. */
+  async shutdown(): Promise<void> {
     this.closed = true;
+    const pending: Promise<void>[] = [];
     for (const generation of this.generations.values()) {
       this.abort(generation, "shutdown");
+      pending.push(generation.settled);
+      clearTimeout(generation.evictTimer);
+    }
+    await Promise.all(pending);
+    for (const generation of this.generations.values()) {
       for (const observer of generation.observers) observer.close();
       generation.observers.clear();
-      clearTimeout(generation.evictTimer);
     }
   }
 }

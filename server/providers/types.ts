@@ -6,6 +6,10 @@ export interface Provider {
   listModels(signal?: AbortSignal): Promise<ProviderModel[]>;
   /** Discovered parallel slot count, if the provider reports one. */
   discoverSlots(signal?: AbortSignal): Promise<number | undefined>;
+  /** Token count of `text` with the model's tokenizer. */
+  tokenize(model: string, text: string, options?: { special?: boolean }): Promise<number>;
+  /** The model's chat template applied to `messages` (the formatted prompt). */
+  applyTemplate(model: string, messages: { role: string; content: string }[]): Promise<string>;
   /** Streams one chat completion. Aborting `signal` cancels the upstream request. */
   streamChat(request: ChatRequest, signal: AbortSignal): AsyncGenerator<ProviderEvent>;
 }

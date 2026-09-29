@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ErrorCode } from "./errors";
+import { canonicalUuid } from "./ids";
 import { GENERATION_STATES, type TerminalState } from "./generation-state";
 
 export * from "./generation-state";
@@ -28,13 +29,23 @@ export const chatMessageSchema = z.strictObject({
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
 export const startGenerationRequestSchema = z.strictObject({
+  /** Omit for a draft: the server mints the conversation on first send (§4.1). */
+  conversationId: canonicalUuid.optional(),
   model: z.string().trim().min(1).max(200),
-  messages: z.array(chatMessageSchema).min(1).max(200),
+  content: z
+    .string()
+    .max(100_000)
+    .refine((value) => value.trim() !== "", "must not be empty"),
+  /** Client-minted idempotency key for this send (INV-58). */
+  operationKey: z.uuid(),
+  operationIssuedAt: z.iso.datetime({ offset: false }),
 });
 export type StartGenerationRequest = z.infer<typeof startGenerationRequestSchema>;
 
 export const startGenerationResponseSchema = z.strictObject({
+  conversationId: z.uuid(),
   generationId: z.uuid(),
+  userMessageId: z.uuid(),
   assistantMessageId: z.uuid(),
 });
 export type StartGenerationResponse = z.infer<typeof startGenerationResponseSchema>;
@@ -50,6 +61,7 @@ export type GenerationError = z.infer<typeof generationErrorSchema>;
 export const generationSnapshotSchema = z.strictObject({
   generationId: z.uuid(),
   assistantMessageId: z.uuid(),
+  conversationId: z.uuid(),
   model: z.string(),
   state: z.enum(GENERATION_STATES),
   content: z.string(),
@@ -59,6 +71,8 @@ export const generationSnapshotSchema = z.strictObject({
   error: generationErrorSchema.nullable(),
   createdAt: z.string(),
   finishedAt: z.string().nullable(),
+  /** Conversation revision after the terminal write (null while running or if discarded). */
+  revision: z.string().nullable(),
   /** Id of the last event applied to this snapshot (SSE `id`). */
   lastEventId: z.number().int().nonnegative(),
 });
@@ -76,5 +90,7 @@ export type GenerationEvent =
         state: TerminalState;
         finishReason: string | null;
         error: GenerationError | null;
+        /** Conversation revision computed after the assistant write and any auto-title. */
+        revision: string | null;
       };
     };

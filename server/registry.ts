@@ -1,10 +1,14 @@
 import { Router, type Request, type Response } from "express";
 import type { z } from "zod";
 import type { HealthDto } from "@shared/api";
+import type { ConversationDto } from "@shared/conversations";
+import type { SendService } from "./chat/send-service.ts";
 import type { ModelCatalog } from "./generations/catalog.ts";
 import type { GenerationManager } from "./generations/manager.ts";
 import type { SseOptions } from "./generations/sse.ts";
 import type { Logger } from "./logger.ts";
+import type { ConversationStore } from "./storage/conversations.ts";
+import type { OperationStore } from "./storage/operations.ts";
 import { parseRequest, type ParsedRequest, type RequestSchemas } from "./validation.ts";
 
 /**
@@ -20,6 +24,16 @@ export interface RouteServices {
   health: () => HealthDto;
   models: ModelCatalog;
   generations: GenerationManager;
+  conversations: ConversationStore;
+  operations: OperationStore;
+  send: SendService;
+  /** Loads a conversation DTO for the acting user (SSR loaders and API). */
+  conversationDto: (id: string) => Promise<ConversationDto>;
+  /**
+   * The acting user. Phase 3: LOCAL_USER_ID from configuration; from Phase 4
+   * the authenticated session. Never from headers, query, body or params (INV-14).
+   */
+  userId: string;
   sse: SseOptions;
   logger: Logger;
   /**

@@ -189,6 +189,83 @@ export function createLlamaCppProvider(
       : undefined;
   }
 
+  async function postJson(path: string, body: unknown): Promise<unknown> {
+    const url = `${requireBaseUrl()}${path}`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(config.timeoutMs),
+      });
+    } catch (error) {
+      if ((error as Error).name === "TimeoutError") {
+        throw new ProviderError(
+          ErrorCode.PROVIDER_TIMEOUT,
+          "timeout",
+          "The model server did not respond in time",
+        );
+      }
+      throw new ProviderError(
+        ErrorCode.PROVIDER_UNAVAILABLE,
+        "unreachable",
+        "The model server is unreachable",
+      );
+    }
+    if (!res.ok) throw await httpError(res);
+    try {
+      return JSON.parse(await readCapped(res, config.maxResponseBytes)) as unknown;
+    } catch (error) {
+      if (error instanceof ProviderError) throw error;
+      throw new ProviderError(
+        ErrorCode.PROVIDER_ERROR,
+        "invalid_response",
+        "The model server sent an invalid response",
+      );
+    }
+  }
+
+  // Router mode needs the model as a query parameter (docs/provider-notes.md).
+  const modelQuery = (model: string) => `?model=${encodeURIComponent(model)}`;
+
+  async function tokenize(
+    model: string,
+    text: string,
+    options: { special?: boolean } = {},
+  ): Promise<number> {
+    const body = await postJson(`/tokenize${modelQuery(model)}`, {
+      model,
+      content: text,
+      ...(options.special ? { add_special: true, parse_special: true } : {}),
+    });
+    const tokens = isObject(body) ? body.tokens : undefined;
+    if (!Array.isArray(tokens)) {
+      throw new ProviderError(
+        ErrorCode.PROVIDER_ERROR,
+        "invalid_response",
+        "The model server sent an invalid token list",
+      );
+    }
+    return tokens.length;
+  }
+
+  async function applyTemplate(
+    model: string,
+    messages: { role: string; content: string }[],
+  ): Promise<string> {
+    const body = await postJson(`/apply-template${modelQuery(model)}`, { model, messages });
+    const prompt = isObject(body) ? body.prompt : undefined;
+    if (typeof prompt !== "string") {
+      throw new ProviderError(
+        ErrorCode.PROVIDER_ERROR,
+        "invalid_response",
+        "The model server sent an invalid template result",
+      );
+    }
+    return prompt;
+  }
+
   async function* streamChat(
     request: ChatRequest,
     signal: AbortSignal,
@@ -360,5 +437,5 @@ export function createLlamaCppProvider(
     }
   }
 
-  return { listModels, discoverSlots, streamChat };
+  return { listModels, discoverSlots, tokenize, applyTemplate, streamChat };
 }

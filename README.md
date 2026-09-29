@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 2 (llama.cpp chat demo).** ChatUI serves a public, server-rendered status page, `GET /api/health`, and a **loopback-only chat demo** at `/chat`: server-owned generations against a llama.cpp server, streamed over SSE. Nothing is saved yet. Storage, accounts and multiple providers arrive in later phases. Until authentication (Phase 4) ChatUI is reachable from `127.0.0.1` only, and the chat demo is disabled entirely in the container.
+> **Status: Phase 3 (persistent conversations).** ChatUI serves a public status page, `GET /api/health`, and a **loopback-only chat** at `/chat` with conversations stored as canonical Markdown under `DATA_DIR`, server-owned generations against a llama.cpp server and SSE streaming. Accounts, multiple providers and the full UI arrive in later phases. Until authentication (Phase 4) ChatUI is reachable from `127.0.0.1` only, and chat is disabled entirely in the container.
 
 ## Prerequisites
 
@@ -44,7 +44,7 @@ Operator commands are introduced as their services exist. Until then they exit w
 | ------------------------------------------------------------------- | -------------- |
 | `serve` (default), `healthcheck`                                    | Phase 1b       |
 | `provider:check` (reachability and credentials of `LLAMA_BASE_URL`) | Phase 2        |
-| `index:rebuild`                                                     | Phase 3        |
+| `index:rebuild` (rebuild derived indexes; server stopped)           | Phase 3        |
 | `user:create` (password via stdin), `user:reset-password`           | Phase 4        |
 | `backup`, `restore`                                                 | Phase 16       |
 
@@ -60,6 +60,13 @@ LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
 ```
 
 The page renders the composer on the server (you can type before JavaScript loads). Replies stream with the model's reasoning shown separately. Reloading keeps watching the running reply, and Stop cancels it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
+
+## Data, backups and limits
+
+- Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).
+- **Back up all of `DATA_DIR`.** `index/` is derived and optional in a backup: it is rebuilt from the Markdown when missing. Keep `operations/` (short-lived send records used for safe retries and crash recovery). Stop the server, or copy from a filesystem snapshot, for a consistent backup; online backup/restore arrives in Phase 16.
+- **Single process only.** Exactly one ChatUI process may use a `DATA_DIR` (locks are in-process). Don't run two servers, or the CLI `index:rebuild`, against the same directory at the same time.
+- Writes are atomic and durable (temp file, fsync, rename, directory fsync). On Windows, directory fsync is unavailable and rename-over-existing semantics differ; Linux containers are the supported runtime.
 
 ## Install (development)
 
@@ -86,6 +93,7 @@ npm run dev                 # http://127.0.0.1:3000 with HMR
 | `typecheck`               | Route typegen + `tsc` (strict)                                                                                                                                                                                                                                                                         |
 | `lint`                    | ESLint (type-aware, strict)                                                                                                                                                                                                                                                                            |
 | `format` / `format:check` | Prettier                                                                                                                                                                                                                                                                                               |
+| `index:rebuild`           | Rebuilds the derived conversation index from the Markdown files (stop the server first)                                                                                                                                                                                                                |
 | `verify:compose`          | Builds the image and verifies the Compose runtime on Docker or Podman (loopback-only publishing, non-root, read-only rootfs, healthcheck, in-container SSR/hydration checks, `/data` persistence across recreate, clean shutdown). Exits 2 with `NOT RUN` if no container engine is available          |
 | `verify`                  | Builds, then runs the real production server on an ephemeral loopback port with a temporary `DATA_DIR`. It checks health JSON, server HTML without JS, CSP nonce wiring, API/asset/document 404 separation, browser hydration (production and development builds) with no warnings, and clean shutdown |
 
@@ -109,7 +117,7 @@ shared/     Types and schemas shared by client and server (@shared/*)
 tests/      Vitest + Supertest tests
 scripts/    verify and dev orchestration
 public/     Static files copied into the client build
-data/       Persistent data boundary (git-ignored; unused until Phase 3)
+data/       Persistent data (git-ignored): canonical Markdown, derived index, operation records
 docs/       Phase reports
 ```
 

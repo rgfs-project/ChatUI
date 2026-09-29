@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -35,7 +36,7 @@ const servers: { server: Server; chatui: ChatUiApp }[] = [];
 
 afterEach(async () => {
   for (const { server, chatui } of servers.splice(0)) {
-    chatui.shutdown();
+    await chatui.shutdown();
     server.closeAllConnections();
     await new Promise<void>((resolve) =>
       server.close(() => {
@@ -53,6 +54,7 @@ async function start(
     ...extra,
     config: { provider: providerConfig({ baseUrl: llama.url, apiKey: API_KEY, ...provider }) },
   });
+  await chatui.ready;
   const server = createServer(chatui.handler);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   servers.push({ server, chatui });
@@ -80,7 +82,12 @@ async function api(run: Running, method: string, path: string, body?: unknown) {
 }
 
 async function startGeneration(run: Running, model: string, content = "hello there") {
-  return api(run, "POST", "/api/generations", { model, messages: [{ role: "user", content }] });
+  return api(run, "POST", "/api/generations", {
+    model,
+    content,
+    operationKey: randomUUID(),
+    operationIssuedAt: new Date().toISOString(),
+  });
 }
 
 async function waitTerminal(run: Running, id: string): Promise<GenerationSnapshot> {
@@ -155,7 +162,12 @@ describe("generations", () => {
     const run = await start();
     const res = await startGeneration(run, MOCK_MODELS.chat, "hello there");
     expect(res.status).toBe(202);
-    expect(Object.keys(res.body).sort()).toEqual(["assistantMessageId", "generationId"]);
+    expect(Object.keys(res.body).sort()).toEqual([
+      "assistantMessageId",
+      "conversationId",
+      "generationId",
+      "userMessageId",
+    ]);
     const snapshot = await waitTerminal(run, res.body.generationId as string);
     expect(snapshot).toMatchObject({
       state: "completed",
@@ -199,7 +211,9 @@ describe("generations", () => {
     const run = await start();
     const before = chatRequests();
     const missing = await api(run, "POST", "/api/generations", {
-      messages: [{ role: "user", content: "x" }],
+      content: "x",
+      operationKey: randomUUID(),
+      operationIssuedAt: new Date().toISOString(),
     });
     expect(missing.status).toBe(400);
     expect(missing.body).toMatchObject({ error: { code: "VALIDATION" } });
@@ -210,19 +224,26 @@ describe("generations", () => {
     expect(run.chatui.services.generations.activeCount).toBe(0);
   });
 
-  it("rejects unknown fields and invalid roles", async () => {
+  it("rejects unknown fields and empty content", async () => {
     const run = await start();
-    const extra = await api(run, "POST", "/api/generations", {
+    const base = {
       model: MOCK_MODELS.chat,
-      messages: [{ role: "user", content: "x" }],
+      operationKey: randomUUID(),
+      operationIssuedAt: new Date().toISOString(),
+    };
+    const extra = await api(run, "POST", "/api/generations", {
+      ...base,
+      content: "x",
       temperature: 2,
     });
     expect(extra.status).toBe(400);
-    const role = await api(run, "POST", "/api/generations", {
-      model: MOCK_MODELS.chat,
-      messages: [{ role: "tool", content: "x" }],
+    const empty = await api(run, "POST", "/api/generations", { ...base, content: "  \n " });
+    expect(empty.status).toBe(400);
+    const legacy = await api(run, "POST", "/api/generations", {
+      ...base,
+      messages: [{ role: "user", content: "x" }],
     });
-    expect(role.status).toBe(400);
+    expect(legacy.status).toBe(400);
   });
 
   it.each([

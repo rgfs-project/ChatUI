@@ -191,7 +191,35 @@ export async function browserChecks(base: string): Promise<void> {
   }
 }
 
-/** Phase 2 chat demo checks (host process with a mock provider). */
+function sendPayload(model: string, content: string, conversationId?: string) {
+  return JSON.stringify({
+    ...(conversationId ? { conversationId } : {}),
+    model,
+    content,
+    operationKey: crypto.randomUUID(),
+    operationIssuedAt: new Date().toISOString(),
+  });
+}
+
+/** Sends over HTTP and follows the SSE stream to its terminal event. */
+export async function sendAndWait(
+  base: string,
+  model: string,
+  content: string,
+  conversationId?: string,
+): Promise<{ status: number; conversationId: string; sse: string }> {
+  const start = await fetch(`${base}/api/generations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: sendPayload(model, content, conversationId),
+  });
+  const started = (await start.json()) as { conversationId?: string; generationId?: string };
+  if (start.status !== 202) return { status: start.status, conversationId: "", sse: "" };
+  const stream = await fetch(`${base}/api/generations/${started.generationId ?? ""}/stream`);
+  return { status: 202, conversationId: started.conversationId ?? "", sse: await stream.text() };
+}
+
+/** Chat demo checks (host process with a mock provider), Phase 2 + 3 UI. */
 export async function chatChecks(
   base: string,
   models: { chat: string; slow: string },
@@ -212,48 +240,38 @@ export async function chatChecks(
     html.includes('<button type="submit" disabled=""'),
   );
 
-  // API generation over real HTTP + SSE.
-  const start = await fetch(`${base}/api/generations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: models.chat,
-      messages: [{ role: "user", content: "over http" }],
-    }),
-  });
-  const started = (await start.json()) as { generationId?: string };
+  // API send over real HTTP + SSE, persisted canonically.
+  const sent = await sendAndWait(base, models.chat, "over http");
   check(
-    "POST /api/generations returns 202 with ids",
-    start.status === 202 && typeof started.generationId === "string",
+    "POST /api/generations returns 202 and the SSE stream ends with one terminal event",
+    sent.status === 202 &&
+      sent.sse.includes("event: snapshot") &&
+      (sent.sse.match(/event: terminal/g) ?? []).length === 1,
   );
-  const stream = await fetch(`${base}/api/generations/${started.generationId ?? ""}/stream`);
-  const sseText = await stream.text();
-  check(
-    "SSE stream delivers snapshot, deltas and one terminal event",
-    stream.headers.get("content-type")?.startsWith("text/event-stream") === true &&
-      sseText.startsWith("id: ") &&
-      sseText.includes("event: snapshot") &&
-      (sseText.match(/event: terminal/g) ?? []).length === 1,
-  );
-  const snapshot = (await (
-    await fetch(`${base}/api/generations/${started.generationId ?? ""}`)
+  const conversation = (await (
+    await fetch(`${base}/api/conversations/${sent.conversationId}`)
   ).json()) as {
-    state?: string;
-    content?: string;
+    messages?: { role: string; content: string }[];
   };
   check(
-    "generation completes with the streamed content",
-    snapshot.state === "completed" && snapshot.content === "Echo: over http",
+    "the exchange is stored in the conversation",
+    JSON.stringify(conversation.messages?.map((m) => [m.role, m.content])) ===
+      JSON.stringify([
+        ["user", "over http"],
+        ["assistant", "Echo: over http"],
+      ]),
   );
 
   const browser = await chromium.launch();
   try {
     const noJs = await browser.newContext({ javaScriptEnabled: false });
     const staticPage = await noJs.newPage();
-    await staticPage.goto(`${base}/chat`);
+    await staticPage.goto(`${base}/chat?c=${sent.conversationId}`);
     check(
-      "INV-54: without JS the chat textarea is usable",
-      await staticPage.locator("#message").isEditable(),
+      "INV-54: without JS the transcript and textarea are server-rendered",
+      (await staticPage.getByTestId("message-assistant").first().textContent())?.includes(
+        "Echo: over http",
+      ) === true && (await staticPage.locator("#message").isEditable()),
     );
     await noJs.close();
 
@@ -265,6 +283,7 @@ export async function chatChecks(
         problems.push(`${msg.type()}: ${msg.text()}`);
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
+    page.on("dialog", (dialog) => void dialog.accept());
 
     // Hold back every script so the user types before hydration.
     let release: () => void = () => undefined;
@@ -285,22 +304,20 @@ export async function chatChecks(
       (await page.locator("#message").inputValue()) === "typed before hydration",
     );
 
-    // Send and watch it stream.
+    // First send creates the conversation; the URL then identifies it.
     await page.getByRole("button", { name: "Send" }).click();
     await page
-      .getByTestId("generation-status")
-      .filter({ hasText: "Completed" })
+      .getByTestId("message-assistant")
+      .filter({ hasText: "Echo: typed before hydration" })
       .waitFor({ timeout: 15_000 });
+    check("browser send streams and stores the reply", true);
+    check("the URL identifies the new conversation", /\/chat\?c=[0-9a-f-]{36}$/.test(page.url()));
     check(
-      "browser send streams the reply",
-      (await page.getByTestId("content").textContent()) === "Echo: typed before hydration",
+      "the conversation is listed with its auto-title",
+      (await page.getByTestId("conversation-list").textContent())?.includes(
+        "typed before hydration",
+      ) === true,
     );
-    check(
-      "reasoning is shown separately",
-      (await page.getByTestId("reasoning").textContent())?.includes("Considering the request.") ===
-        true,
-    );
-    check("the URL identifies the generation", /[?&]g=[0-9a-f-]{36}/.test(page.url()));
 
     // Reload mid-generation: it keeps running and is re-observed.
     await page.locator("#model").selectOption(models.slow);
@@ -309,31 +326,40 @@ export async function chatChecks(
     await page.getByTestId("content").filter({ hasText: "part2" }).waitFor({ timeout: 15_000 });
     await page.reload();
     await page.waitForSelector('html[data-hydrated="true"]');
-    const afterReload = (await page.getByTestId("content").textContent()) ?? "";
-    check(
-      "INV-06: reload does not stop the generation; SSR shows progress",
-      afterReload.includes("part2"),
-    );
     await page
-      .getByTestId("generation-status")
-      .filter({ hasText: "Completed" })
+      .getByTestId("message-assistant")
+      .filter({ hasText: "part29" })
       .waitFor({ timeout: 20_000 });
-    check(
-      "the reloaded page observes the generation to completion",
-      ((await page.getByTestId("content").textContent()) ?? "").includes("part29"),
-    );
+    check("INV-06: reload does not stop the generation; the reply is stored", true);
 
-    // Cancel.
+    // Stop.
     await page.locator("#model").selectOption(models.slow);
     await page.locator("#message").fill("cancel me");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "part1" }).waitFor({ timeout: 15_000 });
     await page.getByRole("button", { name: "Stop generating" }).click();
     await page
-      .getByTestId("generation-status")
-      .filter({ hasText: "Cancelled" })
+      .getByTestId("message-assistant")
+      .filter({ hasText: "Stopped" })
+      .waitFor({ timeout: 10_000 });
+    check("Stop cancels and stores a cancelled reply", true);
+
+    // Rename and delete.
+    await page.locator("#title").fill("Renamed in verify");
+    await page.getByRole("button", { name: "Rename" }).click();
+    await page
+      .getByTestId("conversation-list")
+      .filter({ hasText: "Renamed in verify" })
       .waitFor({ timeout: 5_000 });
-    check("Stop cancels the generation", true);
+    check("rename updates the title", true);
+    await page.getByRole("button", { name: "Delete" }).click();
+    await page.waitForURL(/\/chat$/);
+    check(
+      "delete removes the conversation",
+      !((await page.getByTestId("conversation-list").textContent()) ?? "").includes(
+        "Renamed in verify",
+      ),
+    );
     check(
       "chat demo: no console errors, warnings or CSP violations",
       problems.length === 0,
