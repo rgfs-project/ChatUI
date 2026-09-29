@@ -44,6 +44,7 @@ export class AuthService {
   private readonly hasher: PasswordHasher;
   private readonly config: AuthConfig;
   private readonly logger: Logger;
+  private readonly onAccountRejected: (userId: string) => void;
   private readonly byAddress = new RateLimiter(LOGIN_LIMIT);
   private readonly byUsername = new RateLimiter(LOGIN_LIMIT);
   readonly cookieName: string;
@@ -54,12 +55,14 @@ export class AuthService {
     hasher: PasswordHasher;
     config: AuthConfig;
     logger: Logger;
+    onAccountRejected?: (userId: string) => void;
   }) {
     this.users = options.users;
     this.sessions = options.sessions;
     this.hasher = options.hasher;
     this.config = options.config;
     this.logger = options.logger;
+    this.onAccountRejected = options.onAccountRejected ?? (() => undefined);
     // __Host- cookies must be Secure, host-only and Path=/ (https origins).
     this.cookieName = this.config.secureCookies ? "__Host-chatui_session" : "chatui_session";
   }
@@ -98,6 +101,7 @@ export class AuthService {
     const user = await this.users.get(session.userId);
     if (user?.status !== "active" || user.role !== session.role) {
       await this.sessions.revoke(tokenHash);
+      if (user?.status !== "active") this.onAccountRejected(session.userId);
       return null;
     }
     await this.sessions.touch(tokenHash, session);

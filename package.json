@@ -60,6 +60,7 @@
     "verify": "npm run build && node scripts/verify.ts",
     "verify:compose": "node scripts/verify-compose.ts",
     "index:rebuild": "node server/cli.ts index:rebuild",
-    "user:create": "node server/cli.ts user:create"
+    "user:create": "node server/cli.ts user:create",
+    "test:e2e": "npm run build && playwright test"
   }
 }

@@ -57,6 +57,9 @@ export function storageConfig(overrides: Partial<StorageConfig> = {}): StorageCo
     operationRetentionMs: 7 * 86_400_000,
     contextTrimStep: undefined,
     templateOverheadTokens: 16,
+    generationCheckpointMs: 200,
+    generationRetentionMs: 3_600_000,
+    sseReplayEvents: 2_000,
     ...overrides,
   };
 }

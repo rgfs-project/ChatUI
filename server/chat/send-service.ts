@@ -16,6 +16,7 @@ import {
   type ConversationModel,
 } from "../storage/markdown.ts";
 import { sha256Hex, type OperationRecord, type OperationStore } from "../storage/operations.ts";
+import type { CheckpointStore } from "../storage/checkpoints.ts";
 import { resolvePendingRecord } from "../storage/recovery.ts";
 import {
   assemblePrompt,
@@ -38,12 +39,16 @@ export interface SendHooks {
   /** Test hooks that simulate a crash at the two §4.1 step 4 boundaries. */
   afterPendingRecord?: () => void | Promise<void>;
   afterMarkdownWrite?: () => void | Promise<void>;
+  /** After the committed record and the `running` checkpoint (crash-before-launch tests). */
+  afterCommit?: () => void | Promise<void>;
   /** Test hook between the unlocked preflight and the locked recheck. */
   beforeRecheck?: () => void | Promise<void>;
 }
 
 export interface SendServiceOptions {
   store: ConversationStore;
+  /** Generation checkpoints (Phase 6): `running` is written under the acceptance lock. */
+  checkpoints?: CheckpointStore;
   operations: OperationStore;
   catalog: ModelCatalog;
   generations: GenerationManager;
@@ -335,6 +340,21 @@ export class SendService {
         status: "committed",
         committedAt: this.now().toISOString(),
       });
+      // Same locked step (contracts §4.1 step 5): a crash from here on is
+      // recovered from this checkpoint as an `interrupted` reply.
+      await this.o.checkpoints?.write(
+        this.o.generations.initialCheckpoint({
+          ...ids,
+          conversationId,
+          identity: {
+            userId,
+            operationKey: record.operationKey,
+            providerId: input.providerId,
+            model: input.model,
+          },
+        }),
+      );
+      await this.o.hooks?.afterCommit?.();
 
       const launch = () => {
         this.o.generations.launch(reservation, {
@@ -342,6 +362,7 @@ export class SendService {
           conversationId,
           provider: input.provider,
           model: input.model,
+          operationKey: record.operationKey,
           messages: input.prompt.messages,
           persist: (outcome) =>
             this.persistOutcome(

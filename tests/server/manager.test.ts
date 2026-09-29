@@ -184,20 +184,18 @@ describe("generation state machine", () => {
     expect(generations.snapshot(id).state).toBe("completed");
   });
 
-  it("shutdown fails active generations (persisting them), closes observers and stops admission", async () => {
+  it("shutdown leaves running generations as recovery state, closes observers and stops admission", async () => {
     const { provider } = gatedProvider();
     const generations = manager(provider);
     const persisted: GenerationOutcome[] = [];
     const id = launch(generations, persisted);
     let closed = false;
     generations.observe(id, { send: () => undefined, close: () => (closed = true) });
-    await generations.shutdown();
+    await generations.shutdown(50);
     expect(closed).toBe(true);
-    expect(persisted).toHaveLength(1);
-    expect(generations.snapshot(id)).toMatchObject({
-      state: "failed",
-      error: { code: "INTERNAL" },
-    });
+    // Nothing is decided or written: the next start writes it as `interrupted` (INV-21).
+    expect(persisted).toHaveLength(0);
+    expect(generations.snapshot(id).state).not.toMatch(/completed|cancelled|failed|timed_out/);
     expect(() => generations.reserve("u", "u/x", "p")).toThrow(
       expect.objectContaining({ code: "RATE_LIMITED" }) as Error,
     );

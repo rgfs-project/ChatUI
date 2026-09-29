@@ -308,6 +308,8 @@ export async function chatChecks(
       ]),
   );
 
+  await reconnectCheck(base, session, models.slow);
+
   const browser = await chromium.launch();
   try {
     const [cookieName, cookieValue] = session.cookie.split("=");
@@ -442,5 +444,65 @@ export async function chatDisabledChecks(base: string): Promise<void> {
       (page.headers.get("location") ?? "").startsWith("/login") &&
       api.status === 401,
     `${String(page.status)} ${String(api.status)}`,
+  );
+}
+
+/**
+ * Phase 6 acceptance: disconnect mid-stream, reconnect with Last-Event-ID,
+ * receive exactly the missed events, and find exactly one canonical reply.
+ */
+async function reconnectCheck(base: string, session: ApiSession, model: string): Promise<void> {
+  const start = await fetch(`${base}/api/generations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...sessionHeaders(session, true) },
+    body: sendPayload(model, "reconnect me"),
+  });
+  const started = (await start.json()) as {
+    conversationId: string;
+    generationId: string;
+    assistantMessageId: string;
+  };
+  const url = `${base}/api/generations/${started.generationId}/stream`;
+  const controller = new AbortController();
+  const first = await fetch(url, { headers: sessionHeaders(session), signal: controller.signal });
+  const reader = first.body?.getReader();
+  let text = "";
+  const decoder = new TextDecoder();
+  while (reader && (text.match(/event: delta/g) ?? []).length < 3) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+  }
+  controller.abort();
+  const ids = [...text.matchAll(/^id: (\d+)$/gm)].map((m) => Number(m[1]));
+  const lastId = Math.max(...ids);
+  const resumed = await fetch(url, {
+    headers: { ...sessionHeaders(session), "Last-Event-ID": String(lastId) },
+  });
+  const rest = await resumed.text();
+  const restIds = [...rest.matchAll(/^id: (\d+)$/gm)].map((m) => Number(m[1]));
+  const deltas = (chunk: string) =>
+    [...chunk.matchAll(/^event: delta\ndata: (.*)$/gm)]
+      .map((m) => (JSON.parse(m[1] ?? "{}") as { content?: string }).content ?? "")
+      .join("");
+  const snapshot =
+    (JSON.parse(/^event: snapshot\ndata: (.*)$/m.exec(text)?.[1] ?? "{}") as { content?: string })
+      .content ?? "";
+  const conversation = (await (
+    await fetch(`${base}/api/conversations/${started.conversationId}`, {
+      headers: sessionHeaders(session),
+    })
+  ).json()) as { messages: { id: string; role: string; content: string }[] };
+  const replies = conversation.messages.filter((m) => m.id === started.assistantMessageId);
+  check(
+    "INV-20: reconnect with Last-Event-ID replays exactly the missed events",
+    restIds[0] === lastId + 1 &&
+      !rest.includes("event: snapshot") &&
+      !rest.includes("event: resync") &&
+      rest.includes("event: terminal"),
+  );
+  check(
+    "INV-07: no duplicate canonical assistant write after a reconnect; streamed text equals the stored reply",
+    replies.length === 1 && replies[0]?.content === snapshot + deltas(text) + deltas(rest),
   );
 }

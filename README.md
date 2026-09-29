@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 5 (multiple providers).** ChatUI serves a public status page, `GET /api/health`, and a **signed-in chat** at `/chat`: accounts with server-side sessions, per-user canonical Markdown storage, several OpenAI-compatible providers (llama.cpp and others) with server-side model discovery, server-owned generations and SSE streaming. Admin, the full UI and uploads arrive in later phases.
+> **Status: Phase 6 (production streaming).** Signed-in chat with per-user canonical Markdown storage, several OpenAI-compatible providers, server-owned generations that survive disconnects (reconnect replays exactly what was missed) and are recovered after a restart (partial replies are stored as interrupted), plus browser E2E tests. Admin, the full UI and uploads arrive in later phases.
 
 ## Prerequisites
 
@@ -175,6 +175,7 @@ npm run dev                 # http://127.0.0.1:3000 with HMR
 | `format` / `format:check` | Prettier                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `user:create`             | Creates an account (`-- --username <name> [--admin]`); the password is read from a prompt or stdin                                                                                                                                                                                                                                                                                                        |
 | `index:rebuild`           | Rebuilds the derived conversation index from the Markdown files (stop the server first)                                                                                                                                                                                                                                                                                                                   |
+| `test:e2e`                | Builds, then runs the Playwright browser suite (reload mid-generation, network drop and reconnect, cancel) against the production server with a mock provider                                                                                                                                                                                                                                             |
 | `verify:compose`          | Builds the image and verifies the Compose runtime on Docker or Podman (loopback-only publishing, non-root, read-only rootfs, healthcheck, in-container SSR/hydration checks, `/data` persistence across recreate, clean shutdown). Exits 2 with `NOT RUN` if no container engine is available                                                                                                             |
 | `verify`                  | Builds, then runs the real production server on an ephemeral loopback port with a temporary `DATA_DIR`. It checks health JSON, server HTML without JS, CSP nonce wiring, API/asset/document 404 separation, browser hydration (production and development builds) with no warnings, the signed-in chat flow, persistence across restarts, account isolation, logout, disabled accounts and clean shutdown |
 
@@ -183,7 +184,7 @@ Configuration variables are documented in [`.env.example`](.env.example) and val
 ## Quality gates
 
 ```bash
-npm run format:check && npm run lint && npm run typecheck && npm test && npm run verify
+npm run format:check && npm run lint && npm run typecheck && npm test && npm run verify && npm run test:e2e
 npm run verify:compose   # needs Docker or Podman
 ```
 

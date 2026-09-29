@@ -2,6 +2,9 @@
 import { readdir } from "node:fs/promises";
 import type { ChatIndex, IndexLogger } from "./chat-index.ts";
 import { cleanupTempFiles, ensureDir, readOrNull } from "./fs.ts";
+import type { CheckpointOutcome, CheckpointStore } from "./checkpoints.ts";
+import type { ConversationStore } from "./conversations.ts";
+import { normalizeBody, type AssistantStatus, type Block } from "./markdown.ts";
 import { sha256Hex, type OperationRecord, type OperationStore } from "./operations.ts";
 import { isUuid, SYSTEM_DIR, type DataPaths } from "./paths.ts";
 
@@ -12,6 +15,7 @@ export interface RecoveryReport {
   operationsRolledBack: number;
   operationConflicts: number;
   operationsExpired: number;
+  generations: GenerationRecoveryReport | null;
 }
 
 /** Top-level entries must be user UUIDs, `_system` or `.gitkeep` (logged, never deleted). */
@@ -129,6 +133,7 @@ export async function recoverStorage(options: {
   retentionMs: number;
   startedAt: Date;
   now?: Date;
+  generations?: { store: ConversationStore; checkpoints: CheckpointStore; retentionMs: number };
 }): Promise<RecoveryReport> {
   const { paths, logger } = options;
   await ensureDir(paths.root);
@@ -154,8 +159,184 @@ export async function recoverStorage(options: {
     );
     for (const key of Object.keys(totals) as (keyof typeof totals)[]) totals[key] += r[key];
   }
+  // Step 5: generation checkpoints and committed operations without a reply.
+  const generations = options.generations
+    ? await recoverGenerations({
+        ...options.generations,
+        paths,
+        operations: options.operations,
+        logger,
+        now: options.now ?? new Date(),
+      })
+    : null;
   for (const userId of users) await options.index.load(userId);
-  const report = { tempFilesRemoved, unexpectedEntries, ...totals };
+  const report = { tempFilesRemoved, unexpectedEntries, ...totals, generations };
   logger.info(report, "storage recovery complete");
+  return report;
+}
+
+const STATUS: Record<CheckpointOutcome["state"] | "interrupted", AssistantStatus> = {
+  completed: "complete",
+  cancelled: "cancelled",
+  failed: "failed",
+  timed_out: "timed_out",
+  interrupted: "interrupted",
+};
+
+/**
+ * Appends the reasoning (if any) and assistant block exactly once, under the
+ * conversation lock. Never recreates a missing conversation and never touches
+ * a malformed one. Idempotent by assistant id.
+ */
+async function writeReplyOnce(
+  store: ConversationStore,
+  input: {
+    userId: string;
+    conversationId: string;
+    assistantMessageId: string;
+    providerId: string;
+    model: string;
+    status: AssistantStatus;
+    content: string;
+    reasoning: string;
+    time: string;
+  },
+): Promise<"written" | "exists" | "missing" | "malformed"> {
+  return store.withLock(input.userId, input.conversationId, async () => {
+    const read = await store.readUnlocked(input.userId, input.conversationId);
+    if (read.kind === "missing") return "missing";
+    if (read.kind === "malformed") return "malformed";
+    const model = read.conversation.model;
+    if (model.blocks.some((b) => b.type === "assistant" && b.id === input.assistantMessageId))
+      return "exists";
+    const blocks: Block[] = [];
+    const reasoning = normalizeBody(input.reasoning);
+    if (reasoning !== "")
+      blocks.push({ type: "reasoning", id: input.assistantMessageId, body: reasoning });
+    blocks.push({
+      type: "assistant",
+      id: input.assistantMessageId,
+      status: input.status,
+      ...(input.providerId ? { provider: input.providerId } : {}),
+      ...(input.model ? { model: input.model } : {}),
+      time: input.time,
+      body: normalizeBody(input.content),
+    });
+    await store.writeUnlocked(
+      input.userId,
+      input.conversationId,
+      store.appendBlocks(model, blocks),
+    );
+    return "written";
+  });
+}
+
+export interface GenerationRecoveryReport {
+  interrupted: number;
+  completedDecided: number;
+  orphanCommits: number;
+  alreadyWritten: number;
+  discarded: number;
+  finalizedRemoved: number;
+}
+
+/**
+ * Startup step 5 (contracts §2, §4, INV-21, INV-60): `running` checkpoints are
+ * written once as `interrupted` with their partial output; `terminal-decided`
+ * checkpoints are completed once with their recorded outcome; committed
+ * operations with `terminalWritten: false` and no checkpoint get one empty
+ * `interrupted` reply. The `terminalWritten` flag (not the absence of a block)
+ * decides, so a reply the user later deleted is never re-added.
+ */
+export async function recoverGenerations(options: {
+  paths: DataPaths;
+  store: ConversationStore;
+  operations: OperationStore;
+  checkpoints: CheckpointStore;
+  logger: IndexLogger;
+  retentionMs: number;
+  now: Date;
+}): Promise<GenerationRecoveryReport> {
+  const { store, operations, checkpoints, logger, now } = options;
+  const report: GenerationRecoveryReport = {
+    interrupted: 0,
+    completedDecided: 0,
+    orphanCommits: 0,
+    alreadyWritten: 0,
+    discarded: 0,
+    finalizedRemoved: 0,
+  };
+  const markWritten = async (userId: string, operationKey: string) => {
+    if (!operationKey) return;
+    const record = await operations.read(userId, operationKey).catch(() => null);
+    if (record && !record.terminalWritten)
+      await operations.write(userId, { ...record, terminalWritten: true });
+  };
+  const withCheckpoint = new Set<string>();
+  for (const checkpoint of await checkpoints.all()) {
+    withCheckpoint.add(checkpoint.generationId);
+    if (checkpoint.state === "terminal") {
+      if (now.getTime() - Date.parse(checkpoint.updatedAt) > options.retentionMs) {
+        await checkpoints.delete(checkpoint.generationId);
+        report.finalizedRemoved++;
+      }
+      continue;
+    }
+    const decided =
+      checkpoint.state === "terminal-decided" && checkpoint.outcome !== null
+        ? checkpoint.outcome
+        : null;
+    const result = await writeReplyOnce(store, {
+      userId: checkpoint.userId,
+      conversationId: checkpoint.conversationId,
+      assistantMessageId: checkpoint.assistantMessageId,
+      providerId: checkpoint.providerId,
+      model: checkpoint.model,
+      status: STATUS[decided ? decided.state : "interrupted"],
+      content: decided ? decided.content : checkpoint.content,
+      reasoning: decided ? decided.reasoning : checkpoint.reasoning,
+      time: decided ? decided.finishedAt : now.toISOString(),
+    });
+    if (result === "written") {
+      if (decided) report.completedDecided++;
+      else report.interrupted++;
+    } else if (result === "exists") {
+      report.alreadyWritten++;
+    } else {
+      report.discarded++;
+      logger.info(
+        { generationId: checkpoint.generationId, reason: result },
+        "recovered reply discarded",
+      );
+    }
+    await markWritten(checkpoint.userId, checkpoint.operationKey);
+    await checkpoints.write({ ...checkpoint, state: "terminal", updatedAt: now.toISOString() });
+  }
+  for (const userId of await accountIds(options.paths)) {
+    for (const record of await operations.all(userId)) {
+      if (
+        record.status !== "committed" ||
+        record.terminalWritten ||
+        withCheckpoint.has(record.generationId)
+      )
+        continue;
+      const result = await writeReplyOnce(store, {
+        userId,
+        conversationId: record.conversationId,
+        assistantMessageId: record.assistantMessageId,
+        providerId: "",
+        model: "",
+        status: "interrupted",
+        content: "",
+        reasoning: "",
+        time: now.toISOString(),
+      });
+      if (result === "written") report.orphanCommits++;
+      await operations.write(userId, { ...record, terminalWritten: true });
+    }
+  }
+  if (report.interrupted + report.completedDecided + report.orphanCommits + report.discarded > 0) {
+    logger.info({ ...report }, "generation recovery complete");
+  }
   return report;
 }

@@ -11,6 +11,7 @@ import type { PromptMessage } from "../chat/prompt.ts";
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
 import { ProviderError, type Provider } from "../providers/types.ts";
+import type { CheckpointStore, GenerationCheckpoint } from "../storage/checkpoints.ts";
 
 /** Receives events for one generation. Must never block (INV-06, INV-62). */
 export interface GenerationObserver {
@@ -46,6 +47,12 @@ export interface GenerationManagerOptions {
   maxActivePerUser?: number;
   /** Per-provider admission limits (Phase 5); a missing entry means 1. */
   providerLimits?: Record<string, number>;
+  /** Checkpoint store (Phase 6); without it nothing is checkpointed (unit tests). */
+  checkpoints?: CheckpointStore;
+  /** Checkpoint cadence while running (plus every state transition). */
+  checkpointMs?: number;
+  /** Replay ring buffer size per generation (SSE_REPLAY_EVENTS). */
+  replayEvents?: number;
   /** Terminal generations are kept this long for re-observation, then evicted. */
   retentionMs?: number;
   /** At most this many terminal generations are retained (oldest evicted first). */
@@ -53,6 +60,14 @@ export interface GenerationManagerOptions {
   /** Seconds advertised in Retry-After when admission is full. */
   retryAfterSeconds?: number;
   now?: () => Date;
+}
+
+/** Identity recorded in the checkpoint (never read as conversation history). */
+export interface CheckpointIdentity {
+  userId: string;
+  operationKey: string;
+  providerId: string;
+  model: string;
 }
 
 interface Generation {
@@ -64,6 +79,7 @@ interface Generation {
   assistantMessageId: string;
   conversationKey: string;
   conversationId: string;
+  operationKey: string;
   model: string;
   state: GenerationState;
   /** Set by the first terminal decision; guards INV-05 while persisting. */
@@ -76,11 +92,18 @@ interface Generation {
   finishedAt: string | null;
   revision: string | null;
   seq: number;
+  /** Ring buffer of the most recent events for replay (INV-20). */
+  events: GenerationEvent[];
   observers: Set<GenerationObserver>;
   controller: AbortController;
   maxTimer: NodeJS.Timeout | undefined;
   evictTimer: NodeJS.Timeout | undefined;
   persist: PersistOutcome;
+  /** Checkpoint needs a write (content changed since the last one). */
+  dirty: boolean;
+  lastCheckpointAt: number;
+  /** Serializes this generation's checkpoint writes. */
+  writes: Promise<void>;
   /** Resolves once the terminal outcome is persisted and published. */
   settled: Promise<void>;
   settle: () => void;
@@ -96,22 +119,30 @@ export interface Reservation {
   release(): void;
 }
 
+/** Where an observer resumes (contracts §5, INV-20). */
+export type Cursor = number | undefined;
+
 /**
  * Server-owned generations. The server runs each generation to exactly one
  * terminal state (INV-05) independently of any observer: closing an SSE
  * connection never cancels it (INV-06). At most one non-terminal generation
- * exists per conversation (INV-13).
+ * exists per conversation (INV-13). Progress is checkpointed so a restart can
+ * write the partial reply once (INV-21); observers resume by replay or resync
+ * (INV-20).
  */
 export class GenerationManager {
   private readonly generations = new Map<string, Generation>();
-  /** conversationKey → generation id or a reservation marker. */
+  /** conversationKey → generation id (or a reservation marker) and its owner. */
   private readonly active = new Map<string, { id: string; userId: string; providerId: string }>();
   private readonly providerLimits = new Map<string, number>();
   private readonly options: GenerationManagerOptions;
   private readonly retentionMs: number;
   private readonly maxRetained: number;
   private readonly retryAfterSeconds: number;
+  private readonly replayEvents: number;
+  private readonly checkpointMs: number;
   private readonly now: () => Date;
+  private readonly flushTimer: NodeJS.Timeout | undefined;
   private maxActive: number;
   private closed = false;
 
@@ -123,16 +154,38 @@ export class GenerationManager {
     this.retentionMs = options.retentionMs ?? 10 * 60_000;
     this.maxRetained = options.maxRetained ?? 200;
     this.retryAfterSeconds = options.retryAfterSeconds ?? 5;
+    this.replayEvents = options.replayEvents ?? 2_000;
+    this.checkpointMs = options.checkpointMs ?? 1_000;
     this.now = options.now ?? (() => new Date());
+    if (options.checkpoints) {
+      // One timer for all running generations: at most one write per
+      // generation per interval, never one per token.
+      this.flushTimer = setInterval(
+        () => {
+          this.flushDue();
+        },
+        Math.max(50, Math.floor(this.checkpointMs / 2)),
+      );
+      this.flushTimer.unref();
+    }
   }
 
   get maxActiveGenerations(): number {
     return this.maxActive;
   }
 
-  /** Applies a discovered admission limit (e.g. the provider's parallel slots). */
+  /** Applies a discovered or configured global admission limit. */
   setMaxActiveGenerations(limit: number): void {
     this.maxActive = Math.max(1, Math.floor(limit));
+  }
+
+  /** Sets one provider's admission limit (config, else discovered slots, else 1). */
+  setProviderLimit(providerId: string, limit: number): void {
+    this.providerLimits.set(providerId, Math.max(1, Math.floor(limit)));
+  }
+
+  providerLimit(providerId: string): number {
+    return this.providerLimits.get(providerId) ?? 1;
   }
 
   /** Non-terminal generations plus held reservations. */
@@ -145,25 +198,10 @@ export class GenerationManager {
     return this.active.get(conversationKey)?.id;
   }
 
-  /** Sets one provider's admission limit (config, else discovered slots, else 1). */
-  setProviderLimit(providerId: string, limit: number): void {
-    this.providerLimits.set(providerId, Math.max(1, Math.floor(limit)));
-  }
-
-  providerLimit(providerId: string): number {
-    return this.providerLimits.get(providerId) ?? 1;
-  }
-
-  private activeForProvider(providerId: string): number {
-    let count = 0;
-    for (const entry of this.active.values()) if (entry.providerId === providerId) count++;
-    return count;
-  }
-
-  private activeForUser(userId: string): number {
-    let count = 0;
-    for (const entry of this.active.values()) if (entry.userId === userId) count++;
-    return count;
+  private count(predicate: (entry: { userId: string; providerId: string }) => boolean): number {
+    let n = 0;
+    for (const entry of this.active.values()) if (predicate(entry)) n++;
+    return n;
   }
 
   /** Throws RATE_LIMITED when no admission slot is free (checked before any work). */
@@ -172,10 +210,10 @@ export class GenerationManager {
     if (
       this.closed ||
       this.active.size >= this.maxActive ||
-      (userId !== undefined && this.activeForUser(userId) >= perUser) ||
+      (userId !== undefined && this.count((e) => e.userId === userId) >= perUser) ||
       // A busy provider rejects only its own starts (contracts §4).
       (providerId !== undefined &&
-        this.activeForProvider(providerId) >= this.providerLimit(providerId))
+        this.count((e) => e.providerId === providerId) >= this.providerLimit(providerId))
     ) {
       throw new AppError(
         ErrorCode.RATE_LIMITED,
@@ -215,6 +253,33 @@ export class GenerationManager {
     };
   }
 
+  /** The `running` checkpoint written under the acceptance lock (§4.1 step 5). */
+  initialCheckpoint(input: {
+    generationId: string;
+    assistantMessageId: string;
+    conversationId: string;
+    identity: CheckpointIdentity;
+  }): GenerationCheckpoint {
+    const now = this.now().toISOString();
+    return {
+      version: 1,
+      generationId: input.generationId,
+      userId: input.identity.userId,
+      conversationId: input.conversationId,
+      assistantMessageId: input.assistantMessageId,
+      operationKey: input.identity.operationKey,
+      providerId: input.identity.providerId,
+      model: input.identity.model,
+      state: "running",
+      content: "",
+      reasoning: "",
+      lastEventId: 0,
+      createdAt: now,
+      updatedAt: now,
+      outcome: null,
+    };
+  }
+
   /** Starts completion work for an accepted send, consuming the reservation. */
   launch(
     reservation: Reservation,
@@ -224,6 +289,7 @@ export class GenerationManager {
       conversationId: string;
       provider: Provider;
       model: string;
+      operationKey?: string;
       messages: PromptMessage[];
       persist: PersistOutcome;
     },
@@ -240,6 +306,7 @@ export class GenerationManager {
       assistantMessageId: input.assistantMessageId,
       conversationKey: reservation.conversationKey,
       conversationId: input.conversationId,
+      operationKey: input.operationKey ?? "",
       model: input.model,
       state: "pending",
       decided: false,
@@ -251,11 +318,15 @@ export class GenerationManager {
       finishedAt: null,
       revision: null,
       seq: 0,
+      events: [],
       observers: new Set(),
       controller: new AbortController(),
       maxTimer: undefined,
       evictTimer: undefined,
       persist: input.persist,
+      dirty: false,
+      lastCheckpointAt: Date.now(),
+      writes: Promise.resolve(),
       settled,
       settle,
     };
@@ -280,7 +351,7 @@ export class GenerationManager {
         signal,
       );
       for await (const event of stream) {
-        if (generation.decided) break; // late chunks are dropped
+        if (generation.decided || signal.aborted) break; // late chunks are dropped
         switch (event.type) {
           case "start":
             this.transitionToStreaming(generation);
@@ -288,11 +359,13 @@ export class GenerationManager {
           case "content":
             this.transitionToStreaming(generation);
             generation.content += event.text;
+            generation.dirty = true;
             this.emit(generation, { type: "delta", data: { content: event.text } });
             break;
           case "reasoning":
             this.transitionToStreaming(generation);
             generation.reasoning += event.text;
+            generation.dirty = true;
             this.emit(generation, { type: "delta", data: { reasoning: event.text } });
             break;
           case "finish":
@@ -302,11 +375,12 @@ export class GenerationManager {
             break;
         }
       }
-      this.finish(generation, "completed");
+      if (!signal.aborted) this.finish(generation, "completed");
     } catch (error) {
       if (signal.aborted) {
-        // abort() already decided the terminal state.
+        // abort() already decided the terminal state (or shutdown left it running).
       } else if (error instanceof ProviderError) {
+        // Provider interruption and inactivity timeouts end here.
         this.finish(
           generation,
           error.code === ErrorCode.PROVIDER_TIMEOUT ? "timed_out" : "failed",
@@ -328,20 +402,17 @@ export class GenerationManager {
   /**
    * Ends a generation for a server-side reason and aborts the provider request.
    * The terminal state is decided immediately, without waiting for the
-   * provider to notice the abort.
+   * provider. Shutdown decides nothing: the generation stays `running` in its
+   * checkpoint and the next start writes it as `interrupted` (INV-21).
    */
   private abort(generation: Generation, reason: AbortReason): void {
     if (generation.decided) return;
     generation.controller.abort(reason);
+    if (reason === "shutdown") return;
     if (reason === "max") {
       this.finish(generation, "timed_out", {
         code: ErrorCode.PROVIDER_TIMEOUT,
         message: "The generation exceeded the maximum allowed time",
-      });
-    } else if (reason === "shutdown") {
-      this.finish(generation, "failed", {
-        code: ErrorCode.INTERNAL,
-        message: "The server shut down during the generation",
       });
     } else {
       this.finish(generation, "cancelled");
@@ -352,13 +423,80 @@ export class GenerationManager {
     if (generation.state !== "pending" || generation.decided) return;
     generation.state = "streaming";
     this.emit(generation, { type: "state", data: { state: "streaming" } });
+    void this.checkpoint(generation, "running"); // every state transition
+  }
+
+  private checkpointOf(
+    generation: Generation,
+    state: GenerationCheckpoint["state"],
+    outcome: GenerationOutcome | null,
+  ): GenerationCheckpoint {
+    return {
+      version: 1,
+      generationId: generation.id,
+      userId: generation.userId,
+      conversationId: generation.conversationId,
+      assistantMessageId: generation.assistantMessageId,
+      operationKey: generation.operationKey,
+      providerId: generation.providerId,
+      model: generation.model,
+      state,
+      content: outcome?.content ?? generation.content,
+      reasoning: outcome?.reasoning ?? generation.reasoning,
+      lastEventId: generation.seq,
+      createdAt: generation.createdAt,
+      updatedAt: this.now().toISOString(),
+      outcome: outcome
+        ? {
+            state: outcome.state,
+            content: outcome.content,
+            reasoning: outcome.reasoning,
+            finishReason: outcome.finishReason,
+            error: outcome.error,
+            finishedAt: outcome.finishedAt,
+          }
+        : null,
+    };
+  }
+
+  /** Queues an atomic checkpoint write (serialized per generation). */
+  private checkpoint(
+    generation: Generation,
+    state: GenerationCheckpoint["state"],
+    outcome: GenerationOutcome | null = null,
+  ): Promise<void> {
+    const store = this.options.checkpoints;
+    if (!store) return Promise.resolve();
+    const snapshot = this.checkpointOf(generation, state, outcome);
+    generation.dirty = false;
+    generation.lastCheckpointAt = Date.now();
+    generation.writes = generation.writes
+      .then(() => store.write(snapshot))
+      .catch((error: unknown) => {
+        this.options.logger.error(
+          { err: error, generationId: generation.id },
+          "checkpoint write failed",
+        );
+      });
+    return generation.writes;
+  }
+
+  /** Writes checkpoints of running generations whose content changed, at most once per interval. */
+  private flushDue(): void {
+    const due = Date.now() - this.checkpointMs;
+    for (const generation of this.generations.values()) {
+      if (!generation.decided && generation.dirty && generation.lastCheckpointAt <= due) {
+        void this.checkpoint(generation, "running");
+      }
+    }
   }
 
   /**
    * The single guarded terminal decision (INV-05): the first caller wins and
-   * every later call is a no-op, so cancel/complete races produce exactly one
-   * terminal state. The outcome is persisted (INV-07) before the terminal
-   * state and event are published, so the event can carry the new revision.
+   * every later call is a no-op. The terminal sequence then runs in order:
+   * `terminal-decided` checkpoint (outcome recorded) → canonical Markdown
+   * write, exactly once (INV-07) → `terminal` checkpoint → publish the state
+   * and the terminal event carrying the new revision.
    */
   private finish(
     generation: Generation,
@@ -381,7 +519,9 @@ export class GenerationManager {
     void (async () => {
       let revision: string | null = null;
       try {
+        await this.checkpoint(generation, "terminal-decided", outcome);
         revision = await generation.persist(outcome);
+        await this.checkpoint(generation, "terminal", outcome);
       } catch (persistError) {
         this.options.logger.error(
           { err: persistError, generationId: generation.id },
@@ -410,6 +550,8 @@ export class GenerationManager {
   private emit(generation: Generation, event: DistributiveOmit<GenerationEvent, "id">): void {
     generation.seq++;
     const full = { ...event, id: generation.seq };
+    generation.events.push(full);
+    if (generation.events.length > this.replayEvents) generation.events.shift();
     for (const observer of generation.observers) observer.send(full);
   }
 
@@ -467,14 +609,35 @@ export class GenerationManager {
     return this.snapshot(id);
   }
 
+  /** Cancels every running generation of a user (disabled or closed account). */
+  cancelForUser(userId: string): void {
+    for (const generation of this.generations.values()) {
+      if (generation.userId !== userId) continue;
+      this.abort(generation, "cancel");
+      for (const observer of generation.observers) observer.close();
+      generation.observers.clear();
+    }
+  }
+
   /**
-   * Observes a generation: the observer receives the current snapshot, then
-   * live events. Returns an unsubscribe function, which never affects the
-   * generation itself (INV-06).
+   * Observes a generation (INV-20). Without a cursor the observer gets a
+   * `snapshot`, then live events. With a cursor inside the replay window it
+   * gets exactly the missed events; a cursor that is older than the window,
+   * unknown or in the future gets one `resync` event with the full snapshot.
+   * There is never a silent gap. A terminal generation's stream closes after
+   * the replay/snapshot. Returns an unsubscribe function, which never affects
+   * the generation (INV-06).
    */
-  observe(id: string, observer: GenerationObserver, userId?: string): () => void {
+  observe(id: string, observer: GenerationObserver, userId?: string, cursor?: Cursor): () => void {
     const generation = this.require(id, userId);
-    observer.send({ type: "snapshot", id: generation.seq, data: this.snapshot(id) });
+    const oldest = generation.events[0]?.id ?? generation.seq + 1;
+    if (cursor === undefined) {
+      observer.send({ type: "snapshot", id: generation.seq, data: this.snapshot(id) });
+    } else if (cursor > generation.seq || cursor < oldest - 1) {
+      observer.send({ type: "resync", id: generation.seq, data: this.snapshot(id) });
+    } else {
+      for (const event of generation.events) if (event.id > cursor) observer.send(event);
+    }
     if (isTerminalState(generation.state)) {
       observer.close();
       return () => undefined;
@@ -485,16 +648,32 @@ export class GenerationManager {
     };
   }
 
-  /** Stops admitting, ends active generations and waits for their outcomes to persist. */
-  async shutdown(): Promise<void> {
+  /**
+   * Graceful shutdown (an optimization only): stop admitting, stop provider
+   * streams, write the latest progress of running generations as `running`
+   * checkpoints (the next start writes them as `interrupted`), let terminal
+   * sequences already under way finish within a bounded time, close observers.
+   */
+  async shutdown(timeoutMs = 10_000): Promise<void> {
     this.closed = true;
+    if (this.flushTimer) clearInterval(this.flushTimer);
     const pending: Promise<void>[] = [];
     for (const generation of this.generations.values()) {
-      this.abort(generation, "shutdown");
-      pending.push(generation.settled);
       clearTimeout(generation.evictTimer);
+      if (generation.decided) {
+        pending.push(generation.settled);
+      } else {
+        this.abort(generation, "shutdown");
+        clearTimeout(generation.maxTimer);
+        pending.push(this.checkpoint(generation, "running"));
+      }
     }
-    await Promise.all(pending);
+    await Promise.race([
+      Promise.all(pending),
+      new Promise((resolve) => {
+        setTimeout(resolve, timeoutMs).unref();
+      }),
+    ]);
     for (const generation of this.generations.values()) {
       for (const observer of generation.observers) observer.close();
       generation.observers.clear();

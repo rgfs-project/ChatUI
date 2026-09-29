@@ -58,6 +58,11 @@ const envSchema = z.object({
   CONTEXT_TRIM_STEP: intFrom(1, 10_000_000).optional(),
   TEMPLATE_OVERHEAD_TOKENS: intFrom(0, 10_000).default(16),
 
+  // Production streaming (Phase 6).
+  GENERATION_CHECKPOINT_MS: intFrom(100, 60_000).default(1_000),
+  GENERATION_RETENTION_MS: intFrom(1_000, 7 * 86_400_000).default(3_600_000),
+  SSE_REPLAY_EVENTS: intFrom(10, 100_000).default(2_000),
+
   // Authentication (Phase 4).
   PUBLIC_ORIGIN: z.string().optional(),
   TRUST_PROXY: intFrom(0, 10).default(0),
@@ -115,6 +120,12 @@ export interface StorageConfig {
   contextTrimStep: number | undefined;
   /** Per-message template overhead used by the pessimistic token estimate. */
   templateOverheadTokens: number;
+  /** Checkpoint cadence for running generations (plus every state transition). */
+  generationCheckpointMs: number;
+  /** Terminal generations (memory and finalized checkpoints) are kept this long. */
+  generationRetentionMs: number;
+  /** Replay ring buffer size per generation. */
+  sseReplayEvents: number;
 }
 
 export interface ProviderConfig {
@@ -304,6 +315,9 @@ export function loadConfig(
       operationRetentionMs: parsed.data.OPERATION_RETENTION_MS,
       contextTrimStep: parsed.data.CONTEXT_TRIM_STEP,
       templateOverheadTokens: parsed.data.TEMPLATE_OVERHEAD_TOKENS,
+      generationCheckpointMs: parsed.data.GENERATION_CHECKPOINT_MS,
+      generationRetentionMs: parsed.data.GENERATION_RETENTION_MS,
+      sseReplayEvents: parsed.data.SSE_REPLAY_EVENTS,
     },
   };
 }

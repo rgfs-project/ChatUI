@@ -180,6 +180,54 @@ POST /api/generations ──► admission ──► model resolve ──► admi
 - **Request time:** each request resolves the hostname, checks **every** resolved address and connects to the checked address through an undici `Agent` whose `lookup` returns only that address (so DNS rebinding cannot swap it). TLS still verifies the hostname's certificate. `redirect: "manual"`: any 3xx is refused.
 - A refused destination surfaces as a normalized `PROVIDER_ERROR` ("not allowed by the server's network policy") or as the provider being unavailable. It never reveals the resolved address.
 
+## Production streaming and recovery (Phase 6)
+
+### Replay (INV-20)
+
+- Every SSE event has a per-generation, monotonically increasing `id`. Each generation keeps a ring buffer of its last `SSE_REPLAY_EVENTS` events (default **2000**). That covers several minutes of token deltas at typical local speeds (~20–60 events/s) while keeping memory bounded at roughly the size of a long reply.
+- **Cursor:** the `Last-Event-ID` header (sent automatically by `EventSource` on reconnect) takes precedence over `?lastEventId=` (for a newly created observer), so an automatic reconnect never reuses a stale URL cursor. Both must be 1–15 decimal digits, otherwise `400 VALIDATION`. Authorization (session and owner) is checked before any replay; a cursor is never a credential.
+- **No cursor** → `snapshot` (full state), then live events.
+- **Cursor inside the window** → exactly the missed events, then live.
+- **Cursor older than the window, unknown or in the future** → one `resync` event with the full snapshot, then live. There is never a silent gap.
+- **Terminal generation:** the replay/snapshot is sent (it includes the terminal event when the cursor is in the window) and the stream closes.
+- The client treats `resync` like `snapshot` (replace, then append deltas) and reconciles by `assistantMessageId`. The server guarantees exact replay, so the client does no deduplication.
+- **Browser connection limits:** each tab holds at most one EventSource for its open conversation (closed on terminal state, navigation, logout and account change). Over HTTP/1.1 browsers allow about 6 connections per origin, shared by all tabs. Many tabs streaming at once can therefore stall new requests until a stream ends. An HTTP/2 TLS proxy (Caddy, Tailscale HTTPS) removes this limit, and the server caps streams per user and in total (INV-62).
+
+### Checkpoints (`server/storage/checkpoints.ts`)
+
+- `_system/generations/<generation-id>.json` records the owner, conversation, ids, operation key, provider/model, state, content/reasoning so far and the last event id. It is never read as conversation history.
+- **States:** `running` → `terminal-decided` (outcome, final content and reasoning recorded before the Markdown write) → `terminal`.
+- The `running` checkpoint is written in the same locked step as acceptance (after the operation record is `committed`). While running it is rewritten at most every `GENERATION_CHECKPOINT_MS` (default 1000 ms), and only when content changed, plus on every state transition. One timer serves all generations; a test asserts well under one write per token. Writes are atomic and serialized per generation.
+- **Terminal sequence:** `terminal-decided` → canonical assistant write (idempotent by assistant id; INV-07) → operation `terminalWritten` → `terminal` → publish the state and the terminal event with the revision.
+- Unfinished checkpoints are recovery state. Finalized ones are removed after `GENERATION_RETENTION_MS` (startup sweep); in-memory terminal generations are evicted after the same time.
+
+### Restart policy (INV-21, INV-60)
+
+- In-flight generations do not survive a restart.
+- **Graceful shutdown** (an optimization only): stop admitting, abort provider streams, write the latest progress as `running` checkpoints, let terminal sequences already under way finish within 10 s, close observers.
+- **Startup step 5** (after operation records, before indexes):
+  - every `running` checkpoint → its partial reply and reasoning are appended once with `status=interrupted`
+  - every `terminal-decided` checkpoint → its recorded status and content are written once
+  - every committed operation with `terminalWritten: false` and no checkpoint → one empty `interrupted` reply
+
+  Each case is idempotent by assistant id (an existing block is skipped) and never recreates a deleted or touches a malformed conversation. The operation's `terminalWritten` flag is set, and that flag, not the absence of a block, decides, so a reply the user deleted is never re-added. Tests simulate a crash at each acceptance step and at each terminal-sequence boundary.
+
+### Lifecycle
+
+- Cancellation, provider interruption (errors, early stream end) and timeouts (inactivity, `GENERATION_MAX_MS`) all go through the single guarded terminal decision.
+- A generation without observers is not abandoned; it runs to completion.
+- Deterministic tests cover:
+  - an observer attaching during the terminal sequence (exactly one terminal event)
+  - reconnect after the terminal event
+  - cancel vs completion
+  - two concurrent sends to one conversation (one `409 GENERATION_IN_PROGRESS`)
+  - a disabled account (its generations are cancelled and its streams end)
+
+### E2E
+
+- `npm run test:e2e` builds, then runs Playwright against the production server with a paced mock provider, a temporary `DATA_DIR` and an account created with the CLI (`tests/e2e`). It covers reload mid-generation, a network drop and reconnect without duplicated or lost text, and cancel from the UI.
+- CI runs it on every push.
+
 ## Persistence (Phase 3)
 
 ### Storage layout and identity
@@ -366,6 +414,9 @@ Validated once at boot (`server/config.ts`); invalid values stop the process wit
 | `OPERATION_RETENTION_MS`                            | `604800000` (7 days)            | ≥ 2 days                                                                                      |
 | `CONTEXT_TRIM_STEP`                                 | 25% of the budget               | truncation anchor step in tokens                                                              |
 | `TEMPLATE_OVERHEAD_TOKENS`                          | `16`                            | per-message overhead for the fallback estimate                                                |
+| `GENERATION_CHECKPOINT_MS`                          | `1000`                          | checkpoint cadence while running                                                              |
+| `GENERATION_RETENTION_MS`                           | `3600000`                       | terminal generations and finalized checkpoints kept                                           |
+| `SSE_REPLAY_EVENTS`                                 | `2000`                          | replay ring buffer per generation                                                             |
 | `PUBLIC_ORIGIN`                                     | `http://localhost:<PORT>`       | https origin, or http://localhost / 127.0.0.1 / [::1] only                                    |
 | `TRUST_PROXY`                                       | `0`                             | proxy hops trusted for the client address                                                     |
 | `REGISTRATION_MODE`                                 | `closed`                        | `closed` \| `open`                                                                            |
@@ -388,7 +439,6 @@ All runtime JS/CSS/icons are built into `build/client` and served from the ChatU
 
 ## Later sections
 
-- Server-owned generation and replayable SSE: N/A until Phase 6.
 - Core chat UI, TanStack Query, primitives decision record: N/A until Phase 7.
 - Loading resilience: N/A until Phase 8.
 - Performance budgets and instrumentation: N/A until Phase 9.
@@ -427,8 +477,8 @@ Tests name the invariant in their title (e.g. `INV-01: …`). "Pending" rows are
 | INV-17 | Reducing a user's privileges or disabling them revokes all their sessions                                                                                                                                                   | 4              | `AuthService.resolveHash` (user reloaded per request; role/status mismatch revokes), `SessionStore.revokeUser`                                                              | `tests/server/auth.test.ts` (INV-17, password change)                                                                        | Implemented (4)                                                                              |
 | INV-18 | Only server-validated `(providerId, modelId)` pairs are ever sent to a provider                                                                                                                                             | 5              | `ModelCatalog.resolve` in `SendService.accept` (before any mutation)                                                                                                        | `tests/server/providers.test.ts` (unknown provider/model, pair valid on A sent to B)                                         | Implemented (5)                                                                              |
 | INV-19 | Every provider endpoint passes SSRF validation on every create/edit and at request time                                                                                                                                     | 5              | `server/providers/ssrf.ts` (`checkUrl` at load, `createSafeFetch` per request with pinning)                                                                                 | `tests/server/providers.test.ts` (INV-19 suite: categories, IPv4-mapped, exceptions, rebinding, redirects, load-time)        | Implemented (5; admin edits in Phase 10 reuse it)                                            |
-| INV-20 | SSE replay never silently skips events; a too-old `Last-Event-ID` triggers a full resync                                                                                                                                    | 6              | —                                                                                                                                                                           | —                                                                                                                            | Pending Phase 6                                                                              |
-| INV-21 | After a restart, no generation remains non-terminal; partial output of a running generation is persisted once as `interrupted`, and a terminal-decided outcome is persisted once with its recorded status                   | 6              | —                                                                                                                                                                           | —                                                                                                                            | Pending Phase 6                                                                              |
+| INV-20 | SSE replay never silently skips events; a too-old `Last-Event-ID` triggers a full resync                                                                                                                                    | 6              | `GenerationManager.observe` (ring buffer, `resync`), cursor rules in `server/routes/generations.ts`                                                                         | `tests/server/streaming.test.ts` (INV-20), `scripts/verify.ts` (reconnect), `tests/e2e/streaming.spec.ts`                    | Implemented (6)                                                                              |
+| INV-21 | After a restart, no generation remains non-terminal; partial output of a running generation is persisted once as `interrupted`, and a terminal-decided outcome is persisted once with its recorded status                   | 6              | `recoverGenerations` in `server/storage/recovery.ts`; `GenerationManager.shutdown`                                                                                          | `tests/server/streaming.test.ts` (INV-21 / INV-60)                                                                           | Implemented (6)                                                                              |
 | INV-22 | Rendered Markdown never executes script or raw HTML                                                                                                                                                                         | 7              | —                                                                                                                                                                           | —                                                                                                                            | Pending Phase 7                                                                              |
 | INV-23 | A stale response never overwrites newer client state                                                                                                                                                                        | 8              | —                                                                                                                                                                           | —                                                                                                                            | Pending Phase 8                                                                              |
 | INV-24 | Admin authorization is enforced server-side on every admin route                                                                                                                                                            | 10             | —                                                                                                                                                                           | —                                                                                                                            | Pending Phase 10                                                                             |

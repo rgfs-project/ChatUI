@@ -1,0 +1,55 @@
+## Phase 6 report
+
+- **Scope completed (files/features):**
+  - Checkpoints (`server/storage/checkpoints.ts`, `_system/generations/<id>.json`):
+    - `running` is written in the acceptance lock step; `terminal-decided` records the outcome before the Markdown write; then `terminal`.
+    - Throttled to `GENERATION_CHECKPOINT_MS` plus every state transition; finalized ones are swept after `GENERATION_RETENTION_MS`.
+  - Generation manager (`server/generations/manager.ts`):
+    - `SSE_REPLAY_EVENTS` ring buffer; cursor-based observe with snapshot, exact replay, or `resync`
+    - terminal sequence with checkpoints
+    - shutdown leaves running generations as recovery state
+    - `cancelForUser` for disabled accounts (wired through `AuthService`)
+  - SSE route: the `Last-Event-ID` header takes precedence over `?lastEventId=`; strict cursor validation; authorization before replay.
+  - Startup step 5 (`recoverGenerations`), after operation records and before indexes:
+    - `running` → one `interrupted` reply with the partial output
+    - `terminal-decided` → the recorded status once
+    - committed operation without a checkpoint → one empty `interrupted` reply
+    - idempotent by assistant id; driven by the `terminalWritten` flag; never recreates conversations
+  - Client: `resync` handled like `snapshot`; reconciliation by `assistantMessageId`; one observer per tab.
+  - Playwright `test:e2e` (`playwright.config.ts`, `tests/e2e`) and a CI step. `verify` checks reconnect with `Last-Event-ID` and no duplicate canonical write.
+  - Config: `GENERATION_CHECKPOINT_MS`, `GENERATION_RETENTION_MS`, `SSE_REPLAY_EVENTS`.
+- **Required tests:**
+  - `tests/server/streaming.test.ts`:
+    - replay within the window (exact ids and text); too-old, unknown and future cursors → `resync`; query resume on a recreated observer; header precedence over a stale query; malformed cursors; authorization before replay
+    - a lagging observer is disconnected and resumes by replay or resync with consistent text
+    - an observer attaching during the terminal sequence (deterministic gates); reconnect after terminal; two concurrent sends to one conversation; disabled-account cancellation
+    - checkpoint cadence (well under one write per token; ends `terminal`)
+    - restart with a `running` checkpoint → `interrupted` written once (idempotent over a second restart)
+    - crash after `terminal-decided` before Markdown → recorded status once; crash between Markdown and checkpoint → no duplicate
+    - deleted source not recreated; a user-deleted reply is not re-added
+    - crashes at each acceptance step (`afterPendingRecord`, `afterMarkdownWrite`, `afterCommit`) recover without duplicates or recreated conversations
+  - `tests/server/manager.test.ts`: cancel/complete race, shutdown semantics.
+  - `tests/server/generations.test.ts`: cancel, provider interruption, timeouts, disconnect/reconnect.
+  - `tests/e2e/streaming.spec.ts`: reload mid-generation, network drop/reconnect without duplicated or lost text, cancel from the UI.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (18 files, 343 tests)
+  - `verify`: PASS (70/70)
+  - `test:e2e`: PASS (3/3)
+  - `verify:compose`: PASS on Docker and rootless Podman; `test:e2e` also runs in CI (run 36550688799)
+  - `npm audit`: 0 vulnerabilities
+- **Invariants:**
+  - INV-20 → `observe` + cursor rules → streaming tests, verify, e2e.
+  - INV-21 → `recoverGenerations` + shutdown → streaming tests.
+  - INV-60 (Phase 6 portion) → checkpoint/operation recovery → streaming and conversations tests.
+  - INV-07 → terminal sequence → streaming tests and verify.
+- **Behaviour changes from earlier phases:**
+  - Graceful shutdown no longer fails running generations; they are recovered as `interrupted` at the next start.
+  - A committed send whose generation never launched now gets one empty `interrupted` reply at startup (Phase 3 left it unanswered, as specified then).
+- **Dependencies:** none new (`@playwright/test` was already present).
+- **Deviations / limitations / unverified items:**
+  - Browser/proxy HTTP/1.1 connection limits are documented, not load-tested.
+  - The e2e network-drop test relies on Chromium's offline emulation; the byte-level reconnect is asserted in `verify`.
+  - Multi-process coordination is out of scope.
+- **Commit/tag status:** commit `feat(phase-6): reconnectable production streaming and generation lifecycle` and tag `phase-6`, pushed to `origin/main`.
+- **Questions needing approval:** none.

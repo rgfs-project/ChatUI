@@ -724,7 +724,14 @@ describe("INV-58: operation keys", () => {
     });
     expect((await api(again, "GET", `/api/operations/${committedKey}`)).status).toBe(200);
     expect((await api(again, "GET", `/api/operations/${rolledKey}`)).status).toBe(404);
-    expect(readFileSync(file)).toEqual(bytes); // never overwritten
+    // The committed record had no reply and no checkpoint: startup writes one
+    // empty `interrupted` reply (contracts §4.1 step 5); nothing else changes.
+    const after = parseConversation(readFileSync(file, "utf8"));
+    if (!after.ok) throw new Error(after.reason);
+    expect(after.conversation.blocks).toEqual([
+      expect.objectContaining({ type: "assistant", status: "interrupted", body: "" }),
+    ]);
+    expect(readFileSync(file).subarray(0, 20)).toEqual(bytes.subarray(0, 20));
     expect(readdirSync(path.join(run.dataDir, run.session.userId, "chats"))).toHaveLength(1); // nothing recreated
   });
 

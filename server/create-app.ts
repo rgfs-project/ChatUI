@@ -17,6 +17,7 @@ import { PreferencesStore } from "./storage/preferences.ts";
 import { UserStore } from "./storage/users.ts";
 import { SendService, type SendServiceOptions } from "./chat/send-service.ts";
 import { ChatIndex } from "./storage/chat-index.ts";
+import { CheckpointStore } from "./storage/checkpoints.ts";
 import { ConversationStore } from "./storage/conversations.ts";
 import { KeyedLocks } from "./storage/locks.ts";
 import { OperationStore } from "./storage/operations.ts";
@@ -81,6 +82,8 @@ export interface ChatUiApp {
   services: RouteServices;
   /** Startup recovery (contracts §2); requests must not be served before it resolves. */
   ready: Promise<RecoveryReport>;
+  /** Generation checkpoint store (diagnostics and tests). */
+  checkpoints: CheckpointStore;
   /** Ends generations (persisting their outcomes) and closes SSE observers. */
   shutdown: () => Promise<void>;
 }
@@ -97,7 +100,13 @@ export function createApp(options: AppOptions): ChatUiApp {
   const storageConfig = options.config.storage;
   const authConfig = options.config.auth;
   const safeFetch = createSafeFetch(providerConfig.ssrf, options.resolver);
+  const paths = new DataPaths(options.config.dataDir);
+  const checkpoints = new CheckpointStore(paths);
   const generations = new GenerationManager({
+    checkpoints,
+    checkpointMs: storageConfig.generationCheckpointMs,
+    replayEvents: storageConfig.sseReplayEvents,
+    retentionMs: storageConfig.generationRetentionMs,
     logger,
     maxOutputTokens: providerConfig.maxOutputTokens,
     generationMaxMs: providerConfig.generationMaxMs,
@@ -140,13 +149,13 @@ export function createApp(options: AppOptions): ChatUiApp {
     },
   });
 
-  const paths = new DataPaths(options.config.dataDir);
   const locks = new KeyedLocks();
   const index = new ChatIndex(paths, logger);
   const conversations = new ConversationStore({ paths, locks, index, now });
   const operations = new OperationStore(paths);
   const send = new SendService({
     store: conversations,
+    checkpoints,
     operations,
     catalog: models,
     generations,
@@ -168,7 +177,17 @@ export function createApp(options: AppOptions): ChatUiApp {
   const hasher =
     options.hasher ??
     new PasswordHasher({ concurrency: authConfig.hashConcurrency, queue: authConfig.hashQueue });
-  const auth = new AuthService({ users, sessions, hasher, config: authConfig, logger });
+  const auth = new AuthService({
+    users,
+    sessions,
+    hasher,
+    config: authConfig,
+    logger,
+    // A disabled or removed account's generations are cancelled (Phase 6).
+    onAccountRejected: (userId) => {
+      generations.cancelForUser(userId);
+    },
+  });
   const sseConnections = new SseConnections({
     maxPerUser: authConfig.maxSsePerUser,
     maxTotal: authConfig.maxSseTotal,
@@ -188,6 +207,11 @@ export function createApp(options: AppOptions): ChatUiApp {
       retentionMs: storageConfig.operationRetentionMs,
       startedAt: options.startedAt ?? now(),
       now: now(),
+      generations: {
+        store: conversations,
+        checkpoints,
+        retentionMs: storageConfig.generationRetentionMs,
+      },
     });
     await users.rebuildIndex();
     await sessions.sweep();
@@ -365,6 +389,7 @@ export function createApp(options: AppOptions): ChatUiApp {
   return {
     handler: app,
     services,
+    checkpoints,
     ready,
     shutdown: async () => {
       clearInterval(retentionTimer);

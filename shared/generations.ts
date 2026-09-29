@@ -117,6 +117,8 @@ export type GenerationSnapshot = z.infer<typeof generationSnapshotSchema>;
 /** SSE events on `GET /api/generations/:id/stream`. */
 export type GenerationEvent =
   | { type: "snapshot"; id: number; data: GenerationSnapshot }
+  /** The cursor was outside the replay window (or unknown): full state, then live events. */
+  | { type: "resync"; id: number; data: GenerationSnapshot }
   | { type: "state"; id: number; data: { state: "streaming" } }
   | { type: "delta"; id: number; data: { content?: string; reasoning?: string } }
   | {

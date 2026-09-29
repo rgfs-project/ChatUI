@@ -5,10 +5,17 @@ import {
   startGenerationRequestSchema,
   startGenerationResponseSchema,
 } from "@shared/generations";
+import { ErrorCode } from "@shared/errors";
+import { AppError } from "../errors.ts";
 import { openSse } from "../generations/sse.ts";
 import { defineRoute, defineSseRoute, userOf } from "../registry.ts";
 
 const idParams = z.strictObject({ id: canonicalUuid });
+/** A bounded nonnegative decimal event id (never an access credential). */
+const cursorSchema = z
+  .string()
+  .regex(/^\d{1,15}$/, "must be a nonnegative integer")
+  .transform((value) => Number(value));
 const unknownId = { id: "00000000-0000-4000-8000-000000000000" };
 
 export const startGenerationRoute = defineRoute({
@@ -63,9 +70,25 @@ export const streamGenerationRoute = defineSseRoute({
   path: "/api/generations/:id/stream",
   auth: "user",
   csrf: "none",
-  request: { params: idParams },
-  handler: ({ params }, ctx) => {
+  request: {
+    params: idParams,
+    // A newly created observer may resume from a cursor (contracts §5).
+    query: z.strictObject({ lastEventId: cursorSchema.optional() }),
+  },
+  handler: ({ params, query }, ctx) => {
     const { req, res, services } = ctx;
+    // EventSource's automatic reconnect sends Last-Event-ID; it takes
+    // precedence over a (possibly stale) URL cursor.
+    const header = req.get("last-event-id");
+    let cursor: number | undefined;
+    if (header !== undefined && header !== "") {
+      const parsed = cursorSchema.safeParse(header);
+      if (!parsed.success)
+        throw new AppError(ErrorCode.VALIDATION, "Last-Event-ID must be a nonnegative integer");
+      cursor = parsed.data;
+    } else {
+      cursor = query.lastEventId;
+    }
     const auth = userOf(ctx);
     // Ownership (404) and connection caps (429) are decided before any stream bytes.
     services.generations.snapshot(params.id, auth.userId);
@@ -87,7 +110,7 @@ export const streamGenerationRoute = defineSseRoute({
     untrack = services.sseConnections.add(auth.userId, auth.tokenHash, () => {
       observer.terminate();
     });
-    unsubscribe = services.generations.observe(params.id, observer, auth.userId);
+    unsubscribe = services.generations.observe(params.id, observer, auth.userId, cursor);
   },
   fixture: { params: unknownId, expectStatus: 404 },
 });

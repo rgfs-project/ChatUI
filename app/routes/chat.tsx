@@ -185,8 +185,10 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     if (!observedId) return;
     const source = new EventSource(`/api/generations/${observedId}/stream`);
-    source.addEventListener("snapshot", (event) => {
-      const s = JSON.parse(event.data as string) as GenerationSnapshot;
+    // snapshot (fresh observer) and resync (cursor outside the replay window)
+    // both carry the full state and replace the view; deltas then continue.
+    const onFullState = (event: MessageEvent<string>) => {
+      const s = JSON.parse(event.data) as GenerationSnapshot;
       setLive({
         generationId: s.generationId,
         assistantMessageId: s.assistantMessageId,
@@ -200,7 +202,9 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
         source.close();
         void revalidator.revalidate();
       }
-    });
+    };
+    source.addEventListener("snapshot", onFullState);
+    source.addEventListener("resync", onFullState);
     source.addEventListener("state", (event) => {
       const { state } = JSON.parse(event.data as string) as { state: GenerationState };
       setLive((v) => (v?.generationId === observedId ? { ...v, state } : v));

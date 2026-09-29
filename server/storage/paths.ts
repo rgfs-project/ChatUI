@@ -96,6 +96,18 @@ export class DataPaths {
     return this.inside(SYSTEM_DIR, "users.index.json");
   }
 
+  generationsDir(): string {
+    return this.inside(SYSTEM_DIR, "generations");
+  }
+
+  generationFile(generationId: string): string {
+    return this.inside(
+      SYSTEM_DIR,
+      "generations",
+      `${this.uuid(generationId, "generation id")}.json`,
+    );
+  }
+
   sessionsDir(): string {
     return this.inside(SYSTEM_DIR, "sessions");
   }
