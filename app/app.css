@@ -127,6 +127,8 @@ a:focus-visible {
 
 .composer {
   display: grid;
+  /* Never wider than its container (the model select's longest option has a large min-content). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
 }
 
@@ -231,13 +233,6 @@ button.secondary {
   white-space: nowrap;
 }
 
-@media (max-width: 640px) {
-  .sidebar {
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
 .auth-form {
   display: grid;
   gap: 0.5rem;
@@ -264,7 +259,9 @@ body {
   grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas: "header header" "sidebar main";
-  height: 100dvh;
+  /* The visible height: dynamic viewport units, or the visual viewport on
+     browsers whose keyboard overlays the page (set by the app layout). */
+  height: var(--app-height, 100dvh);
   overflow: hidden;
 }
 
@@ -316,6 +313,7 @@ body {
 .conversation {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   max-width: none;
@@ -344,6 +342,8 @@ body {
   padding: 0;
   max-width: 48rem;
   display: grid;
+  /* Wide content (long code lines) must scroll inside itself, never widen the column. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -393,6 +393,9 @@ body {
 .markdown td {
   border: 1px solid var(--border);
   padding: 0.25rem 0.5rem;
+  /* Words wrap normally inside cells; a wide table scrolls horizontally. */
+  overflow-wrap: normal;
+  min-width: 6rem;
 }
 
 .code-block {
@@ -651,4 +654,186 @@ button.danger {
 .secondary-link {
   align-self: center;
   margin-right: auto;
+}
+
+/* ---- Phase 11: responsive layout and touch ---- */
+
+/* Safe areas (viewport-fit=cover): nothing sits under a notch or home indicator. */
+.app-header {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+.conversation .composer {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+}
+
+/* Nested scrollers keep their scroll: no chaining into the page. */
+.transcript,
+.sidebar,
+.drawer-content,
+.dialog-content {
+  overscroll-behavior: contain;
+}
+
+.code-block pre,
+.markdown table {
+  overscroll-behavior-x: contain;
+}
+
+.model-select {
+  min-width: 0;
+  max-width: min(20rem, 100%);
+}
+
+/* The drawer (below the breakpoint): a modal panel from the leading edge. */
+.drawer-content {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(20rem, 85vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  border-right: 1px solid var(--border);
+  padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom))
+    max(0.75rem, env(safe-area-inset-left));
+  overflow-y: auto;
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.drawer-content .sidebar {
+  border: 0;
+  padding: 0;
+}
+
+@media (max-width: 767.98px) {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "header" "main";
+  }
+
+  /* The in-grid sidebar gives way to the drawer. */
+  .app-shell > .sidebar {
+    display: none;
+  }
+
+  .transcript {
+    padding: 0.75rem;
+  }
+
+  .conversation-header {
+    padding: 0.5rem 0.75rem 0;
+  }
+
+  .conversation .composer {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  /* Dialogs and overlays become bottom sheets: full width, viewport-safe. */
+  .dialog-content,
+  .overlay-panel,
+  .overlay-wide {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    max-height: 90dvh;
+    border-radius: 0.75rem 0.75rem 0 0;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .jump-to-latest {
+    bottom: 7rem;
+  }
+
+  /* A compact composer: the transcript keeps room above the on-screen keyboard. */
+  .conversation .composer {
+    padding-top: 0.5rem;
+  }
+
+  .composer textarea {
+    height: 4.5em;
+    max-height: 30dvh;
+  }
+
+  .composer .composer-actions {
+    flex-wrap: nowrap;
+    /* Full column width: auto margins would size it to its content instead. */
+    width: 100%;
+    margin: 0.4rem 0 0;
+  }
+
+  .composer .model-select {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  .composer .composer-actions button {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  /* Keyboard shortcuts don't apply to touch keyboards. */
+  .composer .hint {
+    display: none;
+  }
+}
+
+/* Touch targets: at least 44x44 CSS px on narrow screens and coarse pointers. */
+@media (max-width: 767.98px), (pointer: coarse) {
+  button,
+  select,
+  .icon-button,
+  .new-chat,
+  .brand,
+  .app-header a,
+  .sidebar li a,
+  .menu-item,
+  .settings-actions a,
+  .dialog-actions a,
+  summary {
+    min-height: 44px;
+  }
+
+  button,
+  .icon-button,
+  .app-header a {
+    min-width: 44px;
+  }
+
+  .brand,
+  .new-chat,
+  .sidebar li a,
+  .settings-actions a,
+  .dialog-actions a,
+  summary {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .sidebar li a {
+    display: flex;
+  }
+
+  /* 16px text inputs: iOS does not zoom the page when they are focused. */
+  textarea,
+  input,
+  select {
+    font-size: max(1rem, 16px);
+  }
 }

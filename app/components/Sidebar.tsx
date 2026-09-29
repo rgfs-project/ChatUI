@@ -14,7 +14,16 @@ const loadDialogs = () => import("./Dialogs");
 const RenameDialog = lazy(() => loadDialogs().then((m) => ({ default: m.RenameDialog })));
 const ConfirmDialog = lazy(() => loadDialogs().then((m) => ({ default: m.ConfirmDialog })));
 
-function SidebarImpl({ userId, hidden }: { userId: string; hidden: boolean }) {
+function SidebarImpl({
+  userId,
+  hidden,
+  navId = "sidebar",
+}: {
+  userId: string;
+  hidden: boolean;
+  /** The drawer instance needs its own id (Phase 11). */
+  navId?: string;
+}) {
   count("sidebarRenders");
   useEffect(() => {
     count("sidebarMounts");
@@ -59,7 +68,7 @@ function SidebarImpl({ userId, hidden }: { userId: string; hidden: boolean }) {
   });
 
   return (
-    <nav id="sidebar" className="sidebar" aria-label="Conversations" hidden={hidden}>
+    <nav id={navId} className="sidebar" aria-label="Conversations" hidden={hidden}>
       <Link to={paths.newChat()} className="new-chat">
         <Plus size={16} aria-hidden /> New chat
       </Link>

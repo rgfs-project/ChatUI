@@ -26,6 +26,10 @@ export const E2E_ADMIN = "e2e-admin";
 /** A seeded 200-message conversation owned by E2E_USER. */
 export const LONG_CONVERSATION = "7e0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d";
 export const LONG_TITLE = "Long seeded conversation";
+/** A conversation with wide content: a long code line, a wide table, a long URL. */
+export const WIDE_CONVERSATION = "9a1b2c3d-4e5f-4a6b-8c7d-8e9fa0b1c2d3";
+export const WIDE_TITLE = "Wide content";
+
 /** Unique text in an older message (find-in-page). */
 export const OLDER_NEEDLE = "needle-older-message-17";
 
@@ -56,6 +60,36 @@ function userIdOf(dataDir: string, username: string): string {
     if (user.username === username) return entry;
   }
   throw new Error(`no account ${username}`);
+}
+
+function seedWideConversation(dataDir: string, userId: string): void {
+  const at = "2026-01-02T00:00:00.000Z";
+  const code = `const wide = "${"x".repeat(400)}";`;
+  const table = `| ${Array.from({ length: 14 }, (_, i) => `column ${String(i)}`).join(" | ")} |\n|${" --- |".repeat(14)}\n| ${Array.from({ length: 14 }, (_, i) => `value-${String(i)}-long`).join(" | ")} |`;
+  const model = {
+    title: WIDE_TITLE,
+    createdAt: at,
+    updatedAt: at,
+    blocks: [
+      { type: "user" as const, id: randomUUID(), time: at, body: "Show me wide things" },
+      {
+        type: "assistant" as const,
+        id: randomUUID(),
+        status: "complete" as const,
+        provider: "local",
+        model: "mock-chat",
+        time: at,
+        body: `Here:\n\n\`\`\`js\n${code}\n\`\`\`\n\n${table}\n\nhttps://example.com/${"segment".repeat(40)}`,
+      },
+    ],
+  };
+  const problem = validateModel(model);
+  if (problem) throw new Error(problem);
+  const dir = path.join(dataDir, userId, "chats");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  writeFileSync(path.join(dir, `${WIDE_CONVERSATION}.md`), serializeConversation(model), {
+    mode: 0o600,
+  });
 }
 
 /** Writes a canonical 200-message conversation (picked up by startup reconciliation). */
@@ -116,6 +150,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await createUser(dataDir, E2E_OTHER_USER);
   await createUser(dataDir, E2E_ADMIN, true);
   seedLongConversation(dataDir, userIdOf(dataDir, E2E_USER));
+  seedWideConversation(dataDir, userIdOf(dataDir, E2E_USER));
   const port = await freePort();
   const base = `http://127.0.0.1:${String(port)}`;
   const server = spawn(process.execPath, ["server/main.ts"], {

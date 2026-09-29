@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 10 (administration).** A server-rendered chat interface built composer-first, plus an admin dashboard: users (create, reset passwords, roles, disable, delete), providers (write-only API keys, network-policy checks), per-model visibility, sampling and system prompts, instance settings, index maintenance and an audit log. Authorization is always enforced on the server. Mobile layout and uploads arrive in later phases.
+> **Status: Phase 11 (mobile).** A server-rendered chat interface that works on phones, tablets and desktops: a drawer for conversations on small screens, a composer that stays above the on-screen keyboard, bottom-sheet dialogs and touch-sized controls. It also has an admin dashboard with server-enforced authorization and composer-first loading. Uploads arrive in a later phase.
 
 ## Prerequisites
 

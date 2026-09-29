@@ -1,6 +1,6 @@
 import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query";
 import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   Link,
   Outlet,
@@ -15,6 +15,7 @@ import { Sidebar } from "../components/Sidebar";
 import { SignedOutShell } from "../components/SignedOutShell";
 import { appContext } from "../context";
 import { useAuth } from "../lib/auth-store";
+import { useNarrow } from "../lib/use-media-query";
 import { documentPathOf, paths, type OverlayState } from "../lib/paths";
 import { getQueryClient, queryKeys } from "../lib/query";
 import { prefetchForRequest } from "../lib/server-query";
@@ -93,9 +94,26 @@ export default function AppLayout(props: Route.ComponentProps) {
   );
 }
 
+// The drawer (Radix Dialog + the sidebar) loads on demand, never in the critical bundle.
+const loadDrawer = () => import("../components/SidebarDrawer");
+const SidebarDrawer = lazy(loadDrawer);
+
 function Shell({ loaderData }: Route.ComponentProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Mounted after first use so it can restore focus when it closes.
+  const [drawerUsed, setDrawerUsed] = useState(false);
+  const drawerTrigger = useRef<HTMLButtonElement>(null);
+  const narrow = useNarrow();
+  const drawerShown = narrow && drawerOpen;
   const location = useLocation();
+  // Navigating (e.g. picking a conversation in the drawer) closes the drawer.
+  const [drawerPath, setDrawerPath] = useState(location.pathname);
+  if (drawerPath !== location.pathname) {
+    setDrawerPath(location.pathname);
+    setDrawerOpen(false);
+  }
+  useVisualViewportHeight();
   const matches = useMatches();
   const auth = useAuth();
   const overlay = matches.some((m) => /routes\/(settings|admin)$/.test(m.id));
@@ -119,17 +137,29 @@ function Shell({ loaderData }: Route.ComponentProps) {
         >
           <header className="app-header">
             <button
+              ref={drawerTrigger}
               type="button"
               className="icon-button"
-              aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
-              aria-expanded={!collapsed}
-              aria-controls="sidebar"
-              title={collapsed ? "Show sidebar" : "Hide sidebar"}
+              aria-label={
+                narrow ? "Open conversations" : collapsed ? "Show sidebar" : "Hide sidebar"
+              }
+              aria-expanded={narrow ? drawerShown : !collapsed}
+              aria-controls={narrow ? undefined : "sidebar"}
+              aria-haspopup={narrow ? "dialog" : undefined}
+              title={narrow ? "Conversations" : collapsed ? "Show sidebar" : "Hide sidebar"}
+              // Warm the drawer chunk on intent (touch or mouse), never required.
+              onPointerDown={() => void loadDrawer()}
+              onFocus={() => {
+                if (narrow) void loadDrawer();
+              }}
               onClick={() => {
-                setCollapsed((c) => !c);
+                if (narrow) {
+                  setDrawerUsed(true);
+                  setDrawerOpen(true);
+                } else setCollapsed((c) => !c);
               }}
             >
-              {collapsed ? (
+              {collapsed || narrow ? (
                 <PanelLeftOpen size={18} aria-hidden />
               ) : (
                 <PanelLeftClose size={18} aria-hidden />
@@ -169,7 +199,18 @@ function Shell({ loaderData }: Route.ComponentProps) {
               >
                 <Sidebar userId={user.id} hidden={collapsed} />
               </SectionBoundary>
-              <div className="app-main">
+              {narrow && drawerUsed ? (
+                <Suspense fallback={null}>
+                  <SidebarDrawer
+                    userId={user.id}
+                    open={drawerShown}
+                    onOpenChange={setDrawerOpen}
+                    returnFocus={() => drawerTrigger.current}
+                  />
+                </Suspense>
+              ) : null}
+              {/* The background is inert while the drawer is open. */}
+              <div className="app-main" inert={drawerShown}>
                 <SectionBoundary
                   label="This conversation"
                   resetKeys={[location.pathname]}
@@ -220,4 +261,31 @@ export function ErrorBoundary() {
       </button>
     </main>
   );
+}
+
+/**
+ * iOS Safari ignores `interactive-widget=resizes-content`: its on-screen
+ * keyboard overlays the page without shrinking the layout viewport, so
+ * `100dvh` would hide the composer behind it. CSS can't express "the visible
+ * height", so only in that case the visual viewport height is exposed as
+ * `--app-height` (the shell's height). Where the layout viewport already
+ * resizes (Chromium), innerHeight shrinks with it and nothing is set.
+ */
+function useVisualViewportHeight(): void {
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const root = document.documentElement;
+    const update = () => {
+      if (viewport.height < window.innerHeight - 1)
+        root.style.setProperty("--app-height", `${String(Math.round(viewport.height))}px`);
+      else root.style.removeProperty("--app-height");
+    };
+    viewport.addEventListener("resize", update);
+    update();
+    return () => {
+      viewport.removeEventListener("resize", update);
+      root.style.removeProperty("--app-height");
+    };
+  }, []);
 }
