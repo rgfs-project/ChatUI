@@ -1,6 +1,7 @@
 // Accounts (contracts §6). Loadable natively by Node (used by the CLI).
 import { randomUUID } from "node:crypto";
-import { readdir } from "node:fs/promises";
+import { readdir, rename } from "node:fs/promises";
+import path from "node:path";
 import { atomicWrite, ensureDir, readOrNull } from "./fs.ts";
 import type { KeyedLocks } from "./locks.ts";
 import { isUuid, type DataPaths } from "./paths.ts";
@@ -150,6 +151,48 @@ export class UserStore {
         `${JSON.stringify({ version: 1, users: Object.fromEntries(this.byName) }, null, 2)}\n`,
       );
       return record;
+    });
+  }
+
+  /**
+   * Check-and-update under the registry lock: `change` sees the current
+   * record and every account (e.g. to protect the last admin) and returns the
+   * patch, or throws to refuse.
+   */
+  async updateChecked(
+    id: string,
+    change: (
+      current: UserRecord,
+      all: UserRecord[],
+    ) => Partial<Pick<UserRecord, "passwordHash" | "role" | "status">>,
+  ): Promise<UserRecord> {
+    return this.locks.run(REGISTRY_LOCK, async () => {
+      const current = await this.get(id);
+      if (!current) throw new UserError("not_found", "Account not found");
+      const patch = change(current, await this.all());
+      const next: UserRecord = { ...current, ...patch, updatedAt: this.now().toISOString() };
+      await atomicWrite(this.paths.userFile(id), `${JSON.stringify(next, null, 2)}\n`);
+      return next;
+    });
+  }
+
+  /**
+   * Closure's exclusive step (callers hold the account barrier exclusively):
+   * atomically renames the account directory into `_system/deleting/` and
+   * drops it from the username index. Returns the renamed path to delete.
+   */
+  async detach(id: string): Promise<string | null> {
+    return this.locks.run(REGISTRY_LOCK, async () => {
+      const target = path.join(this.paths.deletingDir(), `${id}-${randomUUID()}`);
+      await ensureDir(this.paths.deletingDir());
+      try {
+        await rename(this.paths.userDir(id), target);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      }
+      await this.rebuildIndex();
+      return target;
     });
   }
 

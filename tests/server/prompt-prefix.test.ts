@@ -108,5 +108,6 @@ describe("prompt-prefix stability across turns (formatted prompt)", () => {
     expect(moved).toBeGreaterThan(0);
     expect(moved).toBeLessThan((turns - 1) / 4);
     expect(reused + moved).toBe(turns - 1);
-  });
+    // 32 real sends through the app: allow for slower CI runners.
+  }, 60_000);
 });

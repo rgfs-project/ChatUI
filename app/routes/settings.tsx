@@ -24,7 +24,12 @@ export default function SettingsOverlay() {
         </p>
         <p className="settings-actions">
           <Link to={paths.account()}>Change password</Link>
-          {user?.role === "admin" ? <Link to={paths.admin()}>Administration</Link> : null}
+          {user?.role === "admin" ? (
+            // Intent prefetch of the admin chunk, only for admins (Phase 9 rules).
+            <Link to={paths.admin()} prefetch="intent">
+              Administration
+            </Link>
+          ) : null}
           <button
             type="button"
             className="secondary"

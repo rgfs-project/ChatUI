@@ -25,6 +25,18 @@ function isObject(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** OpenAI-compatible and llama.cpp sampling parameters, only those configured. */
+function samplingFields(sampling: ChatRequest["sampling"]): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!sampling) return out;
+  if (sampling.temperature !== undefined) out.temperature = sampling.temperature;
+  if (sampling.topP !== undefined) out.top_p = sampling.topP;
+  if (sampling.topK !== undefined) out.top_k = sampling.topK;
+  if (sampling.minP !== undefined) out.min_p = sampling.minP;
+  if (sampling.repeatPenalty !== undefined) out.repeat_penalty = sampling.repeatPenalty;
+  return out;
+}
+
 export function createLlamaCppProvider(
   config: Pick<ProviderConfig, "baseUrl" | "apiKey" | "timeoutMs" | "maxResponseBytes"> & {
     /** SSRF-checked, pinned, non-redirecting fetch (defaults to global fetch in unit tests). */
@@ -330,6 +342,7 @@ export function createLlamaCppProvider(
             model: request.model,
             messages: request.messages,
             max_tokens: request.maxTokens,
+            ...samplingFields(request.sampling),
             stream: true,
             stream_options: { include_usage: true },
           }),

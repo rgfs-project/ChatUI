@@ -87,11 +87,9 @@ describe("INV-29 groundwork: startup dependency graph", () => {
     const convo = gate<ReturnType<typeof conversation>>();
     const list = vi.fn();
     const services = {
-      models: {
-        listModels: () => {
-          models.startedAt = performance.now();
-          return models.promise;
-        },
+      modelList: () => {
+        models.startedAt = performance.now();
+        return models.promise.then((providers) => ({ providers, defaultModel: null }));
       },
       conversationDto: () => {
         convo.startedAt = performance.now();
@@ -139,7 +137,8 @@ describe("INV-29 groundwork: startup dependency graph", () => {
         }, 150),
       );
     const services = {
-      models: { listModels: () => delay(MODELS.providers) },
+      modelList: () =>
+        delay(MODELS.providers).then((providers) => ({ providers, defaultModel: null })),
       conversationDto: () => delay(conversation([message(1, "user", "hi")])),
       conversations: { list: () => [] },
     };
@@ -158,7 +157,7 @@ describe("INV-29 groundwork: startup dependency graph", () => {
     try {
       const services = {
         // Discovery that never answers (a cold, stuck provider).
-        models: { listModels: () => new Promise(() => undefined) },
+        modelList: () => new Promise(() => undefined),
         conversationDto: () => Promise.resolve(conversation([message(1, "user", "still here")])),
         conversations: { list: () => [] },
       };
@@ -194,15 +193,15 @@ describe("INV-29 groundwork: startup dependency graph", () => {
   });
 
   it("signed out: the guard redirects before any private read starts", async () => {
-    const listModels = vi.fn();
+    const modelList = vi.fn();
     const conversationDto = vi.fn();
     const handler = createStaticHandler(routes());
     const result = await handler.query(new Request(`http://localhost/chat/${CONV}`), {
-      requestContext: context({ models: { listModels }, conversationDto }, false),
+      requestContext: context({ modelList, conversationDto }, false),
     });
     expect(result).toBeInstanceOf(Response);
     expect((result as Response).headers.get("Location")).toBe(`/login?returnTo=%2Fchat%2F${CONV}`);
-    expect(listModels).not.toHaveBeenCalled();
+    expect(modelList).not.toHaveBeenCalled();
     expect(conversationDto).not.toHaveBeenCalled();
   });
 });

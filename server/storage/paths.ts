@@ -79,6 +79,11 @@ export class DataPaths {
     return this.inside(this.uuid(userId, "user id"), "operations", `${digest}.json`);
   }
 
+  /** Account directories being removed by closure (contracts §6). */
+  deletingDir(): string {
+    return this.inside(SYSTEM_DIR, "deleting");
+  }
+
   systemDir(): string {
     return this.inside(SYSTEM_DIR);
   }

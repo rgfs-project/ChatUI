@@ -9,7 +9,16 @@ import { paths, type OverlayState } from "../lib/paths";
  * conversation behind it and Back (or Escape/close) returns to it; loaded
  * directly it opens over a new chat and closing goes there.
  */
-export function Overlay({ title, children }: { title: string; children: ReactNode }) {
+export function Overlay({
+  title,
+  children,
+  wide = false,
+}: {
+  title: string;
+  children: ReactNode;
+  /** A wider panel (administration). */
+  wide?: boolean;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const background = (location.state as OverlayState | null)?.background;
@@ -26,7 +35,10 @@ export function Overlay({ title, children }: { title: string; children: ReactNod
     >
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content overlay-panel" data-testid="overlay">
+        <Dialog.Content
+          className={`dialog-content overlay-panel${wide ? " overlay-wide" : ""}`}
+          data-testid="overlay"
+        >
           <div className="overlay-header">
             <Dialog.Title className="dialog-title">{title}</Dialog.Title>
             <Dialog.Close asChild>

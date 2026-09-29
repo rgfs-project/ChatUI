@@ -1,0 +1,81 @@
+## Phase 10 report
+
+- **Scope completed (files/features):**
+  - Authorization: registry `admin` policy (`server/registry.ts`) on all 17 `/api/admin/*` routes (`server/routes/admin.ts`), with the role resolved from the fresh user record on every request. `/admin` document route: 404 unless admin.
+  - Users (`server/admin/accounts.ts`):
+    - list/view DTOs (no `passwordHash`), create with an initial password, set password (revokes every session)
+    - role/status changes where reductions revoke sessions and cancel-and-forget generations
+    - last-admin protection under the registry lock (`LAST_ADMIN`)
+    - deletion via the full closure sequence, with the typed username required
+  - Account closure (INV-61):
+    - `UserBarrier` (fair shared/exclusive per-user barrier) and `AccountWrites` (shared barrier + `closing` recheck, never recreating a user root), wired into conversations, operation records, preferences and admin index rebuilds
+    - `GenerationManager.cancelAndForgetUser`; terminal writes for closing accounts are skipped, not retried
+    - `UserStore.detach` (rename into `_system/deleting/`); the user's checkpoints are removed
+    - `resumeClosures` at startup
+  - Providers (`server/admin/providers.ts`):
+    - create/edit/remove on `providers.json` (atomic, locked) with an in-process registry reload (`installProviders`)
+    - full SSRF validation on every save and test (`ENDPOINT_NOT_ALLOWED`)
+    - write-only `apiKey`/`clearApiKey`
+    - `samplingExtensions` flag
+    - "test connection" through the guarded client
+  - Settings (`server/admin/settings.ts`, `_system/settings.json`):
+    - registration override, default model, time zone, generation limits (per-user admission, output tokens)
+    - per-model hidden flag, sampling (`temperature`, `topP`, `topK`, `minP`, `repeatPenalty`), system prompt with `{{username}}`/`{{date}}`/`{{timezone}}` (single expansion; `{{time}}` rejected), and `timeContext` (a context block before the newest user message only)
+    - settings revision in the §4.1 recheck
+    - hidden models filtered for non-admins in `/api/models` and the SSR seed; `defaultModel` in the model list DTO
+  - Audit (`server/admin/audit.ts`): fsynced monthly JSONL with actor, action, target, outcome and code, plus field _names_; `GET /api/admin/audit`.
+  - UI: the `/admin` overlay (`app/admin/`) with Radix Tabs (Users, Providers, Models, Settings, Maintenance, Audit log) and confirmations (typed username for deletion). It's a lazy route chunk with its own CSS; the Settings link prefetches it on intent for admins only.
+  - CLI: `user:reset-password --username` (prompt/stdin, revokes sessions). `verify:compose` exercises password reset through `compose exec` and an offline `index:rebuild` through `compose run`.
+  - Error codes added: `LAST_ADMIN` (409) and `ENDPOINT_NOT_ALLOWED` (400).
+- **Required tests** (`tests/server/admin.test.ts` unless noted):
+  - Every admin route (enumerated from the registry): unauthenticated 401, non-admin 403 `FORBIDDEN`, disabled admin 401, admin success. `tests/server/registry.test.ts` covers the policy table, CSRF and fixtures.
+  - Role escalation (`role` in user routes is a strict-schema 400); a demoted admin is locked out on the next request.
+  - Disabling cancels an active generation; its observer stream closes; later reads and streams are 404.
+  - Last-admin protection (demote, disable, delete, self).
+  - SSRF on create, edit and test (metadata IP, a hostname resolving to a denied address, a bad scheme).
+  - Write-only secrets (replace/keep/clear) and an in-process reload.
+  - Hidden models: gone for users and rejected on send; still usable by admins.
+  - Sampling reaches the provider; templates expand once and user text never does; the time context sits only on the newest message; the system prefix is identical a minute later.
+  - Unsupported extension overrides and disallowed variables are rejected, and so are out-of-range values.
+  - A settings change between preflight and commit is picked up (revision recheck).
+  - Registration and generation limits apply live.
+  - Account closure (INV-61):
+    - deletion removes the directory and login fails
+    - deletion during a streaming generation: drained, terminal write skipped, nothing recreates the directory, checkpoints removed
+    - an in-flight writer finishes before the exclusive step; a later writer aborts without recreating the account
+    - crash after `closing` → startup completes closure
+    - crash after detaching → startup finishes deletion
+    - no deadlock: every closure test completes with generation cancellation and barrier waits in play
+  - Audit entries are written, carry the right actions and outcomes (`LAST_ADMIN` failure), and contain no secret values.
+  - Sentinel secret exposure: provider key and password sentinels never appear in any response body, header or log line across every route.
+  - Index maintenance.
+  - Performance (`tests/e2e/admin.spec.ts`): a normal user's cold chat load makes no admin API request and loads no admin chunk, and `/admin` is a 404 for them. An admin flow covers users (create, role), keyboard-operable tabs, model visibility, settings validation and the audit log. A hidden model is gone for users and the admin API is 403 for them.
+  - `perf:check`: new `admin-route-js` group budgeted. Critical CSS now excludes lazy-route CSS; `critical-chat-js` rose 0.9 KB (default model), within tolerance.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (32 files, 451 tests)
+  - `verify`: PASS (76/76)
+  - `test:e2e`: PASS (28/28)
+  - `verify:compose` (Docker, rootless Podman) in CI, including the operator commands
+  - `npm audit`: 0 vulnerabilities
+- **Invariants:**
+  - INV-17 → reductions revoke and cancel → admin tests
+  - INV-19 → SSRF on every save and test → admin and provider tests
+  - INV-24 → registry `admin` policy → per-route matrix and E2E
+  - INV-25 → write-only keys, sentinel sweep → admin tests
+  - INV-26 → `updateChecked` + `LAST_ADMIN` → admin tests
+  - INV-61 → barrier, guard, closure, resume → closure tests
+- **Behaviour changes from earlier phases:**
+  - `ModelListDto` gains `defaultModel`.
+  - `/api/models` omits hidden models for non-admins.
+  - A saved registration mode overrides `REGISTRATION_MODE`.
+  - `providers.json` edits apply without a restart.
+  - Writers now refuse to write for a closing or missing account.
+- **Dependencies:** `@radix-ui/react-tabs` 1.1.21, the Phase 7 decision record's default headless primitive for tabs (keyboard arrows, ARIA roles). It ships only in the admin chunk.
+- **Deviations / limitations / unverified items:**
+  - The spec's closure races for upload completion, import commits and memory acceptance can't be exercised yet: those writers arrive in Phases 12–13 and must adopt `AccountWrites`. The generation terminal-write race is covered.
+  - The "export barrier" of contracts §6 is implemented as the per-user `UserBarrier`, which exports (Phase 13d) will also use.
+  - Model settings may be saved for a model not currently discovered (e.g. unloaded); they apply when it is used.
+  - Instance generation limits don't lower limits below the environment for other resources; attachment limits and the image-history policy are Phase 12.
+- **Commit/tag status:** commit `feat(phase-10): admin dashboard with server-enforced authorization` and tag `phase-10`, pushed to `origin/main`.
+- **Questions needing approval:** none.

@@ -1,6 +1,7 @@
 // Generation acceptance records by client operation key (contracts §4.1,
 // INV-58). Loadable natively by Node.
 import { createHash } from "node:crypto";
+import type { AccountWrites } from "./account.ts";
 import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "./fs.ts";
 import { isSha256Hex, type DataPaths } from "./paths.ts";
 
@@ -50,8 +51,15 @@ function isRecord(value: unknown): value is OperationRecord {
 export class OperationStore {
   private readonly paths: DataPaths;
 
-  constructor(paths: DataPaths) {
+  private readonly writes: AccountWrites | undefined;
+
+  constructor(paths: DataPaths, writes?: AccountWrites) {
     this.paths = paths;
+    this.writes = writes;
+  }
+
+  private guarded<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    return this.writes ? this.writes.run(userId, fn) : fn();
   }
 
   async read(userId: string, operationKey: string): Promise<OperationRecord | null> {
@@ -65,15 +73,21 @@ export class OperationStore {
   }
 
   async write(userId: string, record: OperationRecord): Promise<void> {
-    await ensureDir(this.paths.operationsDir(userId));
-    await atomicWrite(
-      this.paths.operationFile(userId, operationDigest(userId, record.operationKey)),
-      `${JSON.stringify(record, null, 2)}\n`,
-    );
+    await this.guarded(userId, async () => {
+      await ensureDir(this.paths.operationsDir(userId));
+      await atomicWrite(
+        this.paths.operationFile(userId, operationDigest(userId, record.operationKey)),
+        `${JSON.stringify(record, null, 2)}\n`,
+      );
+    });
   }
 
   async delete(userId: string, operationKey: string): Promise<void> {
-    await durableUnlink(this.paths.operationFile(userId, operationDigest(userId, operationKey)));
+    await this.guarded(userId, () =>
+      durableUnlink(this.paths.operationFile(userId, operationDigest(userId, operationKey))).then(
+        () => undefined,
+      ),
+    );
   }
 
   /** Every readable record of a user (recovery and retention). */

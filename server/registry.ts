@@ -1,4 +1,9 @@
 import { Router, type Request, type Response } from "express";
+import type { ModelListDto } from "@shared/generations";
+import type { AccountAdmin } from "./admin/accounts.ts";
+import type { AuditLog } from "./admin/audit.ts";
+import type { ProviderAdmin } from "./admin/providers.ts";
+import type { SettingsStore } from "./admin/settings.ts";
 import type { z } from "zod";
 import type { HealthDto } from "@shared/api";
 import type { ConversationDto } from "@shared/conversations";
@@ -37,6 +42,17 @@ export interface RouteServices {
   auth: AuthService;
   users: UserStore;
   preferences: PreferencesStore;
+  /** Models a role may use: hidden pairs are removed for non-admins (Phase 10). */
+  modelList: (role: "user" | "admin", options?: { fresh?: boolean }) => Promise<ModelListDto>;
+  /** Phase 10 administration. */
+  admin: {
+    accounts: AccountAdmin;
+    providers: ProviderAdmin;
+    settings: SettingsStore;
+    audit: AuditLog;
+    /** Rebuilds the derived conversation index of one user, or every user. */
+    rebuildIndex: (userId?: string) => Promise<number>;
+  };
   sseConnections: SseConnections;
   sse: SseOptions;
   logger: Logger;
@@ -60,8 +76,12 @@ interface RouteBase<S extends RequestSchemas> {
   method: HttpMethod;
   /** Express path, always under /api. */
   path: `/api/${string}`;
-  /** `public` routes work signed out; `user` routes require a session (401). */
-  auth: "public" | "user";
+  /**
+   * `public` routes work signed out; `user` routes require a session (401);
+   * `admin` routes additionally require the admin role, resolved from the
+   * fresh user record on every request, never from the client (403, INV-24).
+   */
+  auth: "public" | "user" | "admin";
   /**
    * `none` for safe methods; `token`: synchronizer token + X-Expected-User
    * (contracts §5); `origin`: same-origin check for login/registration.
@@ -129,8 +149,10 @@ export function buildApiRouter(routes: readonly AnyApiRoute[], services: RouteSe
     // Policies run before validation and before the handler, for every route.
     const guard = async (req: Request, res: Response): Promise<RouteContext> => {
       const auth = await services.auth.resolve(req);
-      if (route.auth === "user" && !auth)
+      if (route.auth !== "public" && !auth)
         throw new AppError(ErrorCode.UNAUTHENTICATED, "Sign in to continue");
+      if (route.auth === "admin" && auth?.role !== "admin")
+        throw new AppError(ErrorCode.FORBIDDEN, "Administrators only");
       if (route.csrf === "token") services.auth.checkMutation(req, auth);
       if (route.csrf === "origin") services.auth.checkOrigin(req);
       return { req, res, services, auth };

@@ -82,6 +82,11 @@ export function Composer({
   const preferred =
     (remembered &&
       allModels.find((m) => m.providerId === remembered[0] && m.id === remembered[1])) ??
+    allModels.find(
+      (m) =>
+        m.providerId === models.data?.defaultModel?.providerId &&
+        m.id === models.data.defaultModel.modelId,
+    ) ??
     allModels.find((m) => m.status === "loaded") ??
     allModels[0];
   const selectedValue =

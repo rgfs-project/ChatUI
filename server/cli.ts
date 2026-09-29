@@ -12,9 +12,9 @@ import { createSafeFetch, SsrfError } from "./providers/ssrf.ts";
 import { KeyedLocks } from "./storage/locks.ts";
 import { accountIds } from "./storage/recovery.ts";
 import { UserError, UserStore } from "./storage/users.ts";
+import { SessionStore } from "./auth/sessions.ts";
 
 const PLANNED: Readonly<Record<string, string>> = {
-  "user:reset-password": "Phase 4",
   backup: "Phase 16",
   restore: "Phase 16",
 };
@@ -27,6 +27,9 @@ Commands:
   user:create --username <name> [--admin]
                   Create an account. The password is read from an interactive
                   prompt, or from stdin when piped (never from the command line)
+  user:reset-password --username <name>
+                  Set a new password (prompt or stdin, never the command line)
+                  and sign the account out everywhere
   index:rebuild   Rebuild every derived conversation index from the canonical
                   Markdown in DATA_DIR (stop the server first: single process)
   provider:check  Check that LLAMA_BASE_URL is reachable from here (DNS, routing,
@@ -203,6 +206,61 @@ async function userCreate(args: string[]): Promise<number> {
   }
 }
 
+/** Operator password reset: new hash, then every session of the account is revoked. */
+async function userResetPassword(args: string[]): Promise<number> {
+  if (args.some((arg) => arg.startsWith("--password"))) {
+    process.stderr.write(
+      "Passwords are never accepted as arguments; enter it at the prompt or pipe it on stdin.\n",
+    );
+    return 2;
+  }
+  const at = args.indexOf("--username");
+  const username = at >= 0 ? args[at + 1] : undefined;
+  if (!username || args.length !== 2) {
+    process.stderr.write("Usage: node server/cli.ts user:reset-password --username <name>\n");
+    return 2;
+  }
+  let dataDir: string;
+  try {
+    ({ dataDir } = loadConfig(process.env));
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof ConfigError ? error.message : "Invalid configuration"}\n`,
+    );
+    return 1;
+  }
+  const paths = new DataPaths(dataDir);
+  const users = new UserStore({ paths, locks: new KeyedLocks() });
+  const user = await users.findByUsername(username);
+  if (!user || user.status === "closing") {
+    process.stderr.write(`No account "${username}".\n`);
+    return 1;
+  }
+  let password: string;
+  try {
+    password = await readPassword();
+  } catch (error) {
+    process.stderr.write(`${(error as Error).message}\n`);
+    return 1;
+  }
+  if (password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
+    process.stderr.write(
+      `Passwords are ${String(PASSWORD_MIN)}-${String(PASSWORD_MAX)} characters.\n`,
+    );
+    return 1;
+  }
+  const passwordHash = await new PasswordHasher({ concurrency: 1, queue: 0 }).hash(password);
+  await users.update(user.id, { passwordHash });
+  // TTLs only matter for issuing/sweeping; revocation removes every record of the user.
+  const revoked = await new SessionStore({ paths, absoluteTtlMs: 1, idleTtlMs: 1 }).revokeUser(
+    user.id,
+  );
+  process.stdout.write(
+    `Password reset for "${user.username}"; ${String(revoked)} session(s) signed out.\n`,
+  );
+  return 0;
+}
+
 /** Rebuilds derived indexes from canonical Markdown (contracts §1, INV-11). */
 async function indexRebuild(): Promise<number> {
   let dataDir: string;
@@ -239,6 +297,9 @@ switch (command) {
     break;
   case "user:create":
     process.exitCode = await userCreate(process.argv.slice(3));
+    break;
+  case "user:reset-password":
+    process.exitCode = await userResetPassword(process.argv.slice(3));
     break;
   case "index:rebuild":
     process.exitCode = await indexRebuild();

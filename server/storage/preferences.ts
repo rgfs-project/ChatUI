@@ -1,5 +1,6 @@
 // Canonical per-user preferences (contracts §12, INV-34). Loadable natively.
 import { atomicWrite, readOrNull } from "./fs.ts";
+import type { AccountWrites } from "./account.ts";
 import type { KeyedLocks } from "./locks.ts";
 import { isUuid, type DataPaths } from "./paths.ts";
 
@@ -63,9 +64,12 @@ export class PreferencesStore {
   private readonly paths: DataPaths;
   private readonly locks: KeyedLocks;
 
-  constructor(paths: DataPaths, locks: KeyedLocks) {
+  private readonly writes: AccountWrites | undefined;
+
+  constructor(paths: DataPaths, locks: KeyedLocks, writes?: AccountWrites) {
     this.paths = paths;
     this.locks = locks;
+    this.writes = writes;
   }
 
   /** Missing or corrupt files degrade to defaults field by field. */
@@ -81,20 +85,22 @@ export class PreferencesStore {
 
   /** Applies a partial update under the per-user lock, preserving other fields. */
   async update(userId: string, patch: Partial<Omit<Preferences, "version">>): Promise<Preferences> {
-    return this.locks.run(`preferences:${userId}`, async () => {
-      const bytes = await readOrNull(this.paths.preferencesFile(userId));
-      let current: ReturnType<typeof sanitize>;
-      try {
-        current = sanitize(bytes ? JSON.parse(bytes.toString("utf8")) : undefined);
-      } catch {
-        current = sanitize(undefined);
-      }
-      const next: Preferences = { ...current.prefs, ...patch, version: 1 };
-      await atomicWrite(
-        this.paths.preferencesFile(userId),
-        `${JSON.stringify({ ...current.extra, ...next }, null, 2)}\n`,
-      );
-      return next;
-    });
+    const write = () =>
+      this.locks.run(`preferences:${userId}`, async () => {
+        const bytes = await readOrNull(this.paths.preferencesFile(userId));
+        let current: ReturnType<typeof sanitize>;
+        try {
+          current = sanitize(bytes ? JSON.parse(bytes.toString("utf8")) : undefined);
+        } catch {
+          current = sanitize(undefined);
+        }
+        const next: Preferences = { ...current.prefs, ...patch, version: 1 };
+        await atomicWrite(
+          this.paths.preferencesFile(userId),
+          `${JSON.stringify({ ...current.extra, ...next }, null, 2)}\n`,
+        );
+        return next;
+      });
+    return this.writes ? this.writes.run(userId, write) : write();
   }
 }

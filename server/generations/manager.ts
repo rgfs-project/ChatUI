@@ -1,4 +1,5 @@
 import { ErrorCode } from "@shared/errors";
+import { AccountClosedError } from "../storage/account.ts";
 import {
   isTerminalState,
   type GenerationError,
@@ -10,7 +11,7 @@ import {
 import type { PromptMessage } from "../chat/prompt.ts";
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
-import { ProviderError, type Provider } from "../providers/types.ts";
+import { ProviderError, type Provider, type Sampling } from "../providers/types.ts";
 import type { CheckpointStore, GenerationCheckpoint } from "../storage/checkpoints.ts";
 
 /** Receives events for one generation. Must never block (INV-06, INV-62). */
@@ -179,6 +180,13 @@ export class GenerationManager {
     this.maxActive = Math.max(1, Math.floor(limit));
   }
 
+  private perUserOverride: number | undefined;
+
+  /** Instance setting (Phase 10) over MAX_ACTIVE_GENERATIONS_PER_USER; undefined restores it. */
+  setMaxActivePerUser(limit: number | undefined): void {
+    this.perUserOverride = limit === undefined ? undefined : Math.max(1, Math.floor(limit));
+  }
+
   /** Sets one provider's admission limit (config, else discovered slots, else 1). */
   setProviderLimit(providerId: string, limit: number): void {
     this.providerLimits.set(providerId, Math.max(1, Math.floor(limit)));
@@ -206,7 +214,8 @@ export class GenerationManager {
 
   /** Throws RATE_LIMITED when no admission slot is free (checked before any work). */
   assertAdmission(userId?: string, providerId?: string): void {
-    const perUser = this.options.maxActivePerUser ?? Number.POSITIVE_INFINITY;
+    const perUser =
+      this.perUserOverride ?? this.options.maxActivePerUser ?? Number.POSITIVE_INFINITY;
     if (
       this.closed ||
       this.active.size >= this.maxActive ||
@@ -292,6 +301,9 @@ export class GenerationManager {
       operationKey?: string;
       messages: PromptMessage[];
       persist: PersistOutcome;
+      /** Per-send output cap and sampling (instance/model settings, Phase 10). */
+      maxTokens?: number;
+      sampling?: Sampling | undefined;
     },
   ): void {
     let settle!: () => void;
@@ -340,14 +352,26 @@ export class GenerationManager {
       this.abort(generation, "max");
     }, this.options.generationMaxMs);
     generation.maxTimer.unref();
-    void this.run(generation, input.messages);
+    void this.run(generation, input.messages, {
+      maxTokens: input.maxTokens ?? this.options.maxOutputTokens,
+      sampling: input.sampling,
+    });
   }
 
-  private async run(generation: Generation, messages: PromptMessage[]): Promise<void> {
+  private async run(
+    generation: Generation,
+    messages: PromptMessage[],
+    request: { maxTokens: number; sampling: Sampling | undefined },
+  ): Promise<void> {
     const signal = generation.controller.signal;
     try {
       const stream = generation.provider.streamChat(
-        { model: generation.model, messages, maxTokens: this.options.maxOutputTokens },
+        {
+          model: generation.model,
+          messages,
+          maxTokens: request.maxTokens,
+          ...(request.sampling ? { sampling: request.sampling } : {}),
+        },
         signal,
       );
       for await (const event of stream) {
@@ -523,10 +547,20 @@ export class GenerationManager {
         revision = await generation.persist(outcome);
         await this.checkpoint(generation, "terminal", outcome);
       } catch (persistError) {
-        this.options.logger.error(
-          { err: persistError, generationId: generation.id },
-          "persisting the reply failed",
-        );
+        if (persistError instanceof AccountClosedError) {
+          // The account is being closed: its terminal write is skipped, not
+          // retried at restart (INV-61).
+          await this.checkpoint(generation, "terminal", outcome).catch(() => undefined);
+          this.options.logger.info(
+            { generationId: generation.id },
+            "terminal write skipped: account closed",
+          );
+        } else {
+          this.options.logger.error(
+            { err: persistError, generationId: generation.id },
+            "persisting the reply failed",
+          );
+        }
       }
       generation.state = state;
       generation.error = error;
@@ -616,6 +650,22 @@ export class GenerationManager {
       this.abort(generation, "cancel");
       for (const observer of generation.observers) observer.close();
       generation.observers.clear();
+    }
+  }
+
+  /**
+   * Cancels a user's generations, waits until each has settled (its terminal
+   * write done or skipped) and forgets them: afterwards every read or stream
+   * of those ids is GENERATION_NOT_FOUND (INV-17). Never holds a lock or the
+   * account barrier while waiting.
+   */
+  async cancelAndForgetUser(userId: string): Promise<void> {
+    this.cancelForUser(userId);
+    const mine = [...this.generations.values()].filter((g) => g.userId === userId);
+    await Promise.all(mine.map((g) => g.settled));
+    for (const generation of mine) {
+      clearTimeout(generation.evictTimer);
+      this.generations.delete(generation.id);
     }
   }
 

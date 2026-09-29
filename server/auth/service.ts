@@ -56,7 +56,10 @@ export class AuthService {
     config: AuthConfig;
     logger: Logger;
     onAccountRejected?: (userId: string) => void;
+    /** Instance setting that overrides REGISTRATION_MODE once saved (Phase 10). */
+    registrationMode?: () => "open" | "closed" | undefined;
   }) {
+    this.registrationMode = options.registrationMode ?? (() => undefined);
     this.users = options.users;
     this.sessions = options.sessions;
     this.hasher = options.hasher;
@@ -67,8 +70,10 @@ export class AuthService {
     this.cookieName = this.config.secureCookies ? "__Host-chatui_session" : "chatui_session";
   }
 
+  private readonly registrationMode: () => "open" | "closed" | undefined;
+
   get registrationOpen(): boolean {
-    return this.config.registrationMode === "open";
+    return (this.registrationMode() ?? this.config.registrationMode) === "open";
   }
 
   private tokenFrom(req: Request): string | undefined {
@@ -215,6 +220,12 @@ export class AuthService {
     }
     this.logger.info({ userId: user.id }, "login");
     return this.startSession(req, res, user.id, user.username, user.role);
+  }
+
+  /** Validates and hashes a password an admin sets (create user, reset password). */
+  async hashPassword(password: string): Promise<string> {
+    this.validatePassword(password);
+    return this.withHasher(() => this.hasher.hash(password));
   }
 
   validatePassword(password: string): void {

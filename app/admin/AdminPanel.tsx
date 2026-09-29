@@ -1,0 +1,808 @@
+import * as Tabs from "@radix-ui/react-tabs";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactNode, type SyntheticEvent } from "react";
+import type { AdminModelSettings, AdminProviderDto, AdminUserDto } from "@shared/admin";
+import { ConfirmDialog } from "../components/Dialogs";
+import { useUserId } from "../lib/auth-store";
+import { ApiError, apiJson } from "../lib/query";
+import { adminKeys, adminQueries, adminWrite } from "./api";
+import "./admin.css";
+
+/**
+ * Administration (Phase 10). Loaded only with the /admin route. Hiding
+ * controls here is cosmetic: the server authorizes every request (INV-24).
+ */
+export function AdminPanel() {
+  return (
+    <Tabs.Root defaultValue="users" className="admin-tabs">
+      <Tabs.List aria-label="Administration sections">
+        <Tabs.Trigger value="users">Users</Tabs.Trigger>
+        <Tabs.Trigger value="providers">Providers</Tabs.Trigger>
+        <Tabs.Trigger value="models">Models</Tabs.Trigger>
+        <Tabs.Trigger value="settings">Settings</Tabs.Trigger>
+        <Tabs.Trigger value="maintenance">Maintenance</Tabs.Trigger>
+        <Tabs.Trigger value="audit">Audit log</Tabs.Trigger>
+      </Tabs.List>
+      <Tabs.Content value="users">
+        <UsersTab />
+      </Tabs.Content>
+      <Tabs.Content value="providers">
+        <ProvidersTab />
+      </Tabs.Content>
+      <Tabs.Content value="models">
+        <ModelsTab />
+      </Tabs.Content>
+      <Tabs.Content value="settings">
+        <SettingsTab />
+      </Tabs.Content>
+      <Tabs.Content value="maintenance">
+        <MaintenanceTab />
+      </Tabs.Content>
+      <Tabs.Content value="audit">
+        <AuditTab />
+      </Tabs.Content>
+    </Tabs.Root>
+  );
+}
+
+/** Runs an admin action and reports its outcome in a live region. */
+function useAction() {
+  const client = useQueryClient();
+  const userId = useUserId();
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function run<T>(
+    label: string,
+    method: "POST" | "PATCH" | "PUT" | "DELETE",
+    url: string,
+    body?: unknown,
+  ): Promise<T | undefined> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await adminWrite<T>(client, userId, method, url, body);
+      setMessage(`${label}: done.`);
+      return result;
+    } catch (error) {
+      setMessage(`${label} failed: ${error instanceof ApiError ? error.message : "network error"}`);
+      return undefined;
+    } finally {
+      setBusy(false);
+    }
+  }
+  const status: ReactNode = (
+    <p className="admin-note" role="status" aria-live="polite" data-testid="admin-status">
+      {message ?? ""}
+    </p>
+  );
+  return { run, busy, status };
+}
+
+function formValue(form: FormData, name: string): string {
+  const value = form.get(name);
+  return typeof value === "string" ? value : "";
+}
+
+// ---- users ---------------------------------------------------------------
+
+function UsersTab() {
+  const userId = useUserId();
+  const users = useQuery(adminQueries.users(userId));
+  const { run, busy, status } = useAction();
+  const [password, setPassword] = useState<AdminUserDto | null>(null);
+  const [deleting, setDeleting] = useState<AdminUserDto | null>(null);
+  const [confirmName, setConfirmName] = useState("");
+
+  async function create(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    // currentTarget is null once the event has been dispatched: keep the element.
+    const element = event.currentTarget;
+    const form = new FormData(element);
+    const created = await run("Create user", "POST", "/api/admin/users", {
+      username: formValue(form, "username"),
+      password: formValue(form, "password"),
+      role: formValue(form, "role"),
+    });
+    if (created) element.reset();
+  }
+
+  return (
+    <section aria-label="Users">
+      {status}
+      <table className="admin-table" data-testid="admin-users">
+        <thead>
+          <tr>
+            <th scope="col">Username</th>
+            <th scope="col">Role</th>
+            <th scope="col">Status</th>
+            <th scope="col">Chats</th>
+            <th scope="col">Created</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(users.data ?? []).map((u) => (
+            <tr key={u.id}>
+              <td>{u.username}</td>
+              <td>
+                <select
+                  aria-label={`Role of ${u.username}`}
+                  value={u.role}
+                  disabled={busy}
+                  onChange={(event) =>
+                    void run("Change role", "PATCH", `/api/admin/users/${u.id}`, {
+                      role: event.currentTarget.value,
+                    })
+                  }
+                >
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                </select>
+              </td>
+              <td>
+                <select
+                  aria-label={`Status of ${u.username}`}
+                  value={u.status}
+                  disabled={busy}
+                  onChange={(event) =>
+                    void run("Change status", "PATCH", `/api/admin/users/${u.id}`, {
+                      status: event.currentTarget.value,
+                    })
+                  }
+                >
+                  <option value="active">active</option>
+                  <option value="disabled">disabled</option>
+                </select>
+              </td>
+              <td>{u.conversationCount}</td>
+              <td>{u.createdAt.slice(0, 10)}</td>
+              <td className="admin-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setPassword(u);
+                  }}
+                >
+                  Set password
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    setConfirmName("");
+                    setDeleting(u);
+                  }}
+                >
+                  Delete
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <form className="admin-form" onSubmit={(e) => void create(e)} aria-label="Create user">
+        <label>
+          Username
+          <input name="username" required autoComplete="off" />
+        </label>
+        <label>
+          Initial password
+          <input name="password" type="password" required autoComplete="new-password" />
+        </label>
+        <label>
+          Role
+          <select name="role" defaultValue="user">
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
+        <button type="submit" disabled={busy}>
+          Create user
+        </button>
+      </form>
+      {password ? (
+        <form
+          className="admin-form"
+          aria-label={`New password for ${password.username}`}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            void run("Set password", "POST", `/api/admin/users/${password.id}/password`, {
+              password: formValue(form, "password"),
+            }).then((done) => {
+              if (done) setPassword(null);
+            });
+          }}
+        >
+          <label>
+            New password for {password.username} (signs them out everywhere)
+            <input name="password" type="password" required autoComplete="new-password" />
+          </label>
+          <button type="submit" disabled={busy}>
+            Save password
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setPassword(null);
+            }}
+          >
+            Cancel
+          </button>
+        </form>
+      ) : null}
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
+        }}
+        title={`Delete ${deleting?.username ?? ""}?`}
+        description={
+          <>
+            All of this account’s conversations and data are permanently removed. Type{" "}
+            <strong>{deleting?.username}</strong> to confirm.
+            <input
+              aria-label="Type the username to confirm"
+              value={confirmName}
+              onChange={(event) => {
+                setConfirmName(event.currentTarget.value);
+              }}
+            />
+          </>
+        }
+        confirmLabel="Delete account"
+        onConfirm={() => {
+          if (deleting)
+            void run("Delete user", "DELETE", `/api/admin/users/${deleting.id}`, {
+              confirmUsername: confirmName,
+            });
+        }}
+      />
+    </section>
+  );
+}
+
+// ---- providers -------------------------------------------------------------
+
+function ProvidersTab() {
+  const userId = useUserId();
+  const providers = useQuery(adminQueries.providers(userId));
+  const { run, busy, status } = useAction();
+  const [editing, setEditing] = useState<AdminProviderDto | null>(null);
+  const [removing, setRemoving] = useState<AdminProviderDto | null>(null);
+
+  async function save(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const element = event.currentTarget;
+    const form = new FormData(element);
+    const apiKey = formValue(form, "apiKey");
+    const common = {
+      name: formValue(form, "name"),
+      baseUrl: formValue(form, "baseUrl"),
+      samplingExtensions: form.get("samplingExtensions") === "on",
+      capabilities: {
+        inputModalities: ["text", ...(form.get("image") === "on" ? ["image"] : [])],
+        reasoning: form.get("reasoning") === "on",
+        tools: false,
+      },
+    };
+    const done = editing
+      ? await run("Save provider", "PATCH", `/api/admin/providers/${editing.id}`, {
+          ...common,
+          ...(apiKey ? { apiKey } : {}),
+          ...(form.get("clearApiKey") === "on" ? { clearApiKey: true } : {}),
+        })
+      : await run("Add provider", "POST", "/api/admin/providers", {
+          id: formValue(form, "id"),
+          ...common,
+          ...(apiKey ? { apiKey } : {}),
+        });
+    if (done) {
+      setEditing(null);
+      element.reset();
+    }
+  }
+
+  return (
+    <section aria-label="Providers">
+      {status}
+      <table className="admin-table" data-testid="admin-providers">
+        <thead>
+          <tr>
+            <th scope="col">Provider</th>
+            <th scope="col">Endpoint</th>
+            <th scope="col">API key</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(providers.data ?? []).map((p) => (
+            <tr key={p.id}>
+              <td>
+                {p.name} <span className="admin-note">({p.id})</span>
+              </td>
+              <td>{p.baseUrl}</td>
+              <td>{p.hasApiKey ? "set" : "none"}</td>
+              <td>{p.status === "enabled" ? "enabled" : `invalid: ${p.problem ?? ""}`}</td>
+              <td className="admin-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run("Test connection", "POST", `/api/admin/providers/${p.id}/test`)
+                  }
+                >
+                  Test
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setEditing(p);
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    setRemoving(p);
+                  }}
+                >
+                  Remove
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <form
+        key={editing?.id ?? "new"}
+        className="admin-form"
+        aria-label={editing ? `Edit ${editing.name}` : "Add provider"}
+        onSubmit={(e) => void save(e)}
+      >
+        {editing ? null : (
+          <label>
+            Id
+            <input name="id" required pattern="[a-z0-9][a-z0-9_-]{0,63}" />
+          </label>
+        )}
+        <label>
+          Name
+          <input name="name" required defaultValue={editing?.name ?? ""} />
+        </label>
+        <label>
+          Base URL
+          <input name="baseUrl" required defaultValue={editing?.baseUrl ?? ""} />
+        </label>
+        <label>
+          API key {editing?.hasApiKey ? "(leave empty to keep)" : "(optional)"}
+          <input name="apiKey" type="password" autoComplete="off" />
+        </label>
+        {editing?.hasApiKey ? (
+          <label>
+            <span>
+              <input name="clearApiKey" type="checkbox" /> Remove the stored key
+            </span>
+          </label>
+        ) : null}
+        <label>
+          <span>
+            <input
+              name="samplingExtensions"
+              type="checkbox"
+              defaultChecked={editing?.samplingExtensions ?? true}
+            />{" "}
+            llama.cpp sampling (top-k, min-p, repeat penalty)
+          </span>
+        </label>
+        <label>
+          <span>
+            <input
+              name="image"
+              type="checkbox"
+              defaultChecked={editing?.capabilities.inputModalities.includes("image") ?? false}
+            />{" "}
+            Accepts images
+          </span>
+        </label>
+        <label>
+          <span>
+            <input
+              name="reasoning"
+              type="checkbox"
+              defaultChecked={editing?.capabilities.reasoning ?? false}
+            />{" "}
+            Reasoning
+          </span>
+        </label>
+        <button type="submit" disabled={busy}>
+          {editing ? "Save provider" : "Add provider"}
+        </button>
+        {editing ? (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setEditing(null);
+            }}
+          >
+            Cancel
+          </button>
+        ) : null}
+      </form>
+      <p className="admin-note">
+        Every save re-checks the endpoint against the network policy; keys are never shown again.
+      </p>
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(null);
+        }}
+        title={`Remove ${removing?.name ?? ""}?`}
+        description="Its models disappear from the model list immediately."
+        confirmLabel="Remove provider"
+        onConfirm={() => {
+          if (removing)
+            void run("Remove provider", "DELETE", `/api/admin/providers/${removing.id}`);
+        }}
+      />
+    </section>
+  );
+}
+
+// ---- models ------------------------------------------------------------------
+
+function ModelsTab() {
+  const userId = useUserId();
+  const client = useQueryClient();
+  const models = useQuery(adminQueries.models(userId));
+  const { run, busy, status } = useAction();
+  const [editing, setEditing] = useState<{ providerId: string; modelId: string } | null>(null);
+  const settingsFor = (providerId: string, modelId: string): AdminModelSettings | undefined =>
+    models.data?.settings.find((s) => s.providerId === providerId && s.modelId === modelId);
+  const current = editing ? settingsFor(editing.providerId, editing.modelId) : undefined;
+
+  function numberOrNull(form: FormData, name: string): number | null {
+    const raw = formValue(form, name).trim();
+    return raw === "" ? null : Number(raw);
+  }
+
+  return (
+    <section aria-label="Models">
+      {status}
+      <button
+        type="button"
+        className="secondary"
+        disabled={busy}
+        onClick={() => {
+          // Forces discovery on every provider, then shows the fresh lists.
+          void apiJson<NonNullable<typeof models.data>>("/api/admin/models?refresh=1").then(
+            (data) => {
+              client.setQueryData(adminKeys.models(userId), data);
+            },
+            () => undefined,
+          );
+        }}
+      >
+        Refresh discovery
+      </button>
+      <table className="admin-table" data-testid="admin-models">
+        <thead>
+          <tr>
+            <th scope="col">Model</th>
+            <th scope="col">Provider</th>
+            <th scope="col">Status</th>
+            <th scope="col">Visible</th>
+            <th scope="col">Settings</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(models.data?.providers ?? []).flatMap((group) =>
+            group.models.map((m) => {
+              const s = settingsFor(m.providerId, m.id);
+              return (
+                <tr key={`${m.providerId}/${m.id}`}>
+                  <td>{m.id}</td>
+                  <td>{group.provider.name}</td>
+                  <td>{m.status}</td>
+                  <td>
+                    {/* Uncontrolled (toggles at once), re-synced by key when the server answers. */}
+                    <input
+                      key={String(s?.hidden === true)}
+                      type="checkbox"
+                      aria-label={`${m.id} visible to users`}
+                      defaultChecked={s?.hidden !== true}
+                      disabled={busy}
+                      onChange={(event) =>
+                        void run("Visibility", "PUT", "/api/admin/model-settings", {
+                          providerId: m.providerId,
+                          modelId: m.id,
+                          hidden: !event.currentTarget.checked,
+                        })
+                      }
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setEditing({ providerId: m.providerId, modelId: m.id });
+                      }}
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              );
+            }),
+          )}
+        </tbody>
+      </table>
+      {editing ? (
+        <form
+          key={`${editing.providerId}/${editing.modelId}`}
+          className="admin-form"
+          aria-label={`Settings for ${editing.modelId}`}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            const systemPrompt = formValue(form, "systemPrompt");
+            void run("Save model settings", "PUT", "/api/admin/model-settings", {
+              providerId: editing.providerId,
+              modelId: editing.modelId,
+              temperature: numberOrNull(form, "temperature"),
+              topP: numberOrNull(form, "topP"),
+              topK: numberOrNull(form, "topK"),
+              minP: numberOrNull(form, "minP"),
+              repeatPenalty: numberOrNull(form, "repeatPenalty"),
+              systemPrompt: systemPrompt === "" ? null : systemPrompt,
+              timeContext: form.get("timeContext") === "on",
+            }).then((done) => {
+              if (done) setEditing(null);
+            });
+          }}
+        >
+          {(
+            [
+              ["temperature", "Temperature (0–2)", "0.05"],
+              ["topP", "Top-p (0–1]", "0.01"],
+              ["topK", "Top-k", "1"],
+              ["minP", "Min-p (0–1)", "0.01"],
+              ["repeatPenalty", "Repeat penalty (0.5–2)", "0.05"],
+            ] as const
+          ).map(([name, label, step]) => (
+            <label key={name}>
+              {label}
+              <input name={name} type="number" step={step} defaultValue={current?.[name] ?? ""} />
+            </label>
+          ))}
+          <label style={{ gridColumn: "1 / -1" }}>
+            System prompt (variables: {"{{username}}"}, {"{{date}}"}, {"{{timezone}}"})
+            <textarea name="systemPrompt" rows={4} defaultValue={current?.systemPrompt ?? ""} />
+          </label>
+          <label>
+            <span>
+              <input
+                name="timeContext"
+                type="checkbox"
+                defaultChecked={current?.timeContext ?? false}
+              />{" "}
+              Tell the model the current time
+            </span>
+          </label>
+          <button type="submit" disabled={busy}>
+            Save settings
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setEditing(null);
+            }}
+          >
+            Cancel
+          </button>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
+// ---- settings ----------------------------------------------------------------
+
+function SettingsTab() {
+  const userId = useUserId();
+  const settings = useQuery(adminQueries.settings(userId));
+  const models = useQuery(adminQueries.models(userId));
+  const { run, busy, status } = useAction();
+  const s = settings.data;
+  if (!s) return <p className="admin-note">Loading…</p>;
+  const pairs = (models.data?.providers ?? []).flatMap((g) =>
+    g.models.map((m) => JSON.stringify([m.providerId, m.id])),
+  );
+  return (
+    <section aria-label="Instance settings">
+      {status}
+      {s.problem ? (
+        <p role="alert">settings.json could not be read ({s.problem}); defaults are in effect.</p>
+      ) : null}
+      <form
+        key={JSON.stringify(s)}
+        className="admin-form"
+        aria-label="Instance settings"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const model = formValue(form, "defaultModel");
+          const parsed = model ? (JSON.parse(model) as [string, string]) : null;
+          const num = (name: string) => {
+            const raw = formValue(form, name).trim();
+            return raw === "" ? null : Number(raw);
+          };
+          void run("Save settings", "PATCH", "/api/admin/settings", {
+            registrationMode: formValue(form, "registrationMode"),
+            defaultModel: parsed ? { providerId: parsed[0], modelId: parsed[1] } : null,
+            timezone: formValue(form, "timezone"),
+            generation: {
+              maxActivePerUser: num("maxActivePerUser"),
+              maxOutputTokens: num("maxOutputTokens"),
+            },
+          });
+        }}
+      >
+        <label>
+          Registration (
+          {s.registrationModeSource === "settings" ? "saved setting" : "from environment"})
+          <select name="registrationMode" defaultValue={s.registrationMode}>
+            <option value="closed">closed</option>
+            <option value="open">open</option>
+          </select>
+        </label>
+        <label>
+          Default model
+          <select
+            name="defaultModel"
+            defaultValue={
+              s.defaultModel
+                ? JSON.stringify([s.defaultModel.providerId, s.defaultModel.modelId])
+                : ""
+            }
+          >
+            <option value="">(none)</option>
+            {pairs.map((p) => (
+              <option key={p} value={p}>
+                {(JSON.parse(p) as [string, string]).join(" / ")}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Time zone (IANA)
+          <input name="timezone" defaultValue={s.timezone} />
+        </label>
+        <label>
+          Max active generations per user
+          <input
+            name="maxActivePerUser"
+            type="number"
+            min={1}
+            max={32}
+            defaultValue={s.generation.maxActivePerUser ?? ""}
+          />
+        </label>
+        <label>
+          Max output tokens
+          <input
+            name="maxOutputTokens"
+            type="number"
+            min={16}
+            max={65536}
+            defaultValue={s.generation.maxOutputTokens ?? ""}
+          />
+        </label>
+        <button type="submit" disabled={busy}>
+          Save settings
+        </button>
+      </form>
+    </section>
+  );
+}
+
+// ---- maintenance and audit ----------------------------------------------------
+
+function MaintenanceTab() {
+  const userId = useUserId();
+  const users = useQuery(adminQueries.users(userId));
+  const { run, busy, status } = useAction();
+  const [confirm, setConfirm] = useState(false);
+  const [target, setTarget] = useState("");
+  return (
+    <section aria-label="Maintenance">
+      {status}
+      <form
+        className="admin-form"
+        aria-label="Rebuild conversation index"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setTarget(formValue(new FormData(event.currentTarget), "userId"));
+          setConfirm(true);
+        }}
+      >
+        <label>
+          Rebuild the conversation index for
+          <select name="userId" defaultValue="">
+            <option value="">every user</option>
+            {(users.data ?? []).map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.username}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" disabled={busy}>
+          Rebuild index
+        </button>
+      </form>
+      <p className="admin-note">
+        The index is derived from the conversation files and is always safe to rebuild.
+      </p>
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        title="Rebuild the conversation index?"
+        description="Conversation lists are recomputed from the canonical files."
+        confirmLabel="Rebuild"
+        onConfirm={() =>
+          void run(
+            "Rebuild index",
+            "POST",
+            "/api/admin/maintenance/rebuild-index",
+            target ? { userId: target } : {},
+          )
+        }
+      />
+    </section>
+  );
+}
+
+function AuditTab() {
+  const userId = useUserId();
+  const audit = useQuery(adminQueries.audit(userId));
+  return (
+    <section aria-label="Audit log">
+      <table className="admin-table" data-testid="admin-audit">
+        <thead>
+          <tr>
+            <th scope="col">Time</th>
+            <th scope="col">Admin</th>
+            <th scope="col">Action</th>
+            <th scope="col">Target</th>
+            <th scope="col">Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(audit.data ?? []).map((e) => (
+            <tr key={`${e.time}-${e.action}-${e.target.id ?? ""}`}>
+              <td>{e.time.replace("T", " ").slice(0, 19)}</td>
+              <td>{e.actor.username}</td>
+              <td>
+                {e.action}
+                {e.fields ? <span className="admin-note"> ({e.fields.join(", ")})</span> : null}
+              </td>
+              <td>{e.target.label ?? e.target.id ?? e.target.type}</td>
+              <td>{e.outcome === "success" ? "ok" : `failed (${e.code ?? ""})`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
