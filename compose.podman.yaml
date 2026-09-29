@@ -1,0 +1,13 @@
+# Rootless Podman override: bind-mount a host directory for /data with a private
+# SELinux label (:Z) and map the container user to your host user so files
+# under ./data stay owned by you.
+#
+#   mkdir -p data && podman compose -f compose.yaml -f compose.podman.yaml up -d
+#
+# With the default named volume (compose.yaml alone), Podman labels the volume
+# automatically and no override is needed.
+services:
+  chatui:
+    userns_mode: keep-id:uid=1000,gid=1000
+    volumes: !override
+      - ${CHATUI_DATA_DIR:-./data}:/data:Z

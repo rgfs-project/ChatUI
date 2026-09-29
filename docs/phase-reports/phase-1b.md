@@ -1,0 +1,50 @@
+## Phase 1b report
+
+- **Scope completed (files/features):**
+  - `Dockerfile`: multi-stage build (deps → build → prod-deps → runtime) on `node:24.21.0-trixie-slim` pinned by digest. It builds the SSR server bundle and the browser bundle, runs as the non-root `node` user (UID 1000) with a `/data` volume, and uses the stable `node server/cli.ts` entrypoint.
+  - `compose.yaml`: one service, published on `127.0.0.1:${HOST_PORT}:3000` only, named `/data` volume, `init`, `restart: unless-stopped`, read-only rootfs + tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges`, healthcheck.
+  - `compose.podman.yaml`: rootless Podman override with a bind-mounted `./data:/data:Z` and `userns_mode: keep-id`.
+  - `.dockerignore`.
+  - `server/cli.ts`: stable entrypoint with `serve` and `healthcheck`. Planned operator commands (`index:rebuild`, `user:create`, `user:reset-password`, `backup`, `restore`) exit 2 with the phase that introduces them instead of pretending to succeed.
+  - `LISTEN_HOST` config. Outside the container it must be loopback; the image sets `0.0.0.0` plus `CHATUI_CONTAINER=1`.
+  - Contracts §9.2b host peer check (`server/loopback.ts`, applied in `server/create-app.ts`): non-loopback socket peers are dropped, and forwarded headers are ignored. This part of §9.2b was missing from Phase 1a.
+  - `scripts/verify-compose.ts` (`npm run verify:compose`) and `scripts/lib/checks.ts`: shared HTTP/browser checks used by `verify` and `verify:compose`.
+  - `.github/workflows/ci.yml`: quality gates, Docker `verify:compose`, rootless Podman `verify:compose`.
+  - README, ARCHITECTURE (container runtime section, pre-auth boundary, INV-49 row) and `.env.example` updated.
+- **Acceptance criteria with test evidence:**
+  - The Compose SSR build boots with the host port published only on `127.0.0.1`: `verify:compose` checks `<engine> port`, and a connection through a non-loopback host address is refused.
+  - Health, SSR HTML, hydration and non-HTML 404s behave as in Phase 1a inside the container: the full shared check suite runs against the container.
+  - `verify:compose` passes on Docker (44/44) and on rootless Podman 4.9.3 + podman-compose (44/44) in GitHub Actions (run 36523414163).
+  - Volume persistence across recreate is demonstrated with a test sentinel on both engines.
+  - Podman SELinux labeling: **NOT RUN**. The Ubuntu CI runner doesn't enforce SELinux, and there is no container engine on the development host. `verify:compose` runs the `:Z` bind-mount check automatically where `getenforce` reports Enforcing.
+  - CI configuration is present and passes (run 36523414163: all three jobs succeeded).
+  - `ARCHITECTURE.md` maps INV-49.
+- **Quality gates:**
+  - `npm run format:check`: PASS (local and CI)
+  - `npm run lint`: PASS (local and CI)
+  - `npm run typecheck`: PASS (local and CI)
+  - `npm test`: PASS (7 files, 60 tests; local and CI)
+  - `npm run build`: PASS
+  - `npm run verify`: PASS (31/31 local; CI)
+  - `npm run verify:compose`: PASS on Docker (CI, 44/44) and rootless Podman (CI, 44/44). NOT RUN on the development host (no engine installed; exits 2 with "NOT RUN").
+  - `npm audit`: 0 vulnerabilities.
+  - `test:e2e`, `perf:check`: not applicable yet (Phases 6, 9).
+- **Invariants (ID → enforcement → test):**
+  - INV-49 → `Dockerfile`, `compose.yaml`, `compose.podman.yaml` → `scripts/verify-compose.ts` (CI, Docker + Podman).
+  - INV-57 (Compose portion) → the same image serves documents, API and assets → `verify:compose` shared checks.
+  - Contracts §9.2b host peer check → `server/loopback.ts`, `server/create-app.ts`, `server/config.ts` → `tests/server/loopback.test.ts`, `tests/server/config.test.ts`.
+- **Security, SSR, data and performance observations:**
+  - Found in CI: Podman/buildah builds OCI-format images, which silently drop the Dockerfile `HEALTHCHECK`. The healthcheck is now also declared in `compose.yaml`.
+  - The container can't be exposed beyond `127.0.0.1` by configuration alone before Phase 4. Operators must not add networks or proxies (documented). The application writes nothing to `/data` yet; only the verification sentinel does.
+  - `init: true` gives correct SIGTERM delivery. Graceful shutdown returns exit code 0 on both engines.
+- **Dependencies and why approved:**
+  - No new npm dependencies.
+  - Base image `node:24.21.0-trixie-slim@sha256:8ec5d755…` (same Node pin as `.nvmrc`).
+  - CI actions pinned by SHA: `actions/checkout` v7.0.1, `actions/setup-node` v7.0.0.
+  - CI installs `podman-compose` via pipx to drive rootless Podman.
+- **Deviations / limitations / unverified items:**
+  - SELinux enforcement was not exercised (see above).
+  - The Phase 1a report listed 38 tests; the correct count was 39 (fixed there).
+  - To validate `verify:compose` on real engines before landing on `main`, work-in-progress commits were pushed to a temporary `ci/phase-1b` branch. It was squashed into the single phase commit and the branch was deleted.
+- **Commit/tag status:** commit `feat(phase-1b): compose packaging, podman support and CI` and tag `phase-1b`, pushed to `origin/main` per the project owner's instruction.
+- **Questions needing approval:** none.

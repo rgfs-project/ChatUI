@@ -35,7 +35,7 @@ export const stubDocumentHandler: RequestHandler = (_req, res) => {
 export function testApp(overrides: Partial<AppOptions> = {}) {
   const logs = captureLogger();
   const app = createApp({
-    config: { nodeEnv: "test" },
+    config: { nodeEnv: "test", inContainer: false },
     logger: logs.logger,
     version: "9.9.9-test",
     createDocumentHandler: () => stubDocumentHandler,

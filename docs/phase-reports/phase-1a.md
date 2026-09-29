@@ -20,7 +20,7 @@
   - `npm run format:check`: PASS
   - `npm run lint`: PASS
   - `npm run typecheck`: PASS
-  - `npm test`: PASS (6 files, 38 tests)
+  - `npm test`: PASS (6 files, 39 tests)
   - `npm run build`: PASS
   - `npm run verify`: PASS (31/31 checks)
   - `test:e2e`, `perf:check`, `verify:compose`: not applicable in Phase 1a (introduced in Phases 6, 9 and 1b).

@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+build
+.react-router
+data
+docs
+test-results
+playwright-report
+coverage
+.env
+.env.*
+!.env.example
+*.log
+compose.podman.yaml

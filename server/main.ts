@@ -16,11 +16,6 @@ import { ConfigError, loadConfig, type Config } from "./config.ts";
 import { createLogger, type Logger } from "./logger.ts";
 import type * as AppModule from "./app.ts";
 
-/**
- * Phase 1a binds to loopback only (contracts §9.2b): nothing before Phase 4
- * authentication may be reachable from the LAN.
- */
-const HOST = "127.0.0.1";
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -69,10 +64,10 @@ async function developmentHandler(
   return { handler: outer, close: () => devServer.close() };
 }
 
-function listen(server: Server, port: number): Promise<AddressInfo> {
+function listen(server: Server, port: number, host: string): Promise<AddressInfo> {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, HOST, () => {
+    server.listen(port, host, () => {
       server.off("error", reject);
       resolve(server.address() as AddressInfo);
     });
@@ -103,7 +98,7 @@ async function main(): Promise<void> {
   }
 
   const server = createServer(handler);
-  const address = await listen(server, config.port);
+  const address = await listen(server, config.port, config.listenHost);
   logger.info({ host: address.address, port: address.port, mode: config.nodeEnv }, "listening");
 
   let shuttingDown = false;

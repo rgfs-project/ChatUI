@@ -1,0 +1,40 @@
+# ChatUI — supported production runtime (Docker Compose or rootless Podman Compose).
+#
+# Until authentication ships (Phase 4) the port is published on 127.0.0.1 ONLY.
+# Do not change the published address, attach this service to other networks,
+# or put it behind a remote proxy before then.
+name: chatui
+
+services:
+  chatui:
+    build:
+      context: .
+    image: ${CHATUI_IMAGE:-localhost/chatui:local}
+    init: true
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:${HOST_PORT:-3000}:3000"
+    volumes:
+      - chatui-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Declared here as well as in the Dockerfile: Podman/buildah builds OCI-format
+    # images, which cannot carry a HEALTHCHECK instruction.
+    healthcheck:
+      test: ["CMD", "node", "server/cli.ts", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 15s
+
+volumes:
+  chatui-data:
+    name: ${CHATUI_VOLUME:-chatui-data}

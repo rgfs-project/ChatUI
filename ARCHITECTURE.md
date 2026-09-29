@@ -86,20 +86,34 @@ frame-ancestors 'none'
 
 No `unsafe-inline` or `unsafe-eval`. Development only adds `style-src 'unsafe-inline'` (Vite-injected styles) and `connect-src ws://localhost:* ws://127.0.0.1:*` (HMR). Other headers: `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, COOP/CORP `same-origin`. HSTS is left to the TLS-terminating proxy deployment introduced with authentication (Phase 4).
 
-## Pre-auth network boundary
+## Pre-auth network boundary (contracts §9.2b)
 
-Before Phase 4 the HTTP listener binds to `127.0.0.1` only (`server/main.ts`). The only document is the non-sensitive status page. Container publication (`127.0.0.1:HOST_PORT:CONTAINER_PORT`) arrives in Phase 1b.
+- **Host:** `LISTEN_HOST` defaults to `127.0.0.1`, and `server/config.ts` refuses any non-loopback address outside the container image. `server/create-app.ts` also checks the **socket peer address** (`server/loopback.ts`: 127.0.0.0/8, `::1`, IPv4-mapped loopback) and drops any other connection without a response. Forwarded headers are never consulted (`tests/server/loopback.test.ts` connects through a real non-loopback interface).
+- **Container:** the image sets `LISTEN_HOST=0.0.0.0` and `CHATUI_CONTAINER=1` because the app must listen on the container interface. There the peers are the runtime's port proxy, not loopback. `compose.yaml` publishes only `127.0.0.1:${HOST_PORT}:3000` on the project's own default network with no other services. `verify:compose` checks the published address and that the port is refused through a non-loopback host address. Operators must not add networks, other published addresses or remote proxies before Phase 4.
+
+## Container runtime (Phase 1b, INV-49)
+
+Compose is the supported production path; host Node is for development.
+
+- **Image** (`Dockerfile`): a multi-stage build on `node:24.21.0-trixie-slim` pinned by digest. `deps` runs `npm ci`; `build` runs `npm run build` (SSR server bundle and browser bundle); `prod-deps` runs `npm ci --omit=dev`. The runtime stage contains only `package.json`, production `node_modules`, `build/`, and the natively loaded `server/{cli,main,config,logger,loopback}.ts`. The one Express process serves the API, SSR documents and immutable assets.
+- **User and filesystem:** runs as `node` (UID 1000). Application files are root-owned. `/data` is created `0700` and owned by `node`. `compose.yaml` adds `read_only: true` (tmpfs `/tmp`), `cap_drop: [ALL]`, `no-new-privileges`, `init: true` (signal forwarding and zombie reaping) and `restart: unless-stopped`.
+- **Persistence:** `/data` is a named volume (`CHATUI_VOLUME`, default `chatui-data`), independent of the container lifecycle. `verify:compose` writes a test sentinel as the app user, recreates the container and reads it back. The application itself still writes nothing.
+- **Podman:** rootless Podman works with the same `compose.yaml` (named volumes are labeled automatically). `compose.podman.yaml` shows a bind-mounted `./data` with a private SELinux label (`:Z`) and `userns_mode: keep-id` so host files stay owned by the operator. `verify:compose` exercises the `:Z` bind mount when SELinux is enforcing and reports NOT RUN otherwise.
+- **Healthcheck and entrypoint:** `ENTRYPOINT ["node", "server/cli.ts"]`, default `CMD ["serve"]`. The healthcheck runs `server/cli.ts healthcheck`, which requests `GET /api/health` inside the container. It is declared in both `compose.yaml` and the `Dockerfile`, because Podman/buildah OCI-format images drop `HEALTHCHECK`. Future operator commands (`index:rebuild`, `user:create`, `user:reset-password`, `backup`, `restore`) are listed with the phase that introduces them and exit 2 until then.
+- **Secrets:** there are none yet. `.env` is git-ignored and never baked into the image (`.dockerignore`). No secrets appear as command arguments.
+- **CI** (`.github/workflows/ci.yml`): on every push and PR it runs format:check, lint, typecheck, test, build, verify and `npm audit --audit-level=high`, plus `verify:compose` on Docker and on rootless Podman (podman-compose). Actions are pinned by commit SHA with `contents: read` only. Images are built but never published.
 
 ## Configuration
 
 Validated once at boot (`server/config.ts`); invalid values stop the process with a list of every problem. See `.env.example`.
 
-| Variable    | Default       | Rule                                                            |
-| ----------- | ------------- | --------------------------------------------------------------- |
-| `PORT`      | `3000`        | integer 0–65535 (0 = ephemeral)                                 |
-| `DATA_DIR`  | `./data`      | must be an existing directory; nothing writes to it in Phase 1a |
-| `NODE_ENV`  | `development` | `development` \| `production` \| `test`                         |
-| `LOG_LEVEL` | `info`        | pino levels or `silent`                                         |
+| Variable      | Default                         | Rule                                                                                   |
+| ------------- | ------------------------------- | -------------------------------------------------------------------------------------- |
+| `PORT`        | `3000`                          | integer 0–65535 (0 = ephemeral)                                                        |
+| `DATA_DIR`    | `./data` (`/data` in the image) | must be an existing directory; nothing writes to it yet                                |
+| `NODE_ENV`    | `development`                   | `development` \| `production` \| `test`                                                |
+| `LOG_LEVEL`   | `info`                          | pino levels or `silent`                                                                |
+| `LISTEN_HOST` | `127.0.0.1`                     | IP address. It must be loopback unless `CHATUI_CONTAINER=1`, which only the image sets |
 
 ## Logging
 
@@ -111,7 +125,6 @@ All runtime JS/CSS/icons are built into `build/client` and served from the ChatU
 
 ## Later sections
 
-- Compose / Podman / CI packaging (INV-49): N/A until Phase 1b.
 - llama.cpp chat and generation admission: N/A until Phase 2.
 - Canonical Markdown storage, locking and recovery: N/A until Phase 3.
 - Authentication, sessions, CSRF, authorized SSR: N/A until Phase 4.
@@ -184,7 +197,7 @@ Tests name the invariant in their title (e.g. `INV-01: …`). "Pending" rows are
 | INV-46 | Incremental rendering preserves selection, focus, scroll intent and unaffected message identity                                                                                                                             | 14             | —                                                                                                                                                                           | —                                                                                | Pending Phase 14                                                    |
 | INV-47 | Menus/dialogs/selects have correct keyboard, focus, portal and screen-reader behavior                                                                                                                                       | 7, 15          | —                                                                                                                                                                           | —                                                                                | Pending Phase 7, 15                                                 |
 | INV-48 | Composer preserves IME, Enter/Shift+Enter, draft and attachment semantics and cannot double-send                                                                                                                            | 15             | —                                                                                                                                                                           | —                                                                                | Pending Phase 15                                                    |
-| INV-49 | Compose is the supported production path; the canonical `/data` volume survives ordinary recreate and update                                                                                                                | 1b             | —                                                                                                                                                                           | —                                                                                | Pending Phase 1b                                                    |
+| INV-49 | Compose is the supported production path; the canonical `/data` volume survives ordinary recreate and update                                                                                                                | 1b             | `Dockerfile`, `compose.yaml` (named `/data` volume, 127.0.0.1 publication), `compose.podman.yaml`                                                                           | `scripts/verify-compose.ts` (Docker and Podman in CI)                            | Implemented (1b)                                                    |
 | INV-50 | Backup/restore operates on a complete verified single-process data snapshot; restore refuses nonempty state                                                                                                                 | 16             | —                                                                                                                                                                           | —                                                                                | Pending Phase 16                                                    |
 | INV-51 | Optional interactive artifact execution is opaque-origin sandboxed, credentialless, without same-origin access                                                                                                              | 19             | —                                                                                                                                                                           | —                                                                                | Pending Phase 19 (optional, separately approved)                    |
 | INV-52 | Feature capability is truthfully classified as implemented, provider-dependent, or future; UI never implies unsupported tools                                                                                               | 14             | —                                                                                                                                                                           | —                                                                                | Pending Phase 14                                                    |

@@ -18,7 +18,14 @@ afterAll(() => {
 describe("configuration", () => {
   it("applies safe defaults", () => {
     const config = loadConfig({ DATA_DIR: root });
-    expect(config).toEqual({ port: 3000, dataDir: root, nodeEnv: "development", logLevel: "info" });
+    expect(config).toEqual({
+      port: 3000,
+      dataDir: root,
+      nodeEnv: "development",
+      logLevel: "info",
+      listenHost: "127.0.0.1",
+      inContainer: false,
+    });
   });
 
   it("resolves DATA_DIR relative to the working directory", () => {
@@ -57,6 +64,21 @@ describe("configuration", () => {
   it("rejects a DATA_DIR that does not exist or is not a directory", () => {
     expect(() => loadConfig({ DATA_DIR: path.join(root, "missing") })).toThrow(/DATA_DIR/);
     expect(() => loadConfig({ DATA_DIR: path.join(root, "a-file") })).toThrow(/DATA_DIR/);
+  });
+
+  it("host mode refuses non-loopback listen addresses before authentication", () => {
+    expect(() => loadConfig({ DATA_DIR: root, LISTEN_HOST: "0.0.0.0" })).toThrow(/loopback/);
+    expect(() => loadConfig({ DATA_DIR: root, LISTEN_HOST: "192.168.1.10" })).toThrow(/loopback/);
+    expect(loadConfig({ DATA_DIR: root, LISTEN_HOST: "::1" }).listenHost).toBe("::1");
+  });
+
+  it("the container image may listen on its own interface", () => {
+    const config = loadConfig({ DATA_DIR: root, LISTEN_HOST: "0.0.0.0", CHATUI_CONTAINER: "1" });
+    expect(config).toMatchObject({ listenHost: "0.0.0.0", inContainer: true });
+  });
+
+  it("rejects a LISTEN_HOST that is not an IP address", () => {
+    expect(() => loadConfig({ DATA_DIR: root, LISTEN_HOST: "localhost" })).toThrow(/LISTEN_HOST/);
   });
 
   it("treats empty values as unset", () => {

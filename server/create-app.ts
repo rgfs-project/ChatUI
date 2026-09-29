@@ -6,6 +6,7 @@ import type { Config } from "./config.ts";
 import { securityHeaders, type CspMode } from "./csp.ts";
 import { AppError, apiErrorHandler, apiNotFound, sendError } from "./errors.ts";
 import type { Logger } from "./logger.ts";
+import { isLoopbackAddress } from "./loopback.ts";
 import { buildApiRouter, type AnyApiRoute, type RouteServices } from "./registry.ts";
 import { apiRoutes } from "./routes/index.ts";
 import { createHealthService } from "./services/health.ts";
@@ -19,7 +20,7 @@ export interface DocumentRequestValues {
 }
 
 export interface AppOptions {
-  config: Pick<Config, "nodeEnv">;
+  config: Pick<Config, "nodeEnv" | "inContainer">;
   logger: Logger;
   version: string;
   /** Builds the React Router document handler; receives per-request values. */
@@ -45,6 +46,19 @@ export function createApp(options: AppOptions): Express {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", false);
+
+  if (!options.config.inContainer) {
+    // Host mode before authentication: serve loopback peers only, judged by the
+    // socket address, never by forwarded headers (contracts §9.2b).
+    app.use((req, _res, next) => {
+      if (isLoopbackAddress(req.socket.remoteAddress)) {
+        next();
+        return;
+      }
+      logger.warn("rejected non-loopback peer");
+      req.socket.destroy();
+    });
+  }
 
   app.use(
     pinoHttp({

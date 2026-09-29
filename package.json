@@ -52,6 +52,7 @@
     "lint": "react-router typegen && eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "npm run build && node scripts/verify.ts"
+    "verify": "npm run build && node scripts/verify.ts",
+    "verify:compose": "node scripts/verify-compose.ts"
   }
 }
