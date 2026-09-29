@@ -190,3 +190,175 @@ export async function browserChecks(base: string): Promise<void> {
     await browser.close();
   }
 }
+
+/** Phase 2 chat demo checks (host process with a mock provider). */
+export async function chatChecks(
+  base: string,
+  models: { chat: string; slow: string },
+): Promise<void> {
+  // Raw server HTML, no JavaScript executed.
+  const res = await fetch(`${base}/chat`);
+  const html = await res.text();
+  check(
+    "INV-54: /chat server HTML contains the native textarea",
+    res.status === 200 && /<textarea[^>]*id="message"/.test(html),
+  );
+  check(
+    "/chat server HTML lists discovered models",
+    html.includes(`<option value="${models.chat}"`),
+  );
+  check(
+    "/chat Send is disabled until hydration (no fake no-JS send)",
+    html.includes('<button type="submit" disabled=""'),
+  );
+
+  // API generation over real HTTP + SSE.
+  const start = await fetch(`${base}/api/generations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: models.chat,
+      messages: [{ role: "user", content: "over http" }],
+    }),
+  });
+  const started = (await start.json()) as { generationId?: string };
+  check(
+    "POST /api/generations returns 202 with ids",
+    start.status === 202 && typeof started.generationId === "string",
+  );
+  const stream = await fetch(`${base}/api/generations/${started.generationId ?? ""}/stream`);
+  const sseText = await stream.text();
+  check(
+    "SSE stream delivers snapshot, deltas and one terminal event",
+    stream.headers.get("content-type")?.startsWith("text/event-stream") === true &&
+      sseText.startsWith("id: ") &&
+      sseText.includes("event: snapshot") &&
+      (sseText.match(/event: terminal/g) ?? []).length === 1,
+  );
+  const snapshot = (await (
+    await fetch(`${base}/api/generations/${started.generationId ?? ""}`)
+  ).json()) as {
+    state?: string;
+    content?: string;
+  };
+  check(
+    "generation completes with the streamed content",
+    snapshot.state === "completed" && snapshot.content === "Echo: over http",
+  );
+
+  const browser = await chromium.launch();
+  try {
+    const noJs = await browser.newContext({ javaScriptEnabled: false });
+    const staticPage = await noJs.newPage();
+    await staticPage.goto(`${base}/chat`);
+    check(
+      "INV-54: without JS the chat textarea is usable",
+      await staticPage.locator("#message").isEditable(),
+    );
+    await noJs.close();
+
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const problems: string[] = [];
+    page.on("console", (msg: ConsoleMessage) => {
+      if (msg.type() === "error" || msg.type() === "warning")
+        problems.push(`${msg.type()}: ${msg.text()}`);
+    });
+    page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
+
+    // Hold back every script so the user types before hydration.
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/assets/**/*.js", async (route) => {
+      await gate;
+      await route.continue();
+    });
+    await page.goto(`${base}/chat`, { waitUntil: "domcontentloaded" });
+    await page.locator("#message").fill("typed before hydration");
+    release();
+    await page.waitForSelector('html[data-hydrated="true"]', { timeout: 15_000 });
+    await page.unroute("**/assets/**/*.js");
+    check(
+      "INV-56: text typed before hydration survives hydration",
+      (await page.locator("#message").inputValue()) === "typed before hydration",
+    );
+
+    // Send and watch it stream.
+    await page.getByRole("button", { name: "Send" }).click();
+    await page
+      .getByTestId("generation-status")
+      .filter({ hasText: "Completed" })
+      .waitFor({ timeout: 15_000 });
+    check(
+      "browser send streams the reply",
+      (await page.getByTestId("content").textContent()) === "Echo: typed before hydration",
+    );
+    check(
+      "reasoning is shown separately",
+      (await page.getByTestId("reasoning").textContent())?.includes("Considering the request.") ===
+        true,
+    );
+    check("the URL identifies the generation", /[?&]g=[0-9a-f-]{36}/.test(page.url()));
+
+    // Reload mid-generation: it keeps running and is re-observed.
+    await page.locator("#model").selectOption(models.slow);
+    await page.locator("#message").fill("slow one");
+    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByTestId("content").filter({ hasText: "part2" }).waitFor({ timeout: 15_000 });
+    await page.reload();
+    await page.waitForSelector('html[data-hydrated="true"]');
+    const afterReload = (await page.getByTestId("content").textContent()) ?? "";
+    check(
+      "INV-06: reload does not stop the generation; SSR shows progress",
+      afterReload.includes("part2"),
+    );
+    await page
+      .getByTestId("generation-status")
+      .filter({ hasText: "Completed" })
+      .waitFor({ timeout: 20_000 });
+    check(
+      "the reloaded page observes the generation to completion",
+      ((await page.getByTestId("content").textContent()) ?? "").includes("part29"),
+    );
+
+    // Cancel.
+    await page.locator("#model").selectOption(models.slow);
+    await page.locator("#message").fill("cancel me");
+    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByTestId("content").filter({ hasText: "part1" }).waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Stop generating" }).click();
+    await page
+      .getByTestId("generation-status")
+      .filter({ hasText: "Cancelled" })
+      .waitFor({ timeout: 5_000 });
+    check("Stop cancels the generation", true);
+    check(
+      "chat demo: no console errors, warnings or CSP violations",
+      problems.length === 0,
+      problems.join(" | "),
+    );
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+}
+
+/** Container (pre-auth): the chat demo must not exist. */
+export async function chatDisabledChecks(base: string): Promise<void> {
+  const page = await fetch(`${base}/chat`);
+  await page.arrayBuffer();
+  const api = await fetch(`${base}/api/generations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "x", messages: [{ role: "user", content: "x" }] }),
+  });
+  const models = await fetch(`${base}/api/models`);
+  await Promise.all([api.arrayBuffer(), models.arrayBuffer()]);
+  check(
+    "pre-auth chat demo is disabled in the container (§9.2b)",
+    page.status === 404 && api.status === 404 && models.status === 404,
+    `${String(page.status)} ${String(api.status)} ${String(models.status)}`,
+  );
+}

@@ -25,6 +25,16 @@ describe("configuration", () => {
       logLevel: "info",
       listenHost: "127.0.0.1",
       inContainer: false,
+      provider: {
+        baseUrl: undefined,
+        apiKey: undefined,
+        timeoutMs: 300_000,
+        generationMaxMs: 1_800_000,
+        defaultContextTokens: 8_192,
+        maxOutputTokens: 4_096,
+        maxActiveGenerations: undefined,
+        maxResponseBytes: 16 * 1024 * 1024,
+      },
     });
   });
 
@@ -79,6 +89,41 @@ describe("configuration", () => {
 
   it("rejects a LISTEN_HOST that is not an IP address", () => {
     expect(() => loadConfig({ DATA_DIR: root, LISTEN_HOST: "localhost" })).toThrow(/LISTEN_HOST/);
+  });
+
+  it("parses provider settings and strips a trailing slash from LLAMA_BASE_URL", () => {
+    const config = loadConfig({
+      DATA_DIR: root,
+      LLAMA_BASE_URL: "http://192.168.1.20:8080/",
+      LLAMA_API_KEY: "k",
+      PROVIDER_TIMEOUT_MS: "60000",
+      MAX_ACTIVE_GENERATIONS: "3",
+    });
+    expect(config.provider).toMatchObject({
+      baseUrl: "http://192.168.1.20:8080",
+      apiKey: "k",
+      timeoutMs: 60_000,
+      maxActiveGenerations: 3,
+    });
+  });
+
+  it.each([
+    "ftp://host/",
+    "http://user:pass@host:8080",
+    "http://host:8080/?key=secret",
+    "not a url",
+  ])("rejects LLAMA_BASE_URL=%s", (value) => {
+    expect(() => loadConfig({ DATA_DIR: root, LLAMA_BASE_URL: value })).toThrow(/LLAMA_BASE_URL/);
+  });
+
+  it("never echoes a secret in configuration errors", () => {
+    expect(() =>
+      loadConfig({ DATA_DIR: root, LLAMA_API_KEY: "sk-very-secret", MAX_OUTPUT_TOKENS: "0" }),
+    ).toThrow(
+      expect.not.objectContaining({
+        message: expect.stringContaining("sk-very-secret") as string,
+      }) as Error,
+    );
   });
 
   it("treats empty values as unset", () => {

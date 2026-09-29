@@ -32,6 +32,13 @@ export default defineConfig(
     files: ["app/**/*.{ts,tsx}"],
     extends: [reactHooks.configs.flat["recommended-latest"]],
     languageOptions: { globals: { ...globals.browser } },
+    rules: {
+      // React Router loaders throw `data()` responses to set HTTP status.
+      "@typescript-eslint/only-throw-error": [
+        "error",
+        { allow: [{ from: "package", package: "react-router", name: "DataWithResponseInit" }] },
+      ],
+    },
   },
   {
     files: ["server/**/*.ts"],

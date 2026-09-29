@@ -1,0 +1,71 @@
+## Phase 2 report
+
+- **Scope completed (files/features):**
+  - Provider: `server/providers/types.ts` (list models, discover slots, stream, cancel via abort; normalized `ProviderError`) and `server/providers/llamacpp.ts` (OpenAI-compatible llama-server client with an inactivity timeout, response byte cap and error classification without upstream bodies).
+  - Config: `LLAMA_BASE_URL`, `LLAMA_API_KEY`, `PROVIDER_TIMEOUT_MS`, `GENERATION_MAX_MS`, `DEFAULT_CONTEXT_TOKENS`, `MAX_OUTPUT_TOKENS`, `MAX_ACTIVE_GENERATIONS`, `PROVIDER_MAX_RESPONSE_BYTES` (`server/config.ts`, `.env.example`).
+  - Generations: `server/generations/catalog.ts` (model discovery and `MODEL_NOT_FOUND`), `server/generations/manager.ts` (in-memory state machine, single guarded terminal transition, admission, observers, eviction, shutdown) and `server/generations/sse.ts` (contract headers, heartbeats, monotonic ids, byte-bounded observer queue).
+  - API through the registry: `GET /api/models`, `POST /api/generations` → 202, `GET /api/generations/:id`, `POST /api/generations/:id/cancel`, `GET /api/generations/:id/stream` (SSE). The registry gained `defineSseRoute` and `availability: "chat-demo"`.
+  - New error codes: `PROVIDER_UNAVAILABLE`, `PROVIDER_ERROR`, `PROVIDER_TIMEOUT`, `MODEL_NOT_FOUND`, `GENERATION_NOT_FOUND`, `RATE_LIMITED` (+ `Retry-After`).
+  - UI: `/chat` SSR chat demo (native textarea and model select before JS, reasoning shown separately, Stop, status, reload re-observes via `?g=`), linked from the status page.
+  - Probe: `scripts/probe-provider.ts`, run against the live server; findings in `docs/provider-notes.md`.
+  - Container: `node server/cli.ts provider:check`, `LLAMA_*` passthrough in `compose.yaml`, host-alias guidance.
+  - Tests: `tests/support/mock-llama.ts` (deterministic llama-server double speaking the observed format), `tests/support/sse-client.ts`, `tests/server/generations.test.ts`, `tests/server/manager.test.ts`.
+- **Acceptance criteria with test evidence:**
+  - With JavaScript disabled, the loopback `/chat` page shows the chat shell and a usable textarea (`verify`: raw HTML plus JS-disabled browser).
+  - After hydration the browser starts a generation and watches it stream (`verify` with the mock provider). Also verified manually against the live llama.cpp server (`Gemma 4`): the reply streamed, reasoning was separated, the status was Completed, and the console was clean.
+  - Reloading does not stop the generation, and the result can be re-observed (`verify` reloads mid-generation and sees it to completion; `generations.test.ts` disconnect/reconnect).
+  - Remote access to the unauthenticated demo is refused:
+    - On the host, the listener is loopback-only and non-loopback socket peers are dropped (`loopback.test.ts`).
+    - In the container, the demo routes and page don't exist (`registry.test.ts`; `verify:compose` "pre-auth chat demo is disabled in the container"). Container peers are not required to be loopback.
+  - `docs/provider-notes.md` exists; every item is either observed live or marked UNVERIFIED.
+  - Required test list, all covered in `generations.test.ts` / `manager.test.ts`:
+    - model discovery
+    - success
+    - missing and unknown model
+    - invalid provider response
+    - provider failure
+    - timeout (idle, no response, max time)
+    - cancellation
+    - one terminal state under a cancel/complete race
+    - reasoning separation
+    - SSE observation
+    - disconnect while the generation continues
+    - reconnect + snapshot
+    - eviction (TTL and cap)
+    - no credential or upstream body in any response
+    - admission `429` + `Retry-After` with no work started
+    - response cap
+    - slow observer disconnected while the generation and a normal observer continue
+  - `verify` runs a generation against the mock provider over real HTTP/SSE.
+  - `ARCHITECTURE.md` is updated: state machine, SSE conventions, chat demo boundary, INV-04 to INV-06, and the INV-62 Phase 2 portion.
+- **Quality gates:**
+  - `format:check`: PASS
+  - `lint`: PASS
+  - `typecheck`: PASS
+  - `test`: PASS (9 files, 100 tests; stable over repeated runs)
+  - `build`: PASS
+  - `verify`: PASS (46/46)
+  - `verify:compose`: PASS on Docker and on rootless Podman in CI (48/48 each), including host-provider connectivity by LAN address and by `host.docker.internal` (host-gateway) / `host.containers.internal`
+  - `npm audit`: 0 vulnerabilities
+  - `test:e2e` and `perf:check`: not applicable yet
+- **Invariants (ID → enforcement → test):**
+  - INV-04 → `llamacpp.ts` normalization, DTOs → `generations.test.ts` "INV-04" (key, upstream secret, model paths and provider ids never appear in any HTTP/SSE response).
+  - INV-05 → `GenerationManager.finish()` → `manager.test.ts` race (25 iterations, both orders).
+  - INV-06 → `sse.ts`, `observe()` → `generations.test.ts`, `manager.test.ts`, `verify` reload.
+  - INV-62 (Phase 2 portion) → global admission, provider byte cap, observer queue → `generations.test.ts`.
+  - INV-54/56 (Phase 2 portions) → `/chat` SSR textarea and uncontrolled composer → `verify`.
+- **Security, SSR, data and performance observations:**
+  - Probe finding: `/v1/models` `status.args` exposes server command lines and model paths. ChatUI strips all of it.
+  - Probe finding: per-model `/props` may autoload models in router mode, so discovery avoids it and admission defaults to 1 when slots are unknown.
+  - The probed deployment has 18–48 s time to first token even with a warm prefix cache. `PROVIDER_TIMEOUT_MS` defaults to 300 s of inactivity.
+  - Cancel, max-time and shutdown record their terminal state immediately and don't depend on the provider honoring the abort (a test with a non-cooperative provider found this).
+  - The SSE queue is bounded in bytes, not events: a single large write backpressures the socket, so a count limit would disconnect healthy readers (found by the slow-observer test).
+  - The chat route adds a 2.3 kB gzip chunk. Zod stays out of the client bundle (`shared/generation-state.ts` is dependency-free).
+- **Dependencies and why approved:** no new npm dependencies.
+- **Deviations / limitations / unverified items:**
+  - UNVERIFIED items are listed in `docs/provider-notes.md`: servers without an API key, non-router `total_slots`, the `loading` status, autoload latency, role-chunk timing, `<think>`-style reasoning.
+  - The demo sends the in-page conversation as `messages` (client-supplied history is allowed in this phase; the server assembles history from storage from Phase 3).
+  - Podman SELinux enforcement: still NOT RUN (no enforcing host).
+  - Validated first on the temporary `ci/phase-2` branch, then squashed into the phase commit.
+- **Commit/tag status:** commit `feat(phase-2): llama.cpp provider, server-owned generations, SSE observation` and tag `phase-2`, pushed to `origin/main` per the project owner's instruction.
+- **Questions needing approval:** none.

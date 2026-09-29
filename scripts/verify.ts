@@ -13,7 +13,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type ConsoleMessage } from "@playwright/test";
-import { browserChecks, check, httpChecks, results } from "./lib/checks.ts";
+import { MOCK_MODELS, startMockLlama } from "../tests/support/mock-llama.ts";
+import { browserChecks, chatChecks, check, httpChecks, results } from "./lib/checks.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 type Mode = "production" | "development";
@@ -21,6 +22,7 @@ type Mode = "production" | "development";
 function startServer(
   dataDir: string,
   mode: Mode,
+  extraEnv: Record<string, string> = {},
 ): Promise<{ child: ChildProcess; port: number; logs: string[] }> {
   const args =
     mode === "development" ? ["--conditions=development", "server/main.ts"] : ["server/main.ts"];
@@ -32,6 +34,7 @@ function startServer(
       PORT: "0",
       DATA_DIR: dataDir,
       LOG_LEVEL: "info",
+      ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -66,8 +69,8 @@ function startServer(
  * React's production build does not report attribute hydration mismatches, so
  * hydration is also checked against the development build (dev CSP).
  */
-async function developmentHydrationCheck(dataDir: string): Promise<void> {
-  const { child, port } = await startServer(dataDir, "development");
+async function developmentHydrationCheck(dataDir: string, llamaUrl: string): Promise<void> {
+  const { child, port } = await startServer(dataDir, "development", { LLAMA_BASE_URL: llamaUrl });
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
@@ -78,10 +81,12 @@ async function developmentHydrationCheck(dataDir: string): Promise<void> {
       }
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
-    await page.goto(`http://127.0.0.1:${String(port)}/`);
-    await page.waitForSelector('html[data-hydrated="true"]', { timeout: 30_000 });
+    for (const path of ["/", "/chat"]) {
+      await page.goto(`http://127.0.0.1:${String(port)}${path}`);
+      await page.waitForSelector('html[data-hydrated="true"]', { timeout: 30_000 });
+    }
     check(
-      "INV-56: development build: hydration without mismatch or console warnings",
+      "INV-56: development build: / and /chat hydrate without mismatch or console warnings",
       problems.length === 0,
       problems.map((p) => p.slice(0, 300)).join(" | "),
     );
@@ -103,11 +108,16 @@ async function main(): Promise<void> {
     );
   }
   const dataDir = mkdtempSync(path.join(tmpdir(), "chatui-verify-"));
-  const { child, port, logs } = await startServer(dataDir, "production");
+  // Deterministic provider for the chat demo; paced so streaming is observable.
+  const llama = await startMockLlama({ chatChunkDelayMs: 40, chunkDelayMs: 100, slowChunks: 30 });
+  const { child, port, logs } = await startServer(dataDir, "production", {
+    LLAMA_BASE_URL: llama.url,
+  });
   const base = `http://127.0.0.1:${String(port)}`;
   try {
     await httpChecks(base);
     await browserChecks(base);
+    await chatChecks(base, { chat: MOCK_MODELS.chat, slow: MOCK_MODELS.slow });
   } finally {
     const exited = new Promise<number | null>((resolve) =>
       child.once("exit", (code) => {
@@ -132,9 +142,10 @@ async function main(): Promise<void> {
     check("DATA_DIR untouched (nothing writes in Phase 1a)", readdirSync(dataDir).length === 0);
   }
   try {
-    await developmentHydrationCheck(dataDir);
+    await developmentHydrationCheck(dataDir, llama.url);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
+    await llama.close();
   }
   const failed = results.filter((r) => !r.ok);
   process.stdout.write(

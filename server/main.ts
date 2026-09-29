@@ -21,7 +21,12 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 
 type AppModuleShape = typeof AppModule;
 
-function appFrom(mod: AppModuleShape, config: Config, logger: Logger, clientDir?: string) {
+function appFrom(
+  mod: AppModuleShape,
+  config: Config,
+  logger: Logger,
+  clientDir?: string,
+): ReturnType<AppModuleShape["createApp"]> {
   return mod.createApp({
     config,
     logger,
@@ -31,37 +36,55 @@ function appFrom(mod: AppModuleShape, config: Config, logger: Logger, clientDir?
   });
 }
 
-async function productionHandler(config: Config, logger: Logger): Promise<Express> {
-  const bundle = pathToFileURL(path.join(ROOT, "build/server/index.js")).href;
-  const mod = (await import(bundle)) as AppModuleShape;
-  return appFrom(mod, config, logger, path.join(ROOT, "build/client"));
+interface Running {
+  handler: Express;
+  close: () => Promise<void>;
 }
 
-async function developmentHandler(
-  config: Config,
-  logger: Logger,
-): Promise<{ handler: Express; close: () => Promise<void> }> {
+async function productionHandler(config: Config, logger: Logger): Promise<Running> {
+  const bundle = pathToFileURL(path.join(ROOT, "build/server/index.js")).href;
+  const mod = (await import(bundle)) as AppModuleShape;
+  const app = appFrom(mod, config, logger, path.join(ROOT, "build/client"));
+  return {
+    handler: app.handler,
+    close: () => {
+      app.shutdown();
+      return Promise.resolve();
+    },
+  };
+}
+
+async function developmentHandler(config: Config, logger: Logger): Promise<Running> {
   const vite = await import("vite");
   const devServer = await vite.createServer({
     root: ROOT,
     server: { middlewareMode: true },
     appType: "custom",
   });
-  let cached: { mod: AppModuleShape; app: Express } | undefined;
+  let cached: { mod: AppModuleShape; app: ReturnType<AppModuleShape["createApp"]> } | undefined;
   const outer = express();
   outer.disable("x-powered-by");
   outer.use(devServer.middlewares);
   outer.use(async (req, res, next) => {
     try {
       const mod = (await devServer.ssrLoadModule("./server/app.ts")) as AppModuleShape;
-      if (cached?.mod !== mod) cached = { mod, app: appFrom(mod, config, logger) };
-      cached.app(req, res, next);
+      if (cached?.mod !== mod) {
+        cached?.app.shutdown();
+        cached = { mod, app: appFrom(mod, config, logger) };
+      }
+      cached.app.handler(req, res, next);
     } catch (error) {
       if (error instanceof Error) devServer.ssrFixStacktrace(error);
       next(error);
     }
   });
-  return { handler: outer, close: () => devServer.close() };
+  return {
+    handler: outer,
+    close: async () => {
+      cached?.app.shutdown();
+      await devServer.close();
+    },
+  };
 }
 
 function listen(server: Server, port: number, host: string): Promise<AddressInfo> {
@@ -87,17 +110,12 @@ async function main(): Promise<void> {
   }
   const logger = createLogger(config.logLevel);
 
-  let closeDev: (() => Promise<void>) | undefined;
-  let handler: Express;
-  if (config.nodeEnv === "development") {
-    const dev = await developmentHandler(config, logger);
-    handler = dev.handler;
-    closeDev = dev.close;
-  } else {
-    handler = await productionHandler(config, logger);
-  }
+  const running =
+    config.nodeEnv === "development"
+      ? await developmentHandler(config, logger)
+      : await productionHandler(config, logger);
 
-  const server = createServer(handler);
+  const server = createServer(running.handler);
   const address = await listen(server, config.port, config.listenHost);
   logger.info({ host: address.address, port: address.port, mode: config.nodeEnv }, "listening");
 
@@ -111,9 +129,12 @@ async function main(): Promise<void> {
       server.closeAllConnections();
     }, SHUTDOWN_TIMEOUT_MS);
     force.unref();
+    // Ends generations and SSE observers first so long-lived streams do not hold
+    // the server open.
+    const closing = running.close();
     server.close(() => {
       void (async () => {
-        await closeDev?.();
+        await closing;
         clearTimeout(force);
         logger.info("shutdown complete");
         logger.flush();

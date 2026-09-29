@@ -8,8 +8,9 @@ export function meta(): Route.MetaDescriptors {
 }
 
 /** Uses the internal health service directly, never an HTTP self-call. */
-export function loader({ context }: Route.LoaderArgs): HealthDto {
-  return context.get(appContext).services.health();
+export function loader({ context }: Route.LoaderArgs): { health: HealthDto; chatDemo: boolean } {
+  const { services } = context.get(appContext);
+  return { health: services.health(), chatDemo: services.chatDemoEnabled };
 }
 
 /** Lightweight guard: keeps the schema library out of the client bundle. */
@@ -38,7 +39,7 @@ function useHydrated(): boolean {
 type CheckState = { kind: "idle" } | { kind: "checking" } | { kind: "failed" };
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const [health, setHealth] = useState<HealthDto>(loaderData);
+  const [health, setHealth] = useState<HealthDto>(loaderData.health);
   const hydrated = useHydrated();
   const [check, setCheck] = useState<CheckState>({ kind: "idle" });
 
@@ -82,6 +83,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {check.kind === "failed" ? "The server could not be reached." : ""}
         </span>
       </p>
+      {loaderData.chatDemo ? (
+        <p>
+          <a href="/chat">Open the local chat demo</a> (this computer only; nothing is saved).
+        </p>
+      ) : null}
     </main>
   );
 }

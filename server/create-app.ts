@@ -3,6 +3,11 @@ import express, { type Express, type RequestHandler } from "express";
 import { pinoHttp } from "pino-http";
 import { ErrorCode } from "@shared/errors";
 import type { Config } from "./config.ts";
+import { ModelCatalog } from "./generations/catalog.ts";
+import { GenerationManager } from "./generations/manager.ts";
+import { DEFAULT_SSE_OPTIONS, type SseOptions } from "./generations/sse.ts";
+import { createLlamaCppProvider } from "./providers/llamacpp.ts";
+import type { Provider } from "./providers/types.ts";
 import { securityHeaders, type CspMode } from "./csp.ts";
 import { AppError, apiErrorHandler, apiNotFound, sendError } from "./errors.ts";
 import type { Logger } from "./logger.ts";
@@ -20,7 +25,7 @@ export interface DocumentRequestValues {
 }
 
 export interface AppOptions {
-  config: Pick<Config, "nodeEnv" | "inContainer">;
+  config: Pick<Config, "nodeEnv" | "inContainer" | "provider">;
   logger: Logger;
   version: string;
   /** Builds the React Router document handler; receives per-request values. */
@@ -31,6 +36,19 @@ export interface AppOptions {
   clientDir?: string;
   /** Overrides the API inventory (tests only). */
   routes?: readonly AnyApiRoute[];
+  /** Overrides the llama.cpp provider (tests only). */
+  provider?: Provider;
+  /** SSE tuning (tests only). */
+  sse?: Partial<SseOptions>;
+  /** Generation retention tuning (tests only). */
+  generationRetention?: { retentionMs?: number; maxRetained?: number };
+}
+
+export interface ChatUiApp {
+  handler: Express;
+  services: RouteServices;
+  /** Stops generations and closes SSE observers so the HTTP server can close. */
+  shutdown: () => void;
 }
 
 /**
@@ -38,9 +56,43 @@ export interface AppOptions {
  * security headers → /assets → /api → other static files → SSR documents.
  * /api and /assets can never fall through to the HTML document handler.
  */
-export function createApp(options: AppOptions): Express {
+export function createApp(options: AppOptions): ChatUiApp {
   const { logger } = options;
-  const services: RouteServices = { health: createHealthService(options.version) };
+  const providerConfig = options.config.provider;
+  const provider = options.provider ?? createLlamaCppProvider(providerConfig);
+  const models = new ModelCatalog(provider, providerConfig.defaultContextTokens);
+  const generations = new GenerationManager({
+    provider,
+    catalog: models,
+    logger,
+    maxOutputTokens: providerConfig.maxOutputTokens,
+    generationMaxMs: providerConfig.generationMaxMs,
+    // Until discovery reports the provider's parallel slots, admit one (contracts §4).
+    maxActiveGenerations: providerConfig.maxActiveGenerations ?? 1,
+    ...options.generationRetention,
+  });
+  if (providerConfig.maxActiveGenerations === undefined && providerConfig.baseUrl) {
+    provider.discoverSlots().then(
+      (slots) => {
+        if (slots !== undefined) generations.setMaxActiveGenerations(slots);
+        logger.info(
+          { maxActiveGenerations: generations.maxActiveGenerations },
+          "generation admission limit",
+        );
+      },
+      () => {
+        logger.warn("could not discover provider slots; admitting one generation at a time");
+      },
+    );
+  }
+  const services: RouteServices = {
+    health: createHealthService(options.version),
+    models,
+    generations,
+    sse: { ...DEFAULT_SSE_OPTIONS, ...options.sse },
+    logger,
+    chatDemoEnabled: !options.config.inContainer,
+  };
   const cspMode: CspMode = options.config.nodeEnv === "development" ? "development" : "production";
 
   const app = express();
@@ -131,5 +183,11 @@ export function createApp(options: AppOptions): Express {
       .send("Internal server error");
   }) satisfies express.ErrorRequestHandler);
 
-  return app;
+  return {
+    handler: app,
+    services,
+    shutdown: () => {
+      generations.shutdown();
+    },
+  };
 }

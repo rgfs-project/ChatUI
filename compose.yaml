@@ -14,6 +14,15 @@ services:
     restart: unless-stopped
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # llama.cpp server as seen from INSIDE the container (not localhost):
+      # a LAN address, host.containers.internal (Podman), or host.docker.internal
+      # with the extra_hosts entry below (Docker Engine on Linux).
+      LLAMA_BASE_URL: ${LLAMA_BASE_URL:-}
+      # Secret: set it in .env (git-ignored), never on the command line.
+      LLAMA_API_KEY: ${LLAMA_API_KEY:-}
+    # Docker Engine on Linux only (Podman provides host.containers.internal):
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:${HOST_PORT:-3000}:3000"
     volumes:

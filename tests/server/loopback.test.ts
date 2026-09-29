@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 async function serve(inContainer: boolean): Promise<number> {
-  const { app } = testApp({ config: { nodeEnv: "test", inContainer } });
+  const { app } = testApp({ config: { inContainer } });
   server = createServer(app);
   // Test-only: listen on all interfaces so a non-loopback peer can connect.
   await new Promise<void>((resolve) => server?.listen(0, "0.0.0.0", resolve));

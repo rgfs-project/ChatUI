@@ -7,11 +7,19 @@ export class AppError extends Error {
   override name = "AppError";
   readonly code: ErrorCode;
   readonly details: Record<string, unknown> | undefined;
+  /** Extra response headers, e.g. `Retry-After` for RATE_LIMITED. */
+  readonly headers: Readonly<Record<string, string>>;
 
-  constructor(code: ErrorCode, message: string, details?: Record<string, unknown>) {
+  constructor(
+    code: ErrorCode,
+    message: string,
+    details?: Record<string, unknown>,
+    headers: Record<string, string> = {},
+  ) {
     super(message);
     this.code = code;
     this.details = details;
+    this.headers = headers;
   }
 
   get status(): number {
@@ -30,6 +38,7 @@ export function errorBody(
 export function sendError(res: Response, error: AppError): void {
   res
     .status(error.status)
+    .set(error.headers)
     .set("Cache-Control", "no-store")
     .json(errorBody(error.code, error.message, error.details));
 }

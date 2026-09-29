@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 1b (Compose packaging and CI).** The app currently serves a public, server-rendered status page and `GET /api/health`. Chat, storage, authentication and providers arrive in later phases. Until authentication (Phase 4) ChatUI is reachable from `127.0.0.1` only, both on the host and through Compose.
+> **Status: Phase 2 (llama.cpp chat demo).** ChatUI serves a public, server-rendered status page, `GET /api/health`, and a **loopback-only chat demo** at `/chat`: server-owned generations against a llama.cpp server, streamed over SSE. Nothing is saved yet. Storage, accounts and multiple providers arrive in later phases. Until authentication (Phase 4) ChatUI is reachable from `127.0.0.1` only, and the chat demo is disabled entirely in the container.
 
 ## Prerequisites
 
@@ -40,16 +40,26 @@ Then open http://127.0.0.1:3000 (override with `HOST_PORT`). The container:
 
 Operator commands are introduced as their services exist. Until then they exit with status 2 and a message; they never pretend to succeed:
 
-| Command                                                   | Available from |
-| --------------------------------------------------------- | -------------- |
-| `serve` (default), `healthcheck`                          | Phase 1b       |
-| `index:rebuild`                                           | Phase 3        |
-| `user:create` (password via stdin), `user:reset-password` | Phase 4        |
-| `backup`, `restore`                                       | Phase 16       |
+| Command                                                             | Available from |
+| ------------------------------------------------------------------- | -------------- |
+| `serve` (default), `healthcheck`                                    | Phase 1b       |
+| `provider:check` (reachability and credentials of `LLAMA_BASE_URL`) | Phase 2        |
+| `index:rebuild`                                                     | Phase 3        |
+| `user:create` (password via stdin), `user:reset-password`           | Phase 4        |
+| `backup`, `restore`                                                 | Phase 16       |
 
 Updating: `git pull && docker compose up -d --build`. The `/data` volume is reused.
 
-To reach a llama.cpp server on the host from the container, use the host's LAN address or `host.docker.internal` (Docker Desktop) / `host.containers.internal` (Podman). `localhost` inside the container is the container itself. Provider configuration arrives in Phase 2.
+To reach a llama.cpp server from the container, set `LLAMA_BASE_URL` (and `LLAMA_API_KEY` in `.env`) to an address the container can reach: a LAN address, `host.containers.internal` (Podman) or `host.docker.internal` with the `extra_hosts` entry commented in `compose.yaml` (Docker Engine on Linux). `localhost` inside the container is the container itself. Check it with `docker compose exec chatui node server/cli.ts provider:check`. The chat UI itself stays disabled in the container until Phase 4 authentication.
+
+## Chat demo (development host, Phase 2)
+
+```bash
+LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
+# open http://127.0.0.1:3000/chat
+```
+
+The page renders the composer on the server (you can type before JavaScript loads). Replies stream with the model's reasoning shown separately. Reloading keeps watching the running reply, and Stop cancels it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
 
 ## Install (development)
 

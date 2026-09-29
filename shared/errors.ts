@@ -1,12 +1,18 @@
 /**
  * Canonical API error contract (contracts §5). Each phase adds only the codes it
- * uses; Phase 1a introduces the four foundation codes.
+ * uses: Phase 1a the four foundation codes, Phase 2 provider/generation codes.
  */
 export const ErrorCode = {
   VALIDATION: "VALIDATION",
   NOT_FOUND: "NOT_FOUND",
   PAYLOAD_TOO_LARGE: "PAYLOAD_TOO_LARGE",
   INTERNAL: "INTERNAL",
+  PROVIDER_UNAVAILABLE: "PROVIDER_UNAVAILABLE",
+  PROVIDER_ERROR: "PROVIDER_ERROR",
+  PROVIDER_TIMEOUT: "PROVIDER_TIMEOUT",
+  MODEL_NOT_FOUND: "MODEL_NOT_FOUND",
+  GENERATION_NOT_FOUND: "GENERATION_NOT_FOUND",
+  RATE_LIMITED: "RATE_LIMITED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -16,6 +22,12 @@ export const ERROR_HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   NOT_FOUND: 404,
   PAYLOAD_TOO_LARGE: 413,
   INTERNAL: 500,
+  PROVIDER_UNAVAILABLE: 502,
+  PROVIDER_ERROR: 502,
+  PROVIDER_TIMEOUT: 504,
+  MODEL_NOT_FOUND: 400,
+  GENERATION_NOT_FOUND: 404,
+  RATE_LIMITED: 429,
 };
 
 /** `details` never contains stack traces, paths, upstream bodies or secrets. */

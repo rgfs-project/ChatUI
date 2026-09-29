@@ -1,18 +1,34 @@
 import { ESLint } from "eslint";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { routeInventoryRestriction } from "../../eslint.route-inventory.js";
 import { buildApiRouter, defineRoute, erase } from "../../server/registry.ts";
 import { apiRoutes } from "../../server/routes/index.ts";
-import { testApp } from "./helpers.ts";
+import { startMockLlama, type MockLlama } from "../support/mock-llama.ts";
+import { providerConfig, testApp } from "./helpers.ts";
+
+let llama: MockLlama;
+
+beforeAll(async () => {
+  llama = await startMockLlama({ slots: 2 });
+});
+
+afterAll(async () => {
+  await llama.close();
+});
+
+const withProvider = (inContainer = false) =>
+  testApp({ config: { inContainer, provider: providerConfig({ baseUrl: llama.url }) } });
+
+const UNKNOWN_ID = "00000000-0000-4000-8000-000000000000";
 
 describe("API route registry", () => {
   it("every registered route is under /api with schemas, a DTO and policies", () => {
     expect(apiRoutes.length).toBeGreaterThan(0);
     for (const route of apiRoutes) {
       expect(route.path.startsWith("/api/")).toBe(true);
-      expect(route.response).toBeInstanceOf(z.ZodType);
+      if (route.kind !== "sse") expect(route.response).toBeInstanceOf(z.ZodType);
       for (const schema of Object.values(route.request)) {
         expect(schema).toBeInstanceOf(z.ZodType);
       }
@@ -21,17 +37,29 @@ describe("API route registry", () => {
     }
   });
 
-  it("every route answers its fixture request with a DTO-conformant response", async () => {
-    const { app } = testApp();
+  it("every route answers its fixture request with a DTO or a contract error", async () => {
+    const { app } = withProvider();
     for (const route of apiRoutes) {
+      const name = `${route.method} ${route.path}`;
       const query = new URLSearchParams(route.fixture.query ?? {}).toString();
-      const url = query ? `${route.path}?${query}` : route.path;
+      let url: string = route.path;
+      for (const [key, value] of Object.entries(route.fixture.params ?? {})) {
+        url = url.replace(`:${key}`, value);
+      }
+      if (query) url = `${url}?${query}`;
       const req = request(app)[route.method](url);
       const res =
         route.fixture.body === undefined ? await req : await req.send(route.fixture.body as object);
-      expect(res.status, `${route.method} ${route.path}`).toBe(route.status ?? 200);
-      expect(route.response.safeParse(res.body).success).toBe(true);
-      expect(res.headers["cache-control"]).toBe("no-store");
+      const expected =
+        route.fixture.expectStatus ?? (route.kind === "sse" ? 200 : (route.status ?? 200));
+      expect(res.status, name).toBe(expected);
+      if (expected >= 400) {
+        expect(res.headers["content-type"], name).toMatch(/^application\/json/);
+        expect(res.body, name).toMatchObject({ error: { code: expect.any(String) as string } });
+      } else if (route.kind !== "sse") {
+        expect(route.response.safeParse(res.body).success, name).toBe(true);
+      }
+      expect(res.headers["cache-control"], name).toBe("no-store");
     }
   });
 
@@ -48,9 +76,22 @@ describe("API route registry", () => {
         fixture: {},
       }),
     );
-    expect(() =>
-      buildApiRouter([route, route], { health: () => ({ status: "ok", version: "" }) }),
-    ).toThrow(/Duplicate API route/);
+    const { chatui } = testApp();
+    expect(() => buildApiRouter([route, route], chatui.services)).toThrow(/Duplicate API route/);
+  });
+
+  it("chat-demo routes do not exist in the container (contracts §9.2b)", async () => {
+    const { app } = withProvider(true);
+    const demo = apiRoutes.filter((route) => route.availability === "chat-demo");
+    expect(demo.length).toBeGreaterThanOrEqual(5);
+    for (const route of demo) {
+      const req = request(app)[route.method](route.path.replace(":id", UNKNOWN_ID));
+      const res =
+        route.fixture.body === undefined ? await req : await req.send(route.fixture.body as object);
+      expect(res.status, route.path).toBe(404);
+      expect(res.body).toMatchObject({ error: { code: "NOT_FOUND" } });
+    }
+    expect((await request(app).get("/api/health")).status).toBe(200);
   });
 
   it("GET /api/health returns exactly the public health DTO (INV-03)", async () => {

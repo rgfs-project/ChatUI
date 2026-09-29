@@ -15,7 +15,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type AddressInfo } from "node:net";
 import { networkInterfaces, tmpdir } from "node:os";
 import path from "node:path";
-import { browserChecks, check, httpChecks, results } from "./lib/checks.ts";
+import { startMockLlama } from "../tests/support/mock-llama.ts";
+import { browserChecks, chatDisabledChecks, check, httpChecks, results } from "./lib/checks.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -238,8 +239,62 @@ async function main(): Promise<void> {
     // Application behaviour inside the container.
     await httpChecks(base);
     await browserChecks(base);
+    await chatDisabledChecks(base);
     const healthJson = (await (await fetch(`${base}/api/health`)).json()) as { version?: string };
     check("container serves this build's version", healthJson.version === version);
+
+    // Provider connectivity from inside the container (Phase 2): a mock
+    // llama-server on the host, reached by LAN address and by the engine's
+    // host alias.
+    const provider = await startMockLlama({ host: "0.0.0.0" });
+    try {
+      const providerPort = new URL(provider.url).port;
+      const probe = (url: string, extra: string[] = []) =>
+        run(
+          engine,
+          [
+            "run",
+            "--rm",
+            ...extra,
+            "-e",
+            `LLAMA_BASE_URL=${url}`,
+            env.CHATUI_IMAGE,
+            "provider:check",
+          ],
+          {
+            quiet: true,
+          },
+        );
+      if (external) {
+        const lan = await probe(`http://${external}:${providerPort}`);
+        check(
+          "container reaches a host llama-server by LAN address",
+          lan.code === 0,
+          lan.stderr.trim(),
+        );
+      } else {
+        process.stdout.write("NOT RUN  provider via LAN address (host has no external IPv4)\n");
+      }
+      const alias =
+        engine === "podman"
+          ? await probe(`http://host.containers.internal:${providerPort}`)
+          : await probe(`http://host.docker.internal:${providerPort}`, [
+              "--add-host",
+              "host.docker.internal:host-gateway",
+            ]);
+      check(
+        `container reaches the host via ${engine === "podman" ? "host.containers.internal" : "host.docker.internal (host-gateway)"}`,
+        alias.code === 0,
+        (alias.stderr + alias.stdout).trim(),
+      );
+      const missing = await probe("http://127.0.0.1:9");
+      check(
+        "provider:check reports an unreachable provider and fails",
+        missing.code === 1 && missing.stderr.includes("unreachable"),
+      );
+    } finally {
+      await provider.close();
+    }
 
     // Persistence: a test sentinel (the app itself writes nothing yet).
     const sentinel = `verify-${id}`;

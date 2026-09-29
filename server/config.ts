@@ -8,18 +8,19 @@ import { isLoopbackAddress } from "./loopback.ts";
 
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
 
+function intFrom(min: number, max: number) {
+  return z.string().transform((value, ctx) => {
+    const n = /^\d+$/.test(value) ? Number(value) : Number.NaN;
+    if (!Number.isSafeInteger(n) || n < min || n > max) {
+      ctx.addIssue({ code: "custom", message: `must be an integer between ${min} and ${max}` });
+      return z.NEVER;
+    }
+    return n;
+  });
+}
+
 const envSchema = z.object({
-  PORT: z
-    .string()
-    .default("3000")
-    .transform((value, ctx) => {
-      const port = /^\d+$/.test(value) ? Number(value) : Number.NaN;
-      if (!Number.isInteger(port) || port < 0 || port > 65535) {
-        ctx.addIssue({ code: "custom", message: "must be an integer between 0 and 65535" });
-        return z.NEVER;
-      }
-      return port;
-    }),
+  PORT: intFrom(0, 65_535).default(3_000),
   DATA_DIR: z.string().min(1, "must not be empty").default("./data"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
@@ -29,6 +30,24 @@ const envSchema = z.object({
     .refine((value) => isIP(value) !== 0, "must be an IP address"),
   // Set only by the container image (Dockerfile). Not a user-facing option.
   CHATUI_CONTAINER: z.enum(["0", "1"]).default("0"),
+
+  // llama.cpp provider (Phase 2).
+  LLAMA_BASE_URL: z
+    .url({ protocol: /^https?$/, message: "must be an http(s) URL" })
+    .refine((value) => {
+      if (!URL.canParse(value)) return true; // reported by the url check above
+      const url = new URL(value);
+      return !url.username && !url.password && !url.search && !url.hash;
+    }, "must not contain credentials, a query string or a fragment")
+    .transform((value) => value.replace(/\/+$/, ""))
+    .optional(),
+  LLAMA_API_KEY: z.string().min(1).max(4096).optional(),
+  PROVIDER_TIMEOUT_MS: intFrom(1_000, 3_600_000).default(300_000),
+  GENERATION_MAX_MS: intFrom(1_000, 86_400_000).default(1_800_000),
+  DEFAULT_CONTEXT_TOKENS: intFrom(256, 10_000_000).default(8_192),
+  MAX_OUTPUT_TOKENS: intFrom(1, 1_000_000).default(4_096),
+  MAX_ACTIVE_GENERATIONS: intFrom(1, 1_000).optional(),
+  PROVIDER_MAX_RESPONSE_BYTES: intFrom(1_024, 1_073_741_824).default(16 * 1024 * 1024),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -46,6 +65,23 @@ export interface Config {
    * container runtime's proxy, not loopback.
    */
   inContainer: boolean;
+  provider: ProviderConfig;
+}
+
+export interface ProviderConfig {
+  /** llama-server base URL without trailing slash; undefined = not configured. */
+  baseUrl: string | undefined;
+  /** Secret. Never logged or sent to the browser. */
+  apiKey: string | undefined;
+  /** Per-request inactivity timeout: to the first chunk and between chunks. */
+  timeoutMs: number;
+  /** Whole-generation cap. */
+  generationMaxMs: number;
+  defaultContextTokens: number;
+  maxOutputTokens: number;
+  /** Explicit global generation admission limit; undefined = discovered slots, else 1. */
+  maxActiveGenerations: number | undefined;
+  maxResponseBytes: number;
 }
 
 export class ConfigError extends Error {
@@ -102,5 +138,15 @@ export function loadConfig(
     logLevel: parsed.data.LOG_LEVEL,
     listenHost: parsed.data.LISTEN_HOST,
     inContainer,
+    provider: {
+      baseUrl: parsed.data.LLAMA_BASE_URL,
+      apiKey: parsed.data.LLAMA_API_KEY,
+      timeoutMs: parsed.data.PROVIDER_TIMEOUT_MS,
+      generationMaxMs: parsed.data.GENERATION_MAX_MS,
+      defaultContextTokens: parsed.data.DEFAULT_CONTEXT_TOKENS,
+      maxOutputTokens: parsed.data.MAX_OUTPUT_TOKENS,
+      maxActiveGenerations: parsed.data.MAX_ACTIVE_GENERATIONS,
+      maxResponseBytes: parsed.data.PROVIDER_MAX_RESPONSE_BYTES,
+    },
   };
 }
