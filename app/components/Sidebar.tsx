@@ -5,7 +5,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import type { ConversationSummary } from "@shared/conversations";
 import { paths } from "../lib/paths";
-import { apiJson, fetchers, queryKeys } from "../lib/query";
+import { apiJson, queries, queryKeys } from "../lib/query";
 import { count } from "../lib/render-counters";
 import { ConfirmDialog, RenameDialog } from "./Dialogs";
 
@@ -17,10 +17,9 @@ function SidebarImpl({ userId, hidden }: { userId: string; hidden: boolean }) {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const client = useQueryClient();
-  const { data: conversations = [] } = useQuery({
-    queryKey: queryKeys.conversations(userId),
-    queryFn: fetchers.conversations,
-  });
+  // Secondary data: loaded after hydration, never gating the composer.
+  const list = useQuery(queries.conversations(userId));
+  const conversations = list.data ?? [];
   const [renaming, setRenaming] = useState<ConversationSummary | null>(null);
   const [deleting, setDeleting] = useState<ConversationSummary | null>(null);
   // The menu trigger that opened a dialog: focus returns there (INV-47).
@@ -55,6 +54,22 @@ function SidebarImpl({ userId, hidden }: { userId: string; hidden: boolean }) {
       <Link to={paths.newChat()} className="new-chat">
         <Plus size={16} aria-hidden /> New chat
       </Link>
+      {list.isPending ? (
+        <p className="sidebar-note" aria-busy="true" data-testid="conversations-loading">
+          Loading conversations…
+        </p>
+      ) : list.isError && !list.data ? (
+        <div className="sidebar-note" role="alert" data-testid="conversations-error">
+          <p>Conversations couldn’t be loaded.</p>
+          <button type="button" className="secondary" onClick={() => void list.refetch()}>
+            Try again
+          </button>
+        </div>
+      ) : conversations.length === 0 ? (
+        <p className="sidebar-note" data-testid="conversations-empty">
+          No conversations yet. Your chats will appear here.
+        </p>
+      ) : null}
       <ul className="conversation-list" data-testid="conversation-list">
         {conversations.map((item) => (
           <li key={item.id} className={item.id === conversationId ? "current" : undefined}>

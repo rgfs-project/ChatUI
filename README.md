@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 7 (core UI).** A server-rendered chat interface: a fixed header and sidebar, an independently scrolling transcript that follows streaming replies only while you are at the bottom, safe Markdown with code blocks, deep links (`/chat/<id>`), and URL-backed Settings. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. Admin, mobile layout and uploads arrive in later phases.
+> **Status: Phase 8 (state and loading).** A server-rendered chat interface whose composer is usable as soon as the page hydrates: the conversation list loads alongside, messages appear the moment you send them (with safe automatic resends when the network drops), and an expired session asks you to sign in again in place, keeping your unsent text. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. Admin, mobile layout and uploads arrive in later phases.
 
 ## Prerequisites
 

@@ -1,6 +1,5 @@
-import { useRouteLoaderData } from "react-router";
 import { ConversationView } from "../components/ConversationView";
-import type { loader as layoutLoader } from "./app-layout";
+import { useUserId } from "../lib/auth-store";
 import type { Route } from "./+types/chat-new";
 
 export function meta(): Route.MetaDescriptors {
@@ -9,6 +8,5 @@ export function meta(): Route.MetaDescriptors {
 
 /** A draft: nothing is created until the first successful send. */
 export default function ChatNew() {
-  const layout = useRouteLoaderData<typeof layoutLoader>("routes/app-layout");
-  return <ConversationView key="new" userId={layout?.user.id ?? ""} />;
+  return <ConversationView key="new" userId={useUserId()} />;
 }

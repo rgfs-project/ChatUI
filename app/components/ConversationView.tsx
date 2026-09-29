@@ -1,30 +1,35 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, Send, Square } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore, type SyntheticEvent } from "react";
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+  type Mutation,
+} from "@tanstack/react-query";
+import { ArrowDown } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import type { ConversationDto } from "@shared/conversations";
-import {
-  isTerminalState,
-  type GenerationState,
-  type TerminalState,
-} from "@shared/generation-state";
-import type {
-  GenerationError,
-  GenerationSnapshot,
-  ModelListDto,
-  StartGenerationResponse,
-} from "@shared/generations";
+import { isTerminalState, type GenerationState } from "@shared/generation-state";
+import type { StartGenerationResponse } from "@shared/generations";
 import { AccountChangedError } from "../lib/api";
+import { authStore } from "../lib/auth-store";
 import { paths } from "../lib/paths";
-import { ApiError, apiJson, fetchers, queryKeys } from "../lib/query";
+import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
+import {
+  lookUpOperation,
+  newSendVariables,
+  SendRejectedError,
+  sendWithRetries,
+  SendUnknownError,
+  type SendVariables,
+} from "../lib/send";
 import { NEW_DRAFT, useShell } from "../lib/shell-context";
+import { useLiveGeneration } from "../lib/use-live-generation";
 import { useScrollPin } from "../lib/use-scroll-pin";
+import { Composer, type ModelChoice } from "./Composer";
 import { ConfirmDialog } from "./Dialogs";
 import { Markdown } from "./Markdown";
 import { Message } from "./Message";
-
-/** Resends of an unresolved send with the same operation key (contracts §4.1). */
-const SEND_RETRIES = 3;
 
 const noopSubscribe = () => () => undefined;
 function useHydrated(): boolean {
@@ -33,15 +38,6 @@ function useHydrated(): boolean {
     () => true,
     () => false,
   );
-}
-
-interface Live {
-  generationId: string;
-  assistantMessageId: string;
-  state: GenerationState;
-  content: string;
-  reasoning: string;
-  error: GenerationError | null;
 }
 
 const STATE_LABEL: Record<GenerationState, string> = {
@@ -53,15 +49,33 @@ const STATE_LABEL: Record<GenerationState, string> = {
   timed_out: "Timed out",
 };
 
-function pairKey(pair: [string, string]): string {
-  return JSON.stringify(pair);
+type SendMutation = Mutation<StartGenerationResponse, Error, SendVariables>;
+
+/** Optimistic user messages of this view, read from the send mutations' state. */
+function usePendingSends(userId: string, draftKey: string, conversationId: string | undefined) {
+  return useMutationState({
+    filters: { mutationKey: queryKeys.sends(userId) },
+    select: (mutation) => {
+      const m = mutation as SendMutation;
+      return { mutation: m, state: m.state };
+    },
+  }).filter(({ state }) => {
+    const vars = state.variables;
+    if (!vars) return false;
+    // A rejected send is rolled back: its text returns to the composer.
+    if (state.status === "error" && !(state.error instanceof SendUnknownError)) return false;
+    // Once accepted, a send belongs to the conversation the server named.
+    if (state.data)
+      return conversationId !== undefined && state.data.conversationId === conversationId;
+    return vars.conversationKey === draftKey;
+  });
 }
 
 /**
  * One conversation (or the /chat/new draft). Server-owned state only: the
  * transcript comes from the conversation query, the running reply from the
- * generation's SSE stream (replay/resync aware), reconciled by server ids.
- * Browser lifecycle events never cancel a generation.
+ * generation's SSE stream, optimistic user messages from send mutations;
+ * everything reconciles by server-issued ids.
  */
 export function ConversationView(props: {
   userId: string;
@@ -77,21 +91,14 @@ export function ConversationView(props: {
   const shell = useShell();
   const draftKey = conversationId ?? NEW_DRAFT;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [live, setLive] = useState<Live | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const conversationQuery = useQuery({
-    queryKey: queryKeys.conversation(userId, conversationId ?? ""),
-    queryFn: () => fetchers.conversation(conversationId ?? ""),
+    ...queries.conversation(userId, conversationId ?? ""),
     enabled: conversationId !== undefined && !props.initialError,
-    retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 1,
   });
-  const modelsQuery = useQuery({
-    queryKey: queryKeys.models(userId),
-    queryFn: () => fetchers.models(),
-  });
+  const modelsQuery = useQuery(queries.models(userId));
   const conversation: ConversationDto | undefined = conversationQuery.data;
   const loadError =
     conversationQuery.error instanceof ApiError
@@ -100,61 +107,18 @@ export function ConversationView(props: {
         ? new ApiError(props.initialError.status, props.initialError.code, "")
         : null;
 
-  // The running generation: the one we started here, else the server's view.
-  const serverActive = conversation?.activeGeneration?.generationId ?? null;
-  const observedId = live && !isTerminalState(live.state) ? live.generationId : serverActive;
+  const { live, observedId, started } = useLiveGeneration({
+    userId,
+    conversationId,
+    serverActive: conversation?.activeGeneration?.generationId ?? null,
+    disabled: props.inert === true,
+  });
 
+  // The loader saw no session (client navigation after expiry): re-authenticate.
+  const unauthenticated = props.initialError?.status === 401;
   useEffect(() => {
-    if (!observedId || props.inert) return;
-    const source = new EventSource(`/api/generations/${observedId}/stream`);
-    const onFullState = (event: MessageEvent<string>) => {
-      const s = JSON.parse(event.data) as GenerationSnapshot;
-      setLive({
-        generationId: s.generationId,
-        assistantMessageId: s.assistantMessageId,
-        state: s.state,
-        content: s.content,
-        reasoning: s.reasoning,
-        error: s.error,
-      });
-      if (isTerminalState(s.state)) source.close();
-    };
-    // snapshot (fresh observer) and resync (cursor outside the replay window)
-    // both carry the full state; deltas then continue exactly (INV-20).
-    source.addEventListener("snapshot", onFullState);
-    source.addEventListener("resync", onFullState);
-    source.addEventListener("state", (event: MessageEvent<string>) => {
-      const { state } = JSON.parse(event.data) as { state: GenerationState };
-      setLive((v) => (v?.generationId === observedId ? { ...v, state } : v));
-    });
-    source.addEventListener("delta", (event: MessageEvent<string>) => {
-      const delta = JSON.parse(event.data) as { content?: string; reasoning?: string };
-      setLive((v) =>
-        v?.generationId === observedId
-          ? {
-              ...v,
-              content: v.content + (delta.content ?? ""),
-              reasoning: v.reasoning + (delta.reasoning ?? ""),
-            }
-          : v,
-      );
-    });
-    source.addEventListener("terminal", (event: MessageEvent<string>) => {
-      const t = JSON.parse(event.data) as { state: TerminalState; error: GenerationError | null };
-      setLive((v) =>
-        v?.generationId === observedId ? { ...v, state: t.state, error: t.error } : v,
-      );
-      source.close();
-      // The reply is stored now: refresh the canonical transcript and list.
-      void client.invalidateQueries({
-        queryKey: queryKeys.conversation(userId, conversationId ?? ""),
-      });
-      void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
-    });
-    return () => {
-      source.close();
-    };
-  }, [observedId, props.inert, client, userId, conversationId]);
+    if (unauthenticated) authStore.expire();
+  }, [unauthenticated]);
 
   // Drafts live in tab memory, keyed by conversation, and survive navigation.
   useEffect(() => {
@@ -162,32 +126,36 @@ export function ConversationView(props: {
     if (el?.value === "") el.value = shell.getDraft(draftKey);
   }, [draftKey, shell]);
 
+  const sendMutation = useMutation({
+    mutationKey: queryKeys.sends(userId),
+    mutationFn: (vars: SendVariables) => sendWithRetries(vars),
+    // Runs even if this view unmounted: a rejected message returns to its draft.
+    onError: (error, vars) => {
+      if (error instanceof SendRejectedError && !shell.getDraft(vars.conversationKey))
+        shell.setDraft(vars.conversationKey, vars.content);
+    },
+    onSuccess: (result, vars) => {
+      shell.setModel(result.conversationId, [vars.providerId, vars.model]);
+      void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
+    },
+  });
+  const pending = usePendingSends(userId, draftKey, conversationId);
+
   // Keep the live reply on screen until the stored copy is in the transcript.
   const storedIds = new Set(conversation?.messages.map((m) => m.id));
   const showLive =
     live !== null && (!isTerminalState(live.state) || !storedIds.has(live.assistantMessageId));
+  const optimistic = pending.filter(
+    ({ state }) => !(state.data && storedIds.has(state.data.userMessageId)),
+  );
   const running = observedId !== null;
+  const sending = pending.some(({ state }) => state.status === "pending");
 
-  const groups = modelsQuery.data?.providers ?? [];
-  const allModels = groups.flatMap((g) => g.models);
-  const lastReply = [...(conversation?.messages ?? [])]
-    .reverse()
-    .find((m) => m.role === "assistant");
-  const remembered = shell.getModel(draftKey);
-  const preferred =
-    (remembered &&
-      allModels.find((m) => m.providerId === remembered[0] && m.id === remembered[1])) ??
-    allModels.find((m) => m.providerId === lastReply?.provider && m.id === lastReply.model) ??
-    allModels.find((m) => m.status === "loaded") ??
-    allModels[0];
-  const [selected, setSelected] = useState<string | undefined>(undefined);
-  const selectedValue =
-    selected ?? (preferred ? pairKey([preferred.providerId, preferred.id]) : "");
-
-  // Anything that changes the transcript's height: stored messages, the live
-  // reply appearing, its state line and its growing text.
+  // Anything that changes the transcript's height: stored messages, optimistic
+  // messages, the live reply appearing, its state line and its growing text.
   const contentVersion = [
     conversation?.messages.length ?? 0,
+    optimistic.map(({ state }) => `${state.variables?.tempId ?? ""}:${state.status}`).join(","),
     showLive ? `${live.generationId}:${live.state}:${live.error ? "e" : ""}` : "-",
     live?.content.length ?? 0,
     live?.reasoning.length ?? 0,
@@ -199,80 +167,47 @@ export function ConversationView(props: {
     jumpToLatest,
   } = useScrollPin<HTMLDivElement>(contentVersion);
 
-  async function send(event?: SyntheticEvent) {
-    event?.preventDefault();
-    const content = textareaRef.current?.value.trim() ?? "";
-    if (!content) {
-      textareaRef.current?.focus();
-      return;
-    }
-    let pair: [string, string];
-    try {
-      pair = JSON.parse(selectedValue) as [string, string];
-    } catch {
-      setStatus("Choose a model first.");
-      return;
-    }
-    if (running || busy) return;
-    setBusy(true);
-    setStatus("Sending…");
-    const body = JSON.stringify({
+  const lastReply = [...(conversation?.messages ?? [])]
+    .reverse()
+    .find((m) => m.role === "assistant");
+
+  function send(content: string, choice: ModelChoice) {
+    if (running || sending) return;
+    const vars = newSendVariables({
+      userId,
+      conversationKey: draftKey,
       ...(conversationId ? { conversationId } : {}),
-      providerId: pair[0],
-      model: pair[1],
+      providerId: choice[0],
+      model: choice[1],
       content,
-      operationKey: crypto.randomUUID(),
-      operationIssuedAt: new Date().toISOString(),
     });
-    try {
-      for (let attempt = 0; attempt <= SEND_RETRIES; attempt++) {
-        try {
-          const started = await apiJson<StartGenerationResponse>("/api/generations", {
-            method: "POST",
-            body,
+    // The optimistic message is visible immediately; the composer is cleared.
+    if (textareaRef.current) textareaRef.current.value = "";
+    shell.clearDraft(draftKey);
+    setStatus(null);
+    sendMutation.mutate(vars, {
+      // Only while this view is still mounted.
+      onSuccess: (result) => {
+        started(result);
+        if (result.conversationId !== conversationId) {
+          // The draft becomes a real conversation: replace the draft URL so
+          // Back does not resurrect the empty draft (INV-53).
+          void navigate(paths.chat(result.conversationId), { replace: true });
+        } else {
+          void client.invalidateQueries({
+            queryKey: queryKeys.conversation(userId, result.conversationId),
           });
-          if (textareaRef.current) textareaRef.current.value = "";
-          shell.clearDraft(draftKey);
-          shell.setModel(started.conversationId, pair);
-          setStatus(null);
-          setLive({
-            generationId: started.generationId,
-            assistantMessageId: started.assistantMessageId,
-            state: "pending",
-            content: "",
-            reasoning: "",
-            error: null,
-          });
-          void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
-          if (started.conversationId !== conversationId) {
-            // The draft becomes a real conversation: replace the draft URL so
-            // Back does not resurrect the empty draft (INV-53).
-            await navigate(paths.chat(started.conversationId), {
-              replace: true,
-              state: { live: started },
-            });
-          } else {
-            await client.invalidateQueries({
-              queryKey: queryKeys.conversation(userId, conversationId),
-            });
-          }
-          return;
-        } catch (error) {
-          if (error instanceof AccountChangedError) return; // discarded, never re-sent
-          // A contract error other than INTERNAL means rejected: nothing was saved.
-          if (error instanceof ApiError && error.code && error.code !== "INTERNAL") {
-            setStatus(error.message);
-            return;
-          }
         }
-        await new Promise((resolve) => setTimeout(resolve, 1_000 * (attempt + 1)));
-      }
-      setStatus(
-        "The outcome of this send is unknown. Check the conversation, then send again if needed.",
-      );
-    } finally {
-      setBusy(false);
-    }
+      },
+      onError: (error) => {
+        if (error instanceof AccountChangedError) return; // discarded, never re-sent
+        if (error instanceof SendRejectedError) {
+          setStatus(error.message);
+          const el = textareaRef.current;
+          if (el?.value === "") el.value = vars.content;
+        }
+      },
+    });
   }
 
   async function cancel() {
@@ -329,9 +264,6 @@ export function ConversationView(props: {
     );
   }
 
-  const modelCount = allModels.length;
-  const canSend = hydrated && modelCount > 0 && !running && !busy && !props.inert;
-
   return (
     <main className="conversation" data-testid="conversation" inert={props.inert}>
       <div className="conversation-header">
@@ -347,6 +279,7 @@ export function ConversationView(props: {
         tabIndex={0}
         role="region"
         aria-label="Transcript"
+        aria-busy={conversationQuery.isFetching && !conversation}
         data-testid="transcript"
       >
         <ol className="messages" aria-label="Messages">
@@ -359,6 +292,31 @@ export function ConversationView(props: {
               status={message.status}
             />
           ))}
+          {optimistic.map(({ mutation, state }) =>
+            state.variables ? (
+              <PendingMessage
+                key={state.variables.tempId}
+                vars={state.variables}
+                status={state.status}
+                error={state.error}
+                onResolved={() => {
+                  client.getMutationCache().remove(mutation);
+                  void client.invalidateQueries({
+                    queryKey: queryKeys.conversation(userId, conversationId ?? ""),
+                  });
+                }}
+                onEdit={(text) => {
+                  client.getMutationCache().remove(mutation);
+                  const el = textareaRef.current;
+                  if (el) {
+                    el.value = text;
+                    shell.setDraft(draftKey, text);
+                    el.focus();
+                  }
+                }}
+              />
+            ) : null,
+          )}
           {showLive ? (
             <li
               className="message message-assistant live"
@@ -383,9 +341,19 @@ export function ConversationView(props: {
             </li>
           ) : null}
         </ol>
-        {conversation?.messages.length === 0 && !showLive ? (
-          <p className="placeholder">Send a message to start.</p>
-        ) : null}
+        <TranscriptPlaceholder
+          conversationId={conversationId}
+          loading={conversationQuery.isPending && !props.initialError}
+          error={
+            conversationQuery.isError && !loadError?.code ? conversationQuery.error : undefined
+          }
+          empty={
+            (conversationId === undefined || conversation?.messages.length === 0) &&
+            !showLive &&
+            optimistic.length === 0
+          }
+          onRetry={() => void conversationQuery.refetch()}
+        />
       </div>
       {showJump ? (
         <button
@@ -397,94 +365,116 @@ export function ConversationView(props: {
           <ArrowDown size={16} aria-hidden /> Jump to latest
         </button>
       ) : null}
-      <p className="gen-status" role="status" aria-live="polite" data-testid="status">
-        {status ?? ""}
+      <Composer
+        userId={userId}
+        textareaRef={textareaRef}
+        draftKey={draftKey}
+        hydrated={hydrated}
+        inert={props.inert === true}
+        running={running}
+        sending={sending}
+        status={status}
+        models={modelsQuery}
+        preferred={
+          shell.getModel(draftKey) ??
+          (lastReply?.provider && lastReply.model ? [lastReply.provider, lastReply.model] : null)
+        }
+        onSend={send}
+        onCancel={() => void cancel()}
+      />
+    </main>
+  );
+}
+
+function TranscriptPlaceholder(props: {
+  conversationId: string | undefined;
+  loading: boolean;
+  error: Error | undefined;
+  empty: boolean;
+  onRetry: () => void;
+}) {
+  if (props.conversationId !== undefined && props.loading)
+    return (
+      <p className="placeholder" data-testid="transcript-loading">
+        Loading conversation…
       </p>
-      <form
-        className="composer"
-        onSubmit={(event) => void send(event)}
-        aria-label="Message composer"
-      >
-        <label htmlFor="message" className="visually-hidden">
-          Message
-        </label>
-        <textarea
-          id="message"
-          name="message"
-          ref={textareaRef}
-          rows={3}
-          placeholder="Ask anything…"
-          onInput={(event) => {
-            shell.setDraft(draftKey, event.currentTarget.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              if (canSend) void send();
-            }
-          }}
-        />
-        <div className="composer-actions">
-          <label htmlFor="model" className="visually-hidden">
-            Model
-          </label>
-          <select
-            id="model"
-            name="model"
-            className="model-select"
-            value={selectedValue}
-            disabled={modelCount === 0 || props.inert}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setSelected(value);
-              try {
-                const pair = JSON.parse(value) as [string, string];
-                shell.setModel(draftKey, pair);
-              } catch {
-                // placeholder option
-              }
+    );
+  if (props.error)
+    return (
+      <div className="placeholder" role="alert" data-testid="transcript-error">
+        <p>This conversation couldn’t be loaded.</p>
+        <button type="button" className="secondary" onClick={props.onRetry}>
+          Try again
+        </button>
+      </div>
+    );
+  if (props.empty) return <p className="placeholder">Send a message to start.</p>;
+  return null;
+}
+
+/** An optimistic user message: sending, sent (awaiting the stored copy) or unknown. */
+function PendingMessage(props: {
+  vars: SendVariables;
+  status: "idle" | "pending" | "success" | "error";
+  error: Error | null;
+  onResolved: () => void;
+  onEdit: (text: string) => void;
+}) {
+  const [checking, setChecking] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const unknown = props.status === "error" && props.error instanceof SendUnknownError;
+  return (
+    <li
+      className="message message-user pending"
+      data-testid="message-pending"
+      data-temp-id={props.vars.tempId}
+      aria-busy={props.status === "pending"}
+    >
+      <span className="message-role">
+        You
+        {props.status === "pending" ? <span className="status-badge">Sending…</span> : null}
+        {unknown ? <span className="status-badge status-failed">Outcome unknown</span> : null}
+      </span>
+      <p className="plain-text">{props.vars.content}</p>
+      {unknown ? (
+        <div className="pending-actions" role="alert">
+          <p>
+            {notFound
+              ? "The server has no record of this message. It was probably not saved."
+              : "We couldn’t confirm whether this message was saved. Refresh the conversation to check."}
+          </p>
+          <button
+            type="button"
+            className="secondary"
+            disabled={checking}
+            onClick={() => {
+              setChecking(true);
+              void lookUpOperation(props.vars.operationKey)
+                .then((result) => {
+                  if (result) props.onResolved();
+                  else setNotFound(true);
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                  setChecking(false);
+                });
             }}
           >
-            {modelCount === 0 ? <option value="">No models available</option> : null}
-            {groups.map((group: ModelListDto["providers"][number]) => (
-              <optgroup
-                key={group.provider.id}
-                label={`${group.provider.name}${
-                  group.provider.status === "unavailable"
-                    ? " (unavailable)"
-                    : group.stale
-                      ? " (list may be out of date)"
-                      : ""
-                }`}
-              >
-                {group.models.map((model) => (
-                  <option key={model.id} value={pairKey([model.providerId, model.id])}>
-                    {model.id}
-                    {model.status === "unloaded" ? " (not loaded)" : ""}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <span className="hint">
-            {hydrated ? "Enter to send, Shift+Enter for a new line" : "Loading…"}
-          </span>
-          {running ? (
+            Refresh conversation
+          </button>
+          {notFound ? (
             <button
               type="button"
               className="secondary"
-              onClick={() => void cancel()}
-              disabled={!hydrated}
+              onClick={() => {
+                props.onEdit(props.vars.content);
+              }}
             >
-              <Square size={14} aria-hidden /> Stop generating
+              Edit and resend
             </button>
-          ) : (
-            <button type="submit" disabled={!canSend}>
-              <Send size={14} aria-hidden /> Send
-            </button>
-          )}
+          ) : null}
         </div>
-      </form>
-    </main>
+      ) : null}
+    </li>
   );
 }

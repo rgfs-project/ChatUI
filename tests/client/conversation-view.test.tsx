@@ -18,6 +18,7 @@ import {
   REPLY,
   seededClient,
   USER,
+  signInStore,
 } from "./support";
 
 function Page(props: { initialError?: { status: number; code: string } }) {
@@ -56,6 +57,7 @@ function renderAt(
 let fetchMock: ReturnType<typeof vi.fn<(url: string, init?: RequestInit) => Promise<Response>>>;
 
 beforeEach(() => {
+  signInStore();
   // jsdom has no layout or scrolling.
   Element.prototype.scrollTo = () => undefined;
   FakeEventSource.instances = [];

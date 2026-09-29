@@ -66,7 +66,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
     setSession(loaderData.session);
   }, [loaderData.session]);
   // Account boundary: a changed account purges the previous user's cache.
-  useAccountBoundary(queryClient, loaderData.session.user?.id ?? null);
+  useAccountBoundary(queryClient);
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />

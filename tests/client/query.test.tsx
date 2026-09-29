@@ -1,18 +1,34 @@
 // @vitest-environment jsdom
-import { HydrationBoundary, QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import {
+  HydrationBoundary,
+  QueryClientProvider,
+  type DehydratedState,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterContextProvider, RouterProvider, useParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationView } from "../../app/components/ConversationView";
 import { Sidebar } from "../../app/components/Sidebar";
 import { appContext } from "../../app/context";
-import { ACCOUNT_CHANGED_EVENT } from "../../app/lib/api";
+import { authStore } from "../../app/lib/auth-store";
 import { createQueryClient, isDehydratable, queryKeys } from "../../app/lib/query";
 import { prefetchForRequest } from "../../app/lib/server-query";
 import { ShellProvider } from "../../app/lib/shell-context";
 import { useAccountBoundary } from "../../app/lib/use-account-boundary";
 import { loader as layoutLoader } from "../../app/routes/app-layout";
-import { conversation, CONV, FakeEventSource, json, message, MODELS, USER } from "./support";
+import { loader as conversationLoader } from "../../app/routes/chat-conversation";
+import {
+  conversation,
+  CONV,
+  FakeEventSource,
+  json,
+  message,
+  MODELS,
+  SESSION,
+  signInStore,
+  USER,
+} from "./support";
 
 const OTHER = "99999999-9999-4999-8999-999999999999";
 
@@ -34,6 +50,11 @@ const summary = (id: string, title: string) => ({
 function requestContext(userId: string | null, titles: Record<string, string[]>) {
   const context = new RouterContextProvider();
   const services = {
+    conversationDto: (owner: string, id: string) =>
+      Promise.resolve({
+        ...conversation([message(1, "user", titles[owner]?.[0] ?? "")]),
+        id,
+      }),
     conversations: {
       list: (id: string) =>
         (titles[id] ?? []).map((title, n) =>
@@ -65,20 +86,53 @@ async function load(userId: string | null, titles: Record<string, string[]>, url
   } as never);
 }
 
+/** The active-conversation loader's dehydrated state for one request. */
+async function loadConversation(userId: string, titles: Record<string, string[]>) {
+  const result = (await conversationLoader({
+    context: requestContext(userId, titles),
+    request: new Request(`http://localhost/chat/${CONV}`),
+    params: { conversationId: CONV },
+  } as never)) as unknown as { data: { dehydratedState: DehydratedState } };
+  return result.data.dehydratedState;
+}
+
 describe("INV-55: per-request server QueryClient", () => {
   it("two concurrent users each get only their own dehydrated data", async () => {
     const titles = { [USER]: ["alice secret plan"], [OTHER]: ["bob private notes"] };
-    const [a, b] = await Promise.all([load(USER, titles), load(OTHER, titles)]);
-    const aJson = JSON.stringify(a.dehydratedState);
-    const bJson = JSON.stringify(b.dehydratedState);
+    const [aLayout, bLayout, a, b] = await Promise.all([
+      load(USER, titles),
+      load(OTHER, titles),
+      loadConversation(USER, titles),
+      loadConversation(OTHER, titles),
+    ]);
+    const aJson = JSON.stringify([aLayout.dehydratedState, a]);
+    const bJson = JSON.stringify([bLayout.dehydratedState, b]);
     expect(aJson).toContain("alice secret plan");
     expect(aJson).not.toContain("bob private notes");
     expect(aJson).not.toContain(OTHER);
     expect(bJson).toContain("bob private notes");
     expect(bJson).not.toContain("alice secret plan");
     expect(bJson).not.toContain(USER);
-    for (const q of a.dehydratedState.queries) expect(q.queryKey[1]).toBe(USER);
-    for (const q of b.dehydratedState.queries) expect(q.queryKey[1]).toBe(OTHER);
+    for (const q of [...aLayout.dehydratedState.queries, ...a.queries])
+      expect(q.queryKey[1]).toBe(USER);
+    for (const q of [...bLayout.dehydratedState.queries, ...b.queries])
+      expect(q.queryKey[1]).toBe(OTHER);
+  });
+
+  it("the layout seeds only critical model state, never the full conversation list", async () => {
+    const titles = { [USER]: ["a"] };
+    const context = requestContext(USER, titles);
+    const list = vi.fn();
+    (
+      context.get(appContext).services as unknown as { conversations: { list: unknown } }
+    ).conversations.list = list;
+    const { dehydratedState } = await layoutLoader({
+      context,
+      request: new Request("http://localhost/chat/new"),
+      params: {},
+    } as never);
+    expect(dehydratedState.queries.map((q) => q.queryKey)).toEqual([queryKeys.models(USER)]);
+    expect(list).not.toHaveBeenCalled();
   });
 
   it("signed-out requests redirect with a validated return-to before reading anything", async () => {
@@ -175,10 +229,18 @@ describe("hydration reuses the seeded cache", () => {
 });
 
 describe("account boundary", () => {
-  function Boundary({ client, userId }: { client: QueryClient; userId: string | null }) {
-    useAccountBoundary(client, userId);
+  function Boundary({ client }: { client: QueryClient }) {
+    useAccountBoundary(client);
     return null;
   }
+
+  /** The hook reads auth through the router (root loader data): mount it in one. */
+  function mount(client: QueryClient) {
+    const router = createMemoryRouter([{ path: "/", element: <Boundary client={client} /> }]);
+    return render(<RouterProvider router={router} />);
+  }
+
+  const B = { ...SESSION, user: { id: OTHER, username: "bob", role: "user" as const } };
 
   function seeded() {
     const client = createQueryClient();
@@ -187,17 +249,23 @@ describe("account boundary", () => {
     return client;
   }
 
+  beforeEach(() => {
+    signInStore();
+  });
+
   it("keeps the seeded cache on first render", () => {
     const client = seeded();
-    render(<Boundary client={client} userId={USER} />);
+    mount(client);
     expect(client.getQueryData(queryKeys.conversations(USER))).toBeDefined();
   });
 
   it("an account switch drops the previous user's queries and keeps the new user's", () => {
     const client = seeded();
-    const view = render(<Boundary client={client} userId={USER} />);
+    mount(client);
     client.setQueryData(queryKeys.conversations(OTHER), [summary(CONV, "b")]);
-    view.rerender(<Boundary client={client} userId={OTHER} />);
+    act(() => {
+      authStore.applySession(B);
+    });
     expect(client.getQueryData(queryKeys.conversations(USER))).toBeUndefined();
     expect(client.getQueryData(queryKeys.models(USER))).toBeUndefined();
     expect(client.getQueryData(queryKeys.conversations(OTHER))).toBeDefined();
@@ -205,17 +273,36 @@ describe("account boundary", () => {
 
   it("sign-out drops everything", () => {
     const client = seeded();
-    const view = render(<Boundary client={client} userId={USER} />);
-    view.rerender(<Boundary client={client} userId={null} />);
+    mount(client);
+    act(() => {
+      authStore.signedOut();
+    });
     expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 
-  it("an account change seen by the fetch adapter purges the cache", () => {
+  it("a session expiring mid-use aborts in-flight requests and drops private data", async () => {
     const client = seeded();
-    render(<Boundary client={client} userId={USER} />);
+    let aborted = false;
+    void client
+      .query({
+        queryKey: queryKeys.conversation(USER, CONV),
+        queryFn: ({ signal }) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () => {
+              aborted = true;
+              reject(new DOMException("aborted", "AbortError"));
+            });
+          }),
+      })
+      .catch(() => undefined);
+    mount(client);
     act(() => {
-      window.dispatchEvent(new CustomEvent(ACCOUNT_CHANGED_EVENT));
+      authStore.expire();
+    });
+    await vi.waitFor(() => {
+      expect(aborted).toBe(true);
     });
     expect(client.getQueryCache().getAll()).toHaveLength(0);
+    expect(client.getMutationCache().getAll()).toHaveLength(0);
   });
 });

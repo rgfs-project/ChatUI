@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, queryOptions } from "@tanstack/react-query";
 import type { SessionDto } from "@shared/auth";
 import type { ConversationDto, ConversationSummary } from "@shared/conversations";
 import type { ModelListDto } from "@shared/generations";
@@ -16,6 +16,8 @@ export const queryKeys = {
   generation: (userId: string, id: string) => ["user", userId, "generation", id] as const,
   models: (userId: string) => ["user", userId, "models"] as const,
   preferences: (userId: string) => ["user", userId, "preferences"] as const,
+  /** Mutation key for sends (optimistic messages are read from its state). */
+  sends: (userId: string) => ["user", userId, "send"] as const,
 };
 
 /** Only these key families may be dehydrated into HTML (browser-safe DTOs). */
@@ -78,13 +80,61 @@ export async function apiJson<T>(
   return (await response.json()) as T;
 }
 
+/**
+ * Query functions. Each takes the query's AbortSignal, so a superseded,
+ * unmounted or account-cancelled request is aborted rather than resolved late
+ * (INV-23; TanStack Query only aborts when the signal is consumed).
+ */
 export const fetchers = {
-  session: () => apiJson<SessionDto>("/api/auth/session"),
-  conversations: async () =>
-    (await apiJson<{ conversations: ConversationSummary[] }>("/api/conversations")).conversations,
-  conversation: (id: string) =>
-    apiJson<ConversationDto>(`/api/conversations/${encodeURIComponent(id)}`),
-  models: (refresh = false) => apiJson<ModelListDto>(`/api/models${refresh ? "?refresh=1" : ""}`),
+  session: (signal?: AbortSignal) =>
+    apiJson<SessionDto>("/api/auth/session", signal ? { signal } : {}),
+  conversations: async (signal?: AbortSignal) =>
+    (
+      await apiJson<{ conversations: ConversationSummary[] }>(
+        "/api/conversations",
+        signal ? { signal } : {},
+      )
+    ).conversations,
+  conversation: (id: string, signal?: AbortSignal) =>
+    apiJson<ConversationDto>(
+      `/api/conversations/${encodeURIComponent(id)}`,
+      signal ? { signal } : {},
+    ),
+  models: (refresh = false, signal?: AbortSignal) =>
+    apiJson<ModelListDto>(`/api/models${refresh ? "?refresh=1" : ""}`, signal ? { signal } : {}),
+};
+
+/** Not worth retrying: the server answered with a definite client error. */
+function retryable(failureCount: number, error: Error): boolean {
+  // Definite answers (4xx), expiry and account changes are final; only
+  // network failures (TypeError) and 5xx get one more try.
+  if (error instanceof ApiError) return error.status >= 500 && failureCount < 1;
+  return error.name === "TypeError" && failureCount < 1;
+}
+
+/**
+ * Query options: the one pairing of key and fetcher per resource, used by
+ * every consumer (and any later prefetch), so the cache identity never forks.
+ */
+export const queries = {
+  conversations: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.conversations(userId),
+      queryFn: ({ signal }) => fetchers.conversations(signal),
+      retry: retryable,
+    }),
+  conversation: (userId: string, id: string) =>
+    queryOptions({
+      queryKey: queryKeys.conversation(userId, id),
+      queryFn: ({ signal }) => fetchers.conversation(id, signal),
+      retry: retryable,
+    }),
+  models: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.models(userId),
+      queryFn: ({ signal }) => fetchers.models(false, signal),
+      retry: retryable,
+    }),
 };
 
 /** Drops every cached query and mutation that does not belong to `userId`. */

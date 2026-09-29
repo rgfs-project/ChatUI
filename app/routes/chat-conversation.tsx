@@ -1,10 +1,10 @@
 import { HydrationBoundary } from "@tanstack/react-query";
-import { data, useRouteLoaderData } from "react-router";
+import { data } from "react-router";
 import { ConversationView } from "../components/ConversationView";
 import { appContext } from "../context";
+import { useUserId } from "../lib/auth-store";
 import { queryKeys } from "../lib/query";
 import { prefetchForRequest } from "../lib/server-query";
-import type { loader as layoutLoader } from "./app-layout";
 import type { Route } from "./+types/chat-conversation";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -21,12 +21,13 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
 export async function loader({ context, params }: Route.LoaderArgs) {
   const { services, auth } = context.get(appContext);
   const id = params.conversationId;
+  // Client navigations do not re-run the layout guard: an expired session is
+  // reported as data, and the view opens the re-authentication dialog.
   if (!auth)
-    return {
-      dehydratedState: undefined,
-      error: { status: 401, code: "UNAUTHENTICATED" },
-      title: null,
-    };
+    return data(
+      { dehydratedState: undefined, error: { status: 401, code: "UNAUTHENTICATED" }, title: null },
+      { status: 401 },
+    );
   if (!UUID.test(id))
     return data(
       { dehydratedState: undefined, error: { status: 404, code: "NOT_FOUND" }, title: null },
@@ -57,12 +58,12 @@ export async function loader({ context, params }: Route.LoaderArgs) {
 }
 
 export default function ChatConversation({ loaderData, params }: Route.ComponentProps) {
-  const layout = useRouteLoaderData<typeof layoutLoader>("routes/app-layout");
+  const userId = useUserId();
   return (
     <HydrationBoundary state={loaderData.dehydratedState}>
       <ConversationView
         key={params.conversationId}
-        userId={layout?.user.id ?? ""}
+        userId={userId}
         conversationId={params.conversationId}
         initialError={loaderData.error}
       />
