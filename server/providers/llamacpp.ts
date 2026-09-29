@@ -1,5 +1,6 @@
 import { ErrorCode } from "@shared/errors";
 import type { ProviderConfig } from "../config.ts";
+import { SsrfError, type SafeFetch } from "./ssrf.ts";
 import {
   ProviderError,
   type ChatRequest,
@@ -25,9 +26,29 @@ function isObject(value: unknown): value is Json {
 }
 
 export function createLlamaCppProvider(
-  config: Pick<ProviderConfig, "baseUrl" | "apiKey" | "timeoutMs" | "maxResponseBytes">,
+  config: Pick<ProviderConfig, "baseUrl" | "apiKey" | "timeoutMs" | "maxResponseBytes"> & {
+    /** SSRF-checked, pinned, non-redirecting fetch (defaults to global fetch in unit tests). */
+    fetch?: SafeFetch;
+  },
 ): Provider {
   const { baseUrl } = config;
+
+  /** Every outbound request goes through the SSRF policy when configured. */
+  async function http(url: string, init: RequestInit): Promise<Response> {
+    if (!config.fetch) return fetch(url, init);
+    try {
+      return (await config.fetch(url, init as never)) as unknown as Response;
+    } catch (error) {
+      if (error instanceof SsrfError) {
+        throw new ProviderError(
+          ErrorCode.PROVIDER_ERROR,
+          "blocked",
+          "The provider address is not allowed by the server's network policy",
+        );
+      }
+      throw error;
+    }
+  }
 
   function headers(): Record<string, string> {
     const h: Record<string, string> = {
@@ -112,11 +133,12 @@ export function createLlamaCppProvider(
     const timeout = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await http(url, {
         headers: headers(),
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
     } catch (error) {
+      if (error instanceof ProviderError) throw error;
       if (timeout.aborted) {
         throw new ProviderError(
           ErrorCode.PROVIDER_TIMEOUT,
@@ -166,8 +188,16 @@ export function createLlamaCppProvider(
       const meta = isObject(entry.meta) ? entry.meta : undefined;
       const nCtx = meta?.n_ctx;
       const statusValue = isObject(entry.status) ? entry.status.value : undefined;
+      // Router mode reports per-model input modalities (docs/provider-notes.md).
+      const arch = isObject(entry.architecture) ? entry.architecture : undefined;
+      const modalities = Array.isArray(arch?.input_modalities)
+        ? arch.input_modalities.filter(
+            (m): m is "text" | "image" | "audio" => m === "text" || m === "image" || m === "audio",
+          )
+        : undefined;
       models.push({
         id: entry.id,
+        inputModalities: modalities && modalities.length > 0 ? modalities : undefined,
         contextTokens:
           typeof nCtx === "number" && Number.isSafeInteger(nCtx) && nCtx > 0 ? nCtx : undefined,
         status:
@@ -193,13 +223,14 @@ export function createLlamaCppProvider(
     const url = `${requireBaseUrl()}${path}`;
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await http(url, {
         method: "POST",
         headers: headers(),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(config.timeoutMs),
       });
     } catch (error) {
+      if (error instanceof ProviderError) throw error;
       if ((error as Error).name === "TimeoutError") {
         throw new ProviderError(
           ErrorCode.PROVIDER_TIMEOUT,
@@ -292,7 +323,7 @@ export function createLlamaCppProvider(
     try {
       let res: Response;
       try {
-        res = await fetch(url, {
+        res = await http(url, {
           method: "POST",
           headers: { ...headers(), Accept: "text/event-stream" },
           body: JSON.stringify({
@@ -305,6 +336,7 @@ export function createLlamaCppProvider(
           signal: combined,
         });
       } catch (error) {
+        if (error instanceof ProviderError) throw error;
         if (inactivity.signal.aborted) throw timeoutError();
         if (signal.aborted) throw error;
         throw new ProviderError(

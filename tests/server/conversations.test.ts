@@ -105,6 +105,7 @@ async function api(run: Running, method: string, url: string, body?: unknown) {
 
 function sendBody(content: string, extra: Record<string, unknown> = {}) {
   return {
+    providerId: "local",
     model: MOCK_MODELS.chat,
     content,
     operationKey: randomUUID(),
@@ -385,7 +386,7 @@ describe("send and persistence", () => {
       applyTemplate: (m, msgs) => (check(), real.applyTemplate(m, msgs)),
       streamChat: (r, s) => (check(), real.streamChat(r, s)),
     };
-    const run = await start({ provider });
+    const run = await start({ providerFactory: () => provider });
     storeRef.current = run.chatui.services.conversations;
     const first = await api(run, "POST", "/api/generations", sendBody("a"));
     await waitTerminal(run, first.body.generationId as string);

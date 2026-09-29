@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
@@ -47,6 +47,7 @@ export function providerConfig(overrides: Partial<ProviderConfig> = {}): Provide
     maxOutputTokens: 256,
     maxActiveGenerations: 4,
     maxResponseBytes: 1024 * 1024,
+    ssrf: { allowPrivate: true, hostAllowlist: [], linkLocalExceptions: [] },
     ...overrides,
   };
 }
@@ -104,11 +105,53 @@ export function tempDataDir(): string {
 
 export interface TestAppOptions extends Partial<Omit<AppOptions, "config">> {
   config?: Partial<AppOptions["config"]>;
+  /** Leave providers.json absent so the app bootstraps it from LLAMA_*. */
+  bootstrapProviders?: boolean;
+}
+
+/**
+ * Writes `_system/providers.json` the way an operator would. Tests use it so
+ * the bootstrap provider has an explicit admission limit.
+ */
+export function writeProviders(dataDir: string, providers: object[]): void {
+  mkdirSync(path.join(dataDir, "_system"), { recursive: true });
+  writeFileSync(
+    path.join(dataDir, "_system", "providers.json"),
+    JSON.stringify({ version: 1, providers }),
+  );
+}
+
+export function localProvider(baseUrl: string, extra: Record<string, unknown> = {}): object {
+  return {
+    id: "local",
+    name: "Local llama.cpp",
+    kind: "openai-compatible",
+    baseUrl,
+    capabilities: { inputModalities: ["text"], reasoning: true, tools: false },
+    ...extra,
+  };
 }
 
 export function testApp(overrides: TestAppOptions = {}) {
   const logs = captureLogger();
-  const { config, ...rest } = overrides;
+  const { config, bootstrapProviders, ...rest } = overrides;
+  const dataDir = config?.dataDir ?? tempDataDir();
+  const provider = config?.provider ?? providerConfig();
+  if (
+    provider.baseUrl &&
+    bootstrapProviders !== true &&
+    !existsSync(path.join(dataDir, "_system", "providers.json"))
+  ) {
+    writeProviders(dataDir, [
+      localProvider(provider.baseUrl, {
+        ...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
+        // No explicit limit: the provider's discovered slots apply.
+        ...(provider.maxActiveGenerations === undefined
+          ? {}
+          : { maxActiveGenerations: provider.maxActiveGenerations }),
+      }),
+    ]);
+  }
   const chatui = createApp({
     logger: logs.logger,
     version: "9.9.9-test",
@@ -121,7 +164,7 @@ export function testApp(overrides: TestAppOptions = {}) {
       provider: providerConfig(),
       storage: storageConfig(),
       auth: authConfig(),
-      dataDir: config?.dataDir ?? tempDataDir(),
+      dataDir,
       ...config,
     },
   });

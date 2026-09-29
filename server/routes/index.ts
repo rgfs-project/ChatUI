@@ -22,7 +22,7 @@ import {
 import { healthRoute } from "./health.ts";
 import { getPreferencesRoute, updatePreferencesRoute } from "./preferences.ts";
 import { getOperationRoute } from "./operations.ts";
-import { listModelsRoute } from "./models.ts";
+import { listModelsRoute, listProvidersRoute } from "./models.ts";
 
 /** The complete API route inventory. */
 export const apiRoutes: readonly AnyApiRoute[] = [
@@ -34,6 +34,7 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(changePasswordRoute),
   erase(getPreferencesRoute),
   erase(updatePreferencesRoute),
+  erase(listProvidersRoute),
   erase(listModelsRoute),
   erase(startGenerationRoute),
   erase(getGenerationRoute),

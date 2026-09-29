@@ -37,7 +37,6 @@ export interface GenerationOutcome {
 export type PersistOutcome = (outcome: GenerationOutcome) => Promise<string | null>;
 
 export interface GenerationManagerOptions {
-  provider: Provider;
   logger: Logger;
   maxOutputTokens: number;
   generationMaxMs: number;
@@ -45,6 +44,8 @@ export interface GenerationManagerOptions {
   maxActiveGenerations: number;
   /** Per-user admission limit (Phase 4, INV-62). */
   maxActivePerUser?: number;
+  /** Per-provider admission limits (Phase 5); a missing entry means 1. */
+  providerLimits?: Record<string, number>;
   /** Terminal generations are kept this long for re-observation, then evicted. */
   retentionMs?: number;
   /** At most this many terminal generations are retained (oldest evicted first). */
@@ -56,6 +57,8 @@ export interface GenerationManagerOptions {
 
 interface Generation {
   id: string;
+  providerId: string;
+  provider: Provider;
   /** Owner: other users get GENERATION_NOT_FOUND (INV-15). */
   userId: string;
   assistantMessageId: string;
@@ -89,6 +92,7 @@ type AbortReason = "cancel" | "max" | "shutdown";
 export interface Reservation {
   readonly conversationKey: string;
   readonly userId: string;
+  readonly providerId: string;
   release(): void;
 }
 
@@ -101,7 +105,8 @@ export interface Reservation {
 export class GenerationManager {
   private readonly generations = new Map<string, Generation>();
   /** conversationKey → generation id or a reservation marker. */
-  private readonly active = new Map<string, { id: string; userId: string }>();
+  private readonly active = new Map<string, { id: string; userId: string; providerId: string }>();
+  private readonly providerLimits = new Map<string, number>();
   private readonly options: GenerationManagerOptions;
   private readonly retentionMs: number;
   private readonly maxRetained: number;
@@ -113,6 +118,8 @@ export class GenerationManager {
   constructor(options: GenerationManagerOptions) {
     this.options = options;
     this.maxActive = options.maxActiveGenerations;
+    for (const [id, limit] of Object.entries(options.providerLimits ?? {}))
+      this.providerLimits.set(id, limit);
     this.retentionMs = options.retentionMs ?? 10 * 60_000;
     this.maxRetained = options.maxRetained ?? 200;
     this.retryAfterSeconds = options.retryAfterSeconds ?? 5;
@@ -138,6 +145,21 @@ export class GenerationManager {
     return this.active.get(conversationKey)?.id;
   }
 
+  /** Sets one provider's admission limit (config, else discovered slots, else 1). */
+  setProviderLimit(providerId: string, limit: number): void {
+    this.providerLimits.set(providerId, Math.max(1, Math.floor(limit)));
+  }
+
+  providerLimit(providerId: string): number {
+    return this.providerLimits.get(providerId) ?? 1;
+  }
+
+  private activeForProvider(providerId: string): number {
+    let count = 0;
+    for (const entry of this.active.values()) if (entry.providerId === providerId) count++;
+    return count;
+  }
+
   private activeForUser(userId: string): number {
     let count = 0;
     for (const entry of this.active.values()) if (entry.userId === userId) count++;
@@ -145,12 +167,15 @@ export class GenerationManager {
   }
 
   /** Throws RATE_LIMITED when no admission slot is free (checked before any work). */
-  assertAdmission(userId?: string): void {
+  assertAdmission(userId?: string, providerId?: string): void {
     const perUser = this.options.maxActivePerUser ?? Number.POSITIVE_INFINITY;
     if (
       this.closed ||
       this.active.size >= this.maxActive ||
-      (userId !== undefined && this.activeForUser(userId) >= perUser)
+      (userId !== undefined && this.activeForUser(userId) >= perUser) ||
+      // A busy provider rejects only its own starts (contracts §4).
+      (providerId !== undefined &&
+        this.activeForProvider(providerId) >= this.providerLimit(providerId))
     ) {
       throw new AppError(
         ErrorCode.RATE_LIMITED,
@@ -172,15 +197,16 @@ export class GenerationManager {
   }
 
   /** Reserves the conversation's single slot and a global slot (contracts §4.1 step 4). */
-  reserve(userId: string, conversationKey: string): Reservation {
+  reserve(userId: string, conversationKey: string, providerId: string): Reservation {
     this.assertIdle(conversationKey);
-    this.assertAdmission(userId);
+    this.assertAdmission(userId, providerId);
     const marker = `reserved:${conversationKey}`;
-    this.active.set(conversationKey, { id: marker, userId });
+    this.active.set(conversationKey, { id: marker, userId, providerId });
     let released = false;
     return {
       conversationKey,
       userId,
+      providerId,
       release: () => {
         if (released) return;
         released = true;
@@ -196,6 +222,7 @@ export class GenerationManager {
       generationId: string;
       assistantMessageId: string;
       conversationId: string;
+      provider: Provider;
       model: string;
       messages: PromptMessage[];
       persist: PersistOutcome;
@@ -207,6 +234,8 @@ export class GenerationManager {
     });
     const generation: Generation = {
       id: input.generationId,
+      providerId: reservation.providerId,
+      provider: input.provider,
       userId: reservation.userId,
       assistantMessageId: input.assistantMessageId,
       conversationKey: reservation.conversationKey,
@@ -231,7 +260,11 @@ export class GenerationManager {
       settle,
     };
     this.generations.set(generation.id, generation);
-    this.active.set(reservation.conversationKey, { id: generation.id, userId: reservation.userId });
+    this.active.set(reservation.conversationKey, {
+      id: generation.id,
+      userId: reservation.userId,
+      providerId: reservation.providerId,
+    });
     generation.maxTimer = setTimeout(() => {
       this.abort(generation, "max");
     }, this.options.generationMaxMs);
@@ -242,7 +275,7 @@ export class GenerationManager {
   private async run(generation: Generation, messages: PromptMessage[]): Promise<void> {
     const signal = generation.controller.signal;
     try {
-      const stream = this.options.provider.streamChat(
+      const stream = generation.provider.streamChat(
         { model: generation.model, messages, maxTokens: this.options.maxOutputTokens },
         signal,
       );
@@ -407,6 +440,7 @@ export class GenerationManager {
       generationId: g.id,
       assistantMessageId: g.assistantMessageId,
       conversationId: g.conversationId,
+      providerId: g.providerId,
       model: g.model,
       state: g.state,
       content: g.content,

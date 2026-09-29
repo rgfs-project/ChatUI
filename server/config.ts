@@ -48,6 +48,10 @@ const envSchema = z.object({
   MAX_OUTPUT_TOKENS: intFrom(1, 1_000_000).default(4_096),
   MAX_ACTIVE_GENERATIONS: intFrom(1, 1_000).optional(),
   PROVIDER_MAX_RESPONSE_BYTES: intFrom(1_024, 1_073_741_824).default(16 * 1024 * 1024),
+  // SSRF policy for provider endpoints (Phase 5).
+  ALLOW_PRIVATE_PROVIDER_HOSTS: z.enum(["true", "false"]).default("true"),
+  PROVIDER_HOST_ALLOWLIST: z.string().default(""),
+  PROVIDER_LINK_LOCAL_EXCEPTIONS: z.string().default(""),
 
   // Persistence (Phase 3).
   OPERATION_RETENTION_MS: intFrom(2 * 86_400_000, 365 * 86_400_000).default(7 * 86_400_000),
@@ -127,6 +131,37 @@ export interface ProviderConfig {
   /** Explicit global generation admission limit; undefined = discovered slots, else 1. */
   maxActiveGenerations: number | undefined;
   maxResponseBytes: number;
+  /** SSRF policy applied at load and on every outbound provider request. */
+  ssrf: {
+    allowPrivate: boolean;
+    hostAllowlist: string[];
+    linkLocalExceptions: { hostname: string; address: string; port: number }[];
+  };
+}
+
+/**
+ * `host=address:port` tuples, comma-separated; IPv6 addresses in brackets
+ * (`gw=[fe80::1]:8080`). Exact matches only: no wildcards or ranges.
+ */
+function parseLinkLocalExceptions(value: string): ProviderConfig["ssrf"]["linkLocalExceptions"] {
+  const out: ProviderConfig["ssrf"]["linkLocalExceptions"] = [];
+  for (const part of value
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean)) {
+    const match = /^([a-z0-9.-]+)=(?:\[([0-9a-f:.]+)\]|([0-9.]+)):(\d{1,5})$/i.exec(part);
+    if (!match || !isIP(match[2] ?? match[3] ?? "")) {
+      throw new ConfigError(
+        `Invalid configuration:\n  - PROVIDER_LINK_LOCAL_EXCEPTIONS: "${part}" must be host=address:port (IPv6 in brackets)`,
+      );
+    }
+    out.push({
+      hostname: (match[1] ?? "").toLowerCase(),
+      address: match[2] ?? match[3] ?? "",
+      port: Number(match[4]),
+    });
+  }
+  return out;
 }
 
 export class ConfigError extends Error {
@@ -256,6 +291,13 @@ export function loadConfig(
       maxOutputTokens: parsed.data.MAX_OUTPUT_TOKENS,
       maxActiveGenerations: parsed.data.MAX_ACTIVE_GENERATIONS,
       maxResponseBytes: parsed.data.PROVIDER_MAX_RESPONSE_BYTES,
+      ssrf: {
+        allowPrivate: parsed.data.ALLOW_PRIVATE_PROVIDER_HOSTS === "true",
+        hostAllowlist: parsed.data.PROVIDER_HOST_ALLOWLIST.split(",")
+          .map((h) => h.trim().toLowerCase())
+          .filter(Boolean),
+        linkLocalExceptions: parseLinkLocalExceptions(parsed.data.PROVIDER_LINK_LOCAL_EXCEPTIONS),
+      },
     },
     auth,
     storage: {

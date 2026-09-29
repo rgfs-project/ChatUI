@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 4 (accounts).** ChatUI serves a public status page, `GET /api/health`, and a **signed-in chat** at `/chat`: accounts with server-side sessions, per-user storage of conversations as canonical Markdown under `DATA_DIR`, server-owned generations against a llama.cpp server, and SSE streaming. Multiple providers, admin and the full UI arrive in later phases.
+> **Status: Phase 5 (multiple providers).** ChatUI serves a public status page, `GET /api/health`, and a **signed-in chat** at `/chat`: accounts with server-side sessions, per-user canonical Markdown storage, several OpenAI-compatible providers (llama.cpp and others) with server-side model discovery, server-owned generations and SSE streaming. Admin, the full UI and uploads arrive in later phases.
 
 ## Prerequisites
 
@@ -77,6 +77,41 @@ LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
 
 The page renders the composer on the server (you can type before JavaScript loads). Replies stream with the model's reasoning shown separately. Reloading keeps watching the running reply, and Stop cancels it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
 
+## Providers (`providers.json`)
+
+Model servers are configured in `DATA_DIR/_system/providers.json`. On first start it is created with one `local` provider from `LLAMA_BASE_URL` / `LLAMA_API_KEY`; after that **the file is authoritative** (edit it and restart; an admin UI arrives in Phase 10):
+
+```json
+{
+  "version": 1,
+  "providers": [
+    {
+      "id": "local",
+      "name": "Local llama.cpp",
+      "kind": "openai-compatible",
+      "baseUrl": "http://192.168.1.20:8080",
+      "apiKey": "optional-secret",
+      "timeoutMs": 300000,
+      "maxActiveGenerations": 1,
+      "capabilities": { "inputModalities": ["text"], "reasoning": true, "tools": false },
+      "contextTokens": 32768
+    }
+  ]
+}
+```
+
+- **It contains secrets** (`apiKey`). ChatUI writes it `0600`. API keys never appear in any API response or log. Treat backups of `DATA_DIR` as secret.
+- `id` is 1–64 characters of `a-z 0-9 _ -`, and `kind` is `openai-compatible`. The optional fields fall back as follows:
+  - `timeoutMs` → `PROVIDER_TIMEOUT_MS`
+  - `maxActiveGenerations` → the provider's reported slots, else 1
+  - `contextTokens` → discovery, else `DEFAULT_CONTEXT_TOKENS`
+- An invalid entry is disabled and logged; startup continues. An unreachable provider is shown as unavailable and never blocks startup.
+- Removing a provider never touches conversations: old replies keep their provider/model labels, and new messages just can't select it. You can switch provider and model at any point in a conversation.
+- **Network policy (SSRF):** base URLs must be http(s) without credentials, query or fragment. Every request re-resolves the host, checks every address and pins the connection to the checked address. Redirects are never followed.
+  - Cloud metadata addresses (e.g. `169.254.169.254`, `fd00:ec2::254`) and link-local ranges are denied.
+  - Private and loopback hosts are allowed by default (`ALLOW_PRIVATE_PROVIDER_HOSTS`).
+  - `PROVIDER_HOST_ALLOWLIST` restricts hostnames. `PROVIDER_LINK_LOCAL_EXCEPTIONS` admits an exact `host=address:port` gateway (e.g. Podman's `host.containers.internal`).
+
 ## LAN and phone access (TLS proxy)
 
 Session cookies are `Secure` behind https. ChatUI supports exactly two transports:
@@ -108,7 +143,7 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 ## Data, backups and limits
 
 - Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).
-- Each account has its own directory `DATA_DIR/<user-id>/` (`user.json`, `chats/`, `preferences.json`, `operations/`). `_system/` holds sessions (deleting them signs everyone out) and the derived username index.
+- Each account has its own directory `DATA_DIR/<user-id>/` (`user.json`, `chats/`, `preferences.json`, `operations/`). `_system/` holds `providers.json` (secrets), sessions (deleting them signs everyone out) and the derived username index.
 - **Back up all of `DATA_DIR`.** `index/` is derived and optional in a backup: it is rebuilt from the Markdown when missing. Keep `operations/` (short-lived send records used for safe retries and crash recovery). Stop the server, or copy from a filesystem snapshot, for a consistent backup; online backup/restore arrives in Phase 16.
 - **Single process only.** Exactly one ChatUI process may use a `DATA_DIR` (locks are in-process). Don't run two servers, or the CLI `index:rebuild`, against the same directory at the same time.
 - Writes are atomic and durable (temp file, fsync, rename, directory fsync). On Windows, directory fsync is unavailable and rename-over-existing semantics differ; Linux containers are the supported runtime.

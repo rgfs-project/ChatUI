@@ -25,6 +25,7 @@ export const ErrorCode = {
   CSRF_INVALID: "CSRF_INVALID",
   REGISTRATION_CLOSED: "REGISTRATION_CLOSED",
   SESSION_CHANGED: "SESSION_CHANGED",
+  PROVIDER_NOT_FOUND: "PROVIDER_NOT_FOUND",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -51,6 +52,7 @@ export const ERROR_HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   CSRF_INVALID: 403,
   REGISTRATION_CLOSED: 403,
   SESSION_CHANGED: 409,
+  PROVIDER_NOT_FOUND: 400,
 };
 
 /** `details` never contains stack traces, paths, upstream bodies or secrets. */

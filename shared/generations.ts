@@ -10,16 +10,49 @@ export * from "./generation-state";
  * the schemas are used by the server to validate requests and shape responses.
  */
 
+export const capabilitiesSchema = z.strictObject({
+  inputModalities: z.array(z.enum(["text", "image", "audio"])),
+  reasoning: z.boolean(),
+  tools: z.boolean(),
+});
+
 export const modelDtoSchema = z.strictObject({
+  providerId: z.string(),
+  /** Opaque model id: never parsed. */
   id: z.string(),
-  /** Context window in tokens: discovered from the provider, else the configured default. */
+  /** Context window in tokens: discovered, else provider config, else the default. */
   contextTokens: z.number().int().positive(),
   /** Router-mode load state; `unknown` when the provider does not report it. */
   status: z.enum(["loaded", "unloaded", "loading", "unknown"]),
+  capabilities: capabilitiesSchema,
+  /** Where each capability came from. */
+  capabilitySources: z.strictObject({
+    inputModalities: z.enum(["discovery", "config"]),
+    reasoning: z.enum(["discovery", "config"]),
+    tools: z.enum(["discovery", "config"]),
+  }),
 });
 export type ModelDto = z.infer<typeof modelDtoSchema>;
 
-export const modelListDtoSchema = z.strictObject({ models: z.array(modelDtoSchema) });
+export const providerDtoSchema = z.strictObject({
+  id: z.string(),
+  name: z.string(),
+  /** pending: not yet contacted; stale: last refresh failed; invalid: bad configuration. */
+  status: z.enum(["pending", "ok", "stale", "unavailable", "invalid"]),
+  capabilities: capabilitiesSchema,
+});
+export type ProviderDto = z.infer<typeof providerDtoSchema>;
+
+export const providerListDtoSchema = z.strictObject({ providers: z.array(providerDtoSchema) });
+
+export const providerModelsDtoSchema = z.strictObject({
+  provider: providerDtoSchema,
+  stale: z.boolean(),
+  models: z.array(modelDtoSchema),
+});
+export type ProviderModelsDto = z.infer<typeof providerModelsDtoSchema>;
+
+export const modelListDtoSchema = z.strictObject({ providers: z.array(providerModelsDtoSchema) });
 export type ModelListDto = z.infer<typeof modelListDtoSchema>;
 
 export const chatMessageSchema = z.strictObject({
@@ -31,6 +64,8 @@ export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export const startGenerationRequestSchema = z.strictObject({
   /** Omit for a draft: the server mints the conversation on first send (§4.1). */
   conversationId: canonicalUuid.optional(),
+  /** The pair is validated server-side on every send (INV-18). */
+  providerId: z.string().min(1).max(64),
   model: z.string().trim().min(1).max(200),
   content: z
     .string()
@@ -62,6 +97,7 @@ export const generationSnapshotSchema = z.strictObject({
   generationId: z.uuid(),
   assistantMessageId: z.uuid(),
   conversationId: z.uuid(),
+  providerId: z.string(),
   model: z.string(),
   state: z.enum(GENERATION_STATES),
   content: z.string(),

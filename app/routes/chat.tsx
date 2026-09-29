@@ -16,7 +16,7 @@ import {
 import type {
   GenerationError,
   GenerationSnapshot,
-  ModelDto,
+  ProviderModelsDto,
   StartGenerationResponse,
 } from "@shared/generations";
 import { appContext } from "../context";
@@ -47,14 +47,14 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 
   const id = url.searchParams.get("c");
   const modelsPromise = Promise.race([
-    services.models.list().then((models) => ({ models, modelError: null })),
-    new Promise<{ models: ModelDto[]; modelError: string }>((resolve) => {
+    services.models.listModels().then((groups) => ({ groups, modelError: null })),
+    new Promise<{ groups: ProviderModelsDto[]; modelError: string }>((resolve) => {
       setTimeout(() => {
-        resolve({ models: [], modelError: "The model server is taking a long time to respond." });
+        resolve({ groups: [], modelError: "The model servers are taking a long time to respond." });
       }, MODEL_DISCOVERY_BUDGET_MS).unref();
     }),
   ]).catch((error: unknown) => ({
-    models: [] as ModelDto[],
+    groups: [] as ProviderModelsDto[],
     modelError: error instanceof Error ? error.message : "The model server is unreachable.",
   }));
   let conversation: ConversationDto | null = null;
@@ -83,13 +83,13 @@ export async function loader({ context, request }: Route.LoaderArgs) {
       messageCount: entry.messageCount,
       malformed: entry.malformed,
     }));
-  const { models, modelError } = await modelsPromise;
+  const { groups, modelError } = await modelsPromise;
   return {
     conversations,
     conversation,
     conversationError,
     selectedId: id,
-    models,
+    groups,
     modelError,
     username: auth.username,
   };
@@ -164,13 +164,14 @@ function Message({ message }: { message: MessageDto }) {
 }
 
 export default function Chat({ loaderData }: Route.ComponentProps) {
-  const { conversations, conversation, conversationError, models: initialModels } = loaderData;
+  const { conversations, conversation, conversationError, groups: initialGroups } = loaderData;
   const hydrated = useHydrated();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelRef = useRef<HTMLSelectElement>(null);
-  const [models, setModels] = useState<ModelDto[]>(initialModels);
+  const [groups, setGroups] = useState<ProviderModelsDto[]>(initialGroups);
+  const modelCount = groups.reduce((n, g) => n + g.models.length, 0);
   const [modelError, setModelError] = useState<string | null>(loaderData.modelError);
   const [live, setLive] = useState<Live | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -262,23 +263,31 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
       setModelError((await errorOf(response)).message);
       return;
     }
-    setModels(((await response.json()) as { models: ModelDto[] }).models);
+    setGroups(((await response.json()) as { providers: ProviderModelsDto[] }).providers);
   }, []);
 
   async function send(event?: SyntheticEvent) {
     event?.preventDefault();
     // The textarea is uncontrolled, so text typed before hydration is kept.
     const content = textareaRef.current?.value.trim() ?? "";
-    const model = modelRef.current?.value ?? "";
+    // The option value is the JSON pair [providerId, modelId]; ids are opaque.
+    let pair: [string, string] | undefined;
+    try {
+      pair = JSON.parse(modelRef.current?.value ?? "") as [string, string];
+    } catch {
+      pair = undefined;
+    }
     if (!content) {
       textareaRef.current?.focus();
       return;
     }
-    if (!model || observedId || busy) return;
+    if (!pair || observedId || busy) return;
+    const [providerId, model] = pair;
     setBusy(true);
     setStatus("Sending…");
     const body = JSON.stringify({
       ...(conversation ? { conversationId: conversation.id } : {}),
+      providerId,
       model,
       content,
       operationKey: crypto.randomUUID(),
@@ -364,9 +373,18 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
     await navigate("/chat");
   }
 
-  const defaultModel = (models.find((m) => m.status === "loaded") ?? models[0])?.id;
+  // Default: the most recent reply's provider/model if still available, else a loaded model.
+  const all = groups.flatMap((g) => g.models);
+  const lastReply = [...(conversation?.messages ?? [])]
+    .reverse()
+    .find((m) => m.role === "assistant");
+  const preferred =
+    all.find((m) => m.providerId === lastReply?.provider && m.id === lastReply.model) ??
+    all.find((m) => m.status === "loaded") ??
+    all[0];
+  const defaultModel = preferred ? JSON.stringify([preferred.providerId, preferred.id]) : undefined;
   const running = observedId !== null;
-  const canSend = hydrated && models.length > 0 && !running && !busy && conversationError === null;
+  const canSend = hydrated && modelCount > 0 && !running && !busy && conversationError === null;
   // Keep the streamed reply on screen until the stored copy is in the transcript.
   const showLive =
     live !== null &&
@@ -499,14 +517,27 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
               name="model"
               ref={modelRef}
               defaultValue={defaultModel}
-              disabled={models.length === 0}
+              disabled={modelCount === 0}
             >
-              {models.length === 0 ? <option value="">No models available</option> : null}
-              {models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.id}
-                  {model.status === "unloaded" ? " (not loaded)" : ""}
-                </option>
+              {modelCount === 0 ? <option value="">No models available</option> : null}
+              {groups.map((group) => (
+                <optgroup
+                  key={group.provider.id}
+                  label={`${group.provider.name}${
+                    group.provider.status === "unavailable"
+                      ? " (unavailable)"
+                      : group.stale
+                        ? " (list may be out of date)"
+                        : ""
+                  }`}
+                >
+                  {group.models.map((model) => (
+                    <option key={model.id} value={JSON.stringify([model.providerId, model.id])}>
+                      {model.id}
+                      {model.status === "unloaded" ? " (not loaded)" : ""}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             <button

@@ -22,6 +22,7 @@ export const startGenerationRoute = defineRoute({
   handler: ({ body }, ctx) => ctx.services.send.send(userOf(ctx).userId, body),
   fixture: {
     body: {
+      providerId: "local",
       model: "fixture-missing-model",
       content: "hi",
       operationKey: "00000000-0000-4000-8000-00000000f1f1",

@@ -336,6 +336,12 @@ async function main(): Promise<void> {
         alias.code === 0,
         (alias.stderr + alias.stdout).trim(),
       );
+      const metadata = await probe("http://169.254.169.254/");
+      check(
+        "container: provider:check refuses cloud metadata under the SSRF policy",
+        metadata.code === 1 && metadata.stderr.includes("network policy"),
+        metadata.stderr.trim(),
+      );
       const missing = await probe("http://127.0.0.1:9");
       check(
         "provider:check reports an unreachable provider and fails",

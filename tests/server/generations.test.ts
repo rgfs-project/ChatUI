@@ -89,6 +89,7 @@ async function api(run: Running, method: string, path: string, body?: unknown) {
 
 async function startGeneration(run: Running, model: string, content = "hello there") {
   return api(run, "POST", "/api/generations", {
+    providerId: "local",
     model,
     content,
     operationKey: randomUUID(),
@@ -115,22 +116,41 @@ function chatRequests() {
 }
 
 describe("model discovery", () => {
-  it("lists discovered models as DTOs without raw provider fields (INV-04)", async () => {
+  interface Group {
+    provider: { id: string; status: string };
+    stale: boolean;
+    models: {
+      id: string;
+      providerId: string;
+      contextTokens: number;
+      status: string;
+      capabilities: unknown;
+      capabilitySources: unknown;
+    }[];
+  }
+
+  it("lists models grouped by provider as DTOs without raw provider fields (INV-04)", async () => {
     const run = await start();
     const res = await api(run, "GET", "/api/models");
     expect(res.status).toBe(200);
-    const models = res.body.models as { id: string; contextTokens: number; status: string }[];
-    expect(models.map((m) => m.id)).toContain(MOCK_MODELS.chat);
-    expect(models.find((m) => m.id === MOCK_MODELS.chat)).toEqual({
+    const [group] = res.body.providers as Group[];
+    expect(group?.provider).toMatchObject({ id: "local", status: "ok" });
+    expect(group?.stale).toBe(false);
+    expect(group?.models.find((m) => m.id === MOCK_MODELS.chat)).toEqual({
+      providerId: "local",
       id: MOCK_MODELS.chat,
       contextTokens: 32_768,
       status: "loaded",
+      capabilities: { inputModalities: ["text"], reasoning: true, tools: false },
+      capabilitySources: { inputModalities: "config", reasoning: "config", tools: "config" },
     });
-    expect(models.find((m) => m.id === MOCK_MODELS.slow)).toMatchObject({
+    expect(group?.models.find((m) => m.id === MOCK_MODELS.slow)).toMatchObject({
       contextTokens: 8_192,
       status: "unloaded",
     });
-    expect(JSON.stringify(res.body)).not.toMatch(/secret\/path|llama-server|args|n_params/);
+    expect(JSON.stringify(res.body)).not.toMatch(
+      /secret\/path|llama-server|args|n_params|baseUrl|apiKey/,
+    );
   });
 
   it("sends the configured API key to the provider and never to the client", async () => {
@@ -140,24 +160,30 @@ describe("model discovery", () => {
     expect(run.seen.join("\n")).not.toContain(API_KEY);
   });
 
-  it("reports an unreachable provider as PROVIDER_UNAVAILABLE", async () => {
+  it("an unreachable provider is listed as unavailable with no models; sends fail with PROVIDER_UNAVAILABLE", async () => {
     const run = await start({ baseUrl: "http://127.0.0.1:9" });
     const res = await api(run, "GET", "/api/models");
-    expect(res.status).toBe(502);
-    expect(res.body).toMatchObject({ error: { code: "PROVIDER_UNAVAILABLE" } });
+    expect(res.status).toBe(200);
+    expect((res.body.providers as Group[])[0]).toMatchObject({
+      provider: { status: "unavailable" },
+      models: [],
+    });
+    const sent = await startGeneration(run, MOCK_MODELS.chat);
+    expect(sent.body).toMatchObject({ error: { code: "PROVIDER_UNAVAILABLE" } });
   });
 
-  it("reports rejected credentials as PROVIDER_ERROR without the upstream body", async () => {
+  it("rejected credentials make the provider unavailable without leaking the upstream body", async () => {
     const run = await start({ apiKey: "wrong" });
     const res = await api(run, "GET", "/api/models");
-    expect(res.status).toBe(502);
-    expect(res.body).toMatchObject({ error: { code: "PROVIDER_ERROR" } });
+    expect((res.body.providers as Group[])[0]?.provider.status).toBe("unavailable");
     expect(JSON.stringify(res.body)).not.toContain(UPSTREAM_SECRET);
   });
 
-  it("uses the provider's discovered slot count as the default admission limit", async () => {
+  it("uses the provider's discovered slot count as its admission limit and the global default", async () => {
     const run = await start({ maxActiveGenerations: undefined });
+    await api(run, "GET", "/api/models");
     await vi.waitFor(() => {
+      expect(run.chatui.services.generations.providerLimit("local")).toBe(3);
       expect(run.chatui.services.generations.maxActiveGenerations).toBe(3);
     });
   });
@@ -219,6 +245,7 @@ describe("generations", () => {
     const run = await start();
     const before = chatRequests();
     const missing = await api(run, "POST", "/api/generations", {
+      providerId: "local",
       content: "x",
       operationKey: randomUUID(),
       operationIssuedAt: new Date().toISOString(),
@@ -235,6 +262,7 @@ describe("generations", () => {
   it("rejects unknown fields and empty content", async () => {
     const run = await start();
     const base = {
+      providerId: "local",
       model: MOCK_MODELS.chat,
       operationKey: randomUUID(),
       operationIssuedAt: new Date().toISOString(),

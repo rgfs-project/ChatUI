@@ -25,6 +25,8 @@ export default defineConfig(
     },
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
+      // Conflicts with no-non-null-assertion (autofix rewrites casts to `!`).
+      "@typescript-eslint/non-nullable-type-assertion-style": "off",
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },

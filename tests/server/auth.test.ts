@@ -122,6 +122,7 @@ const send = (
   call(run, "POST", "/api/generations", {
     session,
     body: {
+      providerId: "local",
       model: MOCK_MODELS.slow,
       content,
       operationKey: randomUUID(),

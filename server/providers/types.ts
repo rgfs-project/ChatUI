@@ -16,6 +16,8 @@ export interface Provider {
 
 export interface ProviderModel {
   id: string;
+  /** Discovered input modalities, when the provider reports them reliably. */
+  inputModalities?: ("text" | "image" | "audio")[] | undefined;
   contextTokens: number | undefined;
   status: "loaded" | "unloaded" | "loading" | "unknown";
 }
@@ -54,6 +56,7 @@ export class ProviderError extends Error {
   readonly code: ProviderErrorCode;
   /** Finer classification for UI/tests, never an upstream string. */
   readonly kind:
+    | "blocked"
     | "unreachable"
     | "http"
     | "invalid_response"

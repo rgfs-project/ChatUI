@@ -34,6 +34,7 @@ describe("configuration", () => {
         maxOutputTokens: 4_096,
         maxActiveGenerations: undefined,
         maxResponseBytes: 16 * 1024 * 1024,
+        ssrf: { allowPrivate: true, hostAllowlist: [], linkLocalExceptions: [] },
       },
       auth: {
         publicOrigin: "http://localhost:3000",

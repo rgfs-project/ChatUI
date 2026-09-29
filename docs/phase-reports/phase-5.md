@@ -1,0 +1,44 @@
+## Phase 5 report
+
+- **Scope completed (files/features):**
+  - `server/providers/config.ts`: `_system/providers.json`. Schema per entry, bootstrap from `LLAMA_*` when missing (then authoritative), invalid entries disabled and logged, file written `0600`.
+  - `server/providers/ssrf.ts`:
+    - URL policy
+    - address classification via `ipaddr.js` (metadata deny set, link-local with exact exceptions, private toggle, allowlist, IPv4-mapped normalization)
+    - request-time resolution with every-address checks and connection pinning (undici `Agent` lookup)
+    - no redirects
+  - `server/providers/llamacpp.ts`: all requests go through the safe fetch; per-model input modalities from discovery; SSRF refusals normalized.
+  - `server/generations/catalog.ts`: per-provider discovery cache (TTL, stale-while-revalidate, last-good-on-failure, `unavailable`), `(providerId, modelId)` validation with one refresh on a miss, capability provenance.
+  - Per-provider admission in `GenerationManager` (config, else discovered slots, else 1; global default = sum). Generations carry their provider.
+  - `POST /api/generations` now requires `providerId`; `GET /api/providers`; `GET /api/models` grouped by provider; `PROVIDER_NOT_FOUND`.
+  - The chat UI groups models by provider, shows stale/unavailable states and supports switching provider mid-conversation. `provider:check` now uses the same SSRF policy.
+  - Config: `ALLOW_PRIVATE_PROVIDER_HOSTS`, `PROVIDER_HOST_ALLOWLIST`, `PROVIDER_LINK_LOCAL_EXCEPTIONS`.
+- **Required tests** (`tests/server/providers.test.ts` unless noted):
+  - a second provider implementation (in-memory) proves the abstraction; provider and model listing; valid generation
+  - unknown provider; unknown model; a pair valid on A sent to B; A→B continuity in one conversation (history and per-reply provider attributes)
+  - an unreachable provider at startup (non-blocking, `unavailable`); a failed refresh keeps the stale list; unexpected model-list shapes
+  - SSRF: every blocked category including IPv4-mapped metadata, exact link-local exceptions vs near misses, metadata precedence over exceptions and allowlist, URL scheme/credentials/fragment/query, DNS rebinding via a test resolver with proof of pinning, redirect refusal, load-time disabling, request-time refusal
+  - provider removal leaves conversations intact; no API key or base URL in any response; a saturated provider A rejects while B accepts (also in `manager.test.ts`); bootstrap then authoritative file
+  - `verify:compose` exercises the policy through real Docker/Podman routing: LAN address and host alias allowed, cloud metadata refused.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (17 files, 328 tests)
+  - `verify`: PASS (68/68)
+  - `verify:compose`: PASS on Docker and rootless Podman (CI run 36549077339)
+  - `npm audit`: 0 vulnerabilities
+  - Live: discovery against the real llama.cpp router (8 models; `Gemma 4` loaded, 262,144 context, modalities from discovery) through the pinned SSRF fetch. The key appears only in `providers.json` (0600), never in logs.
+- **Invariants:**
+  - INV-18 → `ModelCatalog.resolve` in `SendService` → provider tests.
+  - INV-19 → `ssrf.ts` at load and per request → SSRF suite.
+  - INV-04 → key and base URL never returned → provider tests.
+- **Bugs found and fixed:** Node calls a custom `lookup` with `all: true` (autoSelectFamily), so the pinned lookup must answer in array form. The DNS-rebinding test caught this.
+- **Dependencies:**
+  - `undici` 8.11.2: `Agent` with a custom `lookup` for connection pinning (Node's global fetch exposes no dispatcher of its own).
+  - `ipaddr.js` 2.5.0: maintained IP parsing and range classification, including IPv4-mapped IPv6.
+- **Deviations / limitations / unverified items:**
+  - Admin editing of providers is Phase 10 (edit the file and restart).
+  - The `loading` model status and autoload latency are still UNVERIFIED.
+  - Metadata addresses beyond the documented set (other clouds) should be added as deployments require.
+  - Podman SELinux: NOT RUN.
+- **Commit/tag status:** commit `feat(phase-5): multi-provider model discovery and validation` and tag `phase-5`, pushed to `origin/main`.
+- **Questions needing approval:** none.

@@ -31,14 +31,19 @@ function gatedProvider() {
   return { provider, gate };
 }
 
+/** The test provider behind each manager (generations carry their provider). */
+const providerOf = new WeakMap<GenerationManager, Provider>();
+
 function manager(provider: Provider, maxActiveGenerations = 10) {
-  return new GenerationManager({
-    provider,
+  const generations = new GenerationManager({
     logger: captureLogger().logger,
     maxOutputTokens: 10,
     generationMaxMs: 10_000,
     maxActiveGenerations,
+    providerLimits: { p: 100 },
   });
+  providerOf.set(generations, provider);
+  return generations;
 }
 
 function launch(
@@ -47,10 +52,11 @@ function launch(
   conversationKey = "u/c",
 ) {
   const generationId = randomUUID();
-  generations.launch(generations.reserve("u", conversationKey), {
+  generations.launch(generations.reserve("u", conversationKey, "p"), {
     generationId,
     assistantMessageId: randomUUID(),
     conversationId: randomUUID(),
+    provider: providerOf.get(generations) as Provider,
     model: "m",
     messages: [{ role: "user", content: "x" }],
     persist: (outcome) => {
@@ -115,42 +121,56 @@ describe("generation state machine", () => {
     const { provider, gate } = gatedProvider();
     const generations = manager(provider);
     const id = launch(generations, [], "u/one");
-    expect(() => generations.reserve("u", "u/one")).toThrow(
+    expect(() => generations.reserve("u", "u/one", "p")).toThrow(
       expect.objectContaining({ code: "GENERATION_IN_PROGRESS" }) as Error,
     );
-    expect(() => generations.reserve("u", "u/two")).not.toThrow();
+    expect(() => generations.reserve("u", "u/two", "p")).not.toThrow();
     gate.resolve();
     await generations.settled(id);
     expect(generations.activeFor("u/one")).toBeUndefined();
   });
 
   it("INV-62: the per-user cap limits one user without blocking another", () => {
-    const { provider } = gatedProvider();
     const generations = new GenerationManager({
-      provider,
       logger: captureLogger().logger,
       maxOutputTokens: 10,
       generationMaxMs: 10_000,
       maxActiveGenerations: 10,
       maxActivePerUser: 2,
+      providerLimits: { p: 100 },
     });
-    generations.reserve("alice", "alice/a");
-    generations.reserve("alice", "alice/b");
-    expect(() => generations.reserve("alice", "alice/c")).toThrow(
+    generations.reserve("alice", "alice/a", "p");
+    generations.reserve("alice", "alice/b", "p");
+    expect(() => generations.reserve("alice", "alice/c", "p")).toThrow(
       expect.objectContaining({ code: "RATE_LIMITED" }) as Error,
     );
-    expect(() => generations.reserve("bob", "bob/a")).not.toThrow();
+    expect(() => generations.reserve("bob", "bob/a", "p")).not.toThrow();
+  });
+
+  it("a saturated provider rejects its own starts while another provider still accepts", () => {
+    const generations = new GenerationManager({
+      logger: captureLogger().logger,
+      maxOutputTokens: 10,
+      generationMaxMs: 10_000,
+      maxActiveGenerations: 10,
+      providerLimits: { a: 1, b: 1 },
+    });
+    generations.reserve("u", "u/1", "a");
+    expect(() => generations.reserve("u", "u/2", "a")).toThrow(
+      expect.objectContaining({ code: "RATE_LIMITED" }) as Error,
+    );
+    expect(() => generations.reserve("u", "u/3", "b")).not.toThrow();
   });
 
   it("admission counts reservations and running generations", () => {
     const { provider } = gatedProvider();
     const generations = manager(provider, 1);
-    const reservation = generations.reserve("u", "u/a");
-    expect(() => generations.reserve("u", "u/b")).toThrow(
+    const reservation = generations.reserve("u", "u/a", "p");
+    expect(() => generations.reserve("u", "u/b", "p")).toThrow(
       expect.objectContaining({ code: "RATE_LIMITED" }) as Error,
     );
     reservation.release();
-    expect(() => generations.reserve("u", "u/b")).not.toThrow();
+    expect(() => generations.reserve("u", "u/b", "p")).not.toThrow();
   });
 
   it("an observer that unsubscribes does not affect the generation (INV-06)", async () => {
@@ -178,7 +198,7 @@ describe("generation state machine", () => {
       state: "failed",
       error: { code: "INTERNAL" },
     });
-    expect(() => generations.reserve("u", "u/x")).toThrow(
+    expect(() => generations.reserve("u", "u/x", "p")).toThrow(
       expect.objectContaining({ code: "RATE_LIMITED" }) as Error,
     );
   });

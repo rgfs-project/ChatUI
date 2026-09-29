@@ -26,8 +26,6 @@ import {
 import { counterFor } from "./token-counter.ts";
 
 const DAY_MS = 86_400_000;
-/** Written on assistant blocks until Phase 5 introduces configured providers. */
-export const LOCAL_PROVIDER_ID = "local";
 
 const STATUS: Record<GenerationOutcome["state"], AssistantStatus> = {
   completed: "complete",
@@ -49,7 +47,6 @@ export interface SendServiceOptions {
   operations: OperationStore;
   catalog: ModelCatalog;
   generations: GenerationManager;
-  provider: Provider;
   logger: Logger;
   maxOutputTokens: number;
   operationRetentionMs: number;
@@ -58,7 +55,7 @@ export interface SendServiceOptions {
   now?: () => Date;
   hooks?: SendHooks;
   /** Overrides token counting (tests). */
-  counterFor?: (model: string) => Promise<TokenCounter>;
+  counterFor?: (providerId: string, model: string) => Promise<TokenCounter>;
 }
 
 function resultOf(record: OperationRecord): StartGenerationResponse {
@@ -87,11 +84,12 @@ export class SendService {
   }
 
   static payloadHash(
-    request: Pick<StartGenerationRequest, "conversationId" | "model" | "content">,
+    request: Pick<StartGenerationRequest, "conversationId" | "providerId" | "model" | "content">,
   ): string {
     return sha256Hex(
       JSON.stringify({
         conversationId: request.conversationId ?? null,
+        providerId: request.providerId,
         model: request.model,
         content: normalizeBody(request.content),
       }),
@@ -166,7 +164,9 @@ export class SendService {
     const conversationKey = `${userId}/${conversationId}`;
     this.o.generations.assertAdmission();
     if (request.conversationId) this.o.generations.assertIdle(conversationKey);
-    const model = await this.o.catalog.resolve(request.model);
+    // The browser's (provider, model) pair is untrusted: validate it (INV-18).
+    const model = await this.o.catalog.resolve(request.providerId, request.model);
+    const provider = this.o.catalog.provider(model.providerId);
 
     for (let attempt = 0; attempt < 2; attempt++) {
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
@@ -178,6 +178,8 @@ export class SendService {
       const prompt = await this.preflight(
         snapshot?.model ?? null,
         content,
+        provider,
+        model.providerId,
         model.id,
         model.contextTokens,
       );
@@ -197,12 +199,14 @@ export class SendService {
         if ((current?.revision ?? null) !== (snapshot?.revision ?? null)) return "changed" as const;
         const again = await this.checkKey(userId, request, payloadHash);
         if (again) return { response: again, launch: undefined };
-        const reservation = this.o.generations.reserve(userId, conversationKey);
+        const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
         return this.commit(userId, {
           request,
           payloadHash,
           conversationId,
           content,
+          provider,
+          providerId: model.providerId,
           model: model.id,
           current,
           prompt,
@@ -237,6 +241,8 @@ export class SendService {
   private async preflight(
     current: ConversationModel | null,
     content: string,
+    provider: Provider,
+    providerId: string,
     model: string,
     contextTokens: number,
   ): Promise<AssembledPrompt> {
@@ -252,8 +258,8 @@ export class SendService {
     };
     const budget = Math.max(0, contextTokens - this.o.maxOutputTokens);
     const counter = this.o.counterFor
-      ? await this.o.counterFor(model)
-      : await counterFor(this.o.provider, model, this.o.templateOverheadTokens);
+      ? await this.o.counterFor(providerId, model)
+      : await counterFor(provider, model, this.o.templateOverheadTokens);
     try {
       return await assemblePrompt(withUser, {
         budget,
@@ -279,6 +285,8 @@ export class SendService {
       payloadHash: string;
       conversationId: string;
       content: string;
+      provider: Provider;
+      providerId: string;
       model: string;
       current: { model: ConversationModel; revision: string } | null;
       prompt: AssembledPrompt;
@@ -332,10 +340,18 @@ export class SendService {
         this.o.generations.launch(reservation, {
           ...ids,
           conversationId,
+          provider: input.provider,
           model: input.model,
           messages: input.prompt.messages,
           persist: (outcome) =>
-            this.persistOutcome(userId, conversationId, input.model, record, outcome),
+            this.persistOutcome(
+              userId,
+              conversationId,
+              input.providerId,
+              input.model,
+              record,
+              outcome,
+            ),
         });
       };
       return { response: { conversationId, ...ids }, launch };
@@ -366,6 +382,7 @@ export class SendService {
   private persistOutcome(
     userId: string,
     conversationId: string,
+    providerId: string,
     model: string,
     record: OperationRecord,
     outcome: GenerationOutcome,
@@ -411,7 +428,7 @@ export class SendService {
         type: "assistant",
         id: record.assistantMessageId,
         status: STATUS[outcome.state],
-        provider: LOCAL_PROVIDER_ID,
+        provider: providerId,
         model,
         time: outcome.finishedAt,
         body: normalizeBody(outcome.content),

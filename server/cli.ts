@@ -8,6 +8,7 @@ import { ConfigError, loadConfig } from "./config.ts";
 import { ChatIndex } from "./storage/chat-index.ts";
 import { DataPaths } from "./storage/paths.ts";
 import { PASSWORD_MAX, PASSWORD_MIN, PasswordHasher } from "./auth/passwords.ts";
+import { createSafeFetch, SsrfError } from "./providers/ssrf.ts";
 import { KeyedLocks } from "./storage/locks.ts";
 import { accountIds } from "./storage/recovery.ts";
 import { UserError, UserStore } from "./storage/users.ts";
@@ -57,8 +58,9 @@ async function healthcheck(): Promise<number> {
 async function providerCheck(): Promise<number> {
   let baseUrl: string | undefined;
   let apiKey: string | undefined;
+  let ssrf: ReturnType<typeof loadConfig>["provider"]["ssrf"];
   try {
-    ({ baseUrl, apiKey } = loadConfig(process.env).provider);
+    ({ baseUrl, apiKey, ssrf } = loadConfig(process.env).provider);
   } catch (error) {
     process.stderr.write(
       `${error instanceof ConfigError ? error.message : "Invalid configuration"}\n`,
@@ -71,7 +73,9 @@ async function providerCheck(): Promise<number> {
   }
   const origin = new URL(baseUrl).origin;
   try {
-    const response = await fetch(`${baseUrl}/v1/models`, {
+    // Same network policy as the server: resolved, checked, pinned, no redirects.
+    const safeFetch = createSafeFetch(ssrf);
+    const response = await safeFetch(`${baseUrl}/v1/models`, {
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
       signal: AbortSignal.timeout(10_000),
     });
@@ -92,6 +96,12 @@ async function providerCheck(): Promise<number> {
     process.stdout.write(`${origin}: OK, ${String(count)} model(s) reported.\n`);
     return 0;
   } catch (error) {
+    if (error instanceof SsrfError) {
+      process.stderr.write(
+        `${origin}: refused by the provider network policy (${error.message}).\n`,
+      );
+      return 1;
+    }
     const reason =
       error instanceof Error && error.name === "TimeoutError" ? "timed out" : "unreachable";
     process.stderr.write(

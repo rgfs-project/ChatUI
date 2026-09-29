@@ -8,6 +8,8 @@ import { GenerationManager } from "./generations/manager.ts";
 import { DEFAULT_SSE_OPTIONS, SseConnections, type SseOptions } from "./generations/sse.ts";
 import { createLlamaCppProvider } from "./providers/llamacpp.ts";
 import type { Provider } from "./providers/types.ts";
+import { loadProviders, type ProviderEntry } from "./providers/config.ts";
+import { createSafeFetch, type Resolver } from "./providers/ssrf.ts";
 import { PasswordHasher } from "./auth/passwords.ts";
 import { AuthService, type AuthContext } from "./auth/service.ts";
 import { SessionStore } from "./auth/sessions.ts";
@@ -56,8 +58,10 @@ export interface AppOptions {
   clientDir?: string;
   /** Overrides the API inventory (tests only). */
   routes?: readonly AnyApiRoute[];
-  /** Overrides the llama.cpp provider (tests only). */
-  provider?: Provider;
+  /** Builds a provider for a configured entry (tests: alternative implementations). */
+  providerFactory?: (entry: ProviderEntry) => Provider;
+  /** DNS resolver for the SSRF guard (tests: rebinding scenarios). */
+  resolver?: Resolver;
   /** SSE tuning (tests only). */
   sse?: Partial<SseOptions>;
   /** Generation retention tuning (tests only). */
@@ -92,10 +96,8 @@ export function createApp(options: AppOptions): ChatUiApp {
   const providerConfig = options.config.provider;
   const storageConfig = options.config.storage;
   const authConfig = options.config.auth;
-  const provider = options.provider ?? createLlamaCppProvider(providerConfig);
-  const models = new ModelCatalog(provider, providerConfig.defaultContextTokens);
+  const safeFetch = createSafeFetch(providerConfig.ssrf, options.resolver);
   const generations = new GenerationManager({
-    provider,
     logger,
     maxOutputTokens: providerConfig.maxOutputTokens,
     generationMaxMs: providerConfig.generationMaxMs,
@@ -105,20 +107,38 @@ export function createApp(options: AppOptions): ChatUiApp {
     now,
     ...options.generationRetention,
   });
-  if (providerConfig.maxActiveGenerations === undefined && providerConfig.baseUrl) {
-    provider.discoverSlots().then(
-      (slots) => {
-        if (slots !== undefined) generations.setMaxActiveGenerations(slots);
-        logger.info(
-          { maxActiveGenerations: generations.maxActiveGenerations },
-          "generation admission limit",
-        );
-      },
-      () => {
-        logger.warn("could not discover provider slots; admitting one generation at a time");
-      },
-    );
-  }
+  /** Global cap: explicit MAX_ACTIVE_GENERATIONS, else the sum of provider limits. */
+  const updateGlobalLimit = () => {
+    if (providerConfig.maxActiveGenerations !== undefined) return;
+    const sum = models
+      .providerIds()
+      .reduce((total, id) => total + generations.providerLimit(id), 0);
+    generations.setMaxActiveGenerations(Math.max(1, sum));
+  };
+  const slotsLearned = new Set<string>();
+  const models = new ModelCatalog({
+    providers: [],
+    defaultContextTokens: providerConfig.defaultContextTokens,
+    logger,
+    // Per-provider admission defaults to the provider's discovered slots, else 1.
+    onDiscovered: (providerId, provider) => {
+      if (
+        slotsLearned.has(providerId) ||
+        models.entry(providerId)?.maxActiveGenerations !== undefined
+      )
+        return;
+      slotsLearned.add(providerId);
+      provider.discoverSlots().then(
+        (slots) => {
+          if (slots === undefined) return;
+          generations.setProviderLimit(providerId, slots);
+          updateGlobalLimit();
+          logger.info({ providerId, slots }, "provider admission limit discovered");
+        },
+        () => undefined,
+      );
+    },
+  });
 
   const paths = new DataPaths(options.config.dataDir);
   const locks = new KeyedLocks();
@@ -130,7 +150,6 @@ export function createApp(options: AppOptions): ChatUiApp {
     operations,
     catalog: models,
     generations,
-    provider,
     logger,
     maxOutputTokens: providerConfig.maxOutputTokens,
     operationRetentionMs: storageConfig.operationRetentionMs,
@@ -172,6 +191,33 @@ export function createApp(options: AppOptions): ChatUiApp {
     });
     await users.rebuildIndex();
     await sessions.sweep();
+    // Providers: authoritative providers.json (bootstrapped once from LLAMA_*).
+    const loaded = await loadProviders({
+      paths,
+      policy: providerConfig.ssrf,
+      logger,
+      bootstrap: { baseUrl: providerConfig.baseUrl, apiKey: providerConfig.apiKey },
+    });
+    models.configure(
+      loaded.valid.map((entry) => ({
+        entry,
+        provider:
+          options.providerFactory?.(entry) ??
+          createLlamaCppProvider({
+            baseUrl: entry.baseUrl,
+            apiKey: entry.apiKey,
+            timeoutMs: entry.timeoutMs ?? providerConfig.timeoutMs,
+            maxResponseBytes: providerConfig.maxResponseBytes,
+            fetch: safeFetch,
+          }),
+      })),
+      loaded.invalid,
+    );
+    for (const entry of loaded.valid)
+      generations.setProviderLimit(entry.id, entry.maxActiveGenerations ?? 1);
+    updateGlobalLimit();
+    // Discovery never blocks startup.
+    models.warmUp();
     return report;
   })();
   // Expired sessions and committed operation records are removed hourly.
