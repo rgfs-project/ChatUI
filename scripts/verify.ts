@@ -267,7 +267,7 @@ async function persistenceChecks(llamaUrl: string): Promise<void> {
  * logout and disabled accounts, on the production build.
  */
 async function authChecks(base: string, dataDir: string, admin: ApiSession): Promise<void> {
-  const anon = await fetch(`${base}/chat?c=00000000-0000-4000-8000-000000000000`, {
+  const anon = await fetch(`${base}/chat/00000000-0000-4000-8000-000000000000`, {
     redirect: "manual",
   });
   await anon.arrayBuffer();
@@ -275,7 +275,7 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
     "INV-54: signed out, /chat redirects to sign-in with a validated return-to",
     anon.status === 302 &&
       anon.headers.get("location") ===
-        "/login?returnTo=%2Fchat%3Fc%3D00000000-0000-4000-8000-000000000000",
+        "/login?returnTo=%2Fchat%2F00000000-0000-4000-8000-000000000000",
     `${String(anon.status)} ${anon.headers.get("location") ?? ""}`,
   );
   const anonApi = await fetch(`${base}/api/conversations`);
@@ -287,7 +287,7 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
   const bob = await apiLogin(base, "bob", PASSWORD);
   if (!bob) return;
   const secret = await sendAndWait(base, admin, MOCK_MODELS.chat, "admin-only secret");
-  const doc = await fetch(`${base}/chat?c=${secret.conversationId}`, {
+  const doc = await fetch(`${base}/chat/${secret.conversationId}`, {
     headers: sessionHeaders(admin),
   });
   const docHtml = await doc.text();
@@ -297,7 +297,7 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
       doc.headers.get("cache-control") === "private, no-store" &&
       docHtml.includes("admin-only secret"),
   );
-  const cross = await fetch(`${base}/chat?c=${secret.conversationId}`, {
+  const cross = await fetch(`${base}/chat/${secret.conversationId}`, {
     headers: sessionHeaders(bob),
   });
   const crossHtml = await cross.text();
@@ -315,7 +315,7 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
   const mixed = await Promise.all(
     Array.from({ length: 20 }, (_, i) => {
       const who = i % 2 === 0 ? admin : bob;
-      return fetch(`${base}/chat`, { headers: sessionHeaders(who) }).then(async (r) => ({
+      return fetch(`${base}/chat/new`, { headers: sessionHeaders(who) }).then(async (r) => ({
         who,
         html: await r.text(),
       }));
