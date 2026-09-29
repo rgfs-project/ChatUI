@@ -6,6 +6,22 @@ import {
   useSyncExternalStore,
   type SyntheticEvent,
 } from "react";
+import {
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  LogOut,
+  PanelLeft,
+  Pencil,
+  RefreshCw,
+  Settings,
+  Square,
+  SquarePen,
+  Trash2,
+} from "lucide-react";
+import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, redirect, useNavigate, useRevalidator } from "react-router";
 import type { ConversationDto, ConversationSummary, MessageDto } from "@shared/conversations";
 import {
@@ -143,25 +159,76 @@ async function errorOf(response: Response): Promise<{ code: string | null; messa
   }
 }
 
+/** Copies a reply to the clipboard, confirming briefly. */
+function CopyButton({ text, label = "Copy reply" }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="icon-btn"
+      aria-label={copied ? "Copied" : label}
+      title={copied ? "Copied" : "Copy"}
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => {
+            setCopied(false);
+          }, 1500);
+        });
+      }}
+    >
+      {copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
+    </button>
+  );
+}
+
+/** Collapsed reasoning: "Thought process ›", expands in place. */
+function Reasoning({ text, done, testId }: { text: string; done: boolean; testId?: string }) {
+  return (
+    <details className="reasoning" data-testid={testId}>
+      <summary>
+        {done ? "Thought process" : "Thinking…"}
+        <ChevronRight size={16} className="chevron" aria-hidden />
+      </summary>
+      <p>{text}</p>
+    </details>
+  );
+}
+
 function Message({ message }: { message: MessageDto }) {
   const label =
     message.role === "user" ? "You" : message.role === "assistant" ? "Assistant" : "System";
+  const status = message.status ? STATUS_LABEL[message.status] : "";
+  if (message.role === "user")
+    return (
+      <li className="turn turn-user" data-testid="message-user">
+        <span className="turn-role visually-hidden">{label}</span>
+        <div className="bubble">
+          <p>{message.content}</p>
+        </div>
+        <div className="turn-actions">
+          <CopyButton text={message.content} label="Copy message" />
+        </div>
+      </li>
+    );
   return (
     <li className={`turn turn-${message.role}`} data-testid={`message-${message.role}`}>
       <span className="turn-role">
-        {label}
-        {message.status && STATUS_LABEL[message.status] ? ` · ${STATUS_LABEL[message.status]}` : ""}
+        <span className="visually-hidden">{label}</span>
+        {status ? <span className="badge">{status}</span> : null}
       </span>
-      {message.reasoning ? (
-        <details className="reasoning">
-          <summary>Reasoning</summary>
-          <p>{message.reasoning}</p>
-        </details>
-      ) : null}
+      {message.reasoning ? <Reasoning text={message.reasoning} done /> : null}
       <p>{message.content}</p>
+      {message.role === "assistant" && message.content ? (
+        <div className="turn-actions">
+          <CopyButton text={message.content} />
+        </div>
+      ) : null}
     </li>
   );
 }
+
+const NARROW = "(max-width: 767.98px)";
 
 export default function Chat({ loaderData }: Route.ComponentProps) {
   const { conversations, conversation, conversationError, groups: initialGroups } = loaderData;
@@ -176,6 +243,20 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
   const [live, setLive] = useState<Live | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // null: the sidebar follows the viewport (shown on wide screens, hidden on narrow ones).
+  const [navOpen, setNavOpen] = useState<boolean | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  const titleTriggerRef = useRef<HTMLButtonElement>(null);
+  // Set when a title-menu action moves focus elsewhere (title field, dialog).
+  const keepFocusRef = useRef(false);
+  useEffect(() => {
+    const dialog = deleteDialogRef.current;
+    if (!dialog) return;
+    if (pendingDelete && !dialog.open) dialog.showModal();
+    if (!pendingDelete && dialog.open) dialog.close();
+  }, [pendingDelete]);
 
   // The running generation: the one we just started, else the server's view.
   const serverActive = conversation?.activeGeneration?.generationId ?? null;
@@ -368,7 +449,7 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
   }
 
   async function remove(id: string) {
-    if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
+    setPendingDelete(null);
     const response = await apiFetch(`/api/conversations/${id}`, { method: "DELETE" });
     if (!response.ok) {
       setStatus((await errorOf(response)).message);
@@ -394,65 +475,175 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
     live !== null &&
     (running || !conversation?.messages.some((m) => m.id === live.assistantMessageId));
 
+  const empty = !conversation && !conversationError && !showLive;
+  const initial = (loaderData.username.at(0) ?? "?").toUpperCase();
+  const navClass = navOpen === null ? "" : navOpen ? " nav-open" : " nav-closed";
+
+  function toggleNav() {
+    const visible = navOpen ?? !window.matchMedia(NARROW).matches;
+    setNavOpen(!visible);
+  }
+  // On narrow screens the sidebar is an overlay; picking a destination closes it.
+  function afterNavigate() {
+    if (window.matchMedia(NARROW).matches) setNavOpen(null);
+  }
+
   return (
-    <div className="chat-layout">
+    <div className={`chat-layout${navClass}`}>
       <nav className="sidebar" aria-label="Conversations">
-        <Link to="/chat" className="new-chat">
-          New chat
+        <div className="sidebar-top">
+          <Link to="/chat" className="brand" onClick={afterNavigate}>
+            ChatUI
+          </Link>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Close sidebar"
+            title="Close sidebar"
+            onClick={toggleNav}
+            disabled={!hydrated}
+          >
+            <PanelLeft size={18} aria-hidden />
+          </button>
+        </div>
+        <Link to="/chat" className="nav-row" onClick={afterNavigate}>
+          <SquarePen size={18} aria-hidden /> New chat
         </Link>
-        <ul data-testid="conversation-list">
+        <p className="section-label">All chats</p>
+        <ul className="chat-list" data-testid="conversation-list">
           {conversations.map((item: ConversationSummary) => (
             <li key={item.id} className={item.id === loaderData.selectedId ? "current" : undefined}>
               <Link
                 to={`/chat?c=${item.id}`}
                 aria-current={item.id === loaderData.selectedId ? "page" : undefined}
+                onClick={afterNavigate}
               >
                 {item.malformed ? `${item.title} (unreadable)` : item.title}
               </Link>
             </li>
           ))}
         </ul>
-        <p className="hint">
-          <span data-testid="signed-in-user">{loaderData.username}</span> ·{" "}
-          <a href="/account">Account</a> ·{" "}
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => void logout()}
-            disabled={!hydrated}
-          >
-            Sign out
-          </button>
-        </p>
+        <Menu.Root modal={false}>
+          <Menu.Trigger className="account-trigger">
+            <span className="avatar" aria-hidden>
+              {initial}
+            </span>
+            <span data-testid="signed-in-user">{loaderData.username}</span>
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content className="menu-popover account-popover" side="top" sideOffset={6}>
+              <Menu.Item asChild>
+                <a href="/account" className="menu-item">
+                  <Settings size={17} aria-hidden /> Settings
+                </a>
+              </Menu.Item>
+              <Menu.Separator className="menu-separator" />
+              <Menu.Item className="menu-item" onSelect={() => void logout()}>
+                <LogOut size={17} aria-hidden /> Sign out
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
       </nav>
+      <button
+        type="button"
+        className="nav-backdrop"
+        aria-label="Close sidebar"
+        tabIndex={-1}
+        onClick={toggleNav}
+      />
 
-      <main className="chat">
+      <main className={`chat${empty ? " chat-empty" : ""}`}>
         <header className="chat-header">
-          {conversation ? (
+          <span className="collapsed-only">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Open sidebar"
+              title="Open sidebar"
+              onClick={toggleNav}
+              disabled={!hydrated}
+            >
+              <PanelLeft size={18} aria-hidden />
+            </button>
+            <Link to="/chat" className="icon-btn" aria-label="New chat" title="New chat">
+              <SquarePen size={18} aria-hidden />
+            </Link>
+          </span>
+          {conversation && editingTitle ? (
             <form
               className="title-form"
-              onSubmit={(event) => void rename(event)}
-              key={conversation.revision}
+              onSubmit={(event) => {
+                setEditingTitle(false);
+                void rename(event);
+              }}
             >
               <label htmlFor="title" className="visually-hidden">
                 Conversation title
               </label>
-              <input id="title" name="title" defaultValue={conversation.title} maxLength={200} />
-              <button type="submit" className="secondary" disabled={!hydrated}>
-                Rename
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                disabled={!hydrated}
-                onClick={() => void remove(conversation.id)}
-              >
-                Delete
-              </button>
+              <input
+                id="title"
+                name="title"
+                defaultValue={conversation.title}
+                maxLength={200}
+                autoFocus
+                onFocus={(event) => {
+                  event.currentTarget.select();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setEditingTitle(false);
+                }}
+                onBlur={() => {
+                  setEditingTitle(false);
+                }}
+              />
             </form>
-          ) : (
-            <h1>{conversationError ? "Conversation unavailable" : "New chat"}</h1>
-          )}
+          ) : conversation ? (
+            <Menu.Root modal={false}>
+              <Menu.Trigger
+                ref={titleTriggerRef}
+                className="title-trigger"
+                data-testid="conversation-menu"
+                aria-label={`Conversation options: ${conversation.title}`}
+              >
+                <span className="chat-title">{conversation.title}</span>
+                <ChevronDown size={16} aria-hidden />
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Content
+                  className="menu-popover"
+                  align="start"
+                  sideOffset={6}
+                  onCloseAutoFocus={(event) => {
+                    // Rename moves focus to the title field; Delete to the dialog.
+                    if (keepFocusRef.current) event.preventDefault();
+                    keepFocusRef.current = false;
+                  }}
+                >
+                  <Menu.Item
+                    className="menu-item"
+                    onSelect={() => {
+                      keepFocusRef.current = true;
+                      setEditingTitle(true);
+                    }}
+                  >
+                    <Pencil size={17} aria-hidden /> Rename
+                  </Menu.Item>
+                  <Menu.Item
+                    className="menu-item danger"
+                    onSelect={() => {
+                      keepFocusRef.current = true;
+                      setPendingDelete(conversation.id);
+                    }}
+                  >
+                    <Trash2 size={17} aria-hidden /> Delete
+                  </Menu.Item>
+                </Menu.Content>
+              </Menu.Portal>
+            </Menu.Root>
+          ) : conversationError ? (
+            <h1 className="chat-title">Conversation unavailable</h1>
+          ) : null}
         </header>
 
         {conversationError ? (
@@ -461,9 +652,11 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
             {loaderData.selectedId && UUID.test(loaderData.selectedId) ? (
               <button
                 type="button"
-                className="secondary"
+                className="ghost danger"
                 disabled={!hydrated}
-                onClick={() => void remove(loaderData.selectedId ?? "")}
+                onClick={() => {
+                  setPendingDelete(loaderData.selectedId);
+                }}
               >
                 Delete it
               </button>
@@ -471,117 +664,178 @@ export default function Chat({ loaderData }: Route.ComponentProps) {
           </p>
         ) : null}
 
-        <ol className="history" aria-label="Messages" data-testid="transcript">
-          {conversation?.messages.map((message) => (
-            <Message key={message.id} message={message} />
-          ))}
-        </ol>
+        <div className="scroll">
+          {empty ? <h1 className="greeting">How can I help, {loaderData.username}?</h1> : null}
+          <ol className="history" aria-label="Messages" data-testid="transcript">
+            {conversation?.messages.map((message) => (
+              <Message key={message.id} message={message} />
+            ))}
+          </ol>
 
-        {showLive ? (
-          <section className="response" aria-label="Reply in progress" data-testid="response">
-            {live.reasoning ? (
-              <details className="reasoning" data-testid="reasoning">
-                <summary>Reasoning</summary>
-                <p>{live.reasoning}</p>
-              </details>
-            ) : null}
-            <p className="content" data-testid="content">
-              {live.content}
-            </p>
-            <p className="gen-status" data-testid="generation-status">
-              {STATE_LABEL[live.state]}
-              {live.error ? ` — ${live.error.message}` : ""}
-            </p>
-            {running ? (
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => void cancel()}
-                disabled={!hydrated}
-              >
-                Stop generating
-              </button>
-            ) : null}
-          </section>
-        ) : null}
-
-        <p className="gen-status" role="status" aria-live="polite" data-testid="status">
-          {status ?? ""}
-        </p>
+          {showLive ? (
+            <section
+              className="turn turn-assistant response"
+              aria-label="Reply in progress"
+              data-testid="response"
+            >
+              {live.reasoning ? (
+                <Reasoning
+                  text={live.reasoning}
+                  done={!running || live.content !== ""}
+                  testId="reasoning"
+                />
+              ) : null}
+              <p className="content" data-testid="content">
+                {live.content}
+                {running ? <span className="cursor" aria-hidden /> : null}
+              </p>
+              <p className="gen-status" data-testid="generation-status">
+                {STATE_LABEL[live.state]}
+                {live.error ? ` — ${live.error.message}` : ""}
+              </p>
+            </section>
+          ) : null}
+        </div>
 
         <form
           className="composer"
           onSubmit={(event) => void send(event)}
           aria-label="Message composer"
         >
-          <label htmlFor="model">Model</label>
-          <div className="model-row">
-            <select
-              id="model"
-              name="model"
-              ref={modelRef}
-              defaultValue={defaultModel}
-              disabled={modelCount === 0}
-            >
-              {modelCount === 0 ? <option value="">No models available</option> : null}
-              {groups.map((group) => (
-                <optgroup
-                  key={group.provider.id}
-                  label={`${group.provider.name}${
-                    group.provider.status === "unavailable"
-                      ? " (unavailable)"
-                      : group.stale
-                        ? " (list may be out of date)"
-                        : ""
-                  }`}
-                >
-                  {group.models.map((model) => (
-                    <option key={model.id} value={JSON.stringify([model.providerId, model.id])}>
-                      {model.id}
-                      {model.status === "unloaded" ? " (not loaded)" : ""}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => void refreshModels()}
-              disabled={!hydrated}
-            >
-              Refresh
-            </button>
-          </div>
+          <p
+            className="gen-status composer-status"
+            role="status"
+            aria-live="polite"
+            data-testid="status"
+          >
+            {status ?? ""}
+          </p>
           {modelError ? (
             <p className="error" role="alert">
               {modelError}
             </p>
           ) : null}
-          <label htmlFor="message">Message</label>
-          <textarea
-            id="message"
-            name="message"
-            ref={textareaRef}
-            rows={4}
-            placeholder="Ask anything…"
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-          />
-          <div className="composer-actions">
-            <span className="hint">
-              {hydrated ? "Enter to send, Shift+Enter for a new line" : "Loading…"}
+          <div className="composer-box">
+            <label htmlFor="message" className="visually-hidden">
+              Message
+            </label>
+            <textarea
+              id="message"
+              name="message"
+              ref={textareaRef}
+              rows={1}
+              placeholder="Ask anything"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+            />
+            <label htmlFor="model" className="visually-hidden">
+              Model
+            </label>
+            <span className="model-picker">
+              <select
+                id="model"
+                name="model"
+                className="model-select"
+                ref={modelRef}
+                defaultValue={defaultModel}
+                disabled={modelCount === 0}
+              >
+                {modelCount === 0 ? <option value="">No models available</option> : null}
+                {groups.map((group) => (
+                  <optgroup
+                    key={group.provider.id}
+                    label={`${group.provider.name}${
+                      group.provider.status === "unavailable"
+                        ? " (unavailable)"
+                        : group.stale
+                          ? " (list may be out of date)"
+                          : ""
+                    }`}
+                  >
+                    {group.models.map((model) => (
+                      <option key={model.id} value={JSON.stringify([model.providerId, model.id])}>
+                        {model.id}
+                        {model.status === "unloaded" ? " (not loaded)" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <ChevronDown size={15} className="model-chevron" aria-hidden />
             </span>
-            <button type="submit" disabled={!canSend}>
-              Send
+            <button
+              type="button"
+              className="icon-btn round"
+              aria-label="Refresh models"
+              title="Refresh the model list"
+              onClick={() => void refreshModels()}
+              disabled={!hydrated}
+            >
+              <RefreshCw size={16} aria-hidden />
             </button>
+            {running ? (
+              <button
+                type="button"
+                className="send-btn"
+                aria-label="Stop generating"
+                title="Stop generating"
+                onClick={() => void cancel()}
+                disabled={!hydrated}
+              >
+                <Square size={13} fill="currentColor" aria-hidden />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="send-btn"
+                aria-label="Send"
+                title="Send (Enter) · New line (Shift+Enter)"
+                disabled={!canSend}
+              >
+                <ArrowUp size={18} strokeWidth={2.25} aria-hidden />
+              </button>
+            )}
           </div>
         </form>
       </main>
+
+      <dialog
+        ref={deleteDialogRef}
+        className="confirm-dialog"
+        aria-labelledby="delete-title"
+        onClose={() => {
+          setPendingDelete(null);
+          titleTriggerRef.current?.focus();
+        }}
+      >
+        <h2 id="delete-title">Delete this conversation?</h2>
+        <p>The conversation and every message in it are removed. This cannot be undone.</p>
+        <div className="dialog-actions">
+          <button
+            type="button"
+            className="ghost"
+            autoFocus
+            onClick={() => {
+              setPendingDelete(null);
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="secondary danger-outline"
+            onClick={() => {
+              if (pendingDelete) void remove(pendingDelete);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </dialog>
     </div>
   );
 }

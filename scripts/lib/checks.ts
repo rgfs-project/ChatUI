@@ -281,7 +281,7 @@ export async function chatChecks(
   check("/chat server HTML lists discovered models", html.includes(`&quot;${models.chat}&quot;`));
   check(
     "/chat Send is disabled until hydration (no fake no-JS send)",
-    html.includes('<button type="submit" disabled=""'),
+    /<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>/.test(html),
   );
 
   // API send over real HTTP + SSE, persisted canonically.
@@ -406,14 +406,18 @@ export async function chatChecks(
     check("Stop cancels and stores a cancelled reply", true);
 
     // Rename and delete.
+    await page.getByTestId("conversation-menu").click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
     await page.locator("#title").fill("Renamed in verify");
-    await page.getByRole("button", { name: "Rename" }).click();
+    await page.locator("#title").press("Enter");
     await page
       .getByTestId("conversation-list")
       .filter({ hasText: "Renamed in verify" })
       .waitFor({ timeout: 5_000 });
     check("rename updates the title", true);
-    await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByTestId("conversation-menu").click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
     await page.waitForURL(/\/chat$/);
     check(
       "delete removes the conversation",
