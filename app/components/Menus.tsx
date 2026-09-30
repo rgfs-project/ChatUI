@@ -4,6 +4,8 @@ import {
   LogOut,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Settings,
   Shield,
   Trash2,
@@ -49,6 +51,8 @@ function Items({ items }: { items: (MenuItemSpec | "separator")[] }) {
 export function RowMenu(props: {
   title: string;
   malformed: boolean;
+  pinned: boolean;
+  onTogglePin: () => void;
   defaultOpen: boolean;
   onTriggerFocus: (element: HTMLElement) => void;
   onOpen: () => void;
@@ -90,6 +94,15 @@ export function RowMenu(props: {
                     },
                   ]),
               {
+                label: props.pinned ? "Unpin" : "Pin",
+                icon: props.pinned ? (
+                  <PinOff size={16} aria-hidden />
+                ) : (
+                  <Pin size={16} aria-hidden />
+                ),
+                onSelect: props.onTogglePin,
+              },
+              {
                 label: "Delete",
                 icon: <Trash2 size={16} aria-hidden />,
                 danger: true,
@@ -111,8 +124,12 @@ export function TitleMenu({
   onOpen,
   onRename,
   onDelete,
+  pinned,
+  onTogglePin,
 }: {
   title: string;
+  pinned: boolean;
+  onTogglePin: () => void;
   defaultOpen: boolean;
   triggerRef: Ref<HTMLButtonElement>;
   onOpen: () => void;
@@ -136,6 +153,7 @@ export function TitleMenu({
           <Items
             items={[
               { label: "Rename", onSelect: onRename },
+              { label: pinned ? "Unpin" : "Pin", onSelect: onTogglePin },
               { label: "Delete", danger: true, onSelect: onDelete },
             ]}
           />

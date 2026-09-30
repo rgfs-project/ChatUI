@@ -1,6 +1,9 @@
 import { CircleUserRound, Paperclip, ScrollText, Shield } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { ConfirmDialog } from "../components/Dialogs";
+import { apiJson, queryKeys } from "../lib/query";
 import { AttachmentSettings } from "../components/AttachmentSettings";
 import { Overlay } from "../components/Overlay";
 import { SkillsSettings } from "../components/SkillsSettings";
@@ -86,9 +89,70 @@ export default function SettingsOverlay() {
                 Sign out
               </button>
             </div>
+            {user ? <ClearHistory userId={user.id} /> : null}
           </section>
         )}
       </div>
     </Overlay>
+  );
+}
+
+/**
+ * Settings → Account → Delete all chats (contracts §4.2 clear history): every
+ * conversation with its attachments and pin. Preferences, skills and (later)
+ * memories and artifacts stay.
+ */
+function ClearHistory({ userId }: { userId: string }) {
+  const client = useQueryClient();
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const clear = useMutation({
+    mutationFn: () => apiJson<{ deleted: number }>("/api/conversations", { method: "DELETE" }),
+    onSuccess: async ({ deleted }) => {
+      setResult(`${String(deleted)} chat${deleted === 1 ? "" : "s"} deleted.`);
+      client.removeQueries({ queryKey: ["user", userId, "conversation"] });
+      client.removeQueries({ queryKey: ["user", userId, "search"] });
+      await client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
+      await navigate(paths.settings(), { replace: true, state: { background: paths.newChat() } });
+    },
+    onError: () => {
+      setResult("The chats couldn’t be deleted. Try again.");
+    },
+  });
+  return (
+    <div className="settings-row">
+      <div>
+        <p className="settings-label">Delete all chats</p>
+        <p className="settings-hint">
+          Permanently deletes every conversation and its attachments. Settings and skills stay.
+        </p>
+        {result ? (
+          <p className="settings-hint" role="status">
+            {result}
+          </p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        className="secondary danger-outline"
+        disabled={clear.isPending}
+        onClick={() => {
+          setConfirming(true);
+        }}
+      >
+        Delete all
+      </button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Delete all chats?"
+        description="Every conversation and its attachments will be permanently deleted. This cannot be undone."
+        confirmLabel="Delete all"
+        onConfirm={() => {
+          clear.mutate();
+        }}
+      />
+    </div>
   );
 }

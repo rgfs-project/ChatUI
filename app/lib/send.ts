@@ -79,7 +79,7 @@ export function newSendVariables(
   };
 }
 
-function stillCurrent(vars: SendVariables): boolean {
+function stillCurrent(vars: { userId: string; epoch: number }): boolean {
   const auth = authStore.get();
   return (
     auth.status === "authenticated" &&
@@ -99,10 +99,58 @@ export async function sendWithRetries(vars: SendVariables): Promise<StartGenerat
     operationIssuedAt: vars.operationIssuedAt,
     ...(vars.attachments?.length ? { attachmentIds: vars.attachments.map((a) => a.id) } : {}),
   });
+  return acceptWithRetries("/api/generations", body, vars);
+}
+
+/** A regeneration (contracts §4.2): accepted like a send, keyed the same way. */
+export interface RegenerateVariables {
+  userId: string;
+  epoch: number;
+  conversationId: string;
+  userMessageId: string;
+  providerId: string;
+  model: string;
+  expectedRevision: string;
+  operationKey: string;
+  operationIssuedAt: string;
+}
+
+export function newRegenerateVariables(
+  fields: Omit<RegenerateVariables, "epoch" | "operationKey" | "operationIssuedAt">,
+): RegenerateVariables {
+  return {
+    ...fields,
+    epoch: authStore.get().epoch,
+    operationKey: crypto.randomUUID(),
+    operationIssuedAt: new Date().toISOString(),
+  };
+}
+
+export function regenerateWithRetries(vars: RegenerateVariables): Promise<StartGenerationResponse> {
+  const body = JSON.stringify({
+    userMessageId: vars.userMessageId,
+    providerId: vars.providerId,
+    model: vars.model,
+    expectedRevision: vars.expectedRevision,
+    operationKey: vars.operationKey,
+    operationIssuedAt: vars.operationIssuedAt,
+  });
+  return acceptWithRetries(
+    `/api/conversations/${encodeURIComponent(vars.conversationId)}/regenerate`,
+    body,
+    vars,
+  );
+}
+
+async function acceptWithRetries(
+  url: string,
+  body: string,
+  vars: { userId: string; epoch: number },
+): Promise<StartGenerationResponse> {
   for (let attempt = 0; ; attempt++) {
     if (!stillCurrent(vars)) throw new AccountChangedError("The signed-in account changed");
     try {
-      return await apiJson<StartGenerationResponse>("/api/generations", {
+      return await apiJson<StartGenerationResponse>(url, {
         method: "POST",
         body,
         isCurrent: () => stillCurrent(vars),

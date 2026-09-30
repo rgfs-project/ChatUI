@@ -613,6 +613,30 @@ export class AttachmentStore {
   }
 
   /**
+   * Removes linked attachments no longer referenced by a canonical user block
+   * (edit, delete exchange, regenerate truncation), after the Markdown write.
+   * Only attachments linked to `conversationId` are touched.
+   */
+  async deleteLinked(
+    userId: string,
+    conversationId: string,
+    ids: Iterable<string>,
+  ): Promise<number> {
+    let removed = 0;
+    for (const id of [...new Set(ids)].sort()) {
+      await this.writes.run(userId, () =>
+        this.locks.run(lockKey(userId, id), async () => {
+          const meta = await this.readMeta(userId, id);
+          if (meta?.conversationId !== conversationId) return;
+          await this.removeUnlocked(userId, id);
+          removed++;
+        }),
+      );
+    }
+    return removed;
+  }
+
+  /**
    * Startup step 7 (and hourly): link pending attachments that a user message
    * in the canonical Markdown already references (a crash between the
    * Markdown write and the link), then garbage-collect pending attachments

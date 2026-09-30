@@ -30,6 +30,8 @@ import {
   type TokenCounter,
 } from "./prompt.ts";
 import { counterFor } from "./token-counter.ts";
+import { attachmentRefs, truncateAfter } from "./turns.ts";
+import type { RegenerateRequest } from "@shared/conversations";
 import type { ModelDto } from "@shared/generations";
 import type { AttachmentMeta, AttachmentStore } from "../storage/attachments.ts";
 import type { PreferencesStore } from "../storage/preferences.ts";
@@ -155,7 +157,7 @@ export class SendService {
   /** Step 1: the operation key decides first, before admission/model/provider checks. */
   private async checkKey(
     userId: string,
-    request: StartGenerationRequest,
+    request: Pick<StartGenerationRequest, "operationKey">,
     payloadHash: string,
   ): Promise<StartGenerationResponse | undefined> {
     const record = await this.o.operations.read(userId, request.operationKey);
@@ -173,7 +175,7 @@ export class SendService {
     return undefined;
   }
 
-  private assertFresh(request: StartGenerationRequest): void {
+  private assertFresh(request: Pick<StartGenerationRequest, "operationIssuedAt">): void {
     const issued = Date.parse(request.operationIssuedAt);
     const now = this.now().getTime();
     if (
@@ -245,14 +247,12 @@ export class SendService {
           )
         : null;
       const prompt = await this.preflight(
-        snapshot?.model ?? null,
-        content,
+        this.withNewUser(snapshot?.model ?? null, content, attachmentIds),
         provider,
         model,
         resolved,
         skills,
         await this.expansion(userId, snapshot?.model ?? null, attachmentIds, model, mediaPolicy),
-        attachmentIds,
       );
       await this.o.hooks?.beforeRecheck?.();
 
@@ -307,6 +307,156 @@ export class SendService {
       ErrorCode.CONFLICT,
       "The conversation changed while sending; reload and try again",
     );
+  }
+
+  static regeneratePayloadHash(request: RegenerateRequest & { conversationId: string }): string {
+    return sha256Hex(
+      JSON.stringify({
+        kind: "regenerate",
+        conversationId: request.conversationId,
+        userMessageId: request.userMessageId,
+        providerId: request.providerId,
+        model: request.model,
+        expectedRevision: request.expectedRevision,
+      }),
+    );
+  }
+
+  /**
+   * Regenerate user turn k (contracts §4.2, §4.1): keep the user block, remove
+   * every block after it and start a generation with fresh generation and
+   * assistant ids; no duplicate user block. The replacement prompt is
+   * preflighted, including one fresh provider contact, before anything is
+   * truncated; the truncation and the reservation commit under the lock with
+   * an operation record, so a lost 202 is resolved by the same key.
+   */
+  async regenerate(
+    userId: string,
+    conversationId: string,
+    request: RegenerateRequest,
+    sender: Sender = { username: "", role: "user" },
+  ): Promise<StartGenerationResponse> {
+    const flightKey = `${userId}:${request.operationKey}`;
+    for (;;) {
+      const inflight = this.inflight.get(flightKey);
+      if (!inflight) break;
+      await inflight.catch(() => undefined);
+    }
+    const work = this.acceptRegenerate(userId, conversationId, request, sender);
+    this.inflight.set(flightKey, work);
+    try {
+      return await work;
+    } finally {
+      if (this.inflight.get(flightKey) === work) this.inflight.delete(flightKey);
+    }
+  }
+
+  private truncation(current: ConversationModel, userMessageId: string) {
+    const result = truncateAfter(current, userMessageId);
+    if ("kind" in result) {
+      if (result.kind === "not_found") throw new AppError(ErrorCode.NOT_FOUND, "Message not found");
+      throw new AppError(
+        ErrorCode.VALIDATION,
+        "This part of the conversation can't be regenerated (it isn't a regular exchange)",
+      );
+    }
+    return result;
+  }
+
+  private async acceptRegenerate(
+    userId: string,
+    conversationId: string,
+    request: RegenerateRequest,
+    sender: Sender,
+  ): Promise<StartGenerationResponse> {
+    const payloadHash = SendService.regeneratePayloadHash({ ...request, conversationId });
+    const known = await this.checkKey(userId, request, payloadHash);
+    if (known) return known;
+    this.assertFresh(request);
+    const conversationKey = `${userId}/${conversationId}`;
+    this.o.generations.assertAdmission();
+    this.o.generations.assertIdle(conversationKey);
+    const model = await this.o.catalog.resolve(request.providerId, request.model);
+    if (sender.role !== "admin" && this.o.settings?.isHidden(model.providerId, model.id))
+      throw new AppError(ErrorCode.MODEL_NOT_FOUND, "The selected model is not available");
+    const provider = this.o.catalog.provider(model.providerId);
+    const settingsFor = () =>
+      this.o.settings?.resolve(model.providerId, model.id, {
+        username: sender.username,
+        now: this.now(),
+      });
+    const skills = (await this.o.skills?.enabled(userId)) ?? new Map<string, SkillDto>();
+    const historyMedia = async () =>
+      (await this.o.preferences?.get(userId))?.historyImages ?? "include";
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const resolved = settingsFor();
+      const mediaPolicy = await historyMedia();
+      // Step 1: authorized snapshot, the caller's revision, a regular target.
+      const snapshot = await this.o.store.withLock(userId, conversationId, () =>
+        this.readExisting(userId, conversationId),
+      );
+      if (snapshot.revision !== request.expectedRevision)
+        throw new AppError(ErrorCode.CONFLICT, "The conversation changed; reload and try again");
+      const { model: truncated } = this.truncation(snapshot.model, request.userMessageId);
+      const target = truncated.blocks.at(-1);
+      const targetIds = target?.type === "user" ? (target.attachments ?? []) : [];
+      const attachmentStore = this.o.attachments;
+      if (attachmentStore && targetIds.length > 0) {
+        const metas = (
+          await Promise.all(targetIds.map((id) => attachmentStore.readMeta(userId, id)))
+        ).filter((m): m is AttachmentMeta => m !== null);
+        this.assertCapable(metas, model);
+      }
+      // Step 2 (no locks): one fresh provider contact, then the replacement prompt.
+      await this.o.catalog.contact(model.providerId);
+      const prompt = await this.preflight(
+        truncated,
+        provider,
+        model,
+        resolved,
+        skills,
+        await this.expansion(userId, truncated, [], model, mediaPolicy),
+      );
+      await this.o.hooks?.beforeRecheck?.();
+
+      // Step 3–4: recheck under the locks, then truncate and commit.
+      const outcome = await this.o.store.withLock(userId, conversationId, async () => {
+        const current = await this.readExisting(userId, conversationId);
+        if (current.revision !== snapshot.revision) return "changed" as const;
+        if ((settingsFor()?.revision ?? null) !== (resolved?.revision ?? null))
+          return "changed" as const;
+        if ((await historyMedia()) !== mediaPolicy) return "changed" as const;
+        const again = await this.checkKey(userId, request, payloadHash);
+        if (again) return { response: again, launch: undefined };
+        const truncation = this.truncation(current.model, request.userMessageId);
+        const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
+        return this.commit(userId, {
+          request,
+          payloadHash,
+          conversationId,
+          content: "",
+          provider,
+          providerId: model.providerId,
+          model: model.id,
+          current,
+          prompt,
+          reservation,
+          sampling: resolved?.sampling,
+          attachments: [],
+          regenerate: {
+            userMessageId: request.userMessageId,
+            next: truncation.model,
+            removed: truncation.removed,
+          },
+        });
+      });
+      if (outcome !== "changed") {
+        outcome.launch?.();
+        return outcome.response;
+      }
+    }
+    throw new AppError(ErrorCode.CONFLICT, "The conversation changed; reload and try again");
   }
 
   private withAttachmentLocks<T>(
@@ -419,25 +569,19 @@ export class SendService {
     return read.conversation;
   }
 
-  /** Step 2 (no locks held): prompt assembly and context budget, from canonical data only. */
-  private async preflight(
+  /** The prompt model of a send: the snapshot plus the new user message. */
+  private withNewUser(
     current: ConversationModel | null,
     content: string,
-    provider: Provider,
-    target: ModelDto,
-    resolved: ResolvedModelSettings | undefined,
-    skills: ReadonlyMap<string, SkillDto>,
-    attachmentsOf: ((ids: readonly string[], newest: boolean) => UserAttachments) | undefined,
     attachmentIds: readonly string[],
-  ): Promise<AssembledPrompt> {
-    const { providerId, id: model, contextTokens } = target;
+  ): ConversationModel {
     const draft: ConversationModel = current ?? {
       title: NEW_CONVERSATION_TITLE,
       createdAt: this.now().toISOString(),
       updatedAt: this.now().toISOString(),
       blocks: [],
     };
-    const withUser: ConversationModel = {
+    return {
       ...draft,
       blocks: [
         ...draft.blocks,
@@ -449,6 +593,18 @@ export class SendService {
         },
       ],
     };
+  }
+
+  /** Step 2 (no locks held): prompt assembly and budget for a model ending in its newest user message. */
+  private async preflight(
+    withUser: ConversationModel,
+    provider: Provider,
+    target: ModelDto,
+    resolved: ResolvedModelSettings | undefined,
+    skills: ReadonlyMap<string, SkillDto>,
+    attachmentsOf: ((ids: readonly string[], newest: boolean) => UserAttachments) | undefined,
+  ): Promise<AssembledPrompt> {
+    const { providerId, id: model, contextTokens } = target;
     const budget = Math.max(0, contextTokens - this.maxOutputTokens());
     const counter = this.o.counterFor
       ? await this.o.counterFor(providerId, model)
@@ -483,7 +639,7 @@ export class SendService {
   private async commit(
     userId: string,
     input: {
-      request: StartGenerationRequest;
+      request: Pick<StartGenerationRequest, "operationKey" | "operationIssuedAt">;
       payloadHash: string;
       conversationId: string;
       content: string;
@@ -496,6 +652,8 @@ export class SendService {
       sampling: Sampling | undefined;
       /** Pending attachments, rechecked under their locks; linked in this commit. */
       attachments: readonly AttachmentMeta[];
+      /** Regeneration (contracts §4.2): the existing user block and the truncated file. */
+      regenerate?: { userMessageId: string; next: ConversationModel; removed: readonly Block[] };
     },
   ): Promise<{ response: StartGenerationResponse; launch: (() => void) | undefined }> {
     const { conversationId, reservation } = input;
@@ -504,7 +662,8 @@ export class SendService {
       const now = this.now().toISOString();
       const ids = {
         generationId: randomUUID(),
-        userMessageId: randomUUID(),
+        // A regeneration answers the existing user block: no duplicate is written.
+        userMessageId: input.regenerate?.userMessageId ?? randomUUID(),
         assistantMessageId: randomUUID(),
       };
       const base: ConversationModel = input.current?.model ?? {
@@ -513,17 +672,19 @@ export class SendService {
         updatedAt: now,
         blocks: [],
       };
-      const next = this.o.store.appendBlocks(base, [
-        {
-          type: "user",
-          id: ids.userMessageId,
-          ...(input.attachments.length > 0
-            ? { attachments: input.attachments.map((meta) => meta.id) }
-            : {}),
-          time: now,
-          body: input.content,
-        },
-      ]);
+      const next = input.regenerate
+        ? { ...input.regenerate.next, updatedAt: now }
+        : this.o.store.appendBlocks(base, [
+            {
+              type: "user",
+              id: ids.userMessageId,
+              ...(input.attachments.length > 0
+                ? { attachments: input.attachments.map((meta) => meta.id) }
+                : {}),
+              time: now,
+              body: input.content,
+            },
+          ]);
       const record: OperationRecord = {
         version: 1,
         operationKey: input.request.operationKey,
@@ -553,6 +714,13 @@ export class SendService {
           ids.userMessageId,
         );
       await this.o.hooks?.afterAttachmentLink?.();
+      // Attachments of removed turns go only after the canonical write (§4.2).
+      if (input.regenerate)
+        await this.o.attachments
+          ?.deleteLinked(userId, conversationId, attachmentRefs(input.regenerate.removed))
+          .catch((error: unknown) => {
+            this.o.logger.warn({ err: error }, "removing truncated attachments failed");
+          });
       await this.o.operations.write(userId, {
         ...record,
         status: "committed",
@@ -662,6 +830,17 @@ export class SendService {
         )
       ) {
         return conversation.revision; // already written
+      }
+      // Only the surviving source turn is answered (INV-35): the reply is
+      // written only while its user block is still the last block.
+      const last = conversation.model.blocks.at(-1);
+      if (last?.type !== "user" || last.id !== record.userMessageId) {
+        this.o.logger.info(
+          { generationId: record.generationId },
+          "reply discarded: its source turn was superseded",
+        );
+        await markWritten();
+        return null;
       }
       const blocks: Block[] = [];
       const reasoning = normalizeBody(outcome.reasoning);

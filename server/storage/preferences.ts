@@ -85,6 +85,17 @@ export class PreferencesStore {
 
   /** Applies a partial update under the per-user lock, preserving other fields. */
   async update(userId: string, patch: Partial<Omit<Preferences, "version">>): Promise<Preferences> {
+    return this.modify(userId, () => patch);
+  }
+
+  /**
+   * Read-modify-write under the per-user lock: `change` sees the current
+   * preferences (pin/unpin without losing a concurrent change).
+   */
+  async modify(
+    userId: string,
+    change: (current: Preferences) => Partial<Omit<Preferences, "version">>,
+  ): Promise<Preferences> {
     const write = () =>
       this.locks.run(`preferences:${userId}`, async () => {
         const bytes = await readOrNull(this.paths.preferencesFile(userId));
@@ -94,7 +105,7 @@ export class PreferencesStore {
         } catch {
           current = sanitize(undefined);
         }
-        const next: Preferences = { ...current.prefs, ...patch, version: 1 };
+        const next: Preferences = { ...current.prefs, ...change(current.prefs), version: 1 };
         await atomicWrite(
           this.paths.preferencesFile(userId),
           `${JSON.stringify({ ...current.extra, ...next }, null, 2)}\n`,

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, MoreHorizontal, PanelLeft, SquarePen } from "lucide-react";
+import { AlertTriangle, MoreHorizontal, PanelLeft, Search, SquarePen } from "lucide-react";
+import type { ConversationSummary } from "@shared/conversations";
 import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useMatches, useParams } from "react-router";
 import { paths, type OverlayState } from "../lib/paths";
@@ -14,6 +15,10 @@ import { preloadDialogs, useConversationActions } from "./ConversationActions";
 const loadMenus = () => import("./Menus");
 const RowMenu = lazy(() => loadMenus().then((m) => ({ default: m.RowMenu })));
 const AccountMenu = lazy(() => loadMenus().then((m) => ({ default: m.AccountMenu })));
+// Search (Phase 13a) loads when opened.
+const SearchDialog = lazy(() =>
+  import("./SearchDialog").then((m) => ({ default: m.SearchDialog })),
+);
 
 export interface SidebarUser {
   id: string;
@@ -58,6 +63,90 @@ function SidebarImpl({
   const menuTrigger = useRef<HTMLElement | null>(null);
   // A placeholder trigger clicked before the menu chunk arrived opens it then.
   const [openRequest, setOpenRequest] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchTrigger = useRef<HTMLButtonElement>(null);
+  const pinned = conversations
+    .filter((c) => typeof c.pinnedRank === "number")
+    .sort((a, b) => (a.pinnedRank ?? 0) - (b.pinnedRank ?? 0));
+  const others = conversations.filter((c) => typeof c.pinnedRank !== "number");
+
+  // Ctrl/⌘+K opens search (the in-grid sidebar owns the shortcut, not the drawer copy).
+  useEffect(() => {
+    if (drawer) return;
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearching(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [drawer]);
+
+  const row = (item: ConversationSummary) => (
+    <li key={item.id} className={item.id === conversationId ? "current" : undefined}>
+      <Link
+        to={paths.chat(item.id)}
+        aria-current={item.id === conversationId ? "page" : undefined}
+        onClick={onNavigate}
+        // Route chunk on intent; the data through the shared query cache.
+        prefetch="intent"
+        onPointerEnter={(event) => {
+          if (event.pointerType === "mouse") prefetchIntent(client, user.id, item.id);
+        }}
+        onPointerLeave={endIntent}
+        onFocus={() => {
+          prefetchIntent(client, user.id, item.id, 0);
+        }}
+        onBlur={endIntent}
+      >
+        {item.malformed ? <AlertTriangle size={14} aria-label="Unreadable" /> : null}
+        <span className="row-title">
+          {item.malformed ? `${item.title} (unreadable)` : item.title}
+        </span>
+      </Link>
+      <Suspense
+        fallback={
+          <button
+            type="button"
+            className="icon-btn row-menu"
+            aria-label={`Actions for ${item.title}`}
+            title="More"
+            onClick={() => {
+              setOpenRequest(item.id);
+            }}
+          >
+            <MoreHorizontal size={16} aria-hidden />
+          </button>
+        }
+      >
+        <RowMenu
+          title={item.title}
+          malformed={item.malformed}
+          pinned={typeof item.pinnedRank === "number"}
+          onTogglePin={() => {
+            actions.togglePin({ ...item, pinned: typeof item.pinnedRank === "number" });
+          }}
+          defaultOpen={openRequest === item.id}
+          onTriggerFocus={(element) => {
+            menuTrigger.current = element;
+          }}
+          onOpen={() => {
+            // Intent: fetch the dialog chunk before it is needed.
+            void preloadDialogs();
+          }}
+          onRename={() => {
+            actions.rename(item, menuTrigger.current);
+          }}
+          onDelete={() => {
+            actions.remove(item, menuTrigger.current);
+          }}
+        />
+      </Suspense>
+    </li>
+  );
 
   return (
     <nav
@@ -85,6 +174,28 @@ function SidebarImpl({
       <Link to={paths.newChat()} className="nav-row" onClick={onNavigate}>
         <SquarePen size={18} aria-hidden /> New chat
       </Link>
+      <button
+        ref={searchTrigger}
+        type="button"
+        className="nav-row"
+        aria-haspopup="dialog"
+        title="Search chats (Ctrl+K)"
+        onClick={() => {
+          setSearching(true);
+        }}
+      >
+        <Search size={18} aria-hidden /> Search chats
+      </button>
+      {pinned.length > 0 ? (
+        <>
+          <p className="section-label" id={`${navId}-pinned`}>
+            Pinned
+          </p>
+          <ul className="chat-list" aria-labelledby={`${navId}-pinned`} data-testid="pinned-list">
+            {pinned.map(row)}
+          </ul>
+        </>
+      ) : null}
       <p className="section-label">All chats</p>
       {list.isPending ? (
         <p className="sidebar-note" aria-busy="true" data-testid="conversations-loading">
@@ -103,65 +214,20 @@ function SidebarImpl({
         </p>
       ) : null}
       <ul className="chat-list" data-testid="conversation-list">
-        {conversations.map((item) => (
-          <li key={item.id} className={item.id === conversationId ? "current" : undefined}>
-            <Link
-              to={paths.chat(item.id)}
-              aria-current={item.id === conversationId ? "page" : undefined}
-              onClick={onNavigate}
-              // Route chunk on intent; the data through the shared query cache.
-              prefetch="intent"
-              onPointerEnter={(event) => {
-                if (event.pointerType === "mouse") prefetchIntent(client, user.id, item.id);
-              }}
-              onPointerLeave={endIntent}
-              onFocus={() => {
-                prefetchIntent(client, user.id, item.id, 0);
-              }}
-              onBlur={endIntent}
-            >
-              {item.malformed ? <AlertTriangle size={14} aria-label="Unreadable" /> : null}
-              <span className="row-title">
-                {item.malformed ? `${item.title} (unreadable)` : item.title}
-              </span>
-            </Link>
-            <Suspense
-              fallback={
-                <button
-                  type="button"
-                  className="icon-btn row-menu"
-                  aria-label={`Actions for ${item.title}`}
-                  title="More"
-                  onClick={() => {
-                    setOpenRequest(item.id);
-                  }}
-                >
-                  <MoreHorizontal size={16} aria-hidden />
-                </button>
-              }
-            >
-              <RowMenu
-                title={item.title}
-                malformed={item.malformed}
-                defaultOpen={openRequest === item.id}
-                onTriggerFocus={(element) => {
-                  menuTrigger.current = element;
-                }}
-                onOpen={() => {
-                  // Intent: fetch the dialog chunk before it is needed.
-                  void preloadDialogs();
-                }}
-                onRename={() => {
-                  actions.rename(item, menuTrigger.current);
-                }}
-                onDelete={() => {
-                  actions.remove(item, menuTrigger.current);
-                }}
-              />
-            </Suspense>
-          </li>
-        ))}
+        {others.map(row)}
       </ul>
+      {searching ? (
+        <Suspense fallback={null}>
+          <SearchDialog
+            userId={user.id}
+            onClose={(navigated) => {
+              setSearching(false);
+              if (!navigated) requestAnimationFrame(() => searchTrigger.current?.focus());
+            }}
+            onNavigate={onNavigate}
+          />
+        </Suspense>
+      ) : null}
       <Account user={user} onNavigate={onNavigate} />
       {actions.dialogs}
     </nav>

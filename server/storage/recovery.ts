@@ -217,8 +217,10 @@ async function writeReplyOnce(
     content: string;
     reasoning: string;
     time: string;
+    /** The source user block; the reply is written only while it is still last (INV-35). */
+    userMessageId: string | null;
   },
-): Promise<"written" | "exists" | "missing" | "malformed"> {
+): Promise<"written" | "exists" | "missing" | "malformed" | "superseded"> {
   return store.withLock(input.userId, input.conversationId, async () => {
     const read = await store.readUnlocked(input.userId, input.conversationId);
     if (read.kind === "missing") return "missing";
@@ -226,6 +228,9 @@ async function writeReplyOnce(
     const model = read.conversation.model;
     if (model.blocks.some((b) => b.type === "assistant" && b.id === input.assistantMessageId))
       return "exists";
+    const last = model.blocks.at(-1);
+    if (input.userMessageId !== null && (last?.type !== "user" || last.id !== input.userMessageId))
+      return "superseded";
     const blocks: Block[] = [];
     const reasoning = normalizeBody(input.reasoning);
     if (reasoning !== "")
@@ -303,6 +308,9 @@ export async function recoverGenerations(options: {
       checkpoint.state === "terminal-decided" && checkpoint.outcome !== null
         ? checkpoint.outcome
         : null;
+    const source = checkpoint.operationKey
+      ? await operations.read(checkpoint.userId, checkpoint.operationKey).catch(() => null)
+      : null;
     const result = await writeReplyOnce(store, {
       userId: checkpoint.userId,
       conversationId: checkpoint.conversationId,
@@ -313,6 +321,7 @@ export async function recoverGenerations(options: {
       content: decided ? decided.content : checkpoint.content,
       reasoning: decided ? decided.reasoning : checkpoint.reasoning,
       time: decided ? decided.finishedAt : now.toISOString(),
+      userMessageId: source?.userMessageId ?? null,
     });
     if (result === "written") {
       if (decided) report.completedDecided++;
@@ -347,6 +356,7 @@ export async function recoverGenerations(options: {
         content: "",
         reasoning: "",
         time: now.toISOString(),
+        userMessageId: record.userMessageId,
       });
       if (result === "written") report.orphanCommits++;
       await operations.write(userId, { ...record, terminalWritten: true });

@@ -16,6 +16,8 @@ export interface RegisteredProvider {
 interface CacheState {
   models: ProviderModel[] | null;
   fetchedAt: number;
+  /** The last refresh reached the provider. */
+  lastOk: boolean;
   /** The last refresh failed; `models` is the last good list. */
   stale: boolean;
   refreshing: Promise<void> | null;
@@ -84,7 +86,7 @@ export class ModelCatalog {
   private state(providerId: string): CacheState {
     let state = this.cache.get(providerId);
     if (!state) {
-      state = { models: null, fetchedAt: 0, stale: false, refreshing: null };
+      state = { models: null, fetchedAt: 0, lastOk: false, stale: false, refreshing: null };
       this.cache.set(providerId, state);
     }
     return state;
@@ -102,11 +104,13 @@ export class ModelCatalog {
           state.models = models;
           state.fetchedAt = this.now();
           state.stale = false;
+          state.lastOk = true;
           this.onDiscovered(providerId, registered.provider);
         },
         (error: unknown) => {
           state.stale = state.models !== null;
           state.fetchedAt = this.now();
+          state.lastOk = false;
           this.logger.warn(
             { providerId, reason: error instanceof ProviderError ? error.kind : "error" },
             state.models
@@ -119,6 +123,22 @@ export class ModelCatalog {
         state.refreshing = null;
       });
     return state.refreshing;
+  }
+
+  /**
+   * One fresh successful provider contact (a discovery refresh), required
+   * before a regeneration truncates anything (contracts §4.1 step 2); a
+   * cached list is not enough. Throws the normalized provider error.
+   */
+  async contact(providerId: string): Promise<void> {
+    if (!this.providers.has(providerId))
+      throw new AppError(ErrorCode.PROVIDER_NOT_FOUND, "The selected provider is not available");
+    const state = this.state(providerId);
+    // A refresh already in flight may have started before this call: wait, then refresh.
+    await state.refreshing;
+    await this.refresh(providerId);
+    if (!state.lastOk)
+      throw new AppError(ErrorCode.PROVIDER_UNAVAILABLE, "The model server is unreachable");
   }
 
   /** Starts discovery for every provider without waiting (startup). */

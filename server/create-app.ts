@@ -22,6 +22,7 @@ import { PreferencesStore } from "./storage/preferences.ts";
 import { SkillsStore } from "./storage/skills.ts";
 import { UserStore } from "./storage/users.ts";
 import { SendService, type SendServiceOptions } from "./chat/send-service.ts";
+import { ConversationMutations } from "./chat/mutations.ts";
 import { ChatIndex } from "./storage/chat-index.ts";
 import { CheckpointStore } from "./storage/checkpoints.ts";
 import { ConversationStore } from "./storage/conversations.ts";
@@ -199,7 +200,9 @@ export function createApp(options: AppOptions): ChatUiApp {
     now,
     writes: accountWrites,
     afterDelete: async (userId, id) => {
+      // Markdown first (done), then its attachments and its stale pin.
       await attachments.deleteForConversation(userId, id);
+      await mutations.dropPin(userId, id);
     },
   });
   const operations = new OperationStore(paths, accountWrites);
@@ -214,6 +217,13 @@ export function createApp(options: AppOptions): ChatUiApp {
   });
   const audit = new AuditLog({ paths, locks, now });
   const preferences = new PreferencesStore(paths, locks, accountWrites);
+  const mutations = new ConversationMutations({
+    store: conversations,
+    generations,
+    attachments,
+    preferences,
+    logger,
+  });
   const send = new SendService({
     store: conversations,
     checkpoints,
@@ -376,6 +386,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     users,
     preferences,
     attachments,
+    mutations,
     skills,
     modelList: async (role, listOptions) => {
       const providers = await models.listModels(listOptions);

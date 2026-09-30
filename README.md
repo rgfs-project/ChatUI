@@ -153,6 +153,19 @@ PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net TRUST_PROXY=1 docker compose up
 
 Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that talks to it.
 
+## Conversations
+
+- **Search** (sidebar "Search chats", or Ctrl/⌘+K) looks through your chat titles and messages and opens a result at the matching message.
+- **Pin** a chat from its "…" menu or the title menu; pinned chats stay at the top (stored in your preferences).
+- Hover (or, on touch screens, look under) a message for its actions:
+  - **Edit** a message: "Send" replaces the reply; "Save" keeps the turn unanswered. Later messages are removed either way.
+  - **Delete** a message together with its reply.
+  - **Regenerate** a reply, or "Get a reply" for an unanswered message.
+
+  ChatUI has no branches: a regenerated reply replaces the old one.
+
+- **Settings → Account → Delete all chats** removes every conversation and its attachments; settings and skills stay.
+
 ## Data, backups and limits
 
 - Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).

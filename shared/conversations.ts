@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { MAX_ATTACHMENTS_PER_MESSAGE } from "./attachment-media";
 import { messageAttachmentSchema } from "./attachments";
+import { canonicalUuid } from "./ids";
 
 /** Conversation DTOs (Phase 3). Browser code imports only the types. */
 
@@ -10,6 +12,8 @@ export const conversationSummarySchema = z.strictObject({
   updatedAt: z.string(),
   messageCount: z.number().int().nonnegative(),
   malformed: z.boolean(),
+  /** Position in the user's pins (Phase 13a), or null when not pinned. */
+  pinnedRank: z.number().int().nonnegative().nullable(),
 });
 export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
 
@@ -70,3 +74,68 @@ export const operationResultSchema = z.strictObject({
   userMessageId: z.uuid(),
   assistantMessageId: z.uuid(),
 });
+
+const revision = z.string().regex(/^[0-9a-f]{64}$/);
+
+/** Edit user turn k (contracts §4.2): new body/attachments; later blocks are removed. */
+export const editMessageSchema = z
+  .strictObject({
+    content: z.string().max(100_000),
+    /** The turn's attachments afterwards: kept ones plus owned pending ones. */
+    attachmentIds: z
+      .array(canonicalUuid)
+      .max(MAX_ATTACHMENTS_PER_MESSAGE)
+      .refine((ids) => new Set(ids).size === ids.length, "must not repeat an attachment")
+      .optional(),
+    expectedRevision: revision,
+  })
+  .refine((v) => v.content.trim() !== "" || (v.attachmentIds?.length ?? 0) > 0, {
+    path: ["content"],
+    message: "must not be empty",
+  });
+export type EditMessageRequest = z.infer<typeof editMessageSchema>;
+
+/** Regenerate user turn k (contracts §4.2): starts a generation like a send (§4.1). */
+export const regenerateSchema = z.strictObject({
+  userMessageId: canonicalUuid,
+  providerId: z.string().min(1).max(64),
+  model: z.string().trim().min(1).max(200),
+  expectedRevision: revision,
+  operationKey: z.uuid(),
+  operationIssuedAt: z.iso.datetime({ offset: false }),
+});
+export type RegenerateRequest = z.infer<typeof regenerateSchema>;
+
+export const pinsSchema = z.strictObject({ pins: z.array(z.uuid()) });
+
+/** Full-text search (INV-36): bounded query and results. */
+export const SEARCH_LIMITS = { maxQuery: 200, maxResults: 50, perConversation: 3 } as const;
+
+export const searchQuerySchema = z.strictObject({
+  q: z
+    .string()
+    .max(SEARCH_LIMITS.maxQuery)
+    .refine((q) => q.trim().length > 0, "must not be empty"),
+  limit: z.coerce.number().int().min(1).max(SEARCH_LIMITS.maxResults).optional(),
+});
+
+export const searchResultSchema = z.strictObject({
+  conversationId: z.uuid(),
+  title: z.string(),
+  /** The matching message, or null for a title match. */
+  messageId: z.uuid().nullable(),
+  role: z.enum(["user", "assistant"]).nullable(),
+  /** A bounded snippet around the first match in that text. */
+  snippet: z.strictObject({ before: z.string(), match: z.string(), after: z.string() }),
+  updatedAt: z.string(),
+});
+export type SearchResult = z.infer<typeof searchResultSchema>;
+
+export const searchResponseSchema = z.strictObject({
+  results: z.array(searchResultSchema),
+  /** More matches exist than were returned. */
+  truncated: z.boolean(),
+  /** Conversations skipped because their files are unreadable. */
+  skippedMalformed: z.number().int().nonnegative(),
+});
+export type SearchResponse = z.infer<typeof searchResponseSchema>;

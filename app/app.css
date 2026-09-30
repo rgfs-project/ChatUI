@@ -768,6 +768,14 @@ a.attachment-file:hover {
   height: 36px;
 }
 
+/* A search result's message, briefly marked after navigation (Phase 13a). */
+.turn.search-hit .bubble,
+.turn-assistant.search-hit {
+  box-shadow: 0 0 0 2px var(--focus);
+  border-radius: 18px;
+  transition: box-shadow 0.4s ease;
+}
+
 /* Queued: waits for the running reply, then sends. */
 .turn-queued .bubble {
   background: transparent;

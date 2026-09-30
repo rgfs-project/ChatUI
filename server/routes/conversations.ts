@@ -5,11 +5,18 @@ import {
   conversationListSchema,
   conversationSummarySchema,
   createConversationSchema,
+  editMessageSchema,
+  pinsSchema,
+  regenerateSchema,
   renameConversationSchema,
+  searchQuerySchema,
+  searchResponseSchema,
   type ConversationDto,
   type MessageDto,
 } from "@shared/conversations";
 import { ErrorCode } from "@shared/errors";
+import { startGenerationResponseSchema } from "@shared/generations";
+import { searchConversations } from "../chat/search.ts";
 import { AppError } from "../errors.ts";
 import { defineRoute, userOf, type RouteServices } from "../registry.ts";
 import { toMessageAttachment } from "../storage/attachments.ts";
@@ -101,18 +108,24 @@ export const listConversationsRoute = defineRoute({
   csrf: "none",
   request: { query: z.strictObject({}) },
   response: conversationListSchema,
-  handler: (_input, ctx) => ({
-    conversations: ctx.services.conversations.list(userOf(ctx).userId).map((entry) =>
-      conversationSummarySchema.parse({
-        id: entry.id,
-        title: entry.title,
-        createdAt: entry.createdAt,
-        updatedAt: entry.updatedAt,
-        messageCount: entry.messageCount,
-        malformed: entry.malformed,
-      }),
-    ),
-  }),
+  handler: async (_input, ctx) => {
+    const userId = userOf(ctx).userId;
+    // Pins ride on the list (one request); canonical in preferences (INV-34).
+    const pins = (await ctx.services.preferences.get(userId)).pins;
+    return {
+      conversations: ctx.services.conversations.list(userId).map((entry) =>
+        conversationSummarySchema.parse({
+          id: entry.id,
+          title: entry.title,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+          messageCount: entry.messageCount,
+          malformed: entry.malformed,
+          pinnedRank: pins.includes(entry.id) ? pins.indexOf(entry.id) : null,
+        }),
+      ),
+    };
+  },
   fixture: {},
 });
 
@@ -189,4 +202,141 @@ export const deleteConversationRoute = defineRoute({
       return { deleted: true as const };
     }),
   fixture: { params: unknownId, expectStatus: 404 },
+});
+
+// ---- Phase 13a: conversation operations (contracts §4.2) ----------------------
+
+const messageParams = z.strictObject({ id: canonicalUuid, messageId: canonicalUuid });
+const unknownMessage = { ...unknownId, messageId: "00000000-0000-4000-8000-00000000000a" };
+const fixtureRevision = "0".repeat(64);
+
+export const editMessageRoute = defineRoute({
+  method: "patch",
+  path: "/api/conversations/:id/messages/:messageId",
+  auth: "user",
+  csrf: "token",
+  request: { params: messageParams, body: editMessageSchema },
+  response: conversationDtoSchema,
+  handler: async ({ params, body }, ctx) => {
+    const userId = userOf(ctx).userId;
+    const written = await mapStorage(() =>
+      ctx.services.mutations.edit(userId, params.id, params.messageId, body),
+    );
+    return toConversationDto(written, ctx.services, userId);
+  },
+  fixture: {
+    params: unknownMessage,
+    body: { content: "edited", expectedRevision: fixtureRevision },
+    expectStatus: 404,
+  },
+});
+
+export const deleteExchangeRoute = defineRoute({
+  method: "delete",
+  path: "/api/conversations/:id/messages/:messageId",
+  auth: "user",
+  csrf: "token",
+  request: {
+    params: messageParams,
+    query: z.strictObject({ expectedRevision: z.string().regex(/^[0-9a-f]{64}$/) }),
+  },
+  response: conversationDtoSchema,
+  handler: async ({ params, query }, ctx) => {
+    const userId = userOf(ctx).userId;
+    const written = await mapStorage(() =>
+      ctx.services.mutations.deleteExchange(
+        userId,
+        params.id,
+        params.messageId,
+        query.expectedRevision,
+      ),
+    );
+    return toConversationDto(written, ctx.services, userId);
+  },
+  fixture: {
+    params: unknownMessage,
+    query: { expectedRevision: fixtureRevision },
+    expectStatus: 404,
+  },
+});
+
+export const regenerateRoute = defineRoute({
+  method: "post",
+  path: "/api/conversations/:id/regenerate",
+  auth: "user",
+  csrf: "token",
+  request: { params: idParams, body: regenerateSchema },
+  response: startGenerationResponseSchema,
+  status: 202,
+  handler: ({ params, body }, ctx) => {
+    const who = userOf(ctx);
+    return ctx.services.send.regenerate(who.userId, params.id, body, {
+      username: who.username,
+      role: who.role,
+    });
+  },
+  fixture: {
+    params: unknownId,
+    body: {
+      userMessageId: "00000000-0000-4000-8000-00000000000a",
+      providerId: "local",
+      model: "fixture-missing-model",
+      expectedRevision: fixtureRevision,
+      operationKey: "00000000-0000-4000-8000-00000000f2f2",
+      operationIssuedAt: new Date().toISOString(),
+    },
+    // The model is validated before the conversation is read.
+    expectStatus: 400,
+  },
+});
+
+export const clearHistoryRoute = defineRoute({
+  method: "delete",
+  path: "/api/conversations",
+  auth: "user",
+  csrf: "token",
+  request: { query: z.strictObject({}) },
+  response: z.strictObject({ deleted: z.number().int().nonnegative() }),
+  handler: async (_input, ctx) => ({
+    deleted: await ctx.services.mutations.clearHistory(userOf(ctx).userId),
+  }),
+  fixture: {},
+});
+
+export const pinConversationRoute = defineRoute({
+  method: "put",
+  path: "/api/conversations/:id/pin",
+  auth: "user",
+  csrf: "token",
+  request: { params: idParams },
+  response: pinsSchema,
+  handler: async ({ params }, ctx) => ({
+    pins: await ctx.services.mutations.setPinned(userOf(ctx).userId, params.id, true),
+  }),
+  fixture: { params: unknownId, expectStatus: 404 },
+});
+
+export const unpinConversationRoute = defineRoute({
+  method: "delete",
+  path: "/api/conversations/:id/pin",
+  auth: "user",
+  csrf: "token",
+  request: { params: idParams },
+  response: pinsSchema,
+  handler: async ({ params }, ctx) => ({
+    pins: await ctx.services.mutations.setPinned(userOf(ctx).userId, params.id, false),
+  }),
+  fixture: { params: unknownId },
+});
+
+export const searchRoute = defineRoute({
+  method: "get",
+  path: "/api/search",
+  auth: "user",
+  csrf: "none",
+  request: { query: searchQuerySchema },
+  response: searchResponseSchema,
+  handler: ({ query }, ctx) =>
+    searchConversations(ctx.services.conversations, userOf(ctx).userId, query.q, query.limit),
+  fixture: { query: { q: "fixture" } },
 });

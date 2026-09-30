@@ -105,5 +105,11 @@ export function useScrollPin<T extends HTMLElement>(contentVersion: unknown) {
       scrollToBottom("smooth");
     },
     isPinned: () => pinned.current,
+    /** Leaves the bottom to show one element (search result navigation). */
+    reveal: (element: HTMLElement) => {
+      pinned.current = false;
+      element.scrollIntoView({ block: "center" });
+      if (ref.current) lastTop.current = ref.current.scrollTop;
+    },
   };
 }

@@ -1,0 +1,155 @@
+/* Search and inline editing (Phase 13a): loaded with their components. */
+
+.search-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(70dvh, 640px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field);
+  color: var(--muted);
+}
+
+.search-field:focus-within {
+  border-color: var(--faint);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-size: 16px;
+}
+
+.search-input:focus {
+  outline: none;
+}
+
+.search-status {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.search-results {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.search-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+
+.search-result.active {
+  background: var(--active);
+  color: var(--fg);
+}
+
+.search-result > svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.search-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.search-title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-snippet {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.search-snippet mark {
+  border-radius: 3px;
+  background: var(--active);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+@media (max-width: 767.98px) {
+  .search-dialog {
+    max-height: 90dvh;
+  }
+}
+
+/* The inline editor takes the bubble's place. */
+.message-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(560px, 100%);
+}
+
+.message-editor textarea {
+  width: 100%;
+  min-height: 5rem;
+  max-height: 20rem;
+  padding: 10px 14px;
+  border: 1px solid var(--faint);
+  border-radius: 16px;
+  background: var(--bubble);
+  color: var(--on-bubble);
+  font: inherit;
+  line-height: 1.55;
+  resize: vertical;
+  field-sizing: content;
+}
+
+.message-editor textarea:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.message-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.message-editor-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: right;
+}
+
+/* The native clear button is blue (off-palette); Escape closes, select-all clears. */
+.search-input::-webkit-search-cancel-button {
+  appearance: none;
+}

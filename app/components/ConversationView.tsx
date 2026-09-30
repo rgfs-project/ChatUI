@@ -12,6 +12,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -37,7 +38,9 @@ import { markAccepted, markGeneration, markOnce } from "../lib/perf";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
 import {
   lookUpOperation,
+  newRegenerateVariables,
   newSendVariables,
+  regenerateWithRetries,
   SendRejectedError,
   sendWithRetries,
   SendUnknownError,
@@ -51,15 +54,24 @@ import type { Command } from "./CommandMenu";
 import { Composer, type ModelChoice } from "./Composer";
 import { preloadDialogs, useConversationActions } from "./ConversationActions";
 import { Markdown } from "./Markdown";
-import { Message, Reasoning } from "./Message";
+import { Message, Reasoning, type MessageAction } from "./Message";
 
 // Interaction-only UI loads on demand (Phase 9): the title menu shows a
 // same-looking placeholder until its chunk arrives; the malformed-state
 // dialog loads only when needed.
 const TitleMenu = lazy(() => import("./Menus").then((m) => ({ default: m.TitleMenu })));
 const ConfirmDialog = lazy(() => preloadDialogs().then((m) => ({ default: m.ConfirmDialog })));
+// The inline message editor loads on the first edit (Phase 13a).
+const MessageEditor = lazy(() =>
+  import("./MessageEditor").then((m) => ({ default: m.MessageEditor })),
+);
 // The image viewer loads on the first click of a thumbnail (Phase 12).
 const ImageViewer = lazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
+
+const USER_ACTIONS: readonly MessageAction[] = ["edit", "delete"];
+const USER_UNANSWERED_ACTIONS: readonly MessageAction[] = ["edit", "regenerate", "delete"];
+const REPLY_ACTIONS: readonly MessageAction[] = ["regenerate"];
+const NO_ACTIONS: readonly MessageAction[] = [];
 
 /** An uploaded attachment shown in an optimistic or queued message. */
 function asMessageAttachment(dto: AttachmentDto): MessageAttachmentDto {
@@ -174,6 +186,24 @@ export function ConversationView(props: {
     /** The thumbnail that opened it: focus returns there on close. */
     trigger: HTMLElement | null;
   } | null>(null);
+  // Conversation operations (Phase 13a): the message being edited, the
+  // operation awaiting confirmation, and whether one is in flight.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmOp, setConfirmOp] = useState<{
+    kind: "delete" | "regenerate";
+    userMessageId: string;
+    latest: boolean;
+    trigger: HTMLElement;
+  } | null>(null);
+  const [opsUsed, setOpsUsed] = useState(false);
+  const [mutating, setMutating] = useState(false);
+  const actionHandler = useRef<(a: MessageAction, id: string, t: HTMLElement) => void>(
+    () => undefined,
+  );
+  // Stable for the memoized messages; the latest handler is installed after render.
+  const onMessageAction = useCallback((action: MessageAction, id: string, t: HTMLElement) => {
+    actionHandler.current(action, id, t);
+  }, []);
   const openImage = useCallback(
     (items: readonly MessageAttachmentDto[], index: number, trigger: HTMLElement) => {
       setViewer({ items, index, trigger });
@@ -186,6 +216,10 @@ export function ConversationView(props: {
     enabled: conversationId !== undefined && !props.initialError,
   });
   const modelsQuery = useQuery(queries.models(userId));
+  // The sidebar's list (same cache entry): whether this conversation is pinned.
+  const listQuery = useQuery({ ...queries.conversations(userId), enabled: hydrated });
+  const pinned =
+    typeof listQuery.data?.find((c) => c.id === conversationId)?.pinnedRank === "number";
   // Skills are only needed once the user types "/": never a startup request.
   const [wantSkills, setWantSkills] = useState(false);
   const skillsQuery = useQuery({ ...queries.skills(userId), enabled: wantSkills });
@@ -296,7 +330,28 @@ export function ConversationView(props: {
     handlers: scrollHandlers,
     showJump,
     jumpToLatest,
+    reveal,
   } = useScrollPin<HTMLDivElement>(contentVersion);
+
+  // A search result opens `/chat/:id#m-<message id>`: show and mark that message once.
+  const revealed = useRef<string | null>(null);
+  const hash = location.hash;
+  const loaded = conversation !== undefined;
+  useEffect(() => {
+    const match = /^#m-([0-9a-f-]{36})$/.exec(hash);
+    if (!match || !loaded || revealed.current === hash) return;
+    const element = document.getElementById(`m-${match[1] ?? ""}`);
+    if (!element) return;
+    revealed.current = hash;
+    reveal(element);
+    element.classList.add("search-hit");
+    const timer = setTimeout(() => {
+      element.classList.remove("search-hit");
+    }, 2500);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [hash, loaded, reveal]);
 
   const lastReply = [...(conversation?.messages ?? [])]
     .reverse()
@@ -448,6 +503,120 @@ export function ConversationView(props: {
     }
   }
 
+  // Which user turn each regular reply answers, and which turns are unanswered.
+  const answers = new Map<string, string>();
+  const unanswered = new Set<string>();
+  conversation?.messages.forEach((message, index, all) => {
+    const next = all[index + 1];
+    if (message.role !== "user") return;
+    if (next?.role === "assistant") answers.set(next.id, message.id);
+    else unanswered.add(message.id);
+  });
+  const opsDisabled = !hydrated || running || sending || mutating || props.inert === true;
+
+  /** The (provider, model) a regeneration uses: the composer's, else the last reply's. */
+  function regenerationModel(): ModelChoice | null {
+    const remembered = shell.getModel(draftKey);
+    if (remembered) return remembered;
+    if (lastReply?.provider && lastReply.model) return [lastReply.provider, lastReply.model];
+    const first = modelsQuery.data?.providers.flatMap((g) => g.models)[0];
+    return first ? [first.providerId, first.id] : null;
+  }
+
+  function operationFailed(error: unknown) {
+    if (error instanceof AccountChangedError) return;
+    const message =
+      error instanceof ApiError || error instanceof SendRejectedError
+        ? error.message
+        : "The change couldn’t be made. Try again.";
+    setStatus(message);
+    void client.invalidateQueries({
+      queryKey: queryKeys.conversation(userId, conversationId ?? ""),
+    });
+  }
+
+  async function regenerate(userMessageId: string, expectedRevision: string) {
+    const choice = regenerationModel();
+    if (!conversationId || !choice) return;
+    const vars = newRegenerateVariables({
+      userId,
+      conversationId,
+      userMessageId,
+      providerId: choice[0],
+      model: choice[1],
+      expectedRevision,
+    });
+    const result = await regenerateWithRetries(vars);
+    markAccepted(result.generationId, result.conversationId);
+    started(result);
+    await client.invalidateQueries({ queryKey: queryKeys.conversation(userId, conversationId) });
+  }
+
+  async function runOperation(fn: () => Promise<void>) {
+    setMutating(true);
+    setStatus(null);
+    try {
+      await fn();
+    } catch (error) {
+      operationFailed(error);
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function saveEdit(messageId: string, content: string, andRegenerate: boolean) {
+    if (!conversation || !conversationId) return;
+    await runOperation(async () => {
+      const dto = await apiJson<ConversationDto>(
+        `/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ content, expectedRevision: conversation.revision }),
+        },
+      );
+      client.setQueryData(queryKeys.conversation(userId, conversationId), dto);
+      setEditingId(null);
+      // Edit and resubmit = edit, then regenerate on the returned revision (§4.2).
+      if (andRegenerate) await regenerate(messageId, dto.revision);
+    });
+    void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
+  }
+
+  async function confirmOperation() {
+    const op = confirmOp;
+    if (!op || !conversation || !conversationId) return;
+    await runOperation(async () => {
+      if (op.kind === "regenerate") {
+        await regenerate(op.userMessageId, conversation.revision);
+        return;
+      }
+      const dto = await apiJson<ConversationDto>(
+        `/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(op.userMessageId)}?expectedRevision=${conversation.revision}`,
+        { method: "DELETE" },
+      );
+      client.setQueryData(queryKeys.conversation(userId, conversationId), dto);
+    });
+    void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
+  }
+
+  const handleAction = (action: MessageAction, messageId: string, trigger: HTMLElement) => {
+    if (opsDisabled) return;
+    if (action === "edit") {
+      setEditingId(messageId);
+      return;
+    }
+    const userMessageId =
+      action === "regenerate" ? (answers.get(messageId) ?? messageId) : messageId;
+    const index = conversation?.messages.findIndex((m) => m.id === messageId) ?? -1;
+    const latest = index >= (conversation?.messages.length ?? 0) - 1;
+    setOpsUsed(true);
+    setConfirmOp({ kind: action, userMessageId, latest, trigger });
+  };
+  // Installs the latest handler after every render (the callback above stays stable).
+  useLayoutEffect(() => {
+    actionHandler.current = handleAction;
+  });
+
   if (loadError?.code === "CONVERSATION_MALFORMED") {
     return (
       <main className="chat empty-state" data-testid="malformed-state" inert={props.inert}>
@@ -573,6 +742,10 @@ export function ConversationView(props: {
             >
               <TitleMenu
                 title={conversation.title}
+                pinned={pinned}
+                onTogglePin={() => {
+                  actions.togglePin({ ...conversation, pinned });
+                }}
                 defaultOpen={titleMenuRequested}
                 triggerRef={titleTriggerRef}
                 onOpen={() => void preloadDialogs()}
@@ -609,12 +782,40 @@ export function ConversationView(props: {
           {conversation?.messages.map((message) => (
             <Message
               key={message.id}
+              messageId={message.id}
               role={message.role}
               content={message.content}
               reasoning={message.reasoning}
               status={message.status}
               attachments={message.attachments}
               onOpenImage={openImage}
+              actions={
+                message.role === "user"
+                  ? unanswered.has(message.id)
+                    ? USER_UNANSWERED_ACTIONS
+                    : USER_ACTIONS
+                  : answers.has(message.id)
+                    ? REPLY_ACTIONS
+                    : NO_ACTIONS
+              }
+              actionsDisabled={opsDisabled}
+              onAction={onMessageAction}
+              editor={
+                editingId === message.id ? (
+                  <Suspense fallback={null}>
+                    <MessageEditor
+                      initial={message.content}
+                      busy={mutating}
+                      onCancel={() => {
+                        setEditingId(null);
+                      }}
+                      onSave={(content, andRegenerate) =>
+                        void saveEdit(message.id, content, andRegenerate)
+                      }
+                    />
+                  </Suspense>
+                ) : undefined
+              }
             />
           ))}
           {optimistic.map(({ mutation, state }) =>
@@ -749,6 +950,27 @@ export function ConversationView(props: {
         }}
       />
       {actions.dialogs}
+      {opsUsed ? (
+        <Suspense fallback={null}>
+          <ConfirmDialog
+            open={confirmOp !== null}
+            onOpenChange={(open) => {
+              if (!open) setConfirmOp(null);
+            }}
+            title={confirmOp?.kind === "delete" ? "Delete this message?" : "Regenerate the reply?"}
+            description={
+              confirmOp?.kind === "delete"
+                ? "The message and its reply will be deleted. Later replies may refer to it."
+                : confirmOp?.latest
+                  ? "The current reply will be replaced."
+                  : "The current reply will be replaced, and every later message in this chat removed."
+            }
+            confirmLabel={confirmOp?.kind === "delete" ? "Delete" : "Regenerate"}
+            returnFocus={() => confirmOp?.trigger ?? null}
+            onConfirm={() => void confirmOperation()}
+          />
+        </Suspense>
+      ) : null}
       {viewer ? (
         <Suspense fallback={null}>
           <ImageViewer

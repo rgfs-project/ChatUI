@@ -434,6 +434,12 @@ describe("INV-21 / INV-60: checkpoints and restart recovery", () => {
     const generationId = randomUUID();
     const assistantMessageId = randomUUID();
     const operationKey = randomUUID();
+    // The crashed generation's own user block is the last one (as acceptance leaves it).
+    const userMessageId = randomUUID();
+    writeFileSync(
+      file,
+      `${readFileSync(file, "utf8")}\n<!-- cc:user id=${userMessageId} -->\nfollow-up\n`,
+    );
     if (options.markdownHasReply) {
       writeFileSync(
         file,
@@ -481,7 +487,7 @@ describe("INV-21 / INV-60: checkpoints and restart recovery", () => {
         payloadHash: "x",
         conversationId,
         generationId,
-        userMessageId: randomUUID(),
+        userMessageId,
         assistantMessageId,
         beforeHash: null,
         afterHash: "a".repeat(64),

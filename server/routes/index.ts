@@ -6,11 +6,18 @@ import {
   streamGenerationRoute,
 } from "./generations.ts";
 import {
+  clearHistoryRoute,
   createConversationRoute,
   deleteConversationRoute,
+  deleteExchangeRoute,
+  editMessageRoute,
   getConversationRoute,
   listConversationsRoute,
+  pinConversationRoute,
+  regenerateRoute,
   renameConversationRoute,
+  searchRoute,
+  unpinConversationRoute,
 } from "./conversations.ts";
 import {
   changePasswordRoute,
@@ -73,6 +80,14 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(getConversationRoute),
   erase(renameConversationRoute),
   erase(deleteConversationRoute),
+  // Conversation operations (Phase 13a).
+  erase(clearHistoryRoute),
+  erase(editMessageRoute),
+  erase(deleteExchangeRoute),
+  erase(regenerateRoute),
+  erase(pinConversationRoute),
+  erase(unpinConversationRoute),
+  erase(searchRoute),
   // Attachments (Phase 12). The literal /limits path is registered before /:id.
   erase(uploadAttachmentRoute),
   erase(attachmentLimitsRoute),

@@ -147,6 +147,7 @@ describe("conversations API", () => {
         updatedAt: dto.updatedAt,
         messageCount: 0,
         malformed: false,
+        pinnedRank: null,
       },
     ]);
 
@@ -675,6 +676,9 @@ describe("INV-58: operation keys", () => {
     const run = await start();
     const created = (await api(run, "POST", "/api/conversations", {})).body.id as string;
     const file = chatFile(run, created);
+    // The committed send's user block is in the file (its after-hash state).
+    const sentUser = randomUUID();
+    writeFileSync(file, `${readFileSync(file, "utf8")}\n<!-- cc:user id=${sentUser} -->\nhello\n`);
     const bytes = readFileSync(file);
     const opsDir = path.join(run.dataDir, run.session.userId, "operations");
     const { mkdirSync } = await import("node:fs");
@@ -690,7 +694,7 @@ describe("INV-58: operation keys", () => {
       payloadHash: "x",
       conversationId,
       generationId: randomUUID(),
-      userMessageId: randomUUID(),
+      userMessageId: sentUser,
       assistantMessageId: randomUUID(),
       beforeHash,
       afterHash,
@@ -729,6 +733,7 @@ describe("INV-58: operation keys", () => {
     const after = parseConversation(readFileSync(file, "utf8"));
     if (!after.ok) throw new Error(after.reason);
     expect(after.conversation.blocks).toEqual([
+      expect.objectContaining({ type: "user", id: sentUser }),
       expect.objectContaining({ type: "assistant", status: "interrupted", body: "" }),
     ]);
     expect(readFileSync(file).subarray(0, 20)).toEqual(bytes.subarray(0, 20));

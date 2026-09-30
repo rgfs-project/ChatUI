@@ -18,6 +18,7 @@ import type { PreferencesStore } from "./storage/preferences.ts";
 import type { SkillsStore } from "./storage/skills.ts";
 import type { UserStore } from "./storage/users.ts";
 import type { AttachmentStore } from "./storage/attachments.ts";
+import type { ConversationMutations } from "./chat/mutations.ts";
 import type { Logger } from "./logger.ts";
 import type { ConversationStore } from "./storage/conversations.ts";
 import type { OperationStore } from "./storage/operations.ts";
@@ -44,6 +45,8 @@ export interface RouteServices {
   auth: AuthService;
   users: UserStore;
   preferences: PreferencesStore;
+  /** Edit, delete exchange, clear history, pins (Phase 13a). */
+  mutations: ConversationMutations;
   /** Uploaded attachments (Phase 12). */
   attachments: AttachmentStore;
   /** Per-user skills (user request, Phase 10). */

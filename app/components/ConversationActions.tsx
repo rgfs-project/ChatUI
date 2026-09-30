@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import { paths } from "../lib/paths";
+import type { ConversationSummary } from "@shared/conversations";
 import { apiJson, queryKeys } from "../lib/query";
 
 // Interaction-only UI loads on demand (Phase 9): never in the critical bundle.
@@ -20,6 +21,8 @@ export interface ConversationActions {
   rename: (target: ConversationTarget, from?: HTMLElement | null) => void;
   /** Opens the delete confirmation; focus returns like `rename`. */
   remove: (target: ConversationTarget, from?: HTMLElement | null) => void;
+  /** Pins or unpins (canonical preferences, Phase 13a). */
+  togglePin: (target: ConversationTarget & { pinned: boolean }) => void;
   /** The dialogs; render once wherever the hook is used. */
   dialogs: ReactNode;
 }
@@ -63,6 +66,22 @@ export function useConversationActions(userId: string): ConversationActions {
     onSettled: () => void invalidate(),
   });
 
+  const pinMutation = useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) =>
+      apiJson<{ pins: string[] }>(`/api/conversations/${encodeURIComponent(id)}/pin`, {
+        method: pinned ? "DELETE" : "PUT",
+      }),
+    onSuccess: ({ pins }) => {
+      client.setQueryData<ConversationSummary[]>(queryKeys.conversations(userId), (list) =>
+        list?.map((item) => ({
+          ...item,
+          pinnedRank: pins.includes(item.id) ? pins.indexOf(item.id) : null,
+        })),
+      );
+    },
+    onError: () => void invalidate(),
+  });
+
   const remember = (from?: HTMLElement | null) => {
     origin.current =
       from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -78,6 +97,9 @@ export function useConversationActions(userId: string): ConversationActions {
       remember(from);
       setUsed(true);
       setDeleting(target);
+    },
+    togglePin: (target) => {
+      pinMutation.mutate({ id: target.id, pinned: target.pinned });
     },
     dialogs: used ? (
       <Suspense fallback={null}>

@@ -1,7 +1,7 @@
 import type { SkillDto } from "@shared/skills";
 import { QueryClient, queryOptions } from "@tanstack/react-query";
 import type { SessionDto } from "@shared/auth";
-import type { ConversationDto, ConversationSummary } from "@shared/conversations";
+import type { ConversationDto, ConversationSummary, SearchResponse } from "@shared/conversations";
 import type { ModelListDto } from "@shared/generations";
 import type { AttachmentLimitsDto } from "@shared/attachments";
 import { apiFetch } from "./api";
@@ -19,6 +19,8 @@ export const queryKeys = {
   models: (userId: string) => ["user", userId, "models"] as const,
   preferences: (userId: string) => ["user", userId, "preferences"] as const,
   skills: (userId: string) => ["user", userId, "skills"] as const,
+  /** Full-text search results per query (Phase 13a); never dehydrated. */
+  search: (userId: string, q: string) => ["user", userId, "search", q] as const,
   /** Attachment limits and the user's used bytes (Phase 12); read when attaching. */
   attachmentLimits: (userId: string) => ["user", userId, "attachment-limits"] as const,
   /** Mutation key for sends (optimistic messages are read from its state). */
@@ -137,6 +139,8 @@ export const fetchers = {
     }),
   skills: async (signal?: AbortSignal) =>
     (await apiJson<{ skills: SkillDto[] }>("/api/skills", signal ? { signal } : {})).skills,
+  search: (q: string, signal?: AbortSignal) =>
+    apiJson<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`, signal ? { signal } : {}),
   preferences: (signal?: AbortSignal) =>
     apiJson<PreferencesDto>("/api/preferences", signal ? { signal } : {}),
   attachmentLimits: (signal?: AbortSignal) =>
@@ -173,6 +177,13 @@ export const queries = {
       queryKey: queryKeys.skills(userId),
       queryFn: ({ signal }) => fetchers.skills(signal),
       retry: retryable,
+    }),
+  search: (userId: string, q: string) =>
+    queryOptions({
+      queryKey: queryKeys.search(userId, q),
+      queryFn: ({ signal }) => fetchers.search(q, signal),
+      retry: retryable,
+      staleTime: 10_000,
     }),
   preferences: (userId: string) =>
     queryOptions({
