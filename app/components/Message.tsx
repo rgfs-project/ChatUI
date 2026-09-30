@@ -1,10 +1,14 @@
 import { Check, ChevronRight, Copy, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { lazy, memo, Suspense, useEffect, useState, type ReactNode } from "react";
 import type { MessageAttachmentDto } from "@shared/attachments";
 import type { MessageDto } from "@shared/conversations";
+import type { ProposalDto } from "@shared/memories";
 import { MessageAttachments } from "./MessageAttachments";
 import { count } from "../lib/render-counters";
 import { Markdown } from "./Markdown";
+
+/** Memory suggestion cards (Phase 13b): loaded only for replies that have some. */
+const MemorySuggestions = lazy(() => import("./MemorySuggestions"));
 
 const STATUS_LABEL: Record<NonNullable<MessageDto["status"]>, string> = {
   complete: "",
@@ -83,6 +87,11 @@ export interface MessageViewProps {
   onAction?: (action: MessageAction, messageId: string, trigger: HTMLElement) => void;
   /** Rendered instead of the bubble while this message is being edited. */
   editor?: ReactNode;
+  /** Assistant only: memory suggestions made with this reply (Phase 13b). */
+  suggestions?: readonly ProposalDto[] | undefined;
+  /** Owner and conversation of the suggestions (primitives keep the memo effective). */
+  userId?: string;
+  conversationId?: string;
 }
 
 const ACTION_LABEL: Record<MessageAction, string> = {
@@ -146,6 +155,9 @@ function MessageImpl({
   actionsDisabled = false,
   onAction,
   editor,
+  suggestions,
+  userId,
+  conversationId,
 }: MessageViewProps) {
   count("messageRenders");
   useEffect(() => {
@@ -196,6 +208,24 @@ function MessageImpl({
           {content ? <CopyButton text={content} label="Copy reply" /> : null}
           {buttons}
         </div>
+      ) : null}
+      {role === "assistant" && suggestions?.length && userId && conversationId ? (
+        <Suspense fallback={null}>
+          <MemorySuggestions
+            userId={userId}
+            conversationId={conversationId}
+            proposals={suggestions}
+            emptyAnswer={content === "" && status === "complete"}
+            disabled={actionsDisabled}
+            onRegenerate={
+              messageId && onAction && actions.includes("regenerate")
+                ? (trigger) => {
+                    onAction("regenerate", messageId, trigger);
+                  }
+                : undefined
+            }
+          />
+        </Suspense>
       ) : null}
     </li>
   );

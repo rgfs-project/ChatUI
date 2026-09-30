@@ -21,7 +21,39 @@ export const MOCK_MODELS = {
   long: "mock-long",
   /** Reports image and audio input (Phase 12) and describes the parts it received. */
   vision: "mock-vision",
+  /**
+   * Proposal tools (Phase 13b), driven by markers in the last user message:
+   * `[[create Name|text]]`, `[[update Name|text]]`, `[[forget Name]]`,
+   * `[[bad]]` (malformed arguments), `[[unknown]]` (a tool not offered),
+   * `[[huge]]` (oversized arguments), `[[big N]]` (a create with N bytes of
+   * content that is not in the prompt), `[[many N]]` (N create calls),
+   * `[[calls-only]]` (no text before the calls), `[[exhaust]]` (reports all
+   * output tokens used), `[[reject-continuation]]` (400 on tool results),
+   * `[[hang-continuation]]` (the continuation stalls), `[[fail-continuation]]`
+   * (the continuation stream breaks). A request with `role: "tool"` messages
+   * is the continuation.
+   */
+  tools: "mock-tools",
 } as const;
+
+interface ToolMarker {
+  kind: string;
+  name: string;
+  text: string;
+}
+
+export function toolMarkers(text: string): ToolMarker[] {
+  return [...text.matchAll(/\[\[([a-z-]+)(?: ([^\]|]*))?(?:\|([^\]]*))?\]\]/g)].map((m) => ({
+    kind: m[1] ?? "",
+    name: (m[2] ?? "").trim(),
+    text: m[3] ?? "",
+  }));
+}
+
+/** Text of a message without the markers. */
+function withoutMarkers(text: string): string {
+  return text.replace(/\[\[[^\]]*\]\]/g, "").trim();
+}
 
 /** A long Markdown answer (fences, tables, nested lists) for UI streaming tests. */
 export function longAnswer(): string {
@@ -111,7 +143,7 @@ function chunk(model: string, delta: Record<string, unknown>, finish: string | n
   };
 }
 
-function usageChunk(model: string) {
+function usageChunk(model: string, completionTokens = 5) {
   return {
     choices: [],
     created: 1_790_000_000,
@@ -120,7 +152,7 @@ function usageChunk(model: string) {
     system_fingerprint: "b0000-mock",
     object: "chat.completion.chunk",
     usage: {
-      completion_tokens: 5,
+      completion_tokens: completionTokens,
       prompt_tokens: 12,
       total_tokens: 17,
       prompt_tokens_details: { cached_tokens: 3 },
@@ -312,6 +344,25 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
       return; // never answers
     }
 
+    const toolMessages = (
+      (body as { messages?: { role: string }[] } | undefined)?.messages ?? []
+    ).filter((m) => m.role === "tool");
+    const markers = toolMarkers(lastUserText(body));
+    if (
+      model === MOCK_MODELS.tools &&
+      toolMessages.length > 0 &&
+      markers.some((m) => m.kind === "reject-continuation")
+    ) {
+      json(res, 400, {
+        error: {
+          code: 400,
+          message: `tool role not supported ${UPSTREAM_SECRET}`,
+          type: "invalid_request_error",
+        },
+      });
+      return;
+    }
+
     open++;
     const stream = { closed: false };
     res.once("close", () => {
@@ -323,9 +374,9 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
       if (!stream.closed)
         res.write(`data: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`);
     };
-    const finish = (reason = "stop") => {
+    const finish = (reason = "stop", completionTokens = 5) => {
       send(chunk(model, {}, reason));
-      send(usageChunk(model));
+      send(usageChunk(model, completionTokens));
       send("[DONE]");
       res.end();
     };
@@ -355,6 +406,87 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
           }),
         );
         finish();
+        return;
+      }
+      case MOCK_MODELS.tools: {
+        if (toolMessages.length > 0) {
+          if (markers.some((m) => m.kind === "hang-continuation")) {
+            send(chunk(model, { content: "Partial continuation " }));
+            return; // then silence
+          }
+          send(chunk(model, { reasoning_content: "Continuing." }));
+          send(chunk(model, { content: `Continued after ${String(toolMessages.length)} ` }));
+          if (markers.some((m) => m.kind === "fail-continuation")) {
+            res.end();
+            return;
+          }
+          send(chunk(model, { content: "result(s)." }));
+          finish();
+          return;
+        }
+        const calls: { name: string; arguments: string }[] = [];
+        for (const marker of markers) {
+          const args = (value: Record<string, string>) => JSON.stringify(value);
+          if (marker.kind === "create" || marker.kind === "update")
+            calls.push({
+              name: `propose_memory_${marker.kind}`,
+              arguments: args({ name: marker.name, content: marker.text }),
+            });
+          else if (marker.kind === "forget")
+            calls.push({ name: "propose_memory_forget", arguments: args({ name: marker.name }) });
+          else if (marker.kind === "bad")
+            calls.push({ name: "propose_memory_create", arguments: '{"name": "Broken", ' });
+          else if (marker.kind === "unknown")
+            calls.push({ name: "delete_everything", arguments: "{}" });
+          else if (marker.kind === "huge")
+            calls.push({
+              name: "propose_memory_create",
+              arguments: args({ name: "Huge", content: "z".repeat(20_000) }),
+            });
+          else if (marker.kind === "big")
+            calls.push({
+              name: "propose_memory_create",
+              arguments: args({ name: "Big", content: "b".repeat(Number(marker.name || "1000")) }),
+            });
+          else if (marker.kind === "many")
+            for (let i = 0; i < Number(marker.name || "2"); i++)
+              calls.push({
+                name: "propose_memory_create",
+                arguments: args({
+                  name: `Note ${String(i + 1)}`,
+                  content: `Fact ${String(i + 1)}.`,
+                }),
+              });
+        }
+        if (calls.length === 0) {
+          send(chunk(model, { content: `Echo: ${lastUserText(body)}` }));
+          finish();
+          return;
+        }
+        send(chunk(model, { reasoning_content: "Thinking." }));
+        if (!markers.some((m) => m.kind === "calls-only"))
+          send(chunk(model, { content: `Noted: ${withoutMarkers(lastUserText(body))}` }));
+        calls.forEach((call, index) => {
+          const half = Math.floor(call.arguments.length / 2);
+          send(
+            chunk(model, {
+              tool_calls: [
+                {
+                  index,
+                  id: `call_${String(index)}`,
+                  type: "function",
+                  function: { name: call.name, arguments: call.arguments.slice(0, half) },
+                },
+              ],
+            }),
+          );
+          send(
+            chunk(model, {
+              tool_calls: [{ index, function: { arguments: call.arguments.slice(half) } }],
+            }),
+          );
+        });
+        finish("tool_calls", markers.some((m) => m.kind === "exhaust") ? 1_000_000 : 5);
         return;
       }
       case MOCK_MODELS.slow: {

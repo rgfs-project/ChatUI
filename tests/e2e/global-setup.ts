@@ -25,6 +25,10 @@ export const E2E_PASSWORD = "e2e password 1234";
 export const E2E_OTHER_USER = "e2e-other";
 /** An administrator (Phase 10 admin UI tests). */
 export const E2E_ADMIN = "e2e-admin";
+/** Memory suggestions (Phase 13b) run under their own account. */
+export const E2E_MEMORY_USER = "e2e-memory";
+/** A second provider on the same mock server whose configuration declares tool support. */
+export const TOOLS_PROVIDER = "tools";
 /** A seeded 200-message conversation owned by E2E_USER. */
 export const LONG_CONVERSATION = "7e0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d";
 export const LONG_TITLE = "Long seeded conversation";
@@ -243,6 +247,33 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await createUser(dataDir, E2E_USER);
   await createUser(dataDir, E2E_OTHER_USER);
   await createUser(dataDir, E2E_ADMIN, true);
+  await createUser(dataDir, E2E_MEMORY_USER);
+  // providers.json as an operator writes it: the bootstrap-equivalent `local`
+  // provider, plus a tool-capable one (Phase 13b proposal tools).
+  mkdirSync(path.join(dataDir, "_system"), { recursive: true, mode: 0o700 });
+  writeFileSync(
+    path.join(dataDir, "_system", "providers.json"),
+    JSON.stringify({
+      version: 1,
+      providers: [
+        {
+          id: "local",
+          name: "Local llama.cpp",
+          kind: "openai-compatible",
+          baseUrl: llama.url,
+          capabilities: { inputModalities: ["text"], reasoning: false, tools: false },
+        },
+        {
+          id: TOOLS_PROVIDER,
+          name: "Tool-capable mock",
+          kind: "openai-compatible",
+          baseUrl: llama.url,
+          capabilities: { inputModalities: ["text"], reasoning: true, tools: true },
+        },
+      ],
+    }),
+    { mode: 0o600 },
+  );
   seedLongConversation(dataDir, userIdOf(dataDir, E2E_USER));
   seedWideConversation(dataDir, userIdOf(dataDir, E2E_USER));
   seedAttachmentsConversation(dataDir, userIdOf(dataDir, E2E_USER));

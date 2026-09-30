@@ -6,7 +6,16 @@ import path from "node:path";
 import express, { type Express, type RequestHandler } from "express";
 import { pinoHttp } from "pino-http";
 import { ErrorCode } from "@shared/errors";
-import { DEFAULT_ATTACHMENT_CONFIG, type AttachmentConfig, type Config } from "./config.ts";
+import {
+  DEFAULT_ATTACHMENT_CONFIG,
+  DEFAULT_MEMORY_CONFIG,
+  type AttachmentConfig,
+  type Config,
+  type MemoryConfig,
+} from "./config.ts";
+import { MemoryStore } from "./storage/memories.ts";
+import { ProposalStore } from "./storage/proposals.ts";
+import { ProposalService, type ProposalHooks } from "./chat/proposals.ts";
 import { AttachmentStore, type AttachmentStoreHooks } from "./storage/attachments.ts";
 import { ModelCatalog } from "./generations/catalog.ts";
 import { GenerationManager } from "./generations/manager.ts";
@@ -60,6 +69,8 @@ export interface AppOptions {
   config: Pick<Config, "nodeEnv" | "inContainer" | "provider" | "storage" | "dataDir" | "auth"> & {
     /** Attachment limits (Phase 12); defaults when omitted (tests). */
     attachments?: Partial<AttachmentConfig>;
+    /** Memory and proposal-tool limits (Phase 13b); defaults when omitted (tests). */
+    memories?: Partial<MemoryConfig>;
   };
   logger: Logger;
   version: string;
@@ -87,6 +98,8 @@ export interface AppOptions {
   now?: () => Date;
   /** Attachment store test hooks. */
   attachmentHooks?: AttachmentStoreHooks;
+  /** Proposal acceptance crash-simulation hooks (tests). */
+  proposalHooks?: ProposalHooks;
   /** Process start, for temp-file cleanup (defaults to now). */
   startedAt?: Date;
 }
@@ -193,18 +206,36 @@ export function createApp(options: AppOptions): ChatUiApp {
     now,
     ...(options.attachmentHooks ? { hooks: options.attachmentHooks } : {}),
   });
+  const memoryConfig: MemoryConfig = { ...DEFAULT_MEMORY_CONFIG, ...options.config.memories };
+  const memories = new MemoryStore({ paths, locks, writes: accountWrites, now });
+  const proposalStore = new ProposalStore({ paths, locks, writes: accountWrites });
   const conversations = new ConversationStore({
     paths,
     locks,
     index,
     now,
     writes: accountWrites,
+    // Pending memory acceptance intents are settled before the Markdown goes (§4.3).
+    beforeDelete: async (userId: string, id: string): Promise<void> => {
+      await proposals.reconcileBeforeDelete(userId, id);
+    },
     afterDelete: async (userId, id) => {
-      // Markdown first (done), then its attachments and its stale pin.
+      // Markdown first (done), then the proposal sidecar, its attachments and its stale pin.
+      await proposalStore.delete(userId, id);
       await attachments.deleteForConversation(userId, id);
       await mutations.dropPin(userId, id);
     },
   });
+  const proposals: ProposalService = new ProposalService({
+    conversations,
+    proposals: proposalStore,
+    memories,
+    logger,
+    maxToolCalls: memoryConfig.maxToolCalls,
+    maxToolArgumentBytes: memoryConfig.maxToolArgumentBytes,
+    now,
+  });
+  if (options.proposalHooks) proposals.hooks = options.proposalHooks;
   const operations = new OperationStore(paths, accountWrites);
   // Instance settings (Phase 10) apply live: generation limits and registration.
   const settings = new SettingsStore({
@@ -223,6 +254,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     attachments,
     preferences,
     logger,
+    proposals,
   });
   const send = new SendService({
     store: conversations,
@@ -240,6 +272,9 @@ export function createApp(options: AppOptions): ChatUiApp {
     skills,
     attachments,
     preferences,
+    memories,
+    proposals,
+    memoryConfig,
     ...options.send,
   });
   const users = new UserStore({ paths, locks, now });
@@ -303,7 +338,18 @@ export function createApp(options: AppOptions): ChatUiApp {
         store: conversations,
         checkpoints,
         retentionMs: storageConfig.generationRetentionMs,
+        // A completed reply's staged proposals go into the sidecar exactly once.
+        proposals: async (checkpoint, model) => {
+          await proposals.persistStaged(
+            checkpoint.userId,
+            checkpoint.conversationId,
+            model,
+            checkpoint.outcome?.proposals ?? [],
+          );
+        },
       },
+      // Step 6: memory acceptance intents, by before/after hashes.
+      memoryIntents: (userId) => proposals.recoverIntents(userId),
       // Step 7: link attachments the Markdown references, GC stale pending ones.
       attachments: (userId) => attachments.reconcile(userId, { startup: true, now: now() }),
     });
@@ -388,6 +434,9 @@ export function createApp(options: AppOptions): ChatUiApp {
     attachments,
     mutations,
     skills,
+    memories,
+    proposals,
+    memoryPromptBudgetBytes: memoryConfig.promptBudgetBytes,
     modelList: async (role, listOptions) => {
       const providers = await models.listModels(listOptions);
       const visible =

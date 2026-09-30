@@ -40,6 +40,36 @@ export interface ChatRequest {
   maxTokens: number;
   /** Admin-configured per-model sampling (Phase 10); omitted fields use the server's defaults. */
   sampling?: Sampling | undefined;
+  /** Function tools offered to the model (Phase 13b proposal tools only). */
+  tools?: readonly ToolDefinition[] | undefined;
+  /**
+   * The single continuation (contracts §4.3): after `messages`, the assistant
+   * tool-call message and one synthetic result per call. Never persisted.
+   */
+  continuation?: ContinuationMessages | undefined;
+}
+
+/** An OpenAI-compatible function tool. */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  /** JSON Schema of the arguments object. */
+  parameters: Record<string, unknown>;
+}
+
+/** A completed streamed call: the raw argument text, never executed by the provider layer. */
+export interface ToolCallMessage {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ContinuationMessages {
+  /** User-visible text the model produced before its calls. */
+  assistantContent: string;
+  calls: readonly ToolCallMessage[];
+  /** One fixed result per call id. */
+  results: readonly { id: string; content: string }[];
 }
 
 export type ProviderEvent =
@@ -48,6 +78,11 @@ export type ProviderEvent =
   | { type: "content"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "finish"; reason: string }
+  /**
+   * A streamed tool-call fragment: `index` identifies the call; `id` and
+   * `name` arrive once, `arguments` in pieces to be concatenated.
+   */
+  | { type: "tool_call"; index: number; id?: string; name?: string; arguments?: string }
   | {
       type: "usage";
       promptTokens: number;

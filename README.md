@@ -118,6 +118,7 @@ Model servers are configured in `DATA_DIR/_system/providers.json`. On first star
   - `timeoutMs` → `PROVIDER_TIMEOUT_MS`
   - `maxActiveGenerations` → the provider's reported slots, else 1
   - `contextTokens` → discovery, else `DEFAULT_CONTEXT_TOKENS`
+- `capabilities.tools: true` offers the proposal-only memory tools to that provider's models (see [Memories](#memories)). Leave it `false` unless the probe shows the server streams tool calls.
 - An invalid entry is disabled and logged; startup continues. An unreachable provider is shown as unavailable and never blocks startup.
 - Removing a provider never touches conversations: old replies keep their provider/model labels, and new messages just can't select it. You can switch provider and model at any point in a conversation.
 - **Network policy (SSRF):** base URLs must be http(s) without credentials, query or fragment. Every request re-resolves the host, checks every address and pins the connection to the checked address. Redirects are never followed.
@@ -164,7 +165,17 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 
   ChatUI has no branches: a regenerated reply replaces the old one.
 
-- **Settings → Account → Delete all chats** removes every conversation and its attachments; settings and skills stay.
+- **Settings → Account → Delete all chats** removes every conversation, its attachments and its memory suggestions; settings, skills and memories stay.
+
+## Memories
+
+- **Settings → Customize → Memories** lists the notes the assistant sees in every chat. You can add, edit and delete them there.
+- Notes are included whole, in name order, until `MEMORY_PROMPT_BUDGET` (bytes) is used up. Notes that don't fit are marked "Not included in chats".
+- For a provider with `"tools": true` in its capabilities, the model can **suggest** remembering, updating or forgetting a note. Suggestions appear under the reply with **Save** and **Dismiss**, and nothing is saved until you press Save.
+  - If the note changed since the suggestion was made, saving is refused rather than overwriting your edit.
+  - Editing, deleting or regenerating the message a suggestion came from makes it unavailable.
+- Tool support depends on the llama.cpp server (`--jinja` and the model's chat template). Run `scripts/probe-provider.ts` and see [docs/provider-notes.md](docs/provider-notes.md#tool-calls-phase-13b) before turning it on.
+- Memories are stored as Markdown files in `DATA_DIR/<user>/memories/`, and suggestions in `DATA_DIR/<user>/proposals/`.
 
 ## Data, backups and limits
 

@@ -36,6 +36,18 @@ import type { ModelDto } from "@shared/generations";
 import type { AttachmentMeta, AttachmentStore } from "../storage/attachments.ts";
 import type { PreferencesStore } from "../storage/preferences.ts";
 import type { MediaPart, UserAttachments } from "./prompt.ts";
+import type { MemoryConfig } from "../config.ts";
+import {
+  memorySection,
+  memorySetRevision,
+  selectForPrompt,
+  type MemorySnapshotEntry,
+  type MemoryStore,
+} from "../storage/memories.ts";
+import type { ToolSession } from "../generations/manager.ts";
+import type { ProposalRecord } from "../storage/proposals.ts";
+import { continuationCost, type ProposalService } from "./proposals.ts";
+import { MEMORY_TOOLS } from "./memory-tools.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -56,6 +68,8 @@ export interface SendHooks {
   afterCommit?: () => void | Promise<void>;
   /** Test hook between the unlocked preflight and the locked recheck. */
   beforeRecheck?: () => void | Promise<void>;
+  /** After the terminal assistant write, before the proposals are written. */
+  afterAssistantWrite?: () => void | Promise<void>;
 }
 
 export interface SendServiceOptions {
@@ -82,6 +96,28 @@ export interface SendServiceOptions {
   attachments?: AttachmentStore;
   /** `historyImages` is a prompt-relevant preference (contracts §4.1). */
   preferences?: PreferencesStore;
+  /** Approved memories (Phase 13b): included in the system instructions within their budget. */
+  memories?: MemoryStore;
+  /** Proposal-only memory tools (Phase 13b), offered to tool-capable models. */
+  proposals?: ProposalService;
+  memoryConfig?: MemoryConfig;
+}
+
+/** The approved notes a prompt includes and the whole set's revision (contracts §4.1 step 2). */
+interface MemoryContext {
+  revision: string | null;
+  section: string | undefined;
+  snapshot: MemorySnapshotEntry[];
+}
+
+/** What step 2 hands to the commit: the prompt plus the tool budget facts. */
+interface Preflight {
+  prompt: AssembledPrompt;
+  counter: TokenCounter;
+  contextTokens: number;
+  /** Proposal tools are offered (a verified tool-capable model). */
+  tools: boolean;
+  memory: MemoryContext;
 }
 
 /** Who is sending: the username feeds prompt templates, the role model visibility. */
@@ -240,6 +276,7 @@ export class SendService {
     for (let attempt = 0; attempt < 2; attempt++) {
       const resolved = settingsFor();
       const mediaPolicy = await historyMedia();
+      const memory = await this.memoryContext(userId, model);
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
       const snapshot = request.conversationId
         ? await this.o.store.withLock(userId, conversationId, () =>
@@ -253,6 +290,7 @@ export class SendService {
         resolved,
         skills,
         await this.expansion(userId, snapshot?.model ?? null, attachmentIds, model, mediaPolicy),
+        memory,
       );
       await this.o.hooks?.beforeRecheck?.();
 
@@ -274,6 +312,7 @@ export class SendService {
           if ((settingsFor()?.revision ?? null) !== (resolved?.revision ?? null))
             return "changed" as const;
           if ((await historyMedia()) !== mediaPolicy) return "changed" as const;
+          if ((await this.memoryRevision(userId)) !== memory.revision) return "changed" as const;
           const again = await this.checkKey(userId, request, payloadHash);
           if (again) return { response: again, launch: undefined };
           const metas =
@@ -392,6 +431,7 @@ export class SendService {
     for (let attempt = 0; attempt < 2; attempt++) {
       const resolved = settingsFor();
       const mediaPolicy = await historyMedia();
+      const memory = await this.memoryContext(userId, model);
       // Step 1: authorized snapshot, the caller's revision, a regular target.
       const snapshot = await this.o.store.withLock(userId, conversationId, () =>
         this.readExisting(userId, conversationId),
@@ -417,6 +457,7 @@ export class SendService {
         resolved,
         skills,
         await this.expansion(userId, truncated, [], model, mediaPolicy),
+        memory,
       );
       await this.o.hooks?.beforeRecheck?.();
 
@@ -427,6 +468,7 @@ export class SendService {
         if ((settingsFor()?.revision ?? null) !== (resolved?.revision ?? null))
           return "changed" as const;
         if ((await historyMedia()) !== mediaPolicy) return "changed" as const;
+        if ((await this.memoryRevision(userId)) !== memory.revision) return "changed" as const;
         const again = await this.checkKey(userId, request, payloadHash);
         if (again) return { response: again, launch: undefined };
         const truncation = this.truncation(current.model, request.userMessageId);
@@ -552,6 +594,16 @@ export class SendService {
     };
   }
 
+  private async stageProposals(
+    userId: string,
+    conversationId: string,
+    model: ConversationModel,
+    staged: readonly ProposalRecord[],
+  ): Promise<void> {
+    if (!this.o.proposals || staged.length === 0) return;
+    await this.o.proposals.persistStaged(userId, conversationId, model, staged);
+  }
+
   /** Reserved output tokens: the instance setting, else MAX_OUTPUT_TOKENS. */
   private maxOutputTokens(): number {
     return this.o.settings?.get().generation?.maxOutputTokens ?? this.o.maxOutputTokens;
@@ -595,6 +647,37 @@ export class SendService {
     };
   }
 
+  /** Whether proposal tools are offered to this model (server-verified capability, §4.3). */
+  private offersTools(model: ModelDto): boolean {
+    return model.capabilities.tools && this.o.proposals !== undefined;
+  }
+
+  private memoryShare(model: ModelDto): number {
+    const configured = this.o.memoryConfig?.promptBudgetBytes ?? 0;
+    // A bounded share of the context: at most a quarter of the prompt budget
+    // (bytes are a pessimistic stand-in for tokens).
+    const budget = Math.max(0, model.contextTokens - this.maxOutputTokens());
+    return Math.min(configured, Math.floor(budget * 0.25));
+  }
+
+  /** The approved-memory revision (a prompt-relevant revision, §4.1 step 3). */
+  private async memoryRevision(userId: string): Promise<string | null> {
+    if (!this.o.memories) return null;
+    return memorySetRevision((await this.o.memories.list(userId)).notes);
+  }
+
+  /** Step 2: the approved notes this prompt includes, whole, in deterministic order (§12). */
+  private async memoryContext(userId: string, model: ModelDto): Promise<MemoryContext> {
+    if (!this.o.memories) return { revision: null, section: undefined, snapshot: [] };
+    const { notes } = await this.o.memories.list(userId);
+    const { included } = selectForPrompt(notes, this.memoryShare(model));
+    return {
+      revision: memorySetRevision(notes),
+      section: memorySection(included),
+      snapshot: included.map((n) => ({ id: n.id, name: n.name, revision: n.revision })),
+    };
+  }
+
   /** Step 2 (no locks held): prompt assembly and budget for a model ending in its newest user message. */
   private async preflight(
     withUser: ConversationModel,
@@ -603,9 +686,9 @@ export class SendService {
     resolved: ResolvedModelSettings | undefined,
     skills: ReadonlyMap<string, SkillDto>,
     attachmentsOf: ((ids: readonly string[], newest: boolean) => UserAttachments) | undefined,
-  ): Promise<AssembledPrompt> {
+    memory: MemoryContext,
+  ): Promise<Preflight> {
     const { providerId, id: model, contextTokens } = target;
-    const budget = Math.max(0, contextTokens - this.maxOutputTokens());
     const counter = this.o.counterFor
       ? await this.o.counterFor(providerId, model)
       : await counterFor(
@@ -614,16 +697,31 @@ export class SendService {
           this.o.templateOverheadTokens,
           this.o.attachments?.mediaTokenReserve ?? 0,
         );
+    const tools = this.offersTools(target);
+    // Offered tool schemas and the continuation's call/result messages are
+    // reserved in the budget (contracts §4 item 5, §4.3).
+    const toolReserve = tools
+      ? (await counter.countGroup([{ role: "system", content: JSON.stringify(MEMORY_TOOLS) }])) +
+        (this.o.memoryConfig?.continuationTokenReserve ?? 0)
+      : 0;
+    const budget = Math.max(0, contextTokens - this.maxOutputTokens() - toolReserve);
+    // Approved memories follow the per-model system prompt; no template
+    // expansion happens inside them (contracts §4 item 3).
+    const instructions =
+      [resolved?.instructions, memory.section]
+        .filter((t) => t !== undefined && t !== "")
+        .join("\n\n") || undefined;
     try {
-      return await assemblePrompt(withUser, {
+      const prompt = await assemblePrompt(withUser, {
         budget,
         trimStep: this.o.contextTrimStep ?? Math.max(1, Math.floor(budget * 0.25)),
         counter,
-        instructions: resolved?.instructions,
+        instructions,
         contextBlock: resolved?.contextBlock,
         expandUser: skills.size > 0 ? (body) => expandSkill(body, skills) : undefined,
         attachmentsOf,
       });
+      return { prompt, counter, contextTokens, tools, memory };
     } catch (error) {
       if (error instanceof ContextTooLargeError) {
         throw new AppError(
@@ -647,7 +745,7 @@ export class SendService {
       providerId: string;
       model: string;
       current: { model: ConversationModel; revision: string } | null;
-      prompt: AssembledPrompt;
+      prompt: Preflight;
       reservation: ReturnType<GenerationManager["reserve"]>;
       sampling: Sampling | undefined;
       /** Pending attachments, rechecked under their locks; linked in this commit. */
@@ -714,6 +812,8 @@ export class SendService {
           ids.userMessageId,
         );
       await this.o.hooks?.afterAttachmentLink?.();
+      // Regeneration removed the old reply: its pending proposals are invalid (§4.3).
+      if (input.regenerate) await this.o.proposals?.invalidateStale(userId, conversationId, next);
       // Attachments of removed turns go only after the canonical write (§4.2).
       if (input.regenerate)
         await this.o.attachments
@@ -738,6 +838,7 @@ export class SendService {
             providerId: input.providerId,
             model: input.model,
           },
+          memorySnapshot: input.prompt.memory.snapshot,
         }),
       );
       await this.o.hooks?.afterCommit?.();
@@ -749,7 +850,9 @@ export class SendService {
           provider: input.provider,
           model: input.model,
           operationKey: record.operationKey,
-          messages: input.prompt.messages,
+          messages: input.prompt.prompt.messages,
+          tools: this.toolSession(userId, conversationId, ids, input),
+          memorySnapshot: input.prompt.memory.snapshot,
           loadMedia: (part) =>
             this.o.attachments?.readBlob(userId, part.attachmentId) ?? Promise.resolve(null),
           maxTokens: this.maxOutputTokens(),
@@ -785,10 +888,35 @@ export class SendService {
     }
   }
 
+  /** The proposal tools for one accepted generation, when the model is tool-capable. */
+  private toolSession(
+    userId: string,
+    conversationId: string,
+    ids: { generationId: string; userMessageId: string; assistantMessageId: string },
+    input: { providerId: string; model: string; prompt: Preflight },
+  ): ToolSession | undefined {
+    const proposals = this.o.proposals;
+    if (!proposals || !input.prompt.tools) return undefined;
+    const { prompt, counter, contextTokens, memory } = input.prompt;
+    return proposals.session({
+      userId,
+      conversationId,
+      ...ids,
+      providerId: input.providerId,
+      model: input.model,
+      snapshot: memory.snapshot,
+      // The continuation near the context limit is skipped, never overflowing (§4.3).
+      fits: async (continuation, maxTokens) =>
+        prompt.promptTokens + (await continuationCost(counter, continuation)) + maxTokens <=
+        contextTokens,
+    });
+  }
+
   /**
    * Terminal write (INV-07): the reasoning block (if any) and the assistant
    * block, appended exactly once under the conversation lock. A deleted or
-   * malformed conversation discards the write; nothing is resurrected.
+   * malformed conversation discards the write; nothing is resurrected. Then,
+   * still under the lock, the staged proposals of a complete reply (§4.3).
    */
   private persistOutcome(
     userId: string,
@@ -824,11 +952,16 @@ export class SendService {
         return null;
       }
       const conversation = read.conversation;
+      const stage = (model: ConversationModel) =>
+        outcome.state === "completed"
+          ? this.stageProposals(userId, conversationId, model, outcome.proposals)
+          : Promise.resolve();
       if (
         conversation.model.blocks.some(
           (block) => block.type === "assistant" && block.id === record.assistantMessageId,
         )
       ) {
+        await stage(conversation.model);
         return conversation.revision; // already written
       }
       // Only the surviving source turn is answered (INV-35): the reply is
@@ -860,6 +993,8 @@ export class SendService {
         conversationId,
         this.o.store.appendBlocks(conversation.model, blocks),
       );
+      await this.o.hooks?.afterAssistantWrite?.();
+      await stage(written.model);
       await markWritten();
       return written.revision;
     });

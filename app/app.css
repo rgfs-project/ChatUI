@@ -1708,6 +1708,13 @@ button.danger-outline {
   }
 }
 
+/* Memory suggestion previews while a reply streams (Phase 13b). */
+.memory-previews {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 /* Touch targets: at least 44x44 CSS px on narrow screens and coarse pointers. */
 @media (max-width: 767.98px), (pointer: coarse) {
   button,

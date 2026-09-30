@@ -113,6 +113,25 @@ ChatUI classifies only by status and `error.type`. Messages are ChatUI's own; up
 
   Raise the reserve for dynamic-resolution models or long audio. An underestimate only makes the synchronous `CONTEXT_TOO_LARGE` check best-effort: a provider context overflow after `202` still ends the generation as `failed` with an explanation.
 
+## Tool calls (Phase 13b)
+
+ChatUI offers three proposal-only tools (`propose_memory_create`, `propose_memory_update`, `propose_memory_forget`), and only to providers whose configuration says `capabilities.tools: true` (contracts §4.3). The probe's `tools` section records what the live server does:
+
+- `streamsToolCalls`: calls arrive as `choices[0].delta.tool_calls[]` fragments (`index`, then `id`/`function.name` once, `function.arguments` in pieces).
+- `endsTurnAfterCall`: the stream finishes with `finish_reason: "tool_calls"`.
+- `continuation.acceptsToolResults`: a follow-up request with an assistant message carrying `tool_calls` and one `role: "tool"` message per call id is accepted (HTTP 200).
+
+**All three are UNVERIFIED.** The Phase 13b environment had no reachable llama-server. llama.cpp documents OpenAI-compatible function calling only with `--jinja` and a template that supports tools, so the result depends on the server flags and the model. Until the probe has been run against your server, leave `tools: false` for that provider, or turn it on and watch the logs.
+
+How ChatUI degrades, whatever the server does:
+
+- **No tool calls streamed.** The reply is ordinary text, and no suggestions are recorded.
+- **Calls with malformed, unknown or oversized arguments.** Each is dropped as invalid (logged without content). The answer is kept and its status is unchanged.
+- **Tool results rejected** (an HTTP 4xx before streaming, or a context overflow). The continuation is skipped: the reply ends with the text written before the calls and stays `complete`. If that text is empty, the UI says "The answer wasn't generated" and offers Regenerate.
+- **The continuation's messages don't fit the context**, or the output tokens or time are used up. The continuation is skipped the same way. It gets only the remaining `MAX_OUTPUT_TOKENS` and `GENERATION_MAX_MS`.
+
+Tool schemas are counted as their tokenized JSON plus `TEMPLATE_OVERHEAD_TOKENS`, and `CONTINUATION_TOKEN_RESERVE` (default 256) is reserved for the call/result messages. `/apply-template` is called without `tools`, so a template that renders tool schemas more verbosely than their JSON can make the synchronous `CONTEXT_TOO_LARGE` check best-effort. A context overflow after `202` still ends the generation as `failed` with an explanation.
+
 ## Router / multi-model behaviour
 
 - One process serves many presets. Requests name a model; unloaded models are loaded on demand (`models_autoload`). Autoload latency and eviction policy: **UNVERIFIED** (not triggered by the probe).

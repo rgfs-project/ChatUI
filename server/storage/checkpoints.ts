@@ -2,6 +2,9 @@
 // Unfinished checkpoints are recovery state; finalized ones are disposable.
 import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "./fs.ts";
 import { isUuid, type DataPaths } from "./paths.ts";
+import type { ContinuationMessages } from "../providers/types.ts";
+import type { MemorySnapshotEntry } from "./memories.ts";
+import type { ProposalRecord } from "./proposals.ts";
 
 export type CheckpointState = "running" | "terminal-decided" | "terminal";
 
@@ -12,6 +15,11 @@ export interface CheckpointOutcome {
   finishReason: string | null;
   error: { code: string; message: string } | null;
   finishedAt: string;
+  /**
+   * Staged proposals (Phase 13b, contracts §4.3): written after the assistant
+   * only when `state` is `completed`; discarded otherwise.
+   */
+  proposals?: ProposalRecord[];
 }
 
 export interface GenerationCheckpoint {
@@ -32,6 +40,12 @@ export interface GenerationCheckpoint {
   updatedAt: string;
   /** Recorded before the Markdown write (terminal-decided). */
   outcome: CheckpointOutcome | null;
+  /** Approved notes the prompt included (Phase 13b, contracts §4.1 step 2). */
+  memorySnapshot?: MemorySnapshotEntry[];
+  /** Staged proposals while running (Phase 13b). */
+  proposals?: ProposalRecord[];
+  /** The continuation's tool-call and result messages; never written to Markdown. */
+  continuation?: ContinuationMessages | null;
 }
 
 function isCheckpoint(value: unknown): value is GenerationCheckpoint {

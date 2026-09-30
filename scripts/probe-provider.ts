@@ -97,6 +97,9 @@ async function streamChat(body: Json, timeoutMs = 180_000) {
     lastUsage: undefined as unknown,
     errorBody: undefined as unknown,
     sampleContent: "",
+    /** Streamed tool-call fragments (Phase 13b) and the calls they assemble into. */
+    toolCallFragments: 0,
+    toolCalls: [] as { id: string; name: string; arguments: string }[],
   };
   if (!res.ok || !res.body) {
     const text = await res.text();
@@ -141,6 +144,16 @@ async function streamChat(body: Json, timeoutMs = 180_000) {
         result.ttftMs ??= Math.round(performance.now() - started);
         result.reasoningChars += delta.reasoning_content.length;
       }
+      if (Array.isArray(delta?.tool_calls))
+        for (const fragment of delta.tool_calls as Json[]) {
+          result.toolCallFragments++;
+          const index = typeof fragment.index === "number" ? fragment.index : 0;
+          const fn = (fragment.function as Json | undefined) ?? {};
+          const call = (result.toolCalls[index] ??= { id: "", name: "", arguments: "" });
+          if (typeof fragment.id === "string") call.id ||= fragment.id;
+          if (typeof fn.name === "string") call.name ||= fn.name;
+          if (typeof fn.arguments === "string") call.arguments += fn.arguments;
+        }
       if (choice?.finish_reason) result.finishReasons.push(choice.finish_reason);
       if (chunk.usage) {
         result.sawUsage = true;
@@ -182,6 +195,91 @@ const loaded = list.find((m) => (m.status as Json | undefined)?.value === "loade
 const model = process.argv[2] ?? (loaded?.id as string | undefined);
 report.probedModel = model;
 if (!model) {
+  // 7. Proposal tools (Phase 13b, contracts §4.3): does the model stream tool
+  // calls, end its turn after one, and accept tool-result messages?
+  const tool = {
+    type: "function",
+    function: {
+      name: "propose_memory_create",
+      description: "Suggest saving a note about the user. The user reviews it.",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string" }, content: { type: "string" } },
+        required: ["name", "content"],
+        additionalProperties: false,
+      },
+    },
+  };
+  const toolPrompt = [
+    {
+      role: "user",
+      content:
+        "Please remember that my favourite colour is green. Use the propose_memory_create tool, then confirm briefly.",
+    },
+  ];
+  const withTools = await streamChat({
+    model,
+    messages: toolPrompt,
+    tools: [tool],
+    max_tokens: 256,
+  });
+  const calls = withTools.toolCalls.filter(Boolean);
+  let continuation: unknown = "UNVERIFIED: the model made no tool call";
+  if (calls.length > 0) {
+    const followUp = await streamChat({
+      model,
+      messages: [
+        ...toolPrompt,
+        {
+          role: "assistant",
+          content: withTools.sampleContent,
+          tool_calls: calls.map((call, i) => ({
+            id: call.id || `call_${String(i)}`,
+            type: "function",
+            function: { name: call.name, arguments: call.arguments },
+          })),
+        },
+        ...calls.map((call, i) => ({
+          role: "tool",
+          tool_call_id: call.id || `call_${String(i)}`,
+          content:
+            "Recorded as a pending memory suggestion for the user to review; it is not saved. Continue your reply to the user.",
+        })),
+      ],
+      max_tokens: 128,
+    });
+    continuation = {
+      status: followUp.status,
+      acceptsToolResults: followUp.status === 200,
+      finishReasons: followUp.finishReasons,
+      contentChars: followUp.contentChars,
+      madeAnotherCall: followUp.toolCalls.length > 0,
+      errorBody: followUp.errorBody,
+    };
+  }
+  report.tools = {
+    status: withTools.status,
+    streamsToolCalls: calls.length > 0,
+    fragments: withTools.toolCallFragments,
+    calls: calls.map((call) => ({
+      name: call.name,
+      hasId: call.id !== "",
+      argumentsParse: (() => {
+        try {
+          JSON.parse(call.arguments);
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
+    })),
+    finishReasons: withTools.finishReasons,
+    endsTurnAfterCall: calls.length > 0 && withTools.finishReasons.includes("tool_calls"),
+    textBeforeCallChars: withTools.contentChars,
+    errorBody: withTools.errorBody,
+    continuation,
+  };
+
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   process.exit(1);
 }

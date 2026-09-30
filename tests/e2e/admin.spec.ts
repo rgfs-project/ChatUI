@@ -85,8 +85,10 @@ test.describe("as an admin", () => {
     );
     const models = panel.getByTestId("admin-models");
     await expect(models).toContainText("mock-hang");
-    await panel.getByLabel("mock-hang visible to users").uncheck();
-    await expect(panel.getByLabel("mock-hang visible to users")).not.toBeChecked();
+    await panel.getByLabel("mock-hang (Local llama.cpp) visible to users").uncheck();
+    await expect(
+      panel.getByLabel("mock-hang (Local llama.cpp) visible to users"),
+    ).not.toBeChecked();
 
     // Settings: a validated time zone.
     await panel.getByRole("tab", { name: "Settings" }).click();
@@ -129,8 +131,14 @@ test.describe("as an admin", () => {
       storageState: await signedInState(browser, E2E_USER),
     });
     const userPage = await userContext.newPage();
-    const models = await (await userPage.request.get(`${base()}/api/models`)).text();
-    expect(models).not.toContain('"mock-hang"');
+    // Hiding is per (provider, model): the same id on another provider stays.
+    const models = (await (await userPage.request.get(`${base()}/api/models`)).json()) as {
+      providers: { provider: { id: string }; models: { id: string }[] }[];
+    };
+    const ids = (providerId: string) =>
+      models.providers.find((g) => g.provider.id === providerId)?.models.map((m) => m.id) ?? [];
+    expect(ids("local")).not.toContain("mock-hang");
+    expect(ids("local")).toContain("mock-chat");
     const forbidden = await userPage.request.get(`${base()}/api/admin/users`);
     expect(forbidden.status()).toBe(403);
     await userContext.close();

@@ -73,6 +73,45 @@ export async function serializeMessages(
   return out;
 }
 
+/**
+ * The continuation's extra messages in the OpenAI format llama-server accepts
+ * with `--jinja` (docs/provider-notes.md): an assistant message carrying
+ * `tool_calls`, then one `role: "tool"` message per call id.
+ */
+export function continuationMessages(continuation: ChatRequest["continuation"]): Json[] {
+  if (!continuation) return [];
+  return [
+    {
+      role: "assistant",
+      content: continuation.assistantContent,
+      tool_calls: continuation.calls.map((call) => ({
+        id: call.id,
+        type: "function",
+        function: { name: call.name, arguments: call.arguments },
+      })),
+    },
+    ...continuation.results.map((result) => ({
+      role: "tool",
+      tool_call_id: result.id,
+      content: result.content,
+    })),
+  ];
+}
+
+/** The `tools` request field for the offered function tools. */
+export function toolsField(tools: ChatRequest["tools"]): Json {
+  if (!tools || tools.length === 0) return {};
+  return {
+    tools: tools.map((tool) => ({
+      type: "function",
+      function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+    })),
+  };
+}
+
+/** Upper bound of tool-call fragments read from one chunk. */
+const MAX_CALL_FRAGMENTS = 32;
+
 /** OpenAI-compatible and llama.cpp sampling parameters, only those configured. */
 function samplingFields(sampling: ChatRequest["sampling"]): Record<string, number> {
   const out: Record<string, number> = {};
@@ -388,9 +427,13 @@ export function createLlamaCppProvider(
           headers: { ...headers(), Accept: "text/event-stream" },
           body: JSON.stringify({
             model: request.model,
-            messages: await serializeMessages(request.messages, request.loadMedia),
+            messages: [
+              ...(await serializeMessages(request.messages, request.loadMedia)),
+              ...continuationMessages(request.continuation),
+            ],
             max_tokens: request.maxTokens,
             ...samplingFields(request.sampling),
+            ...toolsField(request.tools),
             stream: true,
             stream_options: { include_usage: true },
           }),
@@ -508,6 +551,23 @@ export function createLlamaCppProvider(
       }
       if (typeof delta.content === "string" && delta.content) {
         yield { type: "content", text: delta.content };
+      }
+      if (Array.isArray(delta.tool_calls)) {
+        for (const fragment of delta.tool_calls.slice(0, MAX_CALL_FRAGMENTS)) {
+          if (!isObject(fragment)) continue;
+          const index = fragment.index;
+          if (typeof index !== "number" || !Number.isSafeInteger(index) || index < 0) continue;
+          const fn = isObject(fragment.function) ? fragment.function : {};
+          yield {
+            type: "tool_call",
+            index,
+            ...(typeof fragment.id === "string" && fragment.id ? { id: fragment.id } : {}),
+            ...(typeof fn.name === "string" && fn.name ? { name: fn.name } : {}),
+            ...(typeof fn.arguments === "string" && fn.arguments
+              ? { arguments: fn.arguments }
+              : {}),
+          };
+        }
       }
       if (typeof choice.finish_reason === "string" && choice.finish_reason) {
         yield { type: "finish", reason: choice.finish_reason.slice(0, 40) };

@@ -14,10 +14,42 @@ import type { Logger } from "../logger.ts";
 import {
   ProviderError,
   type ChatRequest,
+  type ContinuationMessages,
   type Provider,
   type Sampling,
+  type ToolDefinition,
 } from "../providers/types.ts";
+import type { ProposalPreview } from "@shared/memories";
+import { TOOL_RESULTS, type StreamedCall } from "../chat/memory-tools.ts";
 import type { CheckpointStore, GenerationCheckpoint } from "../storage/checkpoints.ts";
+import type { MemorySnapshotEntry } from "../storage/memories.ts";
+import type { ProposalRecord } from "../storage/proposals.ts";
+
+/** Calls tracked per generation at all; later fragments are ignored (bounded memory). */
+const MAX_TRACKED_CALLS = 32;
+
+/**
+ * Proposal tools for one generation (Phase 13b, contracts §4.3). Supplied by
+ * the send path only for server-verified tool-capable models.
+ */
+export interface ToolSession {
+  tools: readonly ToolDefinition[];
+  /** Per-generation call cap; later calls are invalid. */
+  maxCalls: number;
+  /** Per-call argument bound (UTF-8 bytes), enforced while streaming. */
+  maxArgumentBytes: number;
+  /**
+   * Validates the completed calls (reads only; no locks, no network) and
+   * returns one fixed result per call, the staged records and SSE previews.
+   */
+  record(calls: readonly StreamedCall[]): Promise<{
+    results: { id: string; content: string }[];
+    staged: ProposalRecord[];
+    previews: ProposalPreview[];
+  }>;
+  /** Whether the continuation's messages plus `maxTokens` of output fit the context. */
+  fits(continuation: ContinuationMessages, maxTokens: number): Promise<boolean>;
+}
 
 /** Receives events for one generation. Must never block (INV-06, INV-62). */
 export interface GenerationObserver {
@@ -34,6 +66,8 @@ export interface GenerationOutcome {
   finishReason: string | null;
   error: GenerationError | null;
   finishedAt: string;
+  /** Staged proposals; persisted only for a `completed` outcome (contracts §4.3). */
+  proposals: ProposalRecord[];
 }
 
 /**
@@ -113,6 +147,13 @@ interface Generation {
   /** Resolves once the terminal outcome is persisted and published. */
   settled: Promise<void>;
   settle: () => void;
+  memorySnapshot: MemorySnapshotEntry[] | undefined;
+  /** Staged proposals (Phase 13b) and their SSE previews. */
+  proposals: ProposalRecord[];
+  previews: ProposalPreview[];
+  continuation: ContinuationMessages | null;
+  /** Wall-clock start, for the continuation's remaining time. */
+  startedAtMs: number;
 }
 
 type AbortReason = "cancel" | "max" | "shutdown";
@@ -273,6 +314,7 @@ export class GenerationManager {
     assistantMessageId: string;
     conversationId: string;
     identity: CheckpointIdentity;
+    memorySnapshot?: MemorySnapshotEntry[] | undefined;
   }): GenerationCheckpoint {
     const now = this.now().toISOString();
     return {
@@ -291,6 +333,7 @@ export class GenerationManager {
       createdAt: now,
       updatedAt: now,
       outcome: null,
+      ...(input.memorySnapshot ? { memorySnapshot: input.memorySnapshot } : {}),
     };
   }
 
@@ -311,6 +354,9 @@ export class GenerationManager {
       /** Per-send output cap and sampling (instance/model settings, Phase 10). */
       maxTokens?: number;
       sampling?: Sampling | undefined;
+      /** Proposal tools (Phase 13b); omitted for models without verified tool support. */
+      tools?: ToolSession | undefined;
+      memorySnapshot?: MemorySnapshotEntry[] | undefined;
     },
   ): void {
     let settle!: () => void;
@@ -348,6 +394,11 @@ export class GenerationManager {
       writes: Promise.resolve(),
       settled,
       settle,
+      memorySnapshot: input.memorySnapshot,
+      proposals: [],
+      previews: [],
+      continuation: null,
+      startedAtMs: Date.now(),
     };
     this.generations.set(generation.id, generation);
     this.active.set(reservation.conversationKey, {
@@ -363,6 +414,7 @@ export class GenerationManager {
       maxTokens: input.maxTokens ?? this.options.maxOutputTokens,
       sampling: input.sampling,
       loadMedia: input.loadMedia,
+      tools: input.tools,
     });
   }
 
@@ -373,46 +425,31 @@ export class GenerationManager {
       maxTokens: number;
       sampling: Sampling | undefined;
       loadMedia?: ChatRequest["loadMedia"];
+      tools?: ToolSession | undefined;
     },
   ): Promise<void> {
     const signal = generation.controller.signal;
+    const session = request.tools;
+    const base = {
+      model: generation.model,
+      messages,
+      ...(request.sampling ? { sampling: request.sampling } : {}),
+      ...(request.loadMedia ? { loadMedia: request.loadMedia } : {}),
+    };
+    const pass: StreamPass = { started: false, calls: new Map(), usedTokens: undefined };
     try {
-      const stream = generation.provider.streamChat(
-        {
-          model: generation.model,
-          messages,
-          maxTokens: request.maxTokens,
-          ...(request.sampling ? { sampling: request.sampling } : {}),
-          ...(request.loadMedia ? { loadMedia: request.loadMedia } : {}),
-        },
-        signal,
+      await this.stream(
+        generation,
+        { ...base, maxTokens: request.maxTokens, ...(session ? { tools: session.tools } : {}) },
+        pass,
+        session,
+        false,
       );
-      for await (const event of stream) {
-        if (generation.decided || signal.aborted) break; // late chunks are dropped
-        switch (event.type) {
-          case "start":
-            this.transitionToStreaming(generation);
-            break;
-          case "content":
-            this.transitionToStreaming(generation);
-            generation.content += event.text;
-            generation.dirty = true;
-            this.emit(generation, { type: "delta", data: { content: event.text } });
-            break;
-          case "reasoning":
-            this.transitionToStreaming(generation);
-            generation.reasoning += event.text;
-            generation.dirty = true;
-            this.emit(generation, { type: "delta", data: { reasoning: event.text } });
-            break;
-          case "finish":
-            generation.finishReason = event.reason;
-            break;
-          case "usage":
-            break;
-        }
-      }
-      if (!signal.aborted) this.finish(generation, "completed");
+      if (signal.aborted || generation.decided) return;
+      if (session && pass.calls.size > 0)
+        await this.continueAfterCalls(generation, base, request.maxTokens, pass, session);
+      // Re-read after the awaits: a cancel may have landed meanwhile.
+      if (!aborted(generation)) this.finish(generation, "completed");
     } catch (error) {
       if (signal.aborted) {
         // abort() already decided the terminal state (or shutdown left it running).
@@ -433,6 +470,185 @@ export class GenerationManager {
           message: "The generation failed",
         });
       }
+    }
+  }
+
+  /** One provider request's events into the generation (the first or the continuation). */
+  private async stream(
+    generation: Generation,
+    request: ChatRequest,
+    pass: StreamPass,
+    session: ToolSession | undefined,
+    continuation: boolean,
+  ): Promise<void> {
+    const signal = generation.controller.signal;
+    // The continuation's text joins the earlier text with one blank line.
+    let contentJoined = !continuation || generation.content === "";
+    let reasoningJoined = !continuation || generation.reasoning === "";
+    const stream = generation.provider.streamChat(request, signal);
+    for await (const event of stream) {
+      if (generation.decided || signal.aborted) break; // late chunks are dropped
+      switch (event.type) {
+        case "start":
+          pass.started = true;
+          this.transitionToStreaming(generation);
+          break;
+        case "content": {
+          this.transitionToStreaming(generation);
+          const text = contentJoined ? event.text : `${separator(generation.content)}${event.text}`;
+          contentJoined = true;
+          generation.content += text;
+          generation.dirty = true;
+          this.emit(generation, { type: "delta", data: { content: text } });
+          break;
+        }
+        case "reasoning": {
+          this.transitionToStreaming(generation);
+          const text = reasoningJoined
+            ? event.text
+            : `${separator(generation.reasoning)}${event.text}`;
+          reasoningJoined = true;
+          generation.reasoning += text;
+          generation.dirty = true;
+          this.emit(generation, { type: "delta", data: { reasoning: text } });
+          break;
+        }
+        case "tool_call":
+          // Tool calls count only when tools were offered (never in the continuation).
+          if (session && !continuation) this.collectCall(pass, session, event);
+          break;
+        case "finish":
+          generation.finishReason = event.reason;
+          break;
+        case "usage":
+          pass.usedTokens = event.completionTokens;
+          break;
+      }
+    }
+  }
+
+  /** Accumulates a streamed call fragment within the call and argument bounds. */
+  private collectCall(
+    pass: StreamPass,
+    session: ToolSession,
+    event: { index: number; id?: string; name?: string; arguments?: string },
+  ): void {
+    let call = pass.calls.get(event.index);
+    if (!call) {
+      if (pass.calls.size >= MAX_TRACKED_CALLS) return;
+      call = {
+        index: event.index,
+        id: "",
+        name: "",
+        arguments: "",
+        oversized: false,
+        overCap: pass.calls.size >= session.maxCalls,
+      };
+      pass.calls.set(event.index, call);
+    }
+    if (event.id && !call.id) call.id = event.id.slice(0, 128);
+    if (event.name && !call.name) call.name = event.name.slice(0, 128);
+    if (event.arguments && !call.oversized) {
+      if (
+        Buffer.byteLength(call.arguments) + Buffer.byteLength(event.arguments) >
+        session.maxArgumentBytes
+      ) {
+        call.oversized = true;
+        call.arguments = "";
+      } else call.arguments += event.arguments;
+    }
+  }
+
+  /**
+   * Records the calls' outcomes and issues exactly one continuation request
+   * (contracts §4.3): the same prompt plus the tool-call message and one
+   * fixed result per call, no tools offered, the remaining output tokens and
+   * time. Skipped when either is exhausted, when the messages don't fit the
+   * context, or when the provider rejects tool results; the reply then ends
+   * with the text so far.
+   */
+  private async continueAfterCalls(
+    generation: Generation,
+    base: Omit<ChatRequest, "maxTokens">,
+    maxTokens: number,
+    pass: StreamPass,
+    session: ToolSession,
+  ): Promise<void> {
+    const calls = [...pass.calls.values()]
+      .sort((a, b) => a.index - b.index)
+      .map((call) => ({ ...call, id: call.id || `call_${String(call.index)}` }));
+    let recorded: Awaited<ReturnType<ToolSession["record"]>>;
+    try {
+      recorded = await session.record(calls);
+    } catch (error) {
+      // Recording is best effort: the calls become invalid, the answer stands.
+      this.options.logger.warn(
+        { err: error, generationId: generation.id },
+        "recording proposal calls failed",
+      );
+      recorded = {
+        results: calls.map((call) => ({ id: call.id, content: TOOL_RESULTS.invalid })),
+        staged: [],
+        previews: [],
+      };
+    }
+    if (generation.decided) return;
+    generation.proposals = recorded.staged;
+    generation.previews = recorded.previews;
+    if (recorded.previews.length > 0)
+      this.emit(generation, { type: "proposals", data: { proposals: recorded.previews } });
+    const continuation: ContinuationMessages = {
+      assistantContent: generation.content,
+      calls: calls.map((call) => ({ id: call.id, name: call.name, arguments: call.arguments })),
+      results: recorded.results,
+    };
+    generation.continuation = continuation;
+    void this.checkpoint(generation, "running");
+    // Output already produced: the provider's count, else one token per byte.
+    const used =
+      pass.usedTokens ??
+      Buffer.byteLength(generation.content) +
+        Buffer.byteLength(generation.reasoning) +
+        calls.reduce((sum, call) => sum + Buffer.byteLength(call.arguments), 0);
+    const remainingTokens = maxTokens - used;
+    const remainingMs = this.options.generationMaxMs - (Date.now() - generation.startedAtMs);
+    const log = (reason: string) => {
+      this.options.logger.info(
+        { generationId: generation.id, reason, calls: calls.length },
+        "continuation skipped",
+      );
+    };
+    if (remainingTokens <= 0 || remainingMs <= 0) {
+      log(remainingTokens <= 0 ? "output tokens exhausted" : "time exhausted");
+      return;
+    }
+    if (!(await session.fits(continuation, remainingTokens))) {
+      log("does not fit the context");
+      return;
+    }
+    if (decided(generation)) return;
+    const second: StreamPass = { started: false, calls: new Map(), usedTokens: undefined };
+    generation.finishReason = null;
+    try {
+      await this.stream(
+        generation,
+        { ...base, maxTokens: remainingTokens, continuation },
+        second,
+        session,
+        true,
+      );
+    } catch (error) {
+      // A provider that refuses tool-result messages answers before streaming.
+      if (
+        error instanceof ProviderError &&
+        !second.started &&
+        (error.kind === "http" || error.kind === "context_overflow")
+      ) {
+        log("provider rejected the tool results");
+        generation.finishReason = "tool_calls";
+        return;
+      }
+      throw error;
     }
   }
 
@@ -491,8 +707,12 @@ export class GenerationManager {
             finishReason: outcome.finishReason,
             error: outcome.error,
             finishedAt: outcome.finishedAt,
+            ...(outcome.proposals.length > 0 ? { proposals: outcome.proposals } : {}),
           }
         : null,
+      ...(generation.memorySnapshot ? { memorySnapshot: generation.memorySnapshot } : {}),
+      ...(generation.proposals.length > 0 ? { proposals: generation.proposals } : {}),
+      ...(generation.continuation ? { continuation: generation.continuation } : {}),
     };
   }
 
@@ -552,6 +772,7 @@ export class GenerationManager {
       finishReason: state === "completed" ? generation.finishReason : null,
       error,
       finishedAt: this.now().toISOString(),
+      proposals: generation.proposals,
     };
     void (async () => {
       let revision: string | null = null;
@@ -583,9 +804,14 @@ export class GenerationManager {
       if (this.active.get(generation.conversationKey)?.id === generation.id) {
         this.active.delete(generation.conversationKey);
       }
+      // Proposals are actionable only for a canonically complete reply (§4.3).
+      const proposalIds =
+        state === "completed" && revision !== null
+          ? generation.proposals.filter((p) => p.status === "pending").map((p) => p.id)
+          : [];
       this.emit(generation, {
         type: "terminal",
-        data: { state, finishReason: outcome.finishReason, error, revision },
+        data: { state, finishReason: outcome.finishReason, error, revision, proposalIds },
       });
       for (const observer of generation.observers) observer.close();
       generation.observers.clear();
@@ -640,6 +866,7 @@ export class GenerationManager {
       finishedAt: g.finishedAt,
       revision: g.revision,
       lastEventId: g.seq,
+      ...(g.previews.length > 0 ? { proposals: g.previews } : {}),
     };
   }
 
@@ -742,6 +969,29 @@ export class GenerationManager {
       generation.observers.clear();
     }
   }
+}
+
+/** Per-request streaming state. */
+interface StreamPass {
+  /** The provider accepted the request (response headers). */
+  started: boolean;
+  calls: Map<number, StreamedCall>;
+  /** Completion tokens reported by the provider's usage chunk. */
+  usedTokens: number | undefined;
+}
+
+/** Current flags, read fresh after an await (a cancel or timeout may have landed). */
+function decided(generation: Generation): boolean {
+  return generation.decided;
+}
+function aborted(generation: Generation): boolean {
+  return generation.controller.signal.aborted;
+}
+
+/** What joins earlier text and a continuation's text: exactly one blank line. */
+function separator(text: string): string {
+  if (text.endsWith("\n\n")) return "";
+  return text.endsWith("\n") ? "\n" : "\n\n";
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

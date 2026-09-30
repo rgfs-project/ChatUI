@@ -3,6 +3,7 @@ import { ErrorCode } from "./errors";
 import { canonicalUuid } from "./ids";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "./attachment-media";
 import { GENERATION_STATES, type TerminalState } from "./generation-state";
+import { proposalPreviewSchema, type ProposalPreview } from "./memories";
 
 export * from "./generation-state";
 
@@ -126,6 +127,8 @@ export const generationSnapshotSchema = z.strictObject({
   revision: z.string().nullable(),
   /** Id of the last event applied to this snapshot (SSE `id`). */
   lastEventId: z.number().int().nonnegative(),
+  /** Non-actionable previews of memory suggestions recorded so far (Phase 13b). */
+  proposals: z.array(proposalPreviewSchema).optional(),
 });
 export type GenerationSnapshot = z.infer<typeof generationSnapshotSchema>;
 
@@ -136,6 +139,8 @@ export type GenerationEvent =
   | { type: "resync"; id: number; data: GenerationSnapshot }
   | { type: "state"; id: number; data: { state: "streaming" } }
   | { type: "delta"; id: number; data: { content?: string; reasoning?: string } }
+  /** Memory suggestions recorded during streaming: previews only, never actionable (§4.3). */
+  | { type: "proposals"; id: number; data: { proposals: ProposalPreview[] } }
   | {
       type: "terminal";
       id: number;
@@ -145,5 +150,7 @@ export type GenerationEvent =
         error: GenerationError | null;
         /** Conversation revision computed after the assistant write and any auto-title. */
         revision: string | null;
+        /** Actionable proposal ids: only for a `completed` reply that was written (§4.3). */
+        proposalIds?: string[];
       };
     };

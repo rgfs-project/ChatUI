@@ -98,6 +98,7 @@ export async function toConversationDto(
     revision: conversation.revision,
     messages,
     activeGeneration: active && !active.startsWith("reserved:") ? { generationId: active } : null,
+    proposals: await services.proposals.dtos(userId, conversation.id),
   };
 }
 

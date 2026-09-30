@@ -101,7 +101,12 @@ export function measure(): Record<string, number> {
  * Chunks that must stay out of every cold-visit group: attachment UI that a
  * chat without attachments never needs (Phase 12), loaded on first use.
  */
-export const LAZY_ONLY = ["AttachmentTray", "ImageViewer"] as const;
+export const LAZY_ONLY = [
+  "AttachmentTray",
+  "ImageViewer",
+  "MemorySuggestions",
+  "MemorySettings",
+] as const;
 
 /** Lazy-only chunks a route group would download on a cold visit (must be none). */
 export function lazyLeaks(manifest: Manifest = readManifest()): string[] {

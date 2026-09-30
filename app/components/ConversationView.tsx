@@ -18,6 +18,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { AttachmentDto, MessageAttachmentDto } from "@shared/attachments";
+import type { ProposalDto } from "@shared/memories";
 import {
   addFiles,
   moveTray,
@@ -504,6 +505,7 @@ export function ConversationView(props: {
   }
 
   // Which user turn each regular reply answers, and which turns are unanswered.
+  const suggestionsByReply = groupSuggestions(conversation?.proposals);
   const answers = new Map<string, string>();
   const unanswered = new Set<string>();
   conversation?.messages.forEach((message, index, all) => {
@@ -789,6 +791,9 @@ export function ConversationView(props: {
               status={message.status}
               attachments={message.attachments}
               onOpenImage={openImage}
+              suggestions={suggestionsByReply.get(message.id)}
+              userId={userId}
+              conversationId={conversationId}
               actions={
                 message.role === "user"
                   ? unanswered.has(message.id)
@@ -861,6 +866,16 @@ export function ConversationView(props: {
                 {STATE_LABEL[live.state]}
                 {live.error ? ` — ${live.error.message}` : ""}
               </p>
+              {live.proposals.some((p) => p.status === "pending") ? (
+                // Previews only: they become actionable once the reply is stored (§4.3).
+                <p className="memory-previews" data-testid="memory-previews">
+                  Memory suggestions to review when the reply finishes:{" "}
+                  {live.proposals
+                    .filter((p) => p.status === "pending")
+                    .map((p) => `“${p.name}”`)
+                    .join(", ")}
+                </p>
+              ) : null}
             </li>
           ) : null}
           {queued.map((item) => (
@@ -991,6 +1006,29 @@ export function ConversationView(props: {
 }
 
 /** An optimistic user message: sending, sent (awaiting the stored copy) or unknown. */
+const NO_SUGGESTIONS = new Map<string, ProposalDto[]>();
+const grouped = new WeakMap<readonly ProposalDto[], Map<string, ProposalDto[]>>();
+
+/**
+ * Memory suggestions by the reply that made them. Cached per query-data
+ * array, so each message keeps a stable prop (the memo stays effective while
+ * another reply streams).
+ */
+function groupSuggestions(proposals: readonly ProposalDto[] | undefined) {
+  if (!proposals || proposals.length === 0) return NO_SUGGESTIONS;
+  let byReply = grouped.get(proposals);
+  if (!byReply) {
+    byReply = new Map();
+    for (const proposal of proposals) {
+      const list = byReply.get(proposal.assistantMessageId) ?? [];
+      list.push(proposal);
+      byReply.set(proposal.assistantMessageId, list);
+    }
+    grouped.set(proposals, byReply);
+  }
+  return byReply;
+}
+
 function PendingMessage(props: {
   vars: SendVariables;
   status: "idle" | "pending" | "success" | "error";

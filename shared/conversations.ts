@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MAX_ATTACHMENTS_PER_MESSAGE } from "./attachment-media";
 import { messageAttachmentSchema } from "./attachments";
 import { canonicalUuid } from "./ids";
+import { proposalDtoSchema } from "./memories";
 
 /** Conversation DTOs (Phase 3). Browser code imports only the types. */
 
@@ -48,6 +49,8 @@ export const conversationDtoSchema = z.strictObject({
   messages: z.array(messageDtoSchema),
   /** The running generation for this conversation, if any. */
   activeGeneration: z.strictObject({ generationId: z.uuid() }).nullable(),
+  /** Memory suggestions made in this conversation (Phase 13b), oldest first. */
+  proposals: z.array(proposalDtoSchema).optional(),
 });
 export type ConversationDto = z.infer<typeof conversationDtoSchema>;
 

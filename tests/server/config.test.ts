@@ -2,7 +2,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ConfigError, DEFAULT_ATTACHMENT_CONFIG, loadConfig } from "../../server/config.ts";
+import {
+  ConfigError,
+  DEFAULT_ATTACHMENT_CONFIG,
+  DEFAULT_MEMORY_CONFIG,
+  loadConfig,
+} from "../../server/config.ts";
 
 let root: string;
 
@@ -42,6 +47,7 @@ describe("configuration", () => {
       inContainer: false,
       // The environment defaults match the in-code defaults tests use.
       attachments: DEFAULT_ATTACHMENT_CONFIG,
+      memories: DEFAULT_MEMORY_CONFIG,
       provider: {
         baseUrl: undefined,
         apiKey: undefined,

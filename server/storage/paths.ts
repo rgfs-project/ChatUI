@@ -100,6 +100,32 @@ export class DataPaths {
     return path.join(this.attachmentDir(userId, attachmentId), "meta.json");
   }
 
+  memoriesDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "memories");
+  }
+
+  /** One approved memory, named by its server-minted id (never its name, INV-12). */
+  memoryFile(userId: string, memoryId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "memories",
+      `${this.uuid(memoryId, "memory id")}.md`,
+    );
+  }
+
+  proposalsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "proposals");
+  }
+
+  /** A conversation's proposal sidecar (contracts §4.3). */
+  proposalsFile(userId: string, conversationId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "proposals",
+      `${this.uuid(conversationId, "conversation id")}.json`,
+    );
+  }
+
   /** Account directories being removed by closure (contracts §6). */
   deletingDir(): string {
     return this.inside(SYSTEM_DIR, "deleting");

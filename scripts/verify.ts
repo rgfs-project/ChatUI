@@ -12,6 +12,7 @@
  *     requests), validated return-to, logout and disabled accounts (Phase 4)
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdtempSync,
@@ -26,7 +27,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type ConsoleMessage } from "@playwright/test";
-import { MOCK_MODELS, startMockLlama } from "../tests/support/mock-llama.ts";
+import { MOCK_MODELS, startMockLlama, type MockLlama } from "../tests/support/mock-llama.ts";
 import { check as checkBudget, lazyLeaks, measure, type Budget } from "./perf-check.ts";
 import { png } from "../tests/support/media.ts";
 import {
@@ -462,6 +463,74 @@ function budgetChecks(): void {
  * bytes are served inert, and attachment endpoints are part of the API
  * boundary (JSON errors, never SSR HTML; INV-27, INV-28, INV-57).
  */
+/** Phase 13b: approved memories are user-owned files; tools only for tool-capable models. */
+async function memoryChecks(
+  base: string,
+  dataDir: string,
+  session: ApiSession,
+  llama: MockLlama,
+): Promise<void> {
+  const created = await fetch(`${base}/api/memories`, {
+    method: "POST",
+    headers: { ...sessionHeaders(session, true), "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "../../Coffee order", content: "Flat white" }),
+  });
+  const memory = (await created.json()) as { id?: string; name?: string };
+  const files = readdirSync(path.join(dataDir, session.userId, "memories"));
+  check(
+    "INV-12: a memory file is named by its server-minted UUID, the name lives inside it",
+    created.status === 201 &&
+      files.length === 1 &&
+      files[0] === `${memory.id ?? ""}.md` &&
+      readFileSync(path.join(dataDir, session.userId, "memories", files[0]), "utf8").startsWith(
+        `---\nformatVersion: 1\nid: "${memory.id ?? ""}"\nname: "../../Coffee order"\n`,
+      ),
+    files.join(","),
+  );
+  const since = llama.requests.length;
+  const sent = await fetch(`${base}/api/generations`, {
+    method: "POST",
+    headers: { ...sessionHeaders(session, true), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      providerId: "local",
+      model: MOCK_MODELS.chat,
+      content: "What do I drink?",
+      operationKey: randomUUID(),
+      operationIssuedAt: new Date().toISOString(),
+    }),
+  });
+  await sent.json();
+  interface ChatBody {
+    tools?: unknown;
+    messages?: { role: string; content: unknown }[];
+  }
+  const firstChat = () =>
+    llama.requests.slice(since).find((r) => r.path === "/v1/chat/completions")?.body as
+      ChatBody | undefined;
+  for (let i = 0; i < 100 && !firstChat(); i++) await new Promise((r) => setTimeout(r, 20));
+  const request = firstChat();
+  check(
+    "INV-37: approved memories reach the prompt; no tools for a model without verified tool support",
+    request !== undefined &&
+      request.tools === undefined &&
+      JSON.stringify(request.messages).includes("Flat white"),
+    JSON.stringify(request?.messages?.[0] ?? null).slice(0, 200),
+  );
+  const unknown = "00000000-0000-4000-8000-000000000000";
+  const accept = await fetch(`${base}/api/conversations/${unknown}/proposals/${unknown}/accept`, {
+    method: "POST",
+    headers: { ...sessionHeaders(session, true), "Content-Type": "application/json" },
+    body: "{}",
+  });
+  check(
+    "INV-37: accepting an unknown proposal is a JSON 404",
+    accept.status === 404 &&
+      (accept.headers.get("content-type") ?? "").startsWith("application/json"),
+    String(accept.status),
+  );
+  await accept.arrayBuffer();
+}
+
 async function attachmentChecks(base: string, dataDir: string, session: ApiSession): Promise<void> {
   const unknown = "00000000-0000-4000-8000-000000000000";
   const anon = await fetch(`${base}/api/attachments/${unknown}/content`);
@@ -573,6 +642,7 @@ async function main(): Promise<void> {
     if (admin) await authChecks(base, dataDir, admin);
     const again = await apiLogin(base, "admin", PASSWORD);
     if (again) await attachmentChecks(base, dataDir, again);
+    if (again) await memoryChecks(base, dataDir, again, llama);
   } finally {
     const exited = new Promise<number | null>((resolve) =>
       child.once("exit", (code) => {

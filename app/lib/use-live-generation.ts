@@ -10,6 +10,7 @@ import type {
   GenerationSnapshot,
   StartGenerationResponse,
 } from "@shared/generations";
+import type { ProposalPreview } from "@shared/memories";
 import { refreshSession } from "./api";
 import { markGeneration } from "./perf";
 import { queryKeys } from "./query";
@@ -21,6 +22,8 @@ export interface LiveGeneration {
   content: string;
   reasoning: string;
   error: GenerationError | null;
+  /** Memory suggestions recorded while streaming: previews only (Phase 13b). */
+  proposals: ProposalPreview[];
 }
 
 /**
@@ -70,6 +73,7 @@ export function useLiveGeneration(options: {
         content: s.content,
         reasoning: s.reasoning,
         error: s.error,
+        proposals: s.proposals ?? [],
       });
       if (isTerminalState(s.state)) {
         source.close();
@@ -94,6 +98,10 @@ export function useLiveGeneration(options: {
             }
           : v,
       );
+    });
+    source.addEventListener("proposals", (event: MessageEvent<string>) => {
+      const { proposals } = JSON.parse(event.data) as { proposals: ProposalPreview[] };
+      setLive((v) => (v?.generationId === observedId ? { ...v, proposals } : v));
     });
     source.addEventListener("terminal", (event: MessageEvent<string>) => {
       const t = JSON.parse(event.data) as { state: TerminalState; error: GenerationError | null };
@@ -132,6 +140,7 @@ export function useLiveGeneration(options: {
         content: "",
         reasoning: "",
         error: null,
+        proposals: [],
       });
     },
   };

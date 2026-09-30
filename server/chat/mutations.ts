@@ -6,6 +6,7 @@ import type { AttachmentStore } from "../storage/attachments.ts";
 import type { ConversationStore, LoadedConversation } from "../storage/conversations.ts";
 import { normalizeBody, type Block, type ConversationModel } from "../storage/markdown.ts";
 import type { PreferencesStore } from "../storage/preferences.ts";
+import type { ProposalService } from "./proposals.ts";
 import {
   attachmentRefs,
   deleteExchange,
@@ -32,6 +33,8 @@ export class ConversationMutations {
     attachments: AttachmentStore;
     preferences: PreferencesStore;
     logger: Logger;
+    /** Pending proposals of removed turns become invalid (Phase 13b, contracts §4.3). */
+    proposals?: ProposalService | undefined;
   };
 
   constructor(options: ConversationMutations["o"]) {
@@ -125,6 +128,7 @@ export class ConversationMutations {
           }),
         );
         const written = await this.write(userId, id, result.model);
+        await this.o.proposals?.invalidateStale(userId, id, written.model);
         await this.o.attachments.link(userId, pending, id, messageId);
         await this.cleanup(userId, id, current.model.blocks, result.model.blocks);
         return written;
@@ -143,6 +147,7 @@ export class ConversationMutations {
       const current = await this.current(userId, id, expectedRevision);
       const result = this.applied(deleteExchange(current.model, messageId));
       const written = await this.write(userId, id, result.model);
+      await this.o.proposals?.invalidateStale(userId, id, written.model);
       await this.cleanup(userId, id, current.model.blocks, result.model.blocks);
       return written;
     });
@@ -151,8 +156,9 @@ export class ConversationMutations {
   /**
    * Clear history: every conversation of the user, each with the normal
    * deletion rules (running generations are cancelled first; Markdown, then
-   * its attachments and pin). Preferences other than stale pins, approved
-   * memories and artifacts are untouched.
+   * its proposal sidecar after settling acceptance intents, its attachments
+   * and pin). Preferences other than stale pins, approved memories and
+   * artifacts are untouched.
    */
   async clearHistory(userId: string): Promise<number> {
     let deleted = 0;

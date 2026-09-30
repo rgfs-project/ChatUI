@@ -1,6 +1,6 @@
-import { CircleUserRound, Paperclip, ScrollText, Shield } from "lucide-react";
+import { Brain, CircleUserRound, Paperclip, ScrollText, Shield } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { ConfirmDialog } from "../components/Dialogs";
 import { apiJson, queryKeys } from "../lib/query";
@@ -12,11 +12,14 @@ import { paths } from "../lib/paths";
 import { useSignOut } from "../lib/use-sign-out";
 import type { Route } from "./+types/settings";
 
+/** Settings → Memories (Phase 13b): loaded when its tab opens. */
+const MemorySettings = lazy(() => import("../components/MemorySettings"));
+
 export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings · ChatUI" }];
 }
 
-type Section = "account" | "skills" | "attachments";
+type Section = "account" | "skills" | "memories" | "attachments";
 
 /**
  * Settings: a large panel with its sections listed on the left (Account;
@@ -53,10 +56,21 @@ export default function SettingsOverlay() {
           ) : null}
           <p className="section-label">Customize</p>
           {tab("skills", "Skills", <ScrollText size={18} aria-hidden />)}
+          {tab("memories", "Memories", <Brain size={18} aria-hidden />)}
           {tab("attachments", "Attachments", <Paperclip size={18} aria-hidden />)}
         </nav>
         {section === "skills" && user ? (
           <SkillsSettings userId={user.id} />
+        ) : section === "memories" && user ? (
+          <Suspense
+            fallback={
+              <section className="settings-body">
+                <p className="settings-hint">Loading memories…</p>
+              </section>
+            }
+          >
+            <MemorySettings userId={user.id} />
+          </Suspense>
         ) : section === "attachments" && user ? (
           <AttachmentSettings userId={user.id} />
         ) : (
@@ -99,8 +113,8 @@ export default function SettingsOverlay() {
 
 /**
  * Settings → Account → Delete all chats (contracts §4.2 clear history): every
- * conversation with its attachments and pin. Preferences, skills and (later)
- * memories and artifacts stay.
+ * conversation with its attachments, memory suggestions and pin. Preferences,
+ * skills, approved memories and (later) artifacts stay.
  */
 function ClearHistory({ userId }: { userId: string }) {
   const client = useQueryClient();
@@ -125,7 +139,8 @@ function ClearHistory({ userId }: { userId: string }) {
       <div>
         <p className="settings-label">Delete all chats</p>
         <p className="settings-hint">
-          Permanently deletes every conversation and its attachments. Settings and skills stay.
+          Permanently deletes every conversation and its attachments. Settings, skills and memories
+          stay.
         </p>
         {result ? (
           <p className="settings-hint" role="status">

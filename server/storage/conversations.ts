@@ -70,6 +70,11 @@ export class ConversationStore {
      * removes its linked attachments (contracts §7: Markdown first).
      */
     afterDelete?: (userId: string, id: string) => Promise<void>;
+    /**
+     * Runs under the lock before the Markdown is deleted: settles pending
+     * memory acceptance intents (contracts §4.3).
+     */
+    beforeDelete?: (userId: string, id: string) => Promise<void>;
   }) {
     this.paths = options.paths;
     this.locks = options.locks;
@@ -77,7 +82,10 @@ export class ConversationStore {
     this.now = options.now ?? (() => new Date());
     this.writes = options.writes;
     this.afterDelete = options.afterDelete;
+    this.beforeDelete = options.beforeDelete;
   }
+
+  private readonly beforeDelete: ((userId: string, id: string) => Promise<void>) | undefined;
 
   private readonly afterDelete: ((userId: string, id: string) => Promise<void>) | undefined;
 
@@ -202,6 +210,7 @@ export class ConversationStore {
   /** Deletes the Markdown under the lock, then the index entry (malformed files too). */
   async delete(userId: string, id: string): Promise<void> {
     await this.withLock(userId, id, async () => {
+      await this.beforeDelete?.(userId, id);
       const removed = await this.deleteUnlocked(userId, id);
       if (!removed) throw new StorageError("not_found", "Conversation not found");
       await this.afterDelete?.(userId, id);

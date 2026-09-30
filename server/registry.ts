@@ -1,3 +1,5 @@
+import type { MemoryStore } from "./storage/memories.ts";
+import type { ProposalService } from "./chat/proposals.ts";
 import { Router, type Request, type Response } from "express";
 import type { ModelListDto } from "@shared/generations";
 import type { AccountAdmin } from "./admin/accounts.ts";
@@ -51,6 +53,11 @@ export interface RouteServices {
   attachments: AttachmentStore;
   /** Per-user skills (user request, Phase 10). */
   skills: SkillsStore;
+  /** Approved memories and memory proposals (Phase 13b). */
+  memories: MemoryStore;
+  proposals: ProposalService;
+  /** MEMORY_PROMPT_BUDGET: approved-note bytes a prompt may include. */
+  memoryPromptBudgetBytes: number;
   /** Models a role may use: hidden pairs are removed for non-admins (Phase 10). */
   modelList: (role: "user" | "admin", options?: { fresh?: boolean }) => Promise<ModelListDto>;
   /** Phase 10 administration. */

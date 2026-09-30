@@ -517,7 +517,7 @@ function ModelsTab() {
                     <input
                       key={String(s?.hidden === true)}
                       type="checkbox"
-                      aria-label={`${m.id} visible to users`}
+                      aria-label={`${m.id} (${group.provider.name}) visible to users`}
                       defaultChecked={s?.hidden !== true}
                       disabled={busy}
                       onChange={(event) =>

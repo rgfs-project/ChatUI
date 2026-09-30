@@ -85,6 +85,12 @@ const envSchema = z.object({
   MAX_UPLOADS_PER_USER: intFrom(1, 100).default(4),
   MAX_UPLOADS_TOTAL: intFrom(1, 10_000).default(32),
   MEDIA_TOKEN_RESERVE: intFrom(1, 1_000_000).default(1_024),
+
+  // Approved memories and proposal tools (Phase 13b).
+  MEMORY_PROMPT_BUDGET: intFrom(0, 1_000_000).default(4_096),
+  MEMORY_TOOL_MAX_CALLS: intFrom(1, 16).default(4),
+  MEMORY_TOOL_MAX_ARGUMENT_BYTES: intFrom(256, 65_536).default(8_192),
+  CONTINUATION_TOKEN_RESERVE: intFrom(0, 100_000).default(256),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -106,7 +112,27 @@ export interface Config {
   storage: StorageConfig;
   auth: AuthConfig;
   attachments: AttachmentConfig;
+  memories: MemoryConfig;
 }
+
+/** Approved memories and proposal-only tools (contracts §4.3, §12). */
+export interface MemoryConfig {
+  /** UTF-8 bytes of approved notes a prompt may include (whole notes only). */
+  promptBudgetBytes: number;
+  /** Proposal calls per generation; later calls are invalid. */
+  maxToolCalls: number;
+  /** Streamed argument bytes per call; larger calls are invalid. */
+  maxToolArgumentBytes: number;
+  /** Context tokens reserved for the continuation's call/result messages when tools are offered. */
+  continuationTokenReserve: number;
+}
+
+export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
+  promptBudgetBytes: 4_096,
+  maxToolCalls: 4,
+  maxToolArgumentBytes: 8_192,
+  continuationTokenReserve: 256,
+};
 
 /** Attachment limits (contracts §7). Instance settings can override the first four. */
 export interface AttachmentConfig {
@@ -363,6 +389,12 @@ export function loadConfig(
       maxUploadsPerUser: parsed.data.MAX_UPLOADS_PER_USER,
       maxUploadsTotal: parsed.data.MAX_UPLOADS_TOTAL,
       mediaTokenReserve: parsed.data.MEDIA_TOKEN_RESERVE,
+    },
+    memories: {
+      promptBudgetBytes: parsed.data.MEMORY_PROMPT_BUDGET,
+      maxToolCalls: parsed.data.MEMORY_TOOL_MAX_CALLS,
+      maxToolArgumentBytes: parsed.data.MEMORY_TOOL_MAX_ARGUMENT_BYTES,
+      continuationTokenReserve: parsed.data.CONTINUATION_TOKEN_RESERVE,
     },
     storage: {
       operationRetentionMs: parsed.data.OPERATION_RETENTION_MS,

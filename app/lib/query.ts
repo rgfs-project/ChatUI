@@ -4,6 +4,7 @@ import type { SessionDto } from "@shared/auth";
 import type { ConversationDto, ConversationSummary, SearchResponse } from "@shared/conversations";
 import type { ModelListDto } from "@shared/generations";
 import type { AttachmentLimitsDto } from "@shared/attachments";
+import type { MemoryList } from "@shared/memories";
 import { apiFetch } from "./api";
 
 /**
@@ -21,6 +22,8 @@ export const queryKeys = {
   skills: (userId: string) => ["user", userId, "skills"] as const,
   /** Full-text search results per query (Phase 13a); never dehydrated. */
   search: (userId: string, q: string) => ["user", userId, "search", q] as const,
+  /** Approved memories (Phase 13b); proposals ride on the conversation DTO. */
+  memories: (userId: string) => ["user", userId, "memories"] as const,
   /** Attachment limits and the user's used bytes (Phase 12); read when attaching. */
   attachmentLimits: (userId: string) => ["user", userId, "attachment-limits"] as const,
   /** Mutation key for sends (optimistic messages are read from its state). */
@@ -86,10 +89,18 @@ export class ApiError extends Error {
   override name = "ApiError";
   readonly status: number;
   readonly code: string | null;
-  constructor(status: number, code: string | null, message: string) {
+  /** The contract error's `details` (e.g. a conflict `reason`). */
+  readonly details: Record<string, unknown> | undefined;
+  constructor(
+    status: number,
+    code: string | null,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -105,14 +116,18 @@ export async function apiJson<T>(
   if (!response.ok) {
     let code: string | null = null;
     let message = `Request failed (${String(response.status)})`;
+    let details: Record<string, unknown> | undefined;
     try {
-      const body = (await response.json()) as { error?: { code?: string; message?: string } };
+      const body = (await response.json()) as {
+        error?: { code?: string; message?: string; details?: Record<string, unknown> };
+      };
       code = body.error?.code ?? null;
       message = body.error?.message ?? message;
+      details = body.error?.details;
     } catch {
       // not JSON
     }
-    throw new ApiError(response.status, code, message);
+    throw new ApiError(response.status, code, message, details);
   }
   return (await response.json()) as T;
 }
@@ -143,6 +158,8 @@ export const fetchers = {
     apiJson<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`, signal ? { signal } : {}),
   preferences: (signal?: AbortSignal) =>
     apiJson<PreferencesDto>("/api/preferences", signal ? { signal } : {}),
+  memories: (signal?: AbortSignal) =>
+    apiJson<MemoryList>("/api/memories", signal ? { signal } : {}),
   attachmentLimits: (signal?: AbortSignal) =>
     apiJson<AttachmentLimitsDto>("/api/attachments/limits", signal ? { signal } : {}),
   models: (refresh = false, signal?: AbortSignal) =>
@@ -189,6 +206,12 @@ export const queries = {
     queryOptions({
       queryKey: queryKeys.preferences(userId),
       queryFn: ({ signal }) => fetchers.preferences(signal),
+      retry: retryable,
+    }),
+  memories: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.memories(userId),
+      queryFn: ({ signal }) => fetchers.memories(signal),
       retry: retryable,
     }),
   attachmentLimits: (userId: string) =>

@@ -35,6 +35,15 @@ import {
   uploadAttachmentRoute,
 } from "./attachments.ts";
 import { getPreferencesRoute, updatePreferencesRoute } from "./preferences.ts";
+import {
+  acceptProposalRoute,
+  createMemoryRoute,
+  deleteMemoryRoute,
+  listMemoriesRoute,
+  listProposalsRoute,
+  rejectProposalRoute,
+  updateMemoryRoute,
+} from "./memories.ts";
 import { getOperationRoute } from "./operations.ts";
 import { createSkillRoute, deleteSkillRoute, listSkillsRoute, updateSkillRoute } from "./skills.ts";
 import { listModelsRoute, listProvidersRoute } from "./models.ts";
@@ -88,6 +97,14 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(pinConversationRoute),
   erase(unpinConversationRoute),
   erase(searchRoute),
+  // Approved memories and proposals (Phase 13b).
+  erase(listMemoriesRoute),
+  erase(createMemoryRoute),
+  erase(updateMemoryRoute),
+  erase(deleteMemoryRoute),
+  erase(listProposalsRoute),
+  erase(acceptProposalRoute),
+  erase(rejectProposalRoute),
   // Attachments (Phase 12). The literal /limits path is registered before /:id.
   erase(uploadAttachmentRoute),
   erase(attachmentLimitsRoute),

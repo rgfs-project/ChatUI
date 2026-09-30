@@ -4,7 +4,13 @@ import type { ChatIndex, IndexLogger } from "./chat-index.ts";
 import { cleanupTempFiles, ensureDir, readOrNull } from "./fs.ts";
 import type { CheckpointOutcome, CheckpointStore } from "./checkpoints.ts";
 import type { ConversationStore } from "./conversations.ts";
-import { normalizeBody, type AssistantStatus, type Block } from "./markdown.ts";
+import {
+  normalizeBody,
+  type AssistantStatus,
+  type Block,
+  type ConversationModel,
+} from "./markdown.ts";
+import type { GenerationCheckpoint } from "./checkpoints.ts";
 import { sha256Hex, type OperationRecord, type OperationStore } from "./operations.ts";
 import { isUuid, SYSTEM_DIR, type DataPaths } from "./paths.ts";
 
@@ -17,6 +23,7 @@ export interface RecoveryReport {
   operationsExpired: number;
   generations: GenerationRecoveryReport | null;
   attachments: { incompleteRemoved: number; linked: number; collected: number } | null;
+  memoryIntents: { applied: number; retryable: number; conflicts: number } | null;
 }
 
 /** Top-level entries must be user UUIDs, `_system` or `.gitkeep` (logged, never deleted). */
@@ -135,7 +142,17 @@ export async function recoverStorage(options: {
   retentionMs: number;
   startedAt: Date;
   now?: Date;
-  generations?: { store: ConversationStore; checkpoints: CheckpointStore; retentionMs: number };
+  generations?: {
+    store: ConversationStore;
+    checkpoints: CheckpointStore;
+    retentionMs: number;
+    /** Writes a completed checkpoint's staged proposals (Phase 13b), under the conversation lock. */
+    proposals?: StageProposals;
+  };
+  /** Step 6 per account (Phase 13b): settle memory acceptance intents by hashes. */
+  memoryIntents?: (
+    userId: string,
+  ) => Promise<{ applied: number; retryable: number; conflicts: number }>;
   /** Step 7 per account (Phase 12): reconcile links, GC pending attachments. */
   attachments?: (
     userId: string,
@@ -175,6 +192,17 @@ export async function recoverStorage(options: {
         now: options.now ?? new Date(),
       })
     : null;
+  // Step 6: memory acceptance intents.
+  let memoryIntents: RecoveryReport["memoryIntents"] = null;
+  if (options.memoryIntents) {
+    memoryIntents = { applied: 0, retryable: 0, conflicts: 0 };
+    for (const userId of users) {
+      const r = await options.memoryIntents(userId);
+      memoryIntents.applied += r.applied;
+      memoryIntents.retryable += r.retryable;
+      memoryIntents.conflicts += r.conflicts;
+    }
+  }
   let attachments: RecoveryReport["attachments"] = null;
   if (options.attachments) {
     attachments = { incompleteRemoved: 0, linked: 0, collected: 0 };
@@ -187,7 +215,14 @@ export async function recoverStorage(options: {
   }
   // Step 8: derived indexes.
   for (const userId of users) await options.index.load(userId);
-  const report = { tempFilesRemoved, unexpectedEntries, ...totals, generations, attachments };
+  const report = {
+    tempFilesRemoved,
+    unexpectedEntries,
+    ...totals,
+    generations,
+    memoryIntents,
+    attachments,
+  };
   logger.info(report, "storage recovery complete");
   return report;
 }
@@ -220,14 +255,18 @@ async function writeReplyOnce(
     /** The source user block; the reply is written only while it is still last (INV-35). */
     userMessageId: string | null;
   },
+  /** Runs under the same lock once the reply is (or already was) in the file. */
+  after?: (model: ConversationModel) => Promise<void>,
 ): Promise<"written" | "exists" | "missing" | "malformed" | "superseded"> {
   return store.withLock(input.userId, input.conversationId, async () => {
     const read = await store.readUnlocked(input.userId, input.conversationId);
     if (read.kind === "missing") return "missing";
     if (read.kind === "malformed") return "malformed";
     const model = read.conversation.model;
-    if (model.blocks.some((b) => b.type === "assistant" && b.id === input.assistantMessageId))
+    if (model.blocks.some((b) => b.type === "assistant" && b.id === input.assistantMessageId)) {
+      await after?.(model);
       return "exists";
+    }
     const last = model.blocks.at(-1);
     if (input.userMessageId !== null && (last?.type !== "user" || last.id !== input.userMessageId))
       return "superseded";
@@ -244,14 +283,25 @@ async function writeReplyOnce(
       time: input.time,
       body: normalizeBody(input.content),
     });
-    await store.writeUnlocked(
+    const written = await store.writeUnlocked(
       input.userId,
       input.conversationId,
       store.appendBlocks(model, blocks),
     );
+    await after?.(written.model);
     return "written";
   });
 }
+
+/**
+ * Idempotently writes a completed checkpoint's staged proposals (keyed by
+ * generation id and call index) into the conversation's sidecar. Called under
+ * the conversation lock with the canonical model after the reply write.
+ */
+export type StageProposals = (
+  checkpoint: GenerationCheckpoint,
+  model: ConversationModel,
+) => Promise<void>;
 
 export interface GenerationRecoveryReport {
   interrupted: number;
@@ -278,6 +328,7 @@ export async function recoverGenerations(options: {
   logger: IndexLogger;
   retentionMs: number;
   now: Date;
+  proposals?: StageProposals;
 }): Promise<GenerationRecoveryReport> {
   const { store, operations, checkpoints, logger, now } = options;
   const report: GenerationRecoveryReport = {
@@ -311,18 +362,28 @@ export async function recoverGenerations(options: {
     const source = checkpoint.operationKey
       ? await operations.read(checkpoint.userId, checkpoint.operationKey).catch(() => null)
       : null;
-    const result = await writeReplyOnce(store, {
-      userId: checkpoint.userId,
-      conversationId: checkpoint.conversationId,
-      assistantMessageId: checkpoint.assistantMessageId,
-      providerId: checkpoint.providerId,
-      model: checkpoint.model,
-      status: STATUS[decided ? decided.state : "interrupted"],
-      content: decided ? decided.content : checkpoint.content,
-      reasoning: decided ? decided.reasoning : checkpoint.reasoning,
-      time: decided ? decided.finishedAt : now.toISOString(),
-      userMessageId: source?.userMessageId ?? null,
-    });
+    // Staged proposals survive only a completed outcome (contracts §4.3); a
+    // `running` checkpoint's are discarded with the interrupted reply.
+    const stage =
+      decided?.state === "completed" && (decided.proposals?.length ?? 0) > 0 && options.proposals
+        ? options.proposals
+        : undefined;
+    const result = await writeReplyOnce(
+      store,
+      {
+        userId: checkpoint.userId,
+        conversationId: checkpoint.conversationId,
+        assistantMessageId: checkpoint.assistantMessageId,
+        providerId: checkpoint.providerId,
+        model: checkpoint.model,
+        status: STATUS[decided ? decided.state : "interrupted"],
+        content: decided ? decided.content : checkpoint.content,
+        reasoning: decided ? decided.reasoning : checkpoint.reasoning,
+        time: decided ? decided.finishedAt : now.toISOString(),
+        userMessageId: source?.userMessageId ?? null,
+      },
+      stage ? (model) => stage(checkpoint, model) : undefined,
+    );
     if (result === "written") {
       if (decided) report.completedDecided++;
       else report.interrupted++;
