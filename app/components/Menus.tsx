@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   Pencil,
   Pin,
+  ArrowDownUp,
   PinOff,
   Settings,
   Shield,
@@ -195,6 +196,11 @@ export function AccountMenu(props: {
       <Menu.Portal>
         <Menu.Content className="menu-popover account-popover" side="top" sideOffset={6}>
           {overlayItem(paths.settings(), "Settings", <Settings size={16} aria-hidden />)}
+          {overlayItem(
+            paths.settings("data"),
+            "Import & export",
+            <ArrowDownUp size={16} aria-hidden />,
+          )}
           {props.isAdmin
             ? overlayItem(paths.admin(), "Administration", <Shield size={16} aria-hidden />)
             : null}

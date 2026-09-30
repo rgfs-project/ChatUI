@@ -26,7 +26,32 @@ const KIND_LABEL: Record<ImportItem["kind"], string> = {
   preferences: "Preferences",
 };
 
-/** Uploads the archive with progress (XHR: fetch has no upload progress). */
+const SOURCE_LABELS: Record<ImportPreview["source"], string> = {
+  chatui: "ChatUI export",
+  claude: "Claude data export",
+  duckai: "duck.ai chat",
+};
+
+/** When the source was made: a ChatUI export's date; the latest change otherwise. */
+function sourceDate(preview: ImportPreview): string {
+  const when = new Date(preview.exportCreatedAt).toLocaleString();
+  return preview.source === "chatui" ? `Exported ${when}.` : `Latest change ${when}.`;
+}
+
+/** The browser's IANA time zone, for sources that record none (duck.ai). */
+function timeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Uploads the file with progress (XHR: fetch has no upload progress). The
+ * server detects the source; a non-ZIP goes as opaque bytes so no body
+ * parser touches it.
+ */
 function uploadArchive(
   file: File,
   onProgress: (fraction: number) => void,
@@ -34,10 +59,16 @@ function uploadArchive(
 ): Promise<ImportPreview> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/imports");
+    const tz = timeZone();
+    xhr.open("POST", tz ? `/api/imports?tz=${encodeURIComponent(tz)}` : "/api/imports");
     xhr.responseType = "json";
     xhr.setRequestHeader("Accept", "application/json");
-    xhr.setRequestHeader("Content-Type", "application/zip");
+    xhr.setRequestHeader(
+      "Content-Type",
+      /\.zip$/i.test(file.name) || file.type === "application/zip"
+        ? "application/zip"
+        : "application/octet-stream",
+    );
     const session = currentSession();
     if (session?.csrfToken && session.user) {
       xhr.setRequestHeader("X-CSRF-Token", session.csrfToken);
@@ -51,7 +82,7 @@ function uploadArchive(
       if (xhr.status === 201 && body) resolve(body);
       else
         reject(
-          new Error(body?.error?.message ?? `The archive couldn't be read (${String(xhr.status)})`),
+          new Error(body?.error?.message ?? `The file couldn't be read (${String(xhr.status)})`),
         );
     };
     xhr.onerror = () => {
@@ -69,10 +100,11 @@ function uploadArchive(
 
 function Summary({ counts }: { counts: ImportPreview["counts"] }) {
   const kinds = Object.keys(counts) as ImportItem["kind"][];
-  if (kinds.length === 0) return <p className="settings-hint">The archive is empty.</p>;
+  if (kinds.length === 0)
+    return <p className="settings-hint">Nothing in this file can be imported.</p>;
   return (
     <table className="data-summary">
-      <caption className="visually-hidden">What the archive contains</caption>
+      <caption className="visually-hidden">What the file contains</caption>
       <thead>
         <tr>
           <th scope="col">Item</th>
@@ -124,7 +156,8 @@ function ItemList({ items, title }: { items: readonly ImportItem[]; title: strin
 
 /**
  * Settings → Data (Phase 13d, lazy): export everything as a portable
- * archive, and import one. An import is previewed first (counts, conflicts,
+ * archive, and import one, a Claude data export or a duck.ai chat (13e;
+ * the server detects which). An import is previewed first (counts, conflicts,
  * skipped items), needs explicit confirmation, can be cancelled before it
  * commits, and ends with a report.
  */
@@ -214,7 +247,7 @@ export default function DataSettings({ userId }: { userId: string }) {
         ),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The archive couldn't be read.");
+      setError(e instanceof Error ? e.message : "The file couldn't be read.");
     } finally {
       setUploading(null);
       if (fileRef.current) fileRef.current.value = "";
@@ -268,16 +301,17 @@ export default function DataSettings({ userId }: { userId: string }) {
 
       <h3 className="data-heading">Import</h3>
       <p className="settings-hint">
-        Import a ChatUI export. Nothing changes until you confirm, and nothing you have is ever
-        overwritten.
+        Import a ChatUI export, a Claude data export (the ZIP files from Claude’s Settings → Privacy
+        → Export data, or their conversations.json), or a chat downloaded from duck.ai. Nothing
+        changes until you confirm, and nothing you have is ever overwritten.
       </p>
       <div className="data-row">
         <label className="button-link secondary data-file">
-          <Upload size={16} aria-hidden /> Choose archive…
+          <Upload size={16} aria-hidden /> Choose file…
           <input
             ref={fileRef}
             type="file"
-            accept=".zip,application/zip"
+            accept=".zip,.json,.txt,application/zip,application/json,text/plain"
             className="visually-hidden"
             disabled={uploading !== null || committing}
             onChange={(event) => void choose(event.currentTarget.files?.[0])}
@@ -285,7 +319,7 @@ export default function DataSettings({ userId }: { userId: string }) {
         </label>
         {uploading ? (
           <>
-            <progress max={1} value={uploading.fraction} aria-label="Uploading archive" />
+            <progress max={1} value={uploading.fraction} aria-label="Uploading file" />
             <button
               type="button"
               className="secondary"
@@ -306,10 +340,8 @@ export default function DataSettings({ userId }: { userId: string }) {
 
       {preview?.state === "previewed" ? (
         <div className="data-preview" data-testid="import-preview">
-          <h4>Preview</h4>
-          <p className="settings-hint">
-            Exported {new Date(preview.exportCreatedAt).toLocaleString()}.
-          </p>
+          <h4>Preview: {SOURCE_LABELS[preview.source]}</h4>
+          <p className="settings-hint">{sourceDate(preview)}</p>
           <Summary counts={preview.counts} />
           {preview.warnings.map((w) => (
             <p key={w} className="settings-hint">
@@ -380,7 +412,7 @@ export default function DataSettings({ userId }: { userId: string }) {
                   setAgain(event.currentTarget.checked);
                 }}
               />{" "}
-              This archive was imported on{" "}
+              This export was imported on{" "}
               {new Date(preview.previousImport.committedAt).toLocaleString()}. Import it again
             </label>
           ) : null}

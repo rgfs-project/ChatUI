@@ -105,6 +105,8 @@ const envSchema = z.object({
   IMPORT_MAX_ENTRIES: intFrom(1, 10_000_000).default(50_000),
   IMPORT_MAX_RATIO: intFrom(2, 100_000).default(200),
   IMPORT_MAX_MS: intFrom(1_000, 24 * 3_600_000).default(600_000),
+  IMPORT_MAX_RECORDS: intFrom(1, 100_000_000).default(1_000_000),
+  IMPORT_MAX_JSON_BYTES: intFrom(1_024, 2_147_483_647).default(256 * 1024 * 1024),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -415,6 +417,8 @@ export function loadConfig(
       maxEntries: parsed.data.IMPORT_MAX_ENTRIES,
       maxRatio: parsed.data.IMPORT_MAX_RATIO,
       maxMs: parsed.data.IMPORT_MAX_MS,
+      maxRecords: parsed.data.IMPORT_MAX_RECORDS,
+      maxJsonBytes: parsed.data.IMPORT_MAX_JSON_BYTES,
     },
     artifacts: {
       maxBytes: parsed.data.ARTIFACT_MAX_BYTES,

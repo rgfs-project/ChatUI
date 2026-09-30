@@ -1,0 +1,26 @@
+## Phase 13e report
+
+- **Scope completed:**
+  - An import adapter registry (`server/portability/adapters.ts`, `sources.ts`) through the unchanged 13d preview, journal, conflict, remap, idempotency and recovery machinery. The ChatUI archive is now one adapter, and an OpenAI adapter can be added the same way.
+  - Claude data export adapter (`server/portability/claude.ts`): conversations (latest branch, thinking as reasoning, millisecond times), pasted text attachments, `create_file` outputs as imported artifacts, and memory files as selectable candidates. It works from the ZIPs or a bare `conversations.json`. Tool calls, other blocks, branches, citations, files without bytes and account, sign-in and reflection files are reported as skipped.
+  - duck.ai chat adapter (`server/portability/duckai.ts`), at the owner's request: prompt times use the browser's time zone, and responses get no invented times.
+  - Caps: `IMPORT_MAX_RECORDS` and `IMPORT_MAX_JSON_BYTES`; duplicate conversation or message ids refuse the upload.
+  - UI: Settings → Data accepts `.zip`, `.json` and `.txt`, sends the time zone, and names the source in the preview. The account menu gains "Import & export" (Settings → Data via `?section=data`).
+  - Fixtures: sanitized real exports in `tests/fixtures/` (`scripts/sanitize-export.ts`, provenance in `docs/claude-export-notes.md` and `docs/duckai-export-notes.md`).
+- **Tests:** `tests/server/import-adapters.test.ts` (16 tests):
+  - Each observed fixture: conversations, memories, feedback and account ZIPs.
+  - Skipped-type reporting.
+  - Duplicate ids, bad JSON and unknown files.
+  - Traversal, symlinks, duplicate paths, the ZIP bomb, and the entry, record, JSON-size and time caps.
+  - Bare JSON equals the ZIP (same key, identical, a duplicate needs confirmation).
+  - Conflicts: skip and copy.
+  - Two-user isolation.
+  - Crash rollback at startup.
+  - A round trip through the 13d export into another account (byte-identical chats).
+  - duck.ai time zones, including DST, UTC fallback, an unanswered prompt, and malformed files.
+- **Quality gates:** `format:check`, `lint`, `typecheck` PASS; `test` PASS (46 files, 641 tests); `tests/e2e/data.spec.ts` rerun for the relabelled control. Full `verify`, the full E2E suite and `perf:check` were not rerun in this session, to save the remaining cloud credit; CI runs them on the pushed commit.
+- **Deviations / limitations:**
+  - Only formats observed in the fixtures are mapped (see the notes' UNVERIFIED lists).
+  - `FEATURE-MATRIX.md` isn't part of this repository; the evidence is in `ARCHITECTURE.md`.
+  - OpenAI import is pending the owner's export.
+- **Commit/tag:** `feat(phase-13e): Claude export import adapter`, on `claude/youthful-maxwell-yjyj9c` and `main`. The `phase-13e` tag is local only, because the proxy refuses tag pushes.

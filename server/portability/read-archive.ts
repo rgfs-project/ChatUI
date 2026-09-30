@@ -42,7 +42,7 @@ const S_IFMT = 0o170000;
 const S_IFLNK = 0o120000;
 const S_IFDIR = 0o040000;
 
-function openZip(file: string): Promise<yauzl.ZipFile> {
+export function openZip(file: string): Promise<yauzl.ZipFile> {
   return new Promise((resolve, reject) => {
     yauzl.open(
       file,
@@ -55,7 +55,7 @@ function openZip(file: string): Promise<yauzl.ZipFile> {
   });
 }
 
-function readStream(zip: yauzl.ZipFile, entry: yauzl.Entry): Promise<Readable> {
+export function readStream(zip: yauzl.ZipFile, entry: yauzl.Entry): Promise<Readable> {
   return new Promise((resolve, reject) => {
     zip.openReadStream(entry, (error, stream) => {
       if (error) reject(new ArchiveError(`Entry ${entry.fileName} can't be read`));
@@ -65,7 +65,10 @@ function readStream(zip: yauzl.ZipFile, entry: yauzl.Entry): Promise<Readable> {
 }
 
 /** Every entry's directory record, checked before any byte is decompressed. */
-async function listEntries(zip: yauzl.ZipFile, limits: ImportLimits): Promise<yauzl.Entry[]> {
+export async function listEntries(
+  zip: yauzl.ZipFile,
+  limits: ImportLimits,
+): Promise<yauzl.Entry[]> {
   const entries: yauzl.Entry[] = [];
   const seen = new Set<string>();
   let expanded = 0;
@@ -224,7 +227,7 @@ export async function readArchive(
   }
 }
 
-async function collect(stream: Readable, max: number): Promise<Buffer> {
+export async function collect(stream: Readable, max: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of stream) {

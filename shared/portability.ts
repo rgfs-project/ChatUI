@@ -57,9 +57,17 @@ export const importMemorySchema = z.strictObject({
   action: z.enum(["new", "identical", "conflict"]),
 });
 
+/**
+ * Where an import comes from (Phase 13e): a ChatUI archive, a Claude data
+ * export, or a duck.ai chat download. Each has its own adapter and notes.
+ */
+export const IMPORT_SOURCES = ["chatui", "claude", "duckai"] as const;
+export type ImportSource = (typeof IMPORT_SOURCES)[number];
+
 export const importPreviewSchema = z.strictObject({
   importId: z.uuid(),
-  /** SHA-256 of the archive's manifest: the duplicate-import key. */
+  source: z.enum(IMPORT_SOURCES),
+  /** The duplicate-import key (a ChatUI archive: SHA-256 of its manifest). */
   key: z.string(),
   state: z.enum(["previewed", "committing", "committed", "rolled_back", "failed", "cancelled"]),
   createdAt: z.string(),
@@ -90,5 +98,10 @@ export const importCommitSchema = z.strictObject({
   memoryIds: z.array(canonicalUuid).max(10_000).default([]),
 });
 export type ImportCommit = z.infer<typeof importCommitSchema>;
+
+/** The upload's query: the browser's IANA time zone, for sources without one. */
+export const importUploadQuerySchema = z.strictObject({
+  tz: z.string().max(64).optional(),
+});
 
 export const importParamsSchema = z.strictObject({ id: canonicalUuid });

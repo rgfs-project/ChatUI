@@ -7,6 +7,7 @@ import {
   importCommitSchema,
   importParamsSchema,
   importPreviewSchema,
+  importUploadQuerySchema,
 } from "@shared/portability";
 import { defineRawRoute, defineRoute, userOf } from "../registry.ts";
 import { contentDisposition } from "./attachments.ts";
@@ -105,13 +106,14 @@ export const uploadImportRoute = defineRawRoute({
   path: "/api/imports",
   auth: "user",
   csrf: "token",
-  request: {},
-  handler: async (_input, ctx) => {
+  request: { query: importUploadQuerySchema },
+  handler: async ({ query }, ctx) => {
     const declared = ctx.req.get("content-length");
     const preview = await ctx.services.imports.receive(
       userOf(ctx).userId,
       ctx.req,
       declared && /^\d+$/.test(declared) ? Number(declared) : null,
+      query.tz ?? null,
     );
     ctx.res.status(201).set("Cache-Control", "no-store").json(importPreviewSchema.parse(preview));
   },

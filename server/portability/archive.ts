@@ -115,6 +115,10 @@ export interface ImportLimits {
   maxRatio: number;
   /** Preview (validation) and commit each within this time. */
   maxMs: number;
+  /** Canonical records (conversations, messages, attachments, artifacts, memories) per import. */
+  maxRecords: number;
+  /** One foreign JSON document (e.g. Claude's conversations.json), decoded in memory. */
+  maxJsonBytes: number;
 }
 
 export const DEFAULT_IMPORT_LIMITS: ImportLimits = {
@@ -123,6 +127,8 @@ export const DEFAULT_IMPORT_LIMITS: ImportLimits = {
   maxEntries: 50_000,
   maxRatio: 200,
   maxMs: 10 * 60_000,
+  maxRecords: 1_000_000,
+  maxJsonBytes: 256 * 1024 * 1024,
 };
 
 /** Per-kind size caps for the small (JSON/Markdown) entries. */

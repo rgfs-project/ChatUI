@@ -7,7 +7,13 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { ErrorCode } from "@shared/errors";
 import { memoryNameKey, MEMORY_LIMITS, utf8Bytes } from "@shared/memories";
-import type { ImportCommit, ImportItem, ImportPreview, ItemKind } from "@shared/portability";
+import type {
+  ImportCommit,
+  ImportItem,
+  ImportPreview,
+  ImportSource,
+  ItemKind,
+} from "@shared/portability";
 import { SKILL_LIMITS, skillDtoSchema, type SkillDto } from "@shared/skills";
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
@@ -33,7 +39,9 @@ import { isUuid, type DataPaths } from "../storage/paths.ts";
 import { isProposalRecord, type ProposalRecord } from "../storage/proposals.ts";
 import type { PreferencesStore } from "../storage/preferences.ts";
 import { DEFAULT_IMPORT_LIMITS, type ImportLimits } from "./archive.ts";
-import { ArchiveError, readArchive, type ExtractedEntry } from "./read-archive.ts";
+import { stageUpload, type ImportAdapter } from "./adapters.ts";
+import { ArchiveError, type ExtractedEntry } from "./read-archive.ts";
+import { IMPORT_ADAPTERS } from "./sources.ts";
 
 /** Finished or abandoned import state is kept this long, then removed. */
 export const IMPORT_RETENTION_MS = 24 * 60 * 60_000;
@@ -54,12 +62,17 @@ interface Planned {
 interface Journal {
   version: 1;
   importId: string;
+  /** Absent in journals written before Phase 13e: a ChatUI archive. */
+  source?: ImportSource;
   key: string;
   state: JournalState;
   createdAt: string;
   exportCreatedAt: string;
   entries: ExtractedEntry[];
   unknown: string[];
+  /** The adapter's notes and the source records it couldn't map (Phase 13e). */
+  notes?: string[];
+  skipped?: ImportItem[];
   preview: Pick<ImportPreview, "items" | "memories" | "counts" | "warnings">;
   options: ImportCommit | null;
   planned: Planned[];
@@ -144,7 +157,8 @@ async function atomicCopy(source: string, target: string): Promise<void> {
 
 /**
  * Portable import (Phase 13d, INV-42). An upload is streamed into
- * `import-staging/<id>/`, read with every bound checked (see readArchive),
+ * `import-staging/<id>/`, converted by its source's adapter into staged
+ * ChatUI entries with every bound checked (Phase 13e, see adapters.ts),
  * previewed without touching canonical data, and committed only on the
  * user's confirmation with their choices: conflicts skipped (default) or
  * imported as copies with remapped ids, and memories only when selected.
@@ -169,6 +183,8 @@ export class ImportService {
     logger: Logger;
     limits?: Partial<ImportLimits>;
     now?: () => Date;
+    /** The sources uploads are detected and converted with (Phase 13e). */
+    adapters?: readonly ImportAdapter[];
   };
   readonly limits: ImportLimits;
   hooks: ImportHooks = {};
@@ -223,15 +239,23 @@ export class ImportService {
   // -------------------------------------------------------------------------
   // Upload and preview
 
-  /** Streams the request body (a ZIP) into staging, bounded, then previews it. */
-  receive(userId: string, req: IncomingMessage, declared: number | null): Promise<ImportPreview> {
+  /**
+   * Streams the request body (a ChatUI archive, a Claude export or a duck.ai
+   * chat) into staging, bounded, then converts and previews it.
+   */
+  receive(
+    userId: string,
+    req: IncomingMessage,
+    declared: number | null,
+    timeZone: string | null = null,
+  ): Promise<ImportPreview> {
     return this.exclusive(userId, async () => {
       if (declared !== null && declared > this.limits.maxArchiveBytes)
         throw new AppError(ErrorCode.PAYLOAD_TOO_LARGE, "The archive is too large");
       const importId = randomUUID();
       const dir = this.o.paths.importDir(userId, importId);
       await this.o.writes.run(userId, () => ensureDir(dir));
-      const archive = path.join(dir, "archive.zip");
+      const upload = path.join(dir, "upload");
       try {
         let bytes = 0;
         const max = this.limits.maxArchiveBytes;
@@ -243,8 +267,8 @@ export class ImportService {
             else callback(null, chunk);
           },
         });
-        await pipeline(req, limit, createWriteStream(archive, { mode: 0o600 }));
-        return await this.previewFile(userId, importId, archive);
+        await pipeline(req, limit, createWriteStream(upload, { mode: 0o600 }));
+        return await this.previewFile(userId, importId, upload, timeZone);
       } catch (error) {
         await rm(dir, { recursive: true, force: true }).catch(() => undefined);
         if (error instanceof AppError) throw error;
@@ -258,20 +282,39 @@ export class ImportService {
   private async previewFile(
     userId: string,
     importId: string,
-    archive: string,
+    upload: string,
+    timeZone: string | null,
   ): Promise<ImportPreview> {
     const dir = this.o.paths.importDir(userId, importId);
-    const extracted = await readArchive(archive, path.join(dir, "entries"), this.limits);
-    await unlink(archive).catch(() => undefined);
+    const staged = await stageUpload(
+      {
+        userId,
+        file: upload,
+        stagingDir: path.join(dir, "entries"),
+        limits: this.limits,
+        deadline: Date.now() + this.limits.maxMs,
+        timeZone,
+        now: this.now(),
+        caps: {
+          attachmentMaxBytes: this.o.attachments.effective().maxFileBytes,
+          artifactMaxBytes: this.o.artifacts.config.maxBytes,
+        },
+      },
+      this.o.adapters ?? IMPORT_ADAPTERS,
+    );
+    await unlink(upload).catch(() => undefined);
     const journal: Journal = {
       version: 1,
       importId,
-      key: extracted.key,
+      source: staged.source,
+      key: staged.key,
       state: "previewed",
       createdAt: this.now(),
-      exportCreatedAt: extracted.manifest.createdAt,
-      entries: extracted.entries,
-      unknown: extracted.unknown,
+      exportCreatedAt: staged.exportCreatedAt,
+      entries: staged.entries,
+      unknown: staged.unknown,
+      notes: staged.notes,
+      skipped: staged.skipped,
       preview: { items: [], memories: [], counts: {}, warnings: [] },
       options: null,
       planned: [],
@@ -306,6 +349,7 @@ export class ImportService {
     };
     return {
       importId: journal.importId,
+      source: journal.source ?? "chatui",
       key: journal.key,
       state: journal.state,
       createdAt: journal.createdAt,
@@ -336,8 +380,12 @@ export class ImportService {
 
   private async plan(userId: string, journal: Journal, options: ImportCommit): Promise<Plan> {
     const { paths } = this.o;
-    const items: ImportItem[] = [];
-    const warnings: string[] = journal.unknown.map((name) => `Skipped an unknown entry: ${name}`);
+    // What the source adapter couldn't map comes first (Phase 13e).
+    const items: ImportItem[] = [...(journal.skipped ?? [])];
+    const warnings: string[] = [
+      ...(journal.notes ?? []),
+      ...journal.unknown.map((name) => `Skipped an unknown entry: ${name}`),
+    ];
     const ops: Op[] = [];
     const byKind = (kind: ExtractedEntry["kind"]) => journal.entries.filter((e) => e.kind === kind);
     const read = (e: ExtractedEntry) => readFile(e.file);

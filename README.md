@@ -188,13 +188,13 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 
 - **A single chat:** its title menu → "Export as Markdown" downloads the exact file ChatUI stores (no attachments).
 - **Everything:** Settings → Data → "Export all data" makes one ZIP with your chats, attachments, files, memories, memory suggestions, skills and preferences, each with a checksum. Passwords, sessions and server settings are never included.
-- **Import:** Settings → Data → "Choose archive…" shows a preview first. Nothing changes until you press Import, and nothing you have is overwritten:
+- **Import:** the account menu → "Import & export" (or Settings → Data) → "Choose file…" shows a preview first. It reads a ChatUI export, a Claude data export (its ZIPs, or `conversations.json`) and a chat downloaded from duck.ai; what each maps and skips is in `docs/claude-export-notes.md` and `docs/duckai-export-notes.md`. OpenAI and other sources are not supported yet (each needs its own adapter). Nothing changes until you press Import, and nothing you have is overwritten:
   - Items you already have are skipped.
   - Items that differ from yours are skipped, or imported as copies if you choose.
   - Memories come in only if you tick them.
   - Imported memory suggestions are never actionable.
   - Restoring chats you deleted works from your own archive.
-- Limits: `IMPORT_MAX_ARCHIVE_BYTES`, `IMPORT_MAX_EXPANDED_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_RATIO` (ZIP-bomb guard) and `IMPORT_MAX_MS`. An import interrupted by a crash is rolled back on the next start.
+- Limits: `IMPORT_MAX_ARCHIVE_BYTES`, `IMPORT_MAX_EXPANDED_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_RATIO` (ZIP-bomb guard), `IMPORT_MAX_MS`, `IMPORT_MAX_RECORDS` and `IMPORT_MAX_JSON_BYTES` (one foreign JSON document). An import interrupted by a crash is rolled back on the next start.
 - This is the user-level export; it is not an administrative backup of the whole server (Phase 16).
 
 ## Data, backups and limits

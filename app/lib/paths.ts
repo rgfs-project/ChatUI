@@ -5,7 +5,9 @@
 export const paths = {
   newChat: () => "/chat/new",
   chat: (conversationId: string) => `/chat/${encodeURIComponent(conversationId)}`,
-  settings: () => "/settings",
+  /** Settings; `section` opens a tab directly (e.g. "data" for import and export). */
+  settings: (section?: string) =>
+    section ? `/settings?section=${encodeURIComponent(section)}` : "/settings",
   admin: () => "/admin",
   account: () => "/account",
   login: (returnTo?: string) =>

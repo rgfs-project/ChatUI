@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { ConfirmDialog } from "../components/Dialogs";
 import { apiJson, queryKeys } from "../lib/query";
 import { AttachmentSettings } from "../components/AttachmentSettings";
@@ -31,7 +31,8 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings · ChatUI" }];
 }
 
-type Section = "account" | "data" | "skills" | "memories" | "files" | "attachments";
+const SECTIONS = ["account", "data", "skills", "memories", "files", "attachments"] as const;
+type Section = (typeof SECTIONS)[number];
 
 /**
  * Settings: a large panel with its sections listed on the left (Account;
@@ -41,7 +42,12 @@ export default function SettingsOverlay() {
   const user = useAuth().session?.user;
   const signOut = useSignOut();
   const isAdmin = user?.role === "admin";
-  const [section, setSection] = useState<Section>("account");
+  // `?section=` opens a tab directly (the account menu's "Import & export").
+  const [params] = useSearchParams();
+  const requested = params.get("section");
+  const [section, setSection] = useState<Section>(
+    SECTIONS.includes(requested as Section) ? (requested as Section) : "account",
+  );
   const tab = (id: Section, label: string, icon: ReactNode) => (
     <button
       type="button"

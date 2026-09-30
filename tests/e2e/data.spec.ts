@@ -73,7 +73,7 @@ test.describe("export and import (INV-42, INV-43)", () => {
     // Import the archive: preview, confirm, report.
     await openData(page);
     const previewStarted = Date.now();
-    await page.getByLabel("Choose archive…").setInputFiles(archive);
+    await page.getByLabel("Choose file…").setInputFiles(archive);
     const preview = page.getByTestId("import-preview");
     await expect(preview).toBeVisible();
     const previewMs = Date.now() - previewStarted;
@@ -107,7 +107,7 @@ test.describe("import on a phone", () => {
       page.waitForEvent("download"),
       page.getByTestId("export-download").click(),
     ]);
-    await page.getByLabel("Choose archive…").setInputFiles(await download.path());
+    await page.getByLabel("Choose file…").setInputFiles(await download.path());
     const preview = page.getByTestId("import-preview");
     await expect(preview).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(

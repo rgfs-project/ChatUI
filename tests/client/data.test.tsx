@@ -53,6 +53,7 @@ const MEMORY = "66666666-0000-4000-8000-000000000002";
 function preview(extra: Partial<ImportPreview> = {}): ImportPreview {
   return {
     importId: IMPORT,
+    source: "chatui",
     key: "k".repeat(64),
     state: "previewed",
     createdAt: "2026-01-02T00:00:00.000Z",
