@@ -2,7 +2,8 @@
  * Canonical API error contract (contracts §5). Each phase adds only the codes it
  * uses: Phase 1a the four foundation codes, Phase 2 provider/generation codes,
  * Phase 3 persistence and send-acceptance codes, Phase 4 auth codes, Phase 10
- * admin codes (LAST_ADMIN, and ENDPOINT_NOT_ALLOWED for SSRF-refused provider URLs).
+ * admin codes (LAST_ADMIN, and ENDPOINT_NOT_ALLOWED for SSRF-refused provider URLs),
+ * Phase 12 attachment codes.
  */
 export const ErrorCode = {
   VALIDATION: "VALIDATION",
@@ -29,6 +30,9 @@ export const ErrorCode = {
   PROVIDER_NOT_FOUND: "PROVIDER_NOT_FOUND",
   ENDPOINT_NOT_ALLOWED: "ENDPOINT_NOT_ALLOWED",
   LAST_ADMIN: "LAST_ADMIN",
+  UNSUPPORTED_MEDIA_TYPE: "UNSUPPORTED_MEDIA_TYPE",
+  QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
+  MODEL_CAPABILITY_UNSUPPORTED: "MODEL_CAPABILITY_UNSUPPORTED",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -58,6 +62,9 @@ export const ERROR_HTTP_STATUS: Readonly<Record<ErrorCode, number>> = {
   PROVIDER_NOT_FOUND: 400,
   ENDPOINT_NOT_ALLOWED: 400,
   LAST_ADMIN: 409,
+  UNSUPPORTED_MEDIA_TYPE: 415,
+  QUOTA_EXCEEDED: 413,
+  MODEL_CAPABILITY_UNSUPPORTED: 422,
 };
 
 /** `details` never contains stack traces, paths, upstream bodies or secrets. */

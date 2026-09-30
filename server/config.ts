@@ -74,6 +74,17 @@ const envSchema = z.object({
   MAX_SSE_TOTAL: intFrom(1, 100_000).default(256),
   PASSWORD_HASH_CONCURRENCY: intFrom(1, 64).default(2),
   PASSWORD_HASH_QUEUE: intFrom(0, 10_000).default(16),
+
+  // Attachments (Phase 12). Admin settings may override the first four.
+  ATTACHMENT_MAX_BYTES: intFrom(1_024, 1_073_741_824).default(20 * 1024 * 1024),
+  ATTACHMENT_MAX_PER_MESSAGE: intFrom(1, 10).default(10),
+  ATTACHMENT_QUOTA_BYTES: intFrom(1_024, 1_099_511_627_776).default(1024 * 1024 * 1024),
+  ATTACHMENT_TEXT_INLINE_BYTES: intFrom(256, 10_000_000).default(100_000),
+  ATTACHMENT_PENDING_TTL: intFrom(60_000, 30 * 86_400_000).default(86_400_000),
+  ATTACHMENT_MAX_IMAGE_PIXELS: intFrom(1, 1_000_000_000).default(50_000_000),
+  MAX_UPLOADS_PER_USER: intFrom(1, 100).default(4),
+  MAX_UPLOADS_TOTAL: intFrom(1, 10_000).default(32),
+  MEDIA_TOKEN_RESERVE: intFrom(1, 1_000_000).default(1_024),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -94,7 +105,38 @@ export interface Config {
   provider: ProviderConfig;
   storage: StorageConfig;
   auth: AuthConfig;
+  attachments: AttachmentConfig;
 }
+
+/** Attachment limits (contracts §7). Instance settings can override the first four. */
+export interface AttachmentConfig {
+  maxFileBytes: number;
+  maxPerMessage: number;
+  /** Total attachment bytes per user (QUOTA_EXCEEDED). */
+  quotaBytes: number;
+  /** Text inlined into the prompt per attachment; the rest is cut with a marker. */
+  textInlineBytes: number;
+  /** Unlinked uploads older than this are garbage-collected. */
+  pendingTtlMs: number;
+  maxImagePixels: number;
+  /** Concurrent uploads in flight (INV-62). */
+  maxUploadsPerUser: number;
+  maxUploadsTotal: number;
+  /** Context tokens reserved per image/audio part unless the provider counts them. */
+  mediaTokenReserve: number;
+}
+
+export const DEFAULT_ATTACHMENT_CONFIG: AttachmentConfig = {
+  maxFileBytes: 20 * 1024 * 1024,
+  maxPerMessage: 10,
+  quotaBytes: 1024 * 1024 * 1024,
+  textInlineBytes: 100_000,
+  pendingTtlMs: 86_400_000,
+  maxImagePixels: 50_000_000,
+  maxUploadsPerUser: 4,
+  maxUploadsTotal: 32,
+  mediaTokenReserve: 1_024,
+};
 
 export interface AuthConfig {
   /** The URL users open. https (behind a TLS proxy) or http://localhost only. */
@@ -311,6 +353,17 @@ export function loadConfig(
       },
     },
     auth,
+    attachments: {
+      maxFileBytes: parsed.data.ATTACHMENT_MAX_BYTES,
+      maxPerMessage: parsed.data.ATTACHMENT_MAX_PER_MESSAGE,
+      quotaBytes: parsed.data.ATTACHMENT_QUOTA_BYTES,
+      textInlineBytes: parsed.data.ATTACHMENT_TEXT_INLINE_BYTES,
+      pendingTtlMs: parsed.data.ATTACHMENT_PENDING_TTL,
+      maxImagePixels: parsed.data.ATTACHMENT_MAX_IMAGE_PIXELS,
+      maxUploadsPerUser: parsed.data.MAX_UPLOADS_PER_USER,
+      maxUploadsTotal: parsed.data.MAX_UPLOADS_TOTAL,
+      mediaTokenReserve: parsed.data.MEDIA_TOKEN_RESERVE,
+    },
     storage: {
       operationRetentionMs: parsed.data.OPERATION_RETENTION_MS,
       contextTrimStep: parsed.data.CONTEXT_TRIM_STEP,

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ConfigError, loadConfig } from "../../server/config.ts";
+import { ConfigError, DEFAULT_ATTACHMENT_CONFIG, loadConfig } from "../../server/config.ts";
 
 let root: string;
 
@@ -16,6 +16,21 @@ afterAll(() => {
 });
 
 describe("configuration", () => {
+  it("reads attachment limits from the environment (Phase 12)", () => {
+    const config = loadConfig({
+      DATA_DIR: root,
+      ATTACHMENT_MAX_BYTES: "2048",
+      ATTACHMENT_MAX_PER_MESSAGE: "3",
+      MEDIA_TOKEN_RESERVE: "700",
+    });
+    expect(config.attachments.maxFileBytes).toBe(2048);
+    expect(config.attachments.maxPerMessage).toBe(3);
+    expect(config.attachments.mediaTokenReserve).toBe(700);
+    expect(() => loadConfig({ DATA_DIR: root, ATTACHMENT_MAX_PER_MESSAGE: "11" })).toThrow(
+      ConfigError,
+    );
+  });
+
   it("applies safe defaults", () => {
     const config = loadConfig({ DATA_DIR: root });
     expect(config).toEqual({
@@ -25,6 +40,8 @@ describe("configuration", () => {
       logLevel: "info",
       listenHost: "127.0.0.1",
       inContainer: false,
+      // The environment defaults match the in-code defaults tests use.
+      attachments: DEFAULT_ATTACHMENT_CONFIG,
       provider: {
         baseUrl: undefined,
         apiKey: undefined,

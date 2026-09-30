@@ -15,6 +15,8 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import { serializeConversation, validateModel, type Block } from "../../server/storage/markdown.ts";
 import { startMockLlama } from "../support/mock-llama.ts";
+import { png, wav } from "../support/media.ts";
+import { createHash } from "node:crypto";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 export const E2E_USER = "e2e";
@@ -29,6 +31,11 @@ export const LONG_TITLE = "Long seeded conversation";
 /** A conversation with wide content: a long code line, a wide table, a long URL. */
 export const WIDE_CONVERSATION = "9a1b2c3d-4e5f-4a6b-8c7d-8e9fa0b1c2d3";
 export const WIDE_TITLE = "Wide content";
+
+/** A conversation whose early messages carry many images, audio and text (Phase 12). */
+export const ATTACHMENTS_CONVERSATION = "5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f";
+export const ATTACHMENTS_TITLE = "Many attachments";
+export const SEEDED_IMAGES = 40;
 
 /** Unique text in an older message (find-in-page). */
 export const OLDER_NEEDLE = "needle-older-message-17";
@@ -124,6 +131,93 @@ function seedLongConversation(dataDir: string, userId: string): void {
   });
 }
 
+/** Linked attachments on disk, as the server writes them (contracts §7). */
+function seedAttachmentsConversation(dataDir: string, userId: string): void {
+  const blocks: Block[] = [];
+  const write = (
+    bytes: Buffer,
+    filename: string,
+    mediaType: string,
+    kind: string,
+    messageId: string,
+    size?: { width: number; height: number },
+  ) => {
+    const id = randomUUID();
+    const dir = path.join(dataDir, userId, "attachments", id);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(path.join(dir, "blob"), bytes, { mode: 0o600 });
+    const meta = {
+      version: 1,
+      id,
+      ownerId: userId,
+      conversationId: ATTACHMENTS_CONVERSATION,
+      messageId,
+      filename,
+      mediaType,
+      kind,
+      size: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      createdAt: "2026-01-03T00:00:00.000Z",
+      ...(size ?? {}),
+    };
+    writeFileSync(path.join(dir, "meta.json"), JSON.stringify(meta), { mode: 0o600 });
+    return id;
+  };
+  for (let i = 0; i < 60; i++) {
+    const at = new Date(Date.UTC(2026, 0, 3, 0, i)).toISOString();
+    const userId_ = randomUUID();
+    const attachments: string[] = [];
+    // Two images per early message (the first 20 messages), plus audio and text once.
+    if (i < SEEDED_IMAGES / 2)
+      for (let k = 0; k < 2; k++)
+        attachments.push(
+          write(
+            png(64, 48, [20 * k, 8 * i, 200]),
+            `photo-${String(i)}-${String(k)}.png`,
+            "image/png",
+            "image",
+            userId_,
+            { width: 64, height: 48 },
+          ),
+        );
+    if (i === 0) {
+      attachments.push(write(wav(200), "clip.wav", "audio/wav", "audio", userId_));
+      attachments.push(
+        write(Buffer.from("# Notes\n"), "notes.md", "text/markdown", "text", userId_),
+      );
+    }
+    blocks.push({
+      type: "user",
+      id: userId_,
+      time: at,
+      body: `Look at these ${String(i)}`,
+      ...(attachments.length > 0 ? { attachments } : {}),
+    });
+    blocks.push({
+      type: "assistant",
+      id: randomUUID(),
+      status: "complete",
+      provider: "local",
+      model: "mock-vision",
+      time: at,
+      body: `Reply ${String(i)}.\n\nA second paragraph so every reply has some height.`,
+    });
+  }
+  const model = {
+    title: ATTACHMENTS_TITLE,
+    createdAt: "2026-01-03T00:00:00.000Z",
+    updatedAt: "2026-01-03T01:00:00.000Z",
+    blocks,
+  };
+  const problem = validateModel(model);
+  if (problem) throw new Error(problem);
+  const dir = path.join(dataDir, userId, "chats");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  writeFileSync(path.join(dir, `${ATTACHMENTS_CONVERSATION}.md`), serializeConversation(model), {
+    mode: 0o600,
+  });
+}
+
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
@@ -151,6 +245,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await createUser(dataDir, E2E_ADMIN, true);
   seedLongConversation(dataDir, userIdOf(dataDir, E2E_USER));
   seedWideConversation(dataDir, userIdOf(dataDir, E2E_USER));
+  seedAttachmentsConversation(dataDir, userIdOf(dataDir, E2E_USER));
   const port = await freePort();
   const base = `http://127.0.0.1:${String(port)}`;
   const server = spawn(process.execPath, ["server/main.ts"], {

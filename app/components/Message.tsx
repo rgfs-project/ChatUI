@@ -1,6 +1,8 @@
 import { Check, ChevronRight, Copy } from "lucide-react";
 import { memo, useEffect, useState } from "react";
+import type { MessageAttachmentDto } from "@shared/attachments";
 import type { MessageDto } from "@shared/conversations";
+import { MessageAttachments } from "./MessageAttachments";
 import { count } from "../lib/render-counters";
 import { Markdown } from "./Markdown";
 
@@ -62,9 +64,24 @@ export interface MessageViewProps {
   reasoning: string | null;
   status: MessageDto["status"];
   testId?: string;
+  /** User messages: their attachments (Phase 12). */
+  attachments?: readonly MessageAttachmentDto[];
+  onOpenImage?: (
+    items: readonly MessageAttachmentDto[],
+    index: number,
+    trigger: HTMLElement,
+  ) => void;
 }
 
-function MessageImpl({ role, content, reasoning, status, testId }: MessageViewProps) {
+function MessageImpl({
+  role,
+  content,
+  reasoning,
+  status,
+  testId,
+  attachments,
+  onOpenImage,
+}: MessageViewProps) {
   count("messageRenders");
   useEffect(() => {
     count("messageMounts");
@@ -75,12 +92,19 @@ function MessageImpl({ role, content, reasoning, status, testId }: MessageViewPr
     return (
       <li className="turn turn-user" data-testid={testId ?? "message-user"}>
         <span className="visually-hidden">{label}</span>
-        <div className="bubble">
-          <p className="plain-text">{content}</p>
-        </div>
-        <div className="turn-actions">
-          <CopyButton text={content} label="Copy message" />
-        </div>
+        {attachments?.length ? (
+          <MessageAttachments items={attachments} onOpenImage={onOpenImage} />
+        ) : null}
+        {content ? (
+          <div className="bubble">
+            <p className="plain-text">{content}</p>
+          </div>
+        ) : null}
+        {content ? (
+          <div className="turn-actions">
+            <CopyButton text={content} label="Copy message" />
+          </div>
+        ) : null}
       </li>
     );
   return (

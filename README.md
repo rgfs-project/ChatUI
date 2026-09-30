@@ -156,8 +156,24 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 ## Data, backups and limits
 
 - Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).
-- Each account has its own directory `DATA_DIR/<user-id>/` (`user.json`, `chats/`, `preferences.json`, `operations/`). `_system/` holds `providers.json` (secrets), sessions (deleting them signs everyone out) and the derived username index.
+- Each account has its own directory `DATA_DIR/<user-id>/` (`user.json`, `chats/`, `preferences.json`, `operations/`, `attachments/`). `_system/` holds `providers.json` (secrets), sessions (deleting them signs everyone out) and the derived username index.
 - **Back up all of `DATA_DIR`.** `index/` is derived and optional in a backup: it is rebuilt from the Markdown when missing. Keep `operations/` (short-lived send records used for safe retries and crash recovery). Stop the server, or copy from a filesystem snapshot, for a consistent backup; online backup/restore arrives in Phase 16.
+- **Attachments are part of `DATA_DIR`** (`<user-id>/attachments/<attachment-id>/blob` + `meta.json`) and must be in every backup; messages reference them by id. A message whose attachment is gone shows an "Attachment unavailable" placeholder and still works.
+- **Attachment limits** (environment defaults; an admin can override the first four under Administration → Settings):
+
+  | Limit                           | Variable                                     | Default          |
+  | ------------------------------- | -------------------------------------------- | ---------------- |
+  | File size                       | `ATTACHMENT_MAX_BYTES`                       | 20 MiB           |
+  | Attachments per message         | `ATTACHMENT_MAX_PER_MESSAGE`                 | 10 (the maximum) |
+  | Storage per user                | `ATTACHMENT_QUOTA_BYTES`                     | 1 GiB            |
+  | Text inlined per attachment     | `ATTACHMENT_TEXT_INLINE_BYTES`               | 100,000 bytes    |
+  | Unsent uploads kept             | `ATTACHMENT_PENDING_TTL`                     | 1 day            |
+  | Image size                      | `ATTACHMENT_MAX_IMAGE_PIXELS`                | 50 megapixels    |
+  | Uploads in flight               | `MAX_UPLOADS_PER_USER` / `MAX_UPLOADS_TOTAL` | 4 / 32           |
+  | Context counted per image/audio | `MEDIA_TOKEN_RESERVE`                        | 1,024 tokens     |
+
+  Accepted: PNG, JPEG, WebP and GIF images; WAV, MP3 and FLAC audio; UTF-8 text, Markdown, CSV, JSON and source files. The server decides by the file's bytes, not its name; SVG, HTML, PDF, Office files, video, archives and executables are refused. Images and audio go only to models that report (or are configured with) image/audio input; text files are inlined into the prompt. Each user can choose, under Settings → Attachments, whether earlier images are sent again and how far large photos are shrunk before upload. ChatUI doesn't scan files for malware; bytes are stored and served inert (never executed or rendered as HTML).
+
 - **Single process only.** Exactly one ChatUI process may use a `DATA_DIR` (locks are in-process). Don't run two servers, or the CLI `index:rebuild`, against the same directory at the same time.
 - Writes are atomic and durable (temp file, fsync, rename, directory fsync). On Windows, directory fsync is unavailable and rename-over-existing semantics differ; Linux containers are the supported runtime.
 

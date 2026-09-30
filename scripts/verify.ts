@@ -27,7 +27,8 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import { chromium, type ConsoleMessage } from "@playwright/test";
 import { MOCK_MODELS, startMockLlama } from "../tests/support/mock-llama.ts";
-import { check as checkBudget, measure, type Budget } from "./perf-check.ts";
+import { check as checkBudget, lazyLeaks, measure, type Budget } from "./perf-check.ts";
+import { png } from "../tests/support/media.ts";
 import {
   apiLogin,
   browserChecks,
@@ -420,7 +421,7 @@ function budgetChecks(): void {
   const budget = JSON.parse(
     readFileSync(path.join(ROOT, "performance-budget.json"), "utf8"),
   ) as Budget;
-  const real = checkBudget(sizes, budget);
+  const real = checkBudget(sizes, budget, lazyLeaks());
   check(
     "perf:check: the production build is within performance-budget.json",
     real.ok,
@@ -433,6 +434,10 @@ function budgetChecks(): void {
     ),
   };
   check("perf:check: an intentionally lowered budget fails", !checkBudget(sizes, lowered).ok);
+  check(
+    "perf:check: a lazy attachment chunk in a cold-visit group fails",
+    !checkBudget(sizes, budget, ["critical-chat-js: /assets/AttachmentTray-x.js"]).ok,
+  );
   const assets = readdirSync(path.join(ROOT, "build/client/assets")).filter((f) =>
     /\.(js|css)$/.test(f),
   );
@@ -450,6 +455,76 @@ function budgetChecks(): void {
           existsSync(path.join(ROOT, "build/client/assets", `${f}.gz`))),
     ),
   );
+}
+
+/**
+ * Phase 12 in the production build: uploads are sniffed and stored by id,
+ * bytes are served inert, and attachment endpoints are part of the API
+ * boundary (JSON errors, never SSR HTML; INV-27, INV-28, INV-57).
+ */
+async function attachmentChecks(base: string, dataDir: string, session: ApiSession): Promise<void> {
+  const unknown = "00000000-0000-4000-8000-000000000000";
+  const anon = await fetch(`${base}/api/attachments/${unknown}/content`);
+  check(
+    "INV-57: signed out, attachment bytes are a JSON 401 (never HTML)",
+    anon.status === 401 && (anon.headers.get("content-type") ?? "").startsWith("application/json"),
+    `${String(anon.status)} ${anon.headers.get("content-type") ?? ""}`,
+  );
+  await anon.arrayBuffer();
+  for (const url of [`/api/attachments/${unknown}/content`, "/api/attachments/x/content"]) {
+    const res = await fetch(`${base}${url}`, { headers: sessionHeaders(session) });
+    check(
+      `INV-57: ${url} is a JSON error, never the SSR document`,
+      res.status >= 400 && (res.headers.get("content-type") ?? "").startsWith("application/json"),
+      `${String(res.status)} ${res.headers.get("content-type") ?? ""}`,
+    );
+    await res.arrayBuffer();
+  }
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(png(8, 6))]), "../../photo.png");
+  const uploaded = await fetch(`${base}/api/attachments`, {
+    method: "POST",
+    headers: sessionHeaders(session, true),
+    body: form,
+  });
+  const dto = (await uploaded.json()) as { id?: string; mediaType?: string; width?: number };
+  check(
+    "INV-27: an uploaded PNG is sniffed (201, image/png, 8 px wide)",
+    uploaded.status === 201 && dto.mediaType === "image/png" && dto.width === 8,
+    JSON.stringify(dto),
+  );
+  const dirs = readdirSync(path.join(dataDir, session.userId, "attachments"));
+  check(
+    "INV-28: the attachment directory is named by its server-minted id",
+    dto.id !== undefined && dirs.includes(dto.id) && dirs.every((d) => /^[0-9a-f-]{36}$/.test(d)),
+    dirs.join(","),
+  );
+  const bytes = await fetch(`${base}/api/attachments/${dto.id ?? unknown}/content`, {
+    headers: sessionHeaders(session),
+  });
+  await bytes.arrayBuffer();
+  check(
+    "INV-27: bytes are served with the sniffed type, nosniff and a sandbox CSP",
+    bytes.status === 200 &&
+      bytes.headers.get("content-type") === "image/png" &&
+      bytes.headers.get("x-content-type-options") === "nosniff" &&
+      bytes.headers.get("content-security-policy") === "sandbox; default-src 'none'" &&
+      (bytes.headers.get("cache-control") ?? "").startsWith("private"),
+    [...bytes.headers].map(([k, v]) => `${k}: ${v}`).join("; "),
+  );
+  const svgForm = new FormData();
+  svgForm.append(
+    "file",
+    new Blob(['<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>']),
+    "x.svg",
+  );
+  const svg = await fetch(`${base}/api/attachments`, {
+    method: "POST",
+    headers: sessionHeaders(session, true),
+    body: svgForm,
+  });
+  await svg.arrayBuffer();
+  check("INV-27: an SVG upload is refused (415)", svg.status === 415, String(svg.status));
 }
 
 async function main(): Promise<void> {
@@ -496,6 +571,8 @@ async function main(): Promise<void> {
     );
     const admin = await apiLogin(base, "admin", PASSWORD);
     if (admin) await authChecks(base, dataDir, admin);
+    const again = await apiLogin(base, "admin", PASSWORD);
+    if (again) await attachmentChecks(base, dataDir, again);
   } finally {
     const exited = new Promise<number | null>((resolve) =>
       child.once("exit", (code) => {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ErrorCode } from "./errors";
 import { canonicalUuid } from "./ids";
+import { MAX_ATTACHMENTS_PER_MESSAGE } from "./attachment-media";
 import { GENERATION_STATES, type TerminalState } from "./generation-state";
 
 export * from "./generation-state";
@@ -65,20 +66,30 @@ export const chatMessageSchema = z.strictObject({
 });
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
-export const startGenerationRequestSchema = z.strictObject({
-  /** Omit for a draft: the server mints the conversation on first send (§4.1). */
-  conversationId: canonicalUuid.optional(),
-  /** The pair is validated server-side on every send (INV-18). */
-  providerId: z.string().min(1).max(64),
-  model: z.string().trim().min(1).max(200),
-  content: z
-    .string()
-    .max(100_000)
-    .refine((value) => value.trim() !== "", "must not be empty"),
-  /** Client-minted idempotency key for this send (INV-58). */
-  operationKey: z.uuid(),
-  operationIssuedAt: z.iso.datetime({ offset: false }),
-});
+export const startGenerationRequestSchema = z
+  .strictObject({
+    /** Omit for a draft: the server mints the conversation on first send (§4.1). */
+    conversationId: canonicalUuid.optional(),
+    /** The pair is validated server-side on every send (INV-18). */
+    providerId: z.string().min(1).max(64),
+    model: z.string().trim().min(1).max(200),
+    /** May be empty only when attachments are sent (Phase 12). */
+    content: z.string().max(100_000),
+    /** Client-minted idempotency key for this send (INV-58). */
+    operationKey: z.uuid(),
+    operationIssuedAt: z.iso.datetime({ offset: false }),
+    /** Owned, pending attachments to link to the new user message (Phase 12, contracts §7). */
+    attachmentIds: z
+      .array(canonicalUuid)
+      .min(1)
+      .max(MAX_ATTACHMENTS_PER_MESSAGE)
+      .refine((ids) => new Set(ids).size === ids.length, "must not repeat an attachment")
+      .optional(),
+  })
+  .refine((value) => value.content.trim() !== "" || (value.attachmentIds?.length ?? 0) > 0, {
+    path: ["content"],
+    message: "must not be empty",
+  });
 export type StartGenerationRequest = z.infer<typeof startGenerationRequestSchema>;
 
 export const startGenerationResponseSchema = z.strictObject({

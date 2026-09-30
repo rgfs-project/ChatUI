@@ -12,6 +12,7 @@ import {
 import { ErrorCode } from "@shared/errors";
 import { AppError } from "../errors.ts";
 import { defineRoute, userOf, type RouteServices } from "../registry.ts";
+import { toMessageAttachment } from "../storage/attachments.ts";
 import { StorageError, type LoadedConversation } from "../storage/conversations.ts";
 
 const idParams = z.strictObject({ id: canonicalUuid });
@@ -39,12 +40,25 @@ async function mapStorage<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Explicit DTO from canonical storage (INV-03): no paths, no raw file text. */
-export function toConversationDto(
+/**
+ * Explicit DTO from canonical storage (INV-03): no paths, no raw file text.
+ * Attachment metadata comes along; bytes are demand-loaded (Phase 12).
+ */
+export async function toConversationDto(
   conversation: LoadedConversation,
   services: RouteServices,
   userId: string,
-): ConversationDto {
+): Promise<ConversationDto> {
+  const ids = new Set(
+    conversation.model.blocks.flatMap((block) =>
+      block.type === "user" ? (block.attachments ?? []) : [],
+    ),
+  );
+  const metas = new Map(
+    await Promise.all(
+      [...ids].map(async (id) => [id, await services.attachments.readMeta(userId, id)] as const),
+    ),
+  );
   const messages: MessageDto[] = [];
   let pendingReasoning: string | null = null;
   for (const block of conversation.model.blocks) {
@@ -60,7 +74,10 @@ export function toConversationDto(
       status: block.type === "assistant" ? block.status : null,
       provider: block.type === "assistant" ? (block.provider ?? null) : null,
       model: block.type === "assistant" ? (block.model ?? null) : null,
-      attachments: block.type === "user" ? (block.attachments ?? []) : [],
+      attachments:
+        block.type === "user"
+          ? (block.attachments ?? []).map((id) => toMessageAttachment(id, metas.get(id) ?? null))
+          : [],
       time: block.type === "user" || block.type === "assistant" ? (block.time ?? null) : null,
     });
     pendingReasoning = null;

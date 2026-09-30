@@ -65,13 +65,21 @@ export class ConversationStore {
     now?: () => Date;
     /** Account write guard (INV-61); every canonical write runs through it. */
     writes?: AccountWrites;
+    /**
+     * Runs after a conversation's Markdown is deleted, still under its lock:
+     * removes its linked attachments (contracts §7: Markdown first).
+     */
+    afterDelete?: (userId: string, id: string) => Promise<void>;
   }) {
     this.paths = options.paths;
     this.locks = options.locks;
     this.index = options.index;
     this.now = options.now ?? (() => new Date());
     this.writes = options.writes;
+    this.afterDelete = options.afterDelete;
   }
+
+  private readonly afterDelete: ((userId: string, id: string) => Promise<void>) | undefined;
 
   private readonly writes: AccountWrites | undefined;
 
@@ -196,6 +204,7 @@ export class ConversationStore {
     await this.withLock(userId, id, async () => {
       const removed = await this.deleteUnlocked(userId, id);
       if (!removed) throw new StorageError("not_found", "Conversation not found");
+      await this.afterDelete?.(userId, id);
     });
   }
 

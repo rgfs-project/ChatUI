@@ -30,7 +30,10 @@ export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
     "script-src-attr": ["'none'"],
     // Nonce'd <style> elements only (Radix scroll lock); no unsafe-inline.
     "style-src": ["'self'", nonce],
-    "img-src": ["'self'"],
+    // blob: only for local previews of files being attached (object URLs the
+    // page itself created); attachment bytes come from 'self'.
+    "img-src": ["'self'", "blob:"],
+    "media-src": ["'self'", "blob:"],
     "font-src": ["'self'"],
     "connect-src": ["'self'"],
     "manifest-src": ["'self'"],

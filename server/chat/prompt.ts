@@ -1,9 +1,37 @@
 import type { ConversationModel } from "../storage/markdown.ts";
 
+/** An image or audio attachment sent as a typed content part (Phase 12, contracts §7). */
+export interface MediaPart {
+  type: "image" | "audio";
+  attachmentId: string;
+  mediaType: string;
+}
+
+export type ContentPart = { type: "text"; text: string } | MediaPart;
+
 /** A provider-bound message. Built from canonical storage only (contracts §4). */
 export interface PromptMessage {
   role: "system" | "user" | "assistant";
+  /** All text of the message (what is counted and templated). */
   content: string;
+  /** Ordered typed parts, present only when the message carries media. */
+  parts?: ContentPart[];
+}
+
+/** The typed parts of a message: its own parts, else its text. */
+export function partsOf(message: PromptMessage): ContentPart[] {
+  return message.parts ?? (message.content === "" ? [] : [{ type: "text", text: message.content }]);
+}
+
+export function mediaCount(message: PromptMessage): number {
+  return message.parts?.filter((part) => part.type !== "text").length ?? 0;
+}
+
+/** What a user block contributes besides its body: inlined text files and media parts. */
+export interface UserAttachments {
+  /** Fenced text blocks (inlined text attachments), in attachment order. */
+  text: string[];
+  media: MediaPart[];
 }
 
 export interface TokenCounter {
@@ -30,31 +58,71 @@ export function historyGroups(
   model: ConversationModel,
   /** Rewrites each user body for the provider (skills); stored text is untouched. */
   expandUser: (body: string) => string = (body) => body,
+  /** Expands a user block's attachments (Phase 12); `newest` marks the message being sent. */
+  attachmentsOf?: (ids: readonly string[], newest: boolean) => UserAttachments,
 ): HistoryGroups {
   const system: PromptMessage[] = [];
   const groups: PromptMessage[][] = [];
-  for (const block of model.blocks) {
+  const lastUser = model.blocks.findLastIndex((block) => block.type === "user");
+  model.blocks.forEach((block, index) => {
     if (block.type === "system") {
       system.push({ role: "system", content: block.body });
     } else if (block.type === "user") {
-      groups.push([{ role: "user", content: expandUser(block.body) }]);
+      const body = expandUser(block.body);
+      const extra =
+        attachmentsOf && block.attachments?.length
+          ? attachmentsOf(block.attachments, index === lastUser)
+          : { text: [], media: [] };
+      const content = [body, ...extra.text].filter((text) => text !== "").join("\n\n");
+      groups.push([
+        extra.media.length > 0
+          ? {
+              role: "user",
+              content,
+              // Media first, then the text (the order vision models are tuned for).
+              parts: [
+                ...extra.media,
+                ...(content === "" ? [] : [{ type: "text" as const, text: content }]),
+              ],
+            }
+          : { role: "user", content },
+      ]);
     } else if (block.type === "assistant" && block.body !== "") {
       groups.at(-1)?.push({ role: "assistant", content: block.body });
     }
-  }
+  });
   return { system, groups };
 }
 
-/** Merges adjacent same-role messages in the provider prompt only (two newlines). */
+/**
+ * Merges adjacent same-role messages in the provider prompt only (text joined
+ * with two newlines, typed parts kept in order); canonical blocks are untouched.
+ */
 export function normalizeRoles(messages: PromptMessage[]): PromptMessage[] {
   const out: PromptMessage[] = [];
   for (const message of messages) {
     const last = out.at(-1);
-    if (last?.role === message.role) {
-      last.content = `${last.content}\n\n${message.content}`;
-    } else {
-      out.push({ ...message });
+    if (last?.role !== message.role) {
+      out.push({ ...message, ...(message.parts ? { parts: [...message.parts] } : {}) });
+      continue;
     }
+    const content =
+      last.content === ""
+        ? message.content
+        : message.content === ""
+          ? last.content
+          : `${last.content}\n\n${message.content}`;
+    if (last.parts || message.parts) {
+      const parts: ContentPart[] = [];
+      for (const part of [...partsOf(last), ...partsOf(message)]) {
+        const previous = parts.at(-1);
+        if (part.type === "text" && previous?.type === "text")
+          parts[parts.length - 1] = { type: "text", text: `${previous.text}\n\n${part.text}` };
+        else parts.push(part);
+      }
+      last.parts = parts;
+    }
+    last.content = content;
   }
   return out;
 }
@@ -112,10 +180,12 @@ export async function assemblePrompt(
     contextBlock?: string | undefined;
     /** Expands user messages that invoke a skill ("/name …"). */
     expandUser?: ((body: string) => string) | undefined;
+    /** Expands user attachments (Phase 12). */
+    attachmentsOf?: ((ids: readonly string[], newest: boolean) => UserAttachments) | undefined;
   },
 ): Promise<AssembledPrompt> {
   const { budget, counter } = options;
-  const history = historyGroups(model, options.expandUser);
+  const history = historyGroups(model, options.expandUser, options.attachmentsOf);
   const system = options.instructions
     ? [{ role: "system" as const, content: options.instructions }, ...history.system]
     : history.system;
@@ -125,10 +195,7 @@ export async function assemblePrompt(
   const newestGroup = groups[newest];
   const newestUser = newestGroup?.[0];
   if (options.contextBlock && newestGroup && newestUser)
-    groups[newest] = [
-      { ...newestUser, content: `${options.contextBlock}\n\n${newestUser.content}` },
-      ...newestGroup.slice(1),
-    ];
+    groups[newest] = [withLeadingText(newestUser, options.contextBlock), ...newestGroup.slice(1)];
 
   const systemCost = system.length > 0 ? await counter.countGroup(system) : 0;
   const costs = await Promise.all(groups.map((group) => counter.countGroup(group)));
@@ -176,12 +243,30 @@ export async function assemblePrompt(
   }
 }
 
-/** Pessimistic fallback: one token per UTF-8 byte plus template overhead per message. */
-export function estimateCounter(templateOverheadTokens: number): TokenCounter {
+/** Prepends text (the volatile context block) to a message, before its text part. */
+function withLeadingText(message: PromptMessage, text: string): PromptMessage {
+  const content = message.content === "" ? text : `${text}\n\n${message.content}`;
+  if (!message.parts) return { ...message, content };
+  const media = message.parts.filter((part) => part.type !== "text");
+  return { ...message, content, parts: [...media, { type: "text", text: content }] };
+}
+
+/**
+ * Pessimistic fallback: one token per UTF-8 byte plus template overhead per
+ * message, plus `mediaTokenReserve` per image/audio part (contracts §4 item 5).
+ */
+export function estimateCounter(
+  templateOverheadTokens: number,
+  mediaTokenReserve = 0,
+): TokenCounter {
   const count = (messages: PromptMessage[]) =>
     Promise.resolve(
       messages.reduce(
-        (sum, m) => sum + Buffer.byteLength(m.content, "utf8") + templateOverheadTokens,
+        (sum, m) =>
+          sum +
+          Buffer.byteLength(m.content, "utf8") +
+          templateOverheadTokens +
+          mediaCount(m) * mediaTokenReserve,
         0,
       ),
     );

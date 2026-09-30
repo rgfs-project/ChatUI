@@ -40,6 +40,8 @@ export class AccountAdmin {
     index: ChatIndex;
     checkpoints: CheckpointStore;
     logger: Logger;
+    /** Cancels the account's other in-flight work (uploads, Phase 12). */
+    onClosing?: (id: string) => void;
   };
 
   constructor(options: AccountAdmin["o"]) {
@@ -156,6 +158,7 @@ export class AccountAdmin {
   async finishClosure(id: string): Promise<void> {
     await this.o.sessions.revokeUser(id);
     await this.o.generations.cancelAndForgetUser(id);
+    this.o.onClosing?.(id);
     const detached = await this.o.barrier.exclusive(id, () => this.o.users.detach(id));
     // Generation checkpoints live outside the account directory: remove them too.
     for (const checkpoint of await this.o.checkpoints.all())

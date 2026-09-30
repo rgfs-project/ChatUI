@@ -3,6 +3,7 @@ import { QueryClient, queryOptions } from "@tanstack/react-query";
 import type { SessionDto } from "@shared/auth";
 import type { ConversationDto, ConversationSummary } from "@shared/conversations";
 import type { ModelListDto } from "@shared/generations";
+import type { AttachmentLimitsDto } from "@shared/attachments";
 import { apiFetch } from "./api";
 
 /**
@@ -18,9 +19,22 @@ export const queryKeys = {
   models: (userId: string) => ["user", userId, "models"] as const,
   preferences: (userId: string) => ["user", userId, "preferences"] as const,
   skills: (userId: string) => ["user", userId, "skills"] as const,
+  /** Attachment limits and the user's used bytes (Phase 12); read when attaching. */
+  attachmentLimits: (userId: string) => ["user", userId, "attachment-limits"] as const,
   /** Mutation key for sends (optimistic messages are read from its state). */
   sends: (userId: string) => ["user", userId, "send"] as const,
+  /** Mutation key for uploads and pending-attachment deletes (Phase 12). */
+  uploads: (userId: string) => ["user", userId, "upload"] as const,
 };
+
+/** The user's canonical preferences (contracts §12). */
+export interface PreferencesDto {
+  pins: string[];
+  defaultProvider: string | null;
+  defaultModel: string | null;
+  historyImages: "include" | "omit" | null;
+  imageMaxEdge: number | null;
+}
 
 /** Only these key families may be dehydrated into HTML (browser-safe DTOs). */
 export const DEHYDRATE_ALLOWLIST = new Set([
@@ -123,6 +137,10 @@ export const fetchers = {
     }),
   skills: async (signal?: AbortSignal) =>
     (await apiJson<{ skills: SkillDto[] }>("/api/skills", signal ? { signal } : {})).skills,
+  preferences: (signal?: AbortSignal) =>
+    apiJson<PreferencesDto>("/api/preferences", signal ? { signal } : {}),
+  attachmentLimits: (signal?: AbortSignal) =>
+    apiJson<AttachmentLimitsDto>("/api/attachments/limits", signal ? { signal } : {}),
   models: (refresh = false, signal?: AbortSignal) =>
     apiJson<ModelListDto>(`/api/models${refresh ? "?refresh=1" : ""}`, signal ? { signal } : {}),
 };
@@ -154,6 +172,18 @@ export const queries = {
     queryOptions({
       queryKey: queryKeys.skills(userId),
       queryFn: ({ signal }) => fetchers.skills(signal),
+      retry: retryable,
+    }),
+  preferences: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.preferences(userId),
+      queryFn: ({ signal }) => fetchers.preferences(signal),
+      retry: retryable,
+    }),
+  attachmentLimits: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.attachmentLimits(userId),
+      queryFn: ({ signal }) => fetchers.attachmentLimits(signal),
       retry: retryable,
     }),
   conversation: (userId: string, id: string) =>

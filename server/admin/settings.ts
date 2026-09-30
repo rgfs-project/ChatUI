@@ -74,8 +74,25 @@ export const instanceSettingsSchema = z.strictObject({
       maxOutputTokens: z.number().int().min(16).max(65_536).optional(),
     })
     .optional(),
+  /** Attachment limit overrides (Phase 12); unset fields use the environment defaults. */
+  attachments: z
+    .strictObject({
+      maxFileBytes: z.number().int().min(1_024).max(1_073_741_824).optional(),
+      maxPerMessage: z.number().int().min(1).max(10).optional(),
+      quotaBytes: z.number().int().min(1_024).max(1_099_511_627_776).optional(),
+      textInlineBytes: z.number().int().min(256).max(10_000_000).optional(),
+    })
+    .optional(),
   models: z.array(modelSettingsSchema).max(2_000),
 });
+
+export const ATTACHMENT_SETTING_KEYS = [
+  "maxFileBytes",
+  "maxPerMessage",
+  "quotaBytes",
+  "textInlineBytes",
+] as const;
+export type AttachmentSettingKey = (typeof ATTACHMENT_SETTING_KEYS)[number];
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>;
 
 export const DEFAULT_SETTINGS: InstanceSettings = { version: 1, models: [] };

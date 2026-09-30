@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from "react";
+import type { AttachmentDto } from "@shared/attachments";
 
 /** A message typed while a reply was streaming; sent when the reply finishes. */
 export interface QueuedMessage {
@@ -6,6 +7,8 @@ export interface QueuedMessage {
   content: string;
   /** The (providerId, modelId) chosen when it was queued. */
   pair: [string, string];
+  /** Uploaded attachments sent with it (Phase 12). */
+  attachments?: AttachmentDto[];
 }
 
 /**

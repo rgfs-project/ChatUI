@@ -95,6 +95,24 @@ All counts are ≤ bytes, consistent with the contracts §4 pessimistic fallback
 
 ChatUI classifies only by status and `error.type`. Messages are ChatUI's own; upstream text never reaches clients. A context overflow after `202` ends the generation as `failed` with "The conversation is too long for the model's context window".
 
+## Images and audio (Phase 12)
+
+- **Modalities.** `/v1/models` reports `architecture.input_modalities` per model (observed live; see `/v1/models` above). ChatUI uses it when present, else the provider's configured `capabilities.inputModalities`. The per-model `/props` `modalities` object is not used (see "Context length and slots": calling it could autoload a model).
+- **Request format**, from the llama.cpp server source (`tools/server/server-common.cpp`, master, read 2026-09-30):
+  - Images: `{ "type": "image_url", "image_url": { "url": "data:<type>;base64,<data>" } }`.
+  - Audio: `{ "type": "input_audio", "input_audio": { "data": "<base64>", "format": "wav" | "mp3" | "flac" } }`. The server doesn't validate `format` ("redundant"); the decoder detects WAV, MP3 and FLAC from the bytes.
+  - A part for a modality the loaded model lacks fails with "image input is not supported" / "audio input is not supported" (hint: the mmproj). ChatUI refuses such sends itself (`422 MODEL_CAPABILITY_UNSUPPORTED`) before anything is saved, so this error is only reachable if the capability metadata is wrong.
+  - llama.cpp can also fetch `http(s)` URLs and (with `--media-path`) `file://` URLs. ChatUI never sends URLs, only inline base64, so the provider never fetches anything on a user's behalf.
+- **Live behaviour UNVERIFIED.** The Phase 12 environment had no reachable llama-server. Re-run a vision/audio request against a live server after upgrading llama.cpp (e.g. attach an image with a model whose `input_modalities` include `image`). In particular:
+  - FLAC decoding, and the maximum image/audio size the server accepts, are unverified.
+  - How many tokens a part really costs is unverified.
+- **`MEDIA_TOKEN_RESERVE`** (default 1,024) is counted per image/audio part, because `/tokenize` and `/apply-template` see text only. Published per-image costs vary by model family:
+  - Gemma 3 vision encoders use a fixed 256 tokens per image.
+  - Qwen2.5-VL-style dynamic resolution grows with the image (roughly one token per 28×28 px patch, so a 2048×1365 photo is about 3,500 tokens unless the server caps the resolution).
+  - Audio models count tokens per second of audio.
+
+  Raise the reserve for dynamic-resolution models or long audio. An underestimate only makes the synchronous `CONTEXT_TOO_LARGE` check best-effort: a provider context overflow after `202` still ends the generation as `failed` with an explanation.
+
 ## Router / multi-model behaviour
 
 - One process serves many presets. Requests name a model; unloaded models are loaded on demand (`models_autoload`). Autoload latency and eviction policy: **UNVERIFIED** (not triggered by the probe).

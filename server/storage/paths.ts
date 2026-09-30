@@ -79,6 +79,27 @@ export class DataPaths {
     return this.inside(this.uuid(userId, "user id"), "operations", `${digest}.json`);
   }
 
+  attachmentsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "attachments");
+  }
+
+  /** One attachment's directory, named by its server-minted id (never the filename, INV-28). */
+  attachmentDir(userId: string, attachmentId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "attachments",
+      this.uuid(attachmentId, "attachment id"),
+    );
+  }
+
+  attachmentBlob(userId: string, attachmentId: string): string {
+    return path.join(this.attachmentDir(userId, attachmentId), "blob");
+  }
+
+  attachmentMeta(userId: string, attachmentId: string): string {
+    return path.join(this.attachmentDir(userId, attachmentId), "meta.json");
+  }
+
   /** Account directories being removed by closure (contracts §6). */
   deletingDir(): string {
     return this.inside(SYSTEM_DIR, "deleting");

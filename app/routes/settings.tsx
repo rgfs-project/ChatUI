@@ -1,6 +1,7 @@
-import { CircleUserRound, ScrollText, Shield } from "lucide-react";
+import { CircleUserRound, Paperclip, ScrollText, Shield } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { AttachmentSettings } from "../components/AttachmentSettings";
 import { Overlay } from "../components/Overlay";
 import { SkillsSettings } from "../components/SkillsSettings";
 import { useAuth } from "../lib/auth-store";
@@ -12,11 +13,11 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings · ChatUI" }];
 }
 
-type Section = "account" | "skills";
+type Section = "account" | "skills" | "attachments";
 
 /**
  * Settings: a large panel with its sections listed on the left (Account;
- * Skills under "Customize"). Only implemented features appear.
+ * Skills and Attachments under "Customize"). Only implemented features appear.
  */
 export default function SettingsOverlay() {
   const user = useAuth().session?.user;
@@ -49,9 +50,12 @@ export default function SettingsOverlay() {
           ) : null}
           <p className="section-label">Customize</p>
           {tab("skills", "Skills", <ScrollText size={18} aria-hidden />)}
+          {tab("attachments", "Attachments", <Paperclip size={18} aria-hidden />)}
         </nav>
         {section === "skills" && user ? (
           <SkillsSettings userId={user.id} />
+        ) : section === "attachments" && user ? (
+          <AttachmentSettings userId={user.id} />
         ) : (
           <section className="settings-body" id="account" aria-labelledby="settings-account">
             <h2 id="settings-account">Account</h2>

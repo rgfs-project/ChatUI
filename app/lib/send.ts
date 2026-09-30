@@ -1,3 +1,4 @@
+import type { AttachmentDto } from "@shared/attachments";
 import type { StartGenerationResponse } from "@shared/generations";
 import { AccountChangedError, SessionExpiredError } from "./api";
 import { authStore } from "./auth-store";
@@ -25,6 +26,8 @@ export interface SendVariables {
   providerId: string;
   model: string;
   content: string;
+  /** Uploaded, pending attachments sent with the message (Phase 12). */
+  attachments?: AttachmentDto[];
   operationKey: string;
   operationIssuedAt: string;
   /** Client-temporary id of the optimistic user message. */
@@ -94,6 +97,7 @@ export async function sendWithRetries(vars: SendVariables): Promise<StartGenerat
     content: vars.content,
     operationKey: vars.operationKey,
     operationIssuedAt: vars.operationIssuedAt,
+    ...(vars.attachments?.length ? { attachmentIds: vars.attachments.map((a) => a.id) } : {}),
   });
   for (let attempt = 0; ; attempt++) {
     if (!stillCurrent(vars)) throw new AccountChangedError("The signed-in account changed");

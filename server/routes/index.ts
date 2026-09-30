@@ -20,6 +20,13 @@ import {
   sessionRoute,
 } from "./auth.ts";
 import { healthRoute } from "./health.ts";
+import {
+  attachmentContentRoute,
+  attachmentLimitsRoute,
+  deleteAttachmentRoute,
+  getAttachmentRoute,
+  uploadAttachmentRoute,
+} from "./attachments.ts";
 import { getPreferencesRoute, updatePreferencesRoute } from "./preferences.ts";
 import { getOperationRoute } from "./operations.ts";
 import { createSkillRoute, deleteSkillRoute, listSkillsRoute, updateSkillRoute } from "./skills.ts";
@@ -66,6 +73,12 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(getConversationRoute),
   erase(renameConversationRoute),
   erase(deleteConversationRoute),
+  // Attachments (Phase 12). The literal /limits path is registered before /:id.
+  erase(uploadAttachmentRoute),
+  erase(attachmentLimitsRoute),
+  erase(getAttachmentRoute),
+  erase(attachmentContentRoute),
+  erase(deleteAttachmentRoute),
   // Skills (user request, Phase 10).
   erase(listSkillsRoute),
   erase(createSkillRoute),

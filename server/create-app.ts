@@ -6,7 +6,8 @@ import path from "node:path";
 import express, { type Express, type RequestHandler } from "express";
 import { pinoHttp } from "pino-http";
 import { ErrorCode } from "@shared/errors";
-import type { Config } from "./config.ts";
+import { DEFAULT_ATTACHMENT_CONFIG, type AttachmentConfig, type Config } from "./config.ts";
+import { AttachmentStore, type AttachmentStoreHooks } from "./storage/attachments.ts";
 import { ModelCatalog } from "./generations/catalog.ts";
 import { GenerationManager } from "./generations/manager.ts";
 import { DEFAULT_SSE_OPTIONS, SseConnections, type SseOptions } from "./generations/sse.ts";
@@ -55,7 +56,10 @@ export interface DocumentRequestValues {
 }
 
 export interface AppOptions {
-  config: Pick<Config, "nodeEnv" | "inContainer" | "provider" | "storage" | "dataDir" | "auth">;
+  config: Pick<Config, "nodeEnv" | "inContainer" | "provider" | "storage" | "dataDir" | "auth"> & {
+    /** Attachment limits (Phase 12); defaults when omitted (tests). */
+    attachments?: Partial<AttachmentConfig>;
+  };
   logger: Logger;
   version: string;
   /** Builds the React Router document handler; receives per-request values. */
@@ -80,6 +84,8 @@ export interface AppOptions {
   hasher?: PasswordHasher;
   /** Clock (tests only). */
   now?: () => Date;
+  /** Attachment store test hooks. */
+  attachmentHooks?: AttachmentStoreHooks;
   /** Process start, for temp-file cleanup (defaults to now). */
   startedAt?: Date;
 }
@@ -162,7 +168,40 @@ export function createApp(options: AppOptions): ChatUiApp {
   const accountWrites = new AccountWrites(paths, barrier);
   const skills = new SkillsStore(paths, locks, accountWrites, now);
   const index = new ChatIndex(paths, logger);
-  const conversations = new ConversationStore({ paths, locks, index, now, writes: accountWrites });
+  const attachmentConfig: AttachmentConfig = {
+    ...DEFAULT_ATTACHMENT_CONFIG,
+    ...options.config.attachments,
+  };
+  // Environment defaults with the admin's overrides (Phase 10 settings) applied live.
+  const attachmentLimits = () => {
+    const overrides = settings.get().attachments ?? {};
+    return {
+      maxFileBytes: overrides.maxFileBytes ?? attachmentConfig.maxFileBytes,
+      maxPerMessage: overrides.maxPerMessage ?? attachmentConfig.maxPerMessage,
+      quotaBytes: overrides.quotaBytes ?? attachmentConfig.quotaBytes,
+      textInlineBytes: overrides.textInlineBytes ?? attachmentConfig.textInlineBytes,
+    };
+  };
+  const attachments = new AttachmentStore({
+    paths,
+    locks,
+    writes: accountWrites,
+    logger,
+    config: attachmentConfig,
+    limits: attachmentLimits,
+    now,
+    ...(options.attachmentHooks ? { hooks: options.attachmentHooks } : {}),
+  });
+  const conversations = new ConversationStore({
+    paths,
+    locks,
+    index,
+    now,
+    writes: accountWrites,
+    afterDelete: async (userId, id) => {
+      await attachments.deleteForConversation(userId, id);
+    },
+  });
   const operations = new OperationStore(paths, accountWrites);
   // Instance settings (Phase 10) apply live: generation limits and registration.
   const settings = new SettingsStore({
@@ -174,6 +213,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     },
   });
   const audit = new AuditLog({ paths, locks, now });
+  const preferences = new PreferencesStore(paths, locks, accountWrites);
   const send = new SendService({
     store: conversations,
     checkpoints,
@@ -188,6 +228,8 @@ export function createApp(options: AppOptions): ChatUiApp {
     now,
     settings,
     skills,
+    attachments,
+    preferences,
     ...options.send,
   });
   const users = new UserStore({ paths, locks, now });
@@ -222,6 +264,9 @@ export function createApp(options: AppOptions): ChatUiApp {
     index,
     checkpoints,
     logger,
+    onClosing: (id) => {
+      attachments.cancelUploads(id);
+    },
   });
   const sseConnections = new SseConnections({
     maxPerUser: authConfig.maxSsePerUser,
@@ -249,6 +294,8 @@ export function createApp(options: AppOptions): ChatUiApp {
         checkpoints,
         retentionMs: storageConfig.generationRetentionMs,
       },
+      // Step 7: link attachments the Markdown references, GC stale pending ones.
+      attachments: (userId) => attachments.reconcile(userId, { startup: true, now: now() }),
     });
     await users.rebuildIndex();
     await sessions.sweep();
@@ -306,6 +353,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     void (async () => {
       await sessions.sweep();
       for (const userId of await accountIds(paths)) {
+        await attachments.reconcile(userId, { startup: false, now: now() });
         await resolveOperations(
           paths,
           operations,
@@ -326,7 +374,8 @@ export function createApp(options: AppOptions): ChatUiApp {
       toConversationDto(await conversations.get(userId, id), services, userId),
     auth,
     users,
-    preferences: new PreferencesStore(paths, locks, accountWrites),
+    preferences,
+    attachments,
     skills,
     modelList: async (role, listOptions) => {
       const providers = await models.listModels(listOptions);

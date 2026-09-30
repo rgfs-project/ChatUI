@@ -25,6 +25,54 @@ function isObject(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const AUDIO_FORMAT: Record<string, string> = {
+  "audio/wav": "wav",
+  "audio/mpeg": "mp3",
+  "audio/flac": "flac",
+};
+
+/**
+ * OpenAI-compatible message bodies (docs/provider-notes.md): plain string
+ * content, or typed parts for messages with media: `image_url` with a base64
+ * data URL and `input_audio` with base64 data. Only inline data is ever sent,
+ * never a URL the provider would fetch.
+ */
+export async function serializeMessages(
+  messages: ChatRequest["messages"],
+  loadMedia: ChatRequest["loadMedia"],
+): Promise<Json[]> {
+  const out: Json[] = [];
+  for (const message of messages) {
+    if (!message.parts) {
+      out.push({ role: message.role, content: message.content });
+      continue;
+    }
+    const content: Json[] = [];
+    for (const part of message.parts) {
+      if (part.type === "text") {
+        content.push({ type: "text", text: part.text });
+        continue;
+      }
+      const bytes = (await loadMedia?.(part)) ?? null;
+      if (!bytes) {
+        content.push({ type: "text", text: "[An attachment is no longer available.]" });
+        continue;
+      }
+      const data = bytes.toString("base64");
+      content.push(
+        part.type === "image"
+          ? { type: "image_url", image_url: { url: `data:${part.mediaType};base64,${data}` } }
+          : {
+              type: "input_audio",
+              input_audio: { data, format: AUDIO_FORMAT[part.mediaType] ?? "wav" },
+            },
+      );
+    }
+    out.push({ role: message.role, content });
+  }
+  return out;
+}
+
 /** OpenAI-compatible and llama.cpp sampling parameters, only those configured. */
 function samplingFields(sampling: ChatRequest["sampling"]): Record<string, number> {
   const out: Record<string, number> = {};
@@ -340,7 +388,7 @@ export function createLlamaCppProvider(
           headers: { ...headers(), Accept: "text/event-stream" },
           body: JSON.stringify({
             model: request.model,
-            messages: request.messages,
+            messages: await serializeMessages(request.messages, request.loadMedia),
             max_tokens: request.maxTokens,
             ...samplingFields(request.sampling),
             stream: true,

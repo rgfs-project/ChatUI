@@ -1,7 +1,9 @@
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { ArrowUp, ChevronDown, Square } from "lucide-react";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { ArrowUp, ChevronDown, Plus, Square } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from "react";
+import { acceptAttribute } from "@shared/attachment-media";
 import type { ModelListDto } from "@shared/generations";
+import type { DraftAttachment } from "../lib/attachments";
 import { markOnce } from "../lib/perf";
 import { fetchers, queryKeys } from "../lib/query";
 import { useShell } from "../lib/shell-context";
@@ -13,6 +15,16 @@ import {
   filterCommands,
   type Command,
 } from "./CommandMenu";
+
+// The tray loads with the first attachment (Phase 12): not in the critical chunk.
+const AttachmentTray = lazy(() =>
+  import("./AttachmentTray").then((m) => ({ default: m.AttachmentTray })),
+);
+
+/** Files from a paste or drop (images, audio and text files; the server decides). */
+function filesOf(list: FileList | null | undefined): File[] {
+  return list ? Array.from(list) : [];
+}
 
 /** A `(providerId, modelId)` pair; the server validates it on every send. */
 export type ModelChoice = [string, string];
@@ -71,6 +83,10 @@ export function Composer({
   onCommand,
   onCommandIntent,
   onCancel,
+  attachments = [],
+  attachNotice = null,
+  onAttach,
+  onRemoveAttachment,
 }: {
   userId: string;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -88,10 +104,18 @@ export function Composer({
   /** The user started a "/" command (load anything the list needs). */
   onCommandIntent?: () => void;
   onCancel: () => void;
+  /** The draft's attachments (Phase 12). */
+  attachments?: readonly DraftAttachment[];
+  /** Why files were refused before upload (e.g. too many). */
+  attachNotice?: string | null;
+  onAttach?: (files: File[]) => void;
+  onRemoveAttachment?: (localId: string) => void;
 }) {
   const shell = useShell();
   const client = useQueryClient();
   const modelRef = useRef<HTMLSelectElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   const [selected, setSelected] = useState<string | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
@@ -114,7 +138,26 @@ export function Composer({
   const selectedValue =
     selected ?? (preferred ? pairKey([preferred.providerId, preferred.id]) : "");
   const ready = hydrated && state.kind === "ready" && !inert;
-  const canSend = ready && !running && !sending;
+  // Attachments: sending waits for uploads; a model must read each modality (INV-44).
+  const live = attachments.filter((a) => a.status !== "error");
+  const uploading = live.some((a) => a.status === "uploading");
+  const hasReady = live.some((a) => a.status === "ready");
+  let selectedModel: (typeof allModels)[number] | undefined;
+  try {
+    const [providerId, modelId] = JSON.parse(selectedValue || "null") as ModelChoice;
+    selectedModel = allModels.find((m) => m.providerId === providerId && m.id === modelId);
+  } catch {
+    selectedModel = undefined;
+  }
+  const accepts = selectedModel?.capabilities.inputModalities ?? [];
+  const missing = (["image", "audio"] as const).filter(
+    (kind) => selectedModel && live.some((a) => a.kind === kind) && !accepts.includes(kind),
+  );
+  const capabilityWarning =
+    missing.length > 0 && selectedModel
+      ? `${selectedModel.id} can't read ${missing.map((k) => (k === "image" ? "images" : "audio")).join(" or ")}. Choose another model or remove the attachment.`
+      : null;
+  const canSend = ready && !running && !sending && !uploading && capabilityWarning === null;
 
   const shown = slash === null ? [] : filterCommands(commands, slash);
   const commandOpen = shown.length > 0;
@@ -151,10 +194,11 @@ export function Composer({
   function submit() {
     const el = textareaRef.current;
     const content = el?.value.trim() ?? "";
-    if (!content) {
+    if (!content && !hasReady) {
       el?.focus();
       return;
     }
+    if (uploading || capabilityWarning) return;
     let choice: ModelChoice;
     try {
       choice = JSON.parse(selectedValue) as ModelChoice;
@@ -199,14 +243,31 @@ export function Composer({
         ? null
         : EMPTY_MESSAGE[state.kind];
 
+  const attachable = hydrated && !inert && onAttach !== undefined;
   return (
     <form
-      className="composer"
+      className={`composer${dragging ? " dragging" : ""}`}
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
       aria-label="Message composer"
+      onDragOver={(event) => {
+        if (!attachable || !event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(event) => {
+        setDragging(false);
+        const files = filesOf(event.dataTransfer.files);
+        if (!attachable || files.length === 0) return;
+        event.preventDefault();
+        onAttach(files);
+      }}
     >
       {notice ? (
         <div className="models-notice" role="status" data-testid="models-notice">
@@ -221,13 +282,18 @@ export function Composer({
           </button>
         </div>
       ) : null}
+      {capabilityWarning ? (
+        <div className="models-notice" role="alert" data-testid="capability-warning">
+          <span>{capabilityWarning}</span>
+        </div>
+      ) : null}
       <p
         className="gen-status composer-status"
         role="status"
         aria-live="polite"
         data-testid="status"
       >
-        {status ?? ""}
+        {status ?? attachNotice ?? ""}
       </p>
       {commandOpen ? (
         <CommandMenu
@@ -237,7 +303,37 @@ export function Composer({
           onHover={setActiveCommand}
         />
       ) : null}
-      <div className="composer-box">
+      <div className={`composer-box${attachments.length > 0 ? " has-attachments" : ""}`}>
+        {attachments.length > 0 && onRemoveAttachment ? (
+          <Suspense fallback={null}>
+            <AttachmentTray items={attachments} onRemove={onRemoveAttachment} />
+          </Suspense>
+        ) : null}
+        <button
+          type="button"
+          className="icon-btn attach-btn"
+          aria-label="Attach files"
+          title="Attach images, audio or text files"
+          disabled={!attachable}
+          // The picker opens only from this genuine user activation.
+          onClick={() => fileRef.current?.click()}
+        >
+          <Plus size={20} aria-hidden />
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          hidden
+          tabIndex={-1}
+          accept={acceptAttribute()}
+          data-testid="file-input"
+          onChange={(event) => {
+            const files = filesOf(event.currentTarget.files);
+            event.currentTarget.value = "";
+            if (files.length > 0) onAttach?.(files);
+          }}
+        />
         <label htmlFor="message" className="visually-hidden">
           Message
         </label>
@@ -258,6 +354,13 @@ export function Composer({
             if (query !== null) onCommandIntent?.();
             if (query !== slash) setActiveCommand(0);
             setSlash(query);
+          }}
+          onPaste={(event) => {
+            const files = filesOf(event.clipboardData.files);
+            if (!attachable || files.length === 0) return;
+            // Pasted files attach; pasted text (if any) still goes into the box.
+            if (!event.clipboardData.types.includes("text/plain")) event.preventDefault();
+            onAttach(files);
           }}
           onKeyDown={(event) => {
             if (commandOpen) {

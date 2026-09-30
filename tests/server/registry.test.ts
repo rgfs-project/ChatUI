@@ -81,7 +81,8 @@ describe("API route registry", () => {
   it("every route declares its policies: only the allowlist is public; mutations are CSRF-protected", () => {
     for (const route of apiRoutes) {
       expect(route.path.startsWith("/api/")).toBe(true);
-      if (route.kind !== "sse") expect(route.response).toBeInstanceOf(z.ZodType);
+      if (route.kind !== "sse" && route.kind !== "raw")
+        expect(route.response).toBeInstanceOf(z.ZodType);
       for (const schema of Object.values(route.request)) expect(schema).toBeInstanceOf(z.ZodType);
       expect(route.auth, key(route)).toBe(
         PUBLIC.has(key(route)) ? "public" : route.path.startsWith("/api/admin/") ? "admin" : "user",
@@ -165,7 +166,7 @@ describe("API route registry", () => {
         continue;
       expect(res.status, key(route)).toBe(expected);
       if (expected >= 400) expect(res.type, key(route)).toMatch(/^application\/json/);
-      else if (route.kind !== "sse")
+      else if (route.kind !== "sse" && route.kind !== "raw")
         expect(route.response.safeParse(JSON.parse(res.body)).success, key(route)).toBe(true);
       expect(res.cache, key(route)).toBe("no-store");
     }

@@ -9,12 +9,23 @@ import { ArrowDown, ChevronDown, PanelLeft, SquarePen, X } from "lucide-react";
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useEffectEvent,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
+import type { AttachmentDto, MessageAttachmentDto } from "@shared/attachments";
+import {
+  addFiles,
+  moveTray,
+  removeAttachment,
+  restoreReady,
+  takeReady,
+  useTray,
+} from "../lib/attachments";
+import { MessageAttachments } from "./MessageAttachments";
 import { Link, useLocation, useNavigate } from "react-router";
 import type { ConversationDto } from "@shared/conversations";
 import { isTerminalState, type GenerationState } from "@shared/generation-state";
@@ -47,6 +58,22 @@ import { Message, Reasoning } from "./Message";
 // dialog loads only when needed.
 const TitleMenu = lazy(() => import("./Menus").then((m) => ({ default: m.TitleMenu })));
 const ConfirmDialog = lazy(() => preloadDialogs().then((m) => ({ default: m.ConfirmDialog })));
+// The image viewer loads on the first click of a thumbnail (Phase 12).
+const ImageViewer = lazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
+
+/** An uploaded attachment shown in an optimistic or queued message. */
+function asMessageAttachment(dto: AttachmentDto): MessageAttachmentDto {
+  return {
+    id: dto.id,
+    missing: false,
+    filename: dto.filename,
+    mediaType: dto.mediaType,
+    kind: dto.kind,
+    size: dto.size,
+    width: dto.width,
+    height: dto.height,
+  };
+}
 
 const noopSubscribe = () => () => undefined;
 function useHydrated(): boolean {
@@ -138,6 +165,21 @@ export function ConversationView(props: {
   const [confirmUsed, setConfirmUsed] = useState(false);
   // The title placeholder was clicked before the menu chunk arrived.
   const [titleMenuRequested, setTitleMenuRequested] = useState(false);
+  // Attachments on the composer (tab memory, per draft) and the open image viewer.
+  const tray = useTray(userId, draftKey);
+  const [attachNotice, setAttachNotice] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<{
+    items: readonly MessageAttachmentDto[];
+    index: number;
+    /** The thumbnail that opened it: focus returns there on close. */
+    trigger: HTMLElement | null;
+  } | null>(null);
+  const openImage = useCallback(
+    (items: readonly MessageAttachmentDto[], index: number, trigger: HTMLElement) => {
+      setViewer({ items, index, trigger });
+    },
+    [],
+  );
 
   const conversationQuery = useQuery({
     ...queries.conversation(userId, conversationId ?? ""),
@@ -160,10 +202,9 @@ export function ConversationView(props: {
    * (Stop, a failed reply, or a rejected send whose text is `first`).
    */
   function restoreQueue(reason: string | null, first?: string) {
-    const texts = [
-      ...(first !== undefined ? [first] : []),
-      ...shell.takeQueue(draftKey).map((m) => m.content),
-    ];
+    const queuedItems = shell.takeQueue(draftKey);
+    for (const item of queuedItems) restoreReady(userId, draftKey, item.attachments ?? []);
+    const texts = [...(first !== undefined ? [first] : []), ...queuedItems.map((m) => m.content)];
     const el = textareaRef.current;
     if (texts.length === 0 || !el) return;
     setBox(el, [...texts, el.value].filter((t) => t !== "").join("\n\n"));
@@ -198,8 +239,10 @@ export function ConversationView(props: {
     mutationFn: (vars: SendVariables) => sendWithRetries(vars),
     // Runs even if this view unmounted: a rejected message returns to its draft.
     onError: (error, vars) => {
-      if (error instanceof SendRejectedError && !shell.getDraft(vars.conversationKey))
-        shell.setDraft(vars.conversationKey, vars.content);
+      if (!(error instanceof SendRejectedError)) return;
+      if (!shell.getDraft(vars.conversationKey)) shell.setDraft(vars.conversationKey, vars.content);
+      // Rejected before acceptance: the attachments are still pending, back on the composer.
+      restoreReady(vars.userId, vars.conversationKey, vars.attachments ?? []);
     },
     onSuccess: (result, vars) => {
       markAccepted(result.generationId, result.conversationId);
@@ -259,7 +302,12 @@ export function ConversationView(props: {
     .reverse()
     .find((m) => m.role === "assistant");
 
-  function send(content: string, choice: ModelChoice, fromBox: boolean) {
+  function send(
+    content: string,
+    choice: ModelChoice,
+    fromBox: boolean,
+    attachments: AttachmentDto[] = [],
+  ) {
     const vars = newSendVariables({
       userId,
       conversationKey: draftKey,
@@ -267,7 +315,9 @@ export function ConversationView(props: {
       providerId: choice[0],
       model: choice[1],
       content,
+      ...(attachments.length > 0 ? { attachments } : {}),
     });
+    setAttachNotice(null);
     // The optimistic message is visible immediately; the composer is cleared.
     if (fromBox) {
       if (textareaRef.current) setBox(textareaRef.current, "");
@@ -281,6 +331,7 @@ export function ConversationView(props: {
         if (result.conversationId !== conversationId) {
           // Messages queued on the draft follow it into the new conversation.
           shell.moveQueue(draftKey, result.conversationId);
+          moveTray(userId, draftKey, result.conversationId);
           // The draft becomes a real conversation: replace the draft URL so
           // Back does not resurrect the empty draft (INV-53).
           void navigate(paths.chat(result.conversationId), { replace: true });
@@ -305,14 +356,40 @@ export function ConversationView(props: {
 
   /** The composer's Send/Enter: send now, or queue while a reply is running. */
   function submit(content: string, choice: ModelChoice) {
+    const attachments = takeReady(userId, draftKey);
     if (running || sending) {
-      shell.enqueue(draftKey, { id: crypto.randomUUID(), content, pair: choice });
+      shell.enqueue(draftKey, {
+        id: crypto.randomUUID(),
+        content,
+        pair: choice,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      });
       const el = textareaRef.current;
       if (el) setBox(el, "");
       shell.clearDraft(draftKey);
       return;
     }
-    send(content, choice, true);
+    send(content, choice, true, attachments);
+  }
+
+  /** Files picked, pasted or dropped: upload now with the current limits and preference. */
+  function attach(files: File[]) {
+    void (async () => {
+      const [limits, preferences] = await Promise.all([
+        client.query({ ...queries.attachmentLimits(userId), staleTime: 30_000 }).catch(() => null),
+        client.query({ ...queries.preferences(userId), staleTime: 30_000 }).catch(() => null),
+      ]);
+      setAttachNotice(
+        addFiles(userId, draftKey, files, {
+          maxPerMessage: limits?.maxPerMessage ?? 10,
+          maxFileBytes: limits?.maxFileBytes ?? 20 * 1024 * 1024,
+          imageMaxEdge: preferences?.imageMaxEdge ?? null,
+          onUploaded: () => {
+            void client.invalidateQueries({ queryKey: queryKeys.attachmentLimits(userId) });
+          },
+        }),
+      );
+    })();
   }
 
   // Drain the queue: the next message goes out once the reply has finished
@@ -321,7 +398,7 @@ export function ConversationView(props: {
     const next = shell.getQueue(draftKey)[0];
     if (!next) return;
     shell.removeQueued(draftKey, next.id);
-    send(next.content, next.pair, false);
+    send(next.content, next.pair, false, next.attachments ?? []);
   });
   const hasQueued = queued.length > 0;
   const transcriptReady = conversationId === undefined || conversation !== undefined;
@@ -536,6 +613,8 @@ export function ConversationView(props: {
               content={message.content}
               reasoning={message.reasoning}
               status={message.status}
+              attachments={message.attachments}
+              onOpenImage={openImage}
             />
           ))}
           {optimistic.map(({ mutation, state }) =>
@@ -586,9 +665,17 @@ export function ConversationView(props: {
           {queued.map((item) => (
             <li key={item.id} className="turn turn-user turn-queued" data-testid="message-queued">
               <span className="visually-hidden">You (queued)</span>
-              <div className="bubble">
-                <p className="plain-text">{item.content}</p>
-              </div>
+              {item.attachments?.length ? (
+                <MessageAttachments
+                  items={item.attachments.map(asMessageAttachment)}
+                  onOpenImage={openImage}
+                />
+              ) : null}
+              {item.content ? (
+                <div className="bubble">
+                  <p className="plain-text">{item.content}</p>
+                </div>
+              ) : null}
               <div className="queued-meta">
                 <span>Queued</span>
                 <button
@@ -654,8 +741,29 @@ export function ConversationView(props: {
           setWantSkills(true);
         }}
         onCancel={() => void cancel()}
+        attachments={tray}
+        attachNotice={attachNotice}
+        onAttach={attach}
+        onRemoveAttachment={(localId) => {
+          removeAttachment(userId, draftKey, localId);
+        }}
       />
       {actions.dialogs}
+      {viewer ? (
+        <Suspense fallback={null}>
+          <ImageViewer
+            items={viewer.items}
+            index={viewer.index}
+            onClose={() => {
+              const trigger = viewer.trigger;
+              setViewer(null);
+              requestAnimationFrame(() => {
+                if (trigger?.isConnected) trigger.focus();
+              });
+            }}
+          />
+        </Suspense>
+      ) : null}
     </main>
   );
 }
@@ -679,9 +787,14 @@ function PendingMessage(props: {
       aria-busy={props.status === "pending"}
     >
       <span className="visually-hidden">You</span>
-      <div className="bubble">
-        <p className="plain-text">{props.vars.content}</p>
-      </div>
+      {props.vars.attachments?.length ? (
+        <MessageAttachments items={props.vars.attachments.map(asMessageAttachment)} />
+      ) : null}
+      {props.vars.content ? (
+        <div className="bubble">
+          <p className="plain-text">{props.vars.content}</p>
+        </div>
+      ) : null}
       {props.status === "pending" ? <span className="queued-meta">Sending…</span> : null}
       {unknown ? (
         <div className="pending-actions" role="alert">

@@ -17,6 +17,7 @@ import type { SseConnections, SseOptions } from "./generations/sse.ts";
 import type { PreferencesStore } from "./storage/preferences.ts";
 import type { SkillsStore } from "./storage/skills.ts";
 import type { UserStore } from "./storage/users.ts";
+import type { AttachmentStore } from "./storage/attachments.ts";
 import type { Logger } from "./logger.ts";
 import type { ConversationStore } from "./storage/conversations.ts";
 import type { OperationStore } from "./storage/operations.ts";
@@ -43,6 +44,8 @@ export interface RouteServices {
   auth: AuthService;
   users: UserStore;
   preferences: PreferencesStore;
+  /** Uploaded attachments (Phase 12). */
+  attachments: AttachmentStore;
   /** Per-user skills (user request, Phase 10). */
   skills: SkillsStore;
   /** Models a role may use: hidden pairs are removed for non-admins (Phase 10). */
@@ -121,6 +124,22 @@ export interface SseRoute<S extends RequestSchemas = RequestSchemas> extends Rou
   handler: (input: ParsedRequest<S>, ctx: RouteContext) => void;
 }
 
+/**
+ * A route that writes its own non-JSON response (attachment bytes): validated
+ * and policy-checked like any route; errors thrown before it writes headers
+ * become contract errors.
+ */
+export interface RawRoute<S extends RequestSchemas = RequestSchemas> extends RouteBase<S> {
+  kind: "raw";
+  /** The handler chooses its own status. */
+  status?: never;
+  handler: (input: ParsedRequest<S>, ctx: RouteContext) => Promise<void>;
+}
+
+export function defineRawRoute<S extends RequestSchemas>(route: RawRoute<S>): RawRoute<S> {
+  return route;
+}
+
 export function defineRoute<S extends RequestSchemas, R extends z.ZodType>(
   route: ApiRoute<S, R>,
 ): ApiRoute<S, R> {
@@ -132,10 +151,10 @@ export function defineSseRoute<S extends RequestSchemas>(route: SseRoute<S>): Ss
 }
 
 /** Type-erased form for heterogeneous route lists. */
-export type AnyApiRoute = ApiRoute | SseRoute;
+export type AnyApiRoute = ApiRoute | SseRoute | RawRoute;
 
 export function erase<S extends RequestSchemas, R extends z.ZodType>(
-  route: ApiRoute<S, R> | SseRoute<S>,
+  route: ApiRoute<S, R> | SseRoute<S> | RawRoute<S>,
 ): AnyApiRoute {
   return route;
 }
@@ -164,6 +183,13 @@ export function buildApiRouter(routes: readonly AnyApiRoute[], services: RouteSe
       router[route.method](mountedPath, async (req, res) => {
         const ctx = await guard(req, res);
         route.handler(parseRequest(route.request, req), ctx);
+      });
+      continue;
+    }
+    if (route.kind === "raw") {
+      router[route.method](mountedPath, async (req, res) => {
+        const ctx = await guard(req, res);
+        await route.handler(parseRequest(route.request, req), ctx);
       });
       continue;
     }

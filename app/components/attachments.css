@@ -1,0 +1,312 @@
+/* Attachments before sending and the image viewer (Phase 12): loaded on
+   demand with their components, never part of the critical stylesheet. */
+
+/* The composer grows a row above the text for its attachments. */
+.composer-box.has-attachments {
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-radius: 24px;
+}
+
+.attachment-tray {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 2px 0 8px;
+  padding: 0 0 0 4px;
+  list-style: none;
+}
+
+.tray-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+/* Images: large square previews, as in the transcript. */
+.tray-image {
+  width: 112px;
+  height: 112px;
+}
+
+.tray-file {
+  max-width: 240px;
+  padding: 0 34px 0 12px;
+}
+
+.tray-preview {
+  width: 100%;
+  height: 100%;
+  border-radius: 15px;
+  object-fit: cover;
+}
+
+.tray-item.uploading .tray-preview {
+  opacity: 0.55;
+}
+
+.tray-item.error {
+  border-color: var(--danger);
+}
+
+.tray-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--active);
+  color: var(--fg-2);
+}
+
+.tray-item.error .tray-icon,
+.tray-error {
+  color: var(--danger);
+}
+
+.tray-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.tray-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.tray-name {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tray-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.tray-progress {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  left: 8px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--active);
+}
+
+.tray-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--fg);
+  transform-origin: left;
+  transition: transform 0.15s linear;
+}
+
+/* The round × overlaps the top-right corner; its hit area is larger than the circle. */
+.tray-remove {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.tray-x {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--field);
+  border-radius: 50%;
+  background: var(--fg);
+  color: var(--canvas);
+}
+
+.tray-remove:hover .tray-x {
+  background: var(--fg-2);
+}
+
+.tray-remove:focus-visible {
+  outline: none;
+}
+
+.tray-remove:focus-visible .tray-x {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+@media (max-width: 767.98px), (pointer: coarse) {
+  .tray-item {
+    height: 72px;
+  }
+
+  .tray-image {
+    width: 88px;
+    height: 88px;
+  }
+
+  .tray-remove {
+    top: -18px;
+    right: -18px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .tray-x {
+    width: 26px;
+    height: 26px;
+  }
+}
+
+/* ---- Image viewer ----------------------------------------------------------- */
+
+.viewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(0 0 0 / 0.9);
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 71;
+  display: flex;
+  flex-direction: column;
+  color: #f2f2f2;
+}
+
+.viewer:focus {
+  outline: none;
+}
+
+.viewer-stage {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  padding: 16px;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.viewer-stage.zoomed {
+  place-items: start;
+  overflow: auto;
+}
+
+.viewer-stage.zoomed > img {
+  margin: auto;
+}
+
+.viewer-stage > img {
+  max-width: none;
+  border-radius: 6px;
+  user-select: none;
+}
+
+.viewer-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(38 38 38 / 0.92);
+  color: #f2f2f2;
+  text-decoration: none;
+}
+
+.viewer-btn:hover:not(:disabled) {
+  background: rgb(64 64 64 / 0.95);
+}
+
+.viewer-btn:disabled {
+  opacity: 0.4;
+}
+
+.viewer-btn:focus-visible,
+.viewer-level:focus-visible {
+  outline: 2px solid #f2f2f2;
+  outline-offset: 2px;
+}
+
+.viewer-actions {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+}
+
+.viewer-prev,
+.viewer-next {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  transform: translateY(-50%);
+}
+
+.viewer-prev {
+  left: max(16px, env(safe-area-inset-left));
+}
+
+.viewer-next {
+  right: max(16px, env(safe-area-inset-right));
+}
+
+.viewer-zoom {
+  position: absolute;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 28px;
+  background: rgb(38 38 38 / 0.92);
+  transform: translateX(-50%);
+}
+
+.viewer-zoom .viewer-btn {
+  background: transparent;
+}
+
+.viewer-zoom .viewer-btn:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.viewer-level {
+  min-width: 64px;
+  height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: #f2f2f2;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}

@@ -655,6 +655,13 @@ function SettingsTab() {
               maxActivePerUser: num("maxActivePerUser"),
               maxOutputTokens: num("maxOutputTokens"),
             },
+            // Blank fields fall back to the environment defaults (shown as placeholders).
+            attachments: {
+              maxFileBytes: mib(num("maxFileMiB")),
+              maxPerMessage: num("maxPerMessage"),
+              quotaBytes: mib(num("quotaMiB")),
+              textInlineBytes: num("textInlineBytes"),
+            },
           });
         }}
       >
@@ -708,6 +715,53 @@ function SettingsTab() {
             defaultValue={s.generation.maxOutputTokens ?? ""}
           />
         </label>
+        <fieldset className="admin-fieldset">
+          <legend>Attachments (blank: environment default)</legend>
+          <label>
+            Max file size (MiB)
+            <input
+              name="maxFileMiB"
+              type="number"
+              min={0.001}
+              step="any"
+              placeholder={toMib(s.attachmentDefaults.maxFileBytes)}
+              defaultValue={s.attachments.maxFileBytes ? toMib(s.attachments.maxFileBytes) : ""}
+            />
+          </label>
+          <label>
+            Max attachments per message
+            <input
+              name="maxPerMessage"
+              type="number"
+              min={1}
+              max={10}
+              placeholder={String(s.attachmentDefaults.maxPerMessage)}
+              defaultValue={s.attachments.maxPerMessage ?? ""}
+            />
+          </label>
+          <label>
+            Storage per user (MiB)
+            <input
+              name="quotaMiB"
+              type="number"
+              min={0.001}
+              step="any"
+              placeholder={toMib(s.attachmentDefaults.quotaBytes)}
+              defaultValue={s.attachments.quotaBytes ? toMib(s.attachments.quotaBytes) : ""}
+            />
+          </label>
+          <label>
+            Text inlined per attachment (bytes)
+            <input
+              name="textInlineBytes"
+              type="number"
+              min={256}
+              max={10000000}
+              placeholder={String(s.attachmentDefaults.textInlineBytes)}
+              defaultValue={s.attachments.textInlineBytes ?? ""}
+            />
+          </label>
+        </fieldset>
         <button type="submit" disabled={busy}>
           Save settings
         </button>
@@ -715,6 +769,10 @@ function SettingsTab() {
     </section>
   );
 }
+
+const MIB = 1024 * 1024;
+const mib = (value: number | null) => (value === null ? null : Math.round(value * MIB));
+const toMib = (bytes: number) => String(Math.round((bytes / MIB) * 1000) / 1000);
 
 // ---- maintenance and audit ----------------------------------------------------
 

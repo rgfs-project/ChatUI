@@ -30,6 +30,10 @@ import {
   type TokenCounter,
 } from "./prompt.ts";
 import { counterFor } from "./token-counter.ts";
+import type { ModelDto } from "@shared/generations";
+import type { AttachmentMeta, AttachmentStore } from "../storage/attachments.ts";
+import type { PreferencesStore } from "../storage/preferences.ts";
+import type { MediaPart, UserAttachments } from "./prompt.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -44,6 +48,8 @@ export interface SendHooks {
   /** Test hooks that simulate a crash at the two §4.1 step 4 boundaries. */
   afterPendingRecord?: () => void | Promise<void>;
   afterMarkdownWrite?: () => void | Promise<void>;
+  /** After the attachments are linked, before the record is committed. */
+  afterAttachmentLink?: () => void | Promise<void>;
   /** After the committed record and the `running` checkpoint (crash-before-launch tests). */
   afterCommit?: () => void | Promise<void>;
   /** Test hook between the unlocked preflight and the locked recheck. */
@@ -70,6 +76,10 @@ export interface SendServiceOptions {
   settings?: SettingsStore;
   /** The sender's skills ("/name" messages are expanded in the prompt). */
   skills?: SkillsStore;
+  /** Attachments (Phase 12): linked on send, expanded into the prompt. */
+  attachments?: AttachmentStore;
+  /** `historyImages` is a prompt-relevant preference (contracts §4.1). */
+  preferences?: PreferencesStore;
 }
 
 /** Who is sending: the username feeds prompt templates, the role model visibility. */
@@ -104,7 +114,10 @@ export class SendService {
   }
 
   static payloadHash(
-    request: Pick<StartGenerationRequest, "conversationId" | "providerId" | "model" | "content">,
+    request: Pick<
+      StartGenerationRequest,
+      "conversationId" | "providerId" | "model" | "content" | "attachmentIds"
+    >,
   ): string {
     return sha256Hex(
       JSON.stringify({
@@ -112,6 +125,8 @@ export class SendService {
         providerId: request.providerId,
         model: request.model,
         content: normalizeBody(request.content),
+        // Only present when sent, so earlier records keep their hashes.
+        ...(request.attachmentIds?.length ? { attachmentIds: request.attachmentIds } : {}),
       }),
     );
   }
@@ -195,6 +210,20 @@ export class SendService {
     if (sender.role !== "admin" && this.o.settings?.isHidden(model.providerId, model.id))
       throw new AppError(ErrorCode.MODEL_NOT_FOUND, "The selected model is not available");
     const provider = this.o.catalog.provider(model.providerId);
+    // Attachments (contracts §7): owned and pending in the step-1 snapshot, and
+    // a model that can read them (INV-44), before anything is persisted.
+    const attachmentIds = request.attachmentIds ?? [];
+    const store = this.o.attachments;
+    if (attachmentIds.length > 0) {
+      if (!store) throw new AppError(ErrorCode.VALIDATION, "Attachments are not available");
+      const max = store.effective().maxPerMessage;
+      if (attachmentIds.length > max)
+        throw new AppError(
+          ErrorCode.VALIDATION,
+          `A message can have at most ${String(max)} attachments`,
+        );
+      this.assertCapable(await store.requirePending(userId, attachmentIds), model);
+    }
     // Prompt-relevant settings are a revision too (contracts §4.1).
     const settingsFor = () =>
       this.o.settings?.resolve(model.providerId, model.id, {
@@ -204,8 +233,11 @@ export class SendService {
 
     // Read once per send: every attempt assembles the same skills.
     const skills = (await this.o.skills?.enabled(userId)) ?? new Map<string, SkillDto>();
+    const historyMedia = async () =>
+      (await this.o.preferences?.get(userId))?.historyImages ?? "include";
     for (let attempt = 0; attempt < 2; attempt++) {
       const resolved = settingsFor();
+      const mediaPolicy = await historyMedia();
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
       const snapshot = request.conversationId
         ? await this.o.store.withLock(userId, conversationId, () =>
@@ -216,45 +248,55 @@ export class SendService {
         snapshot?.model ?? null,
         content,
         provider,
-        model.providerId,
-        model.id,
-        model.contextTokens,
+        model,
         resolved,
         skills,
+        await this.expansion(userId, snapshot?.model ?? null, attachmentIds, model, mediaPolicy),
+        attachmentIds,
       );
       await this.o.hooks?.beforeRecheck?.();
 
-      // Step 3–4: recheck and commit under the conversation lock.
-      const outcome = await this.o.store.withLock(userId, conversationId, async () => {
-        const current = request.conversationId
-          ? await this.readExisting(userId, conversationId)
-          : null;
-        if (
-          !request.conversationId &&
-          (await this.o.store.readUnlocked(userId, conversationId)).kind !== "missing"
-        ) {
-          throw new AppError(ErrorCode.CONFLICT, "Conversation id collision; retry");
-        }
-        if ((current?.revision ?? null) !== (snapshot?.revision ?? null)) return "changed" as const;
-        if ((settingsFor()?.revision ?? null) !== (resolved?.revision ?? null))
-          return "changed" as const;
-        const again = await this.checkKey(userId, request, payloadHash);
-        if (again) return { response: again, launch: undefined };
-        const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
-        return this.commit(userId, {
-          request,
-          payloadHash,
-          conversationId,
-          content,
-          provider,
-          providerId: model.providerId,
-          model: model.id,
-          current,
-          prompt,
-          reservation,
-          sampling: resolved?.sampling,
-        });
-      });
+      // Step 3–4: recheck and commit under the conversation lock, then the
+      // attachment locks in ascending id order (contracts §2).
+      const outcome = await this.o.store.withLock(userId, conversationId, () =>
+        this.withAttachmentLocks(userId, attachmentIds, async () => {
+          const current = request.conversationId
+            ? await this.readExisting(userId, conversationId)
+            : null;
+          if (
+            !request.conversationId &&
+            (await this.o.store.readUnlocked(userId, conversationId)).kind !== "missing"
+          ) {
+            throw new AppError(ErrorCode.CONFLICT, "Conversation id collision; retry");
+          }
+          if ((current?.revision ?? null) !== (snapshot?.revision ?? null))
+            return "changed" as const;
+          if ((settingsFor()?.revision ?? null) !== (resolved?.revision ?? null))
+            return "changed" as const;
+          if ((await historyMedia()) !== mediaPolicy) return "changed" as const;
+          const again = await this.checkKey(userId, request, payloadHash);
+          if (again) return { response: again, launch: undefined };
+          const metas =
+            store && attachmentIds.length > 0
+              ? await store.requirePending(userId, attachmentIds)
+              : [];
+          const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
+          return this.commit(userId, {
+            request,
+            payloadHash,
+            conversationId,
+            content,
+            provider,
+            providerId: model.providerId,
+            model: model.id,
+            current,
+            prompt,
+            reservation,
+            sampling: resolved?.sampling,
+            attachments: metas,
+          });
+        }),
+      );
       if (outcome !== "changed") {
         // Completion work (network I/O) starts only after the lock is released.
         outcome.launch?.();
@@ -265,6 +307,99 @@ export class SendService {
       ErrorCode.CONFLICT,
       "The conversation changed while sending; reload and try again",
     );
+  }
+
+  private withAttachmentLocks<T>(
+    userId: string,
+    ids: readonly string[],
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    return this.o.attachments && ids.length > 0
+      ? this.o.attachments.withLocks(userId, ids, fn)
+      : fn();
+  }
+
+  /** INV-44: images and audio only for a model the server verified for that modality. */
+  private assertCapable(metas: readonly AttachmentMeta[], model: ModelDto): void {
+    const accepts = model.capabilities.inputModalities;
+    for (const [kind, noun] of [
+      ["image", "images"],
+      ["audio", "audio"],
+    ] as const) {
+      if (metas.some((m) => m.kind === kind) && !accepts.includes(kind))
+        throw new AppError(
+          ErrorCode.MODEL_CAPABILITY_UNSUPPORTED,
+          `The selected model can't read ${noun}. Choose a model that supports ${noun} or remove the attachment.`,
+          { modality: kind },
+        );
+    }
+  }
+
+  /**
+   * Step 2 attachment expansion (no locks held): text attachments become
+   * fenced blocks labeled with the filename, cut at the inline limit with a
+   * visible marker (in the prompt only); images and audio become typed parts
+   * when the model accepts that modality. Earlier turns' media follow the
+   * `historyImages` preference; media the model can't read is replaced by a
+   * short note. A missing attachment is skipped with a warning (never malformed).
+   */
+  private async expansion(
+    userId: string,
+    current: ConversationModel | null,
+    newIds: readonly string[],
+    model: ModelDto,
+    historyMedia: "include" | "omit",
+  ): Promise<((ids: readonly string[], newest: boolean) => UserAttachments) | undefined> {
+    const store = this.o.attachments;
+    if (!store) return undefined;
+    const ids = new Set(newIds);
+    for (const block of current?.blocks ?? [])
+      if (block.type === "user") for (const id of block.attachments ?? []) ids.add(id);
+    if (ids.size === 0) return undefined;
+    const limit = store.effective().textInlineBytes;
+    const loaded = new Map<string, { meta: AttachmentMeta; text?: string } | null>();
+    for (const id of ids) {
+      const meta = await store.readMeta(userId, id);
+      if (!meta) {
+        this.o.logger.warn({ attachmentId: id }, "attachment missing; skipped in the prompt");
+        loaded.set(id, null);
+        continue;
+      }
+      if (meta.kind !== "text") {
+        loaded.set(id, { meta });
+        continue;
+      }
+      const head = await store.readHead(userId, id, limit);
+      if (head === null) {
+        this.o.logger.warn({ attachmentId: id }, "attachment missing; skipped in the prompt");
+        loaded.set(id, null);
+        continue;
+      }
+      loaded.set(id, { meta, text: fencedText(meta, head, limit) });
+    }
+    const accepts = model.capabilities.inputModalities;
+    return (blockIds, newest) => {
+      const out: UserAttachments = { text: [], media: [] };
+      for (const id of blockIds) {
+        const entry = loaded.get(id);
+        if (!entry) continue;
+        const { meta } = entry;
+        if (entry.text !== undefined) {
+          out.text.push(entry.text);
+          continue;
+        }
+        const kind = meta.kind === "image" ? "image" : "audio";
+        if (accepts.includes(kind) && (newest || historyMedia === "include")) {
+          const part: MediaPart = { type: kind, attachmentId: meta.id, mediaType: meta.mediaType };
+          out.media.push(part);
+        } else {
+          out.text.push(
+            `[${kind === "image" ? "Image" : "Audio"} from an earlier message not included: ${meta.filename}]`,
+          );
+        }
+      }
+      return out;
+    };
   }
 
   /** Reserved output tokens: the instance setting, else MAX_OUTPUT_TOKENS. */
@@ -289,12 +424,13 @@ export class SendService {
     current: ConversationModel | null,
     content: string,
     provider: Provider,
-    providerId: string,
-    model: string,
-    contextTokens: number,
+    target: ModelDto,
     resolved: ResolvedModelSettings | undefined,
     skills: ReadonlyMap<string, SkillDto>,
+    attachmentsOf: ((ids: readonly string[], newest: boolean) => UserAttachments) | undefined,
+    attachmentIds: readonly string[],
   ): Promise<AssembledPrompt> {
+    const { providerId, id: model, contextTokens } = target;
     const draft: ConversationModel = current ?? {
       title: NEW_CONVERSATION_TITLE,
       createdAt: this.now().toISOString(),
@@ -303,12 +439,25 @@ export class SendService {
     };
     const withUser: ConversationModel = {
       ...draft,
-      blocks: [...draft.blocks, { type: "user", id: randomUUID(), body: content }],
+      blocks: [
+        ...draft.blocks,
+        {
+          type: "user",
+          id: randomUUID(),
+          body: content,
+          ...(attachmentIds.length > 0 ? { attachments: [...attachmentIds] } : {}),
+        },
+      ],
     };
     const budget = Math.max(0, contextTokens - this.maxOutputTokens());
     const counter = this.o.counterFor
       ? await this.o.counterFor(providerId, model)
-      : await counterFor(provider, model, this.o.templateOverheadTokens);
+      : await counterFor(
+          provider,
+          model,
+          this.o.templateOverheadTokens,
+          this.o.attachments?.mediaTokenReserve ?? 0,
+        );
     try {
       return await assemblePrompt(withUser, {
         budget,
@@ -317,6 +466,7 @@ export class SendService {
         instructions: resolved?.instructions,
         contextBlock: resolved?.contextBlock,
         expandUser: skills.size > 0 ? (body) => expandSkill(body, skills) : undefined,
+        attachmentsOf,
       });
     } catch (error) {
       if (error instanceof ContextTooLargeError) {
@@ -344,6 +494,8 @@ export class SendService {
       prompt: AssembledPrompt;
       reservation: ReturnType<GenerationManager["reserve"]>;
       sampling: Sampling | undefined;
+      /** Pending attachments, rechecked under their locks; linked in this commit. */
+      attachments: readonly AttachmentMeta[];
     },
   ): Promise<{ response: StartGenerationResponse; launch: (() => void) | undefined }> {
     const { conversationId, reservation } = input;
@@ -362,7 +514,15 @@ export class SendService {
         blocks: [],
       };
       const next = this.o.store.appendBlocks(base, [
-        { type: "user", id: ids.userMessageId, time: now, body: input.content },
+        {
+          type: "user",
+          id: ids.userMessageId,
+          ...(input.attachments.length > 0
+            ? { attachments: input.attachments.map((meta) => meta.id) }
+            : {}),
+          time: now,
+          body: input.content,
+        },
       ]);
       const record: OperationRecord = {
         version: 1,
@@ -383,6 +543,16 @@ export class SendService {
       await this.o.hooks?.afterPendingRecord?.();
       await this.o.store.writeUnlocked(userId, conversationId, next);
       await this.o.hooks?.afterMarkdownWrite?.();
+      // Linked inside the acceptance commit; a crash before this point is
+      // repaired by the startup reconciliation (recovery step 7).
+      if (input.attachments.length > 0)
+        await this.o.attachments?.link(
+          userId,
+          input.attachments,
+          conversationId,
+          ids.userMessageId,
+        );
+      await this.o.hooks?.afterAttachmentLink?.();
       await this.o.operations.write(userId, {
         ...record,
         status: "committed",
@@ -412,6 +582,8 @@ export class SendService {
           model: input.model,
           operationKey: record.operationKey,
           messages: input.prompt.messages,
+          loadMedia: (part) =>
+            this.o.attachments?.readBlob(userId, part.attachmentId) ?? Promise.resolve(null),
           maxTokens: this.maxOutputTokens(),
           sampling: input.sampling,
           persist: (outcome) =>
@@ -513,4 +685,20 @@ export class SendService {
       return written.revision;
     });
   }
+}
+
+/** A text attachment as a fenced block labeled with its filename (contracts §7). */
+export function fencedText(meta: AttachmentMeta, head: Buffer, limit: number): string {
+  const truncated = meta.size > limit;
+  // A cut can split a multibyte character: drop the partial one.
+  const text = head
+    .subarray(0, limit)
+    .toString("utf8")
+    .replace(/\uFFFD+$/, "");
+  const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  const marker = truncated
+    ? `\n[Truncated: the first ${String(limit)} of ${String(meta.size)} bytes of ${meta.filename} are shown.]`
+    : "";
+  return `Attached file: ${meta.filename}\n${fence}\n${text}\n${fence}${marker}`;
 }

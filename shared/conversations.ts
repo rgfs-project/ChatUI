@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { messageAttachmentSchema } from "./attachments";
 
 /** Conversation DTOs (Phase 3). Browser code imports only the types. */
 
@@ -27,7 +28,8 @@ export const messageDtoSchema = z.strictObject({
   status: z.enum(["complete", "cancelled", "failed", "timed_out", "interrupted"]).nullable(),
   provider: z.string().nullable(),
   model: z.string().nullable(),
-  attachments: z.array(z.uuid()),
+  /** User only: attachment metadata (bytes are demand-loaded; contracts §7). */
+  attachments: z.array(messageAttachmentSchema),
   time: z.string().nullable(),
 });
 export type MessageDto = z.infer<typeof messageDtoSchema>;

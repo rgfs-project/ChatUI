@@ -12,7 +12,12 @@ import { providerModelsDtoSchema } from "@shared/generations";
 import { canonicalUuid } from "@shared/ids";
 import type { AuditEntry } from "../admin/audit.ts";
 import { providerCreateSchema, providerUpdateSchema } from "../admin/providers.ts";
-import { EXTENDED_SAMPLING, modelSettingsSchema } from "../admin/settings.ts";
+import {
+  ATTACHMENT_SETTING_KEYS,
+  EXTENDED_SAMPLING,
+  modelSettingsSchema,
+  type AttachmentSettingKey,
+} from "../admin/settings.ts";
 import { AppError } from "../errors.ts";
 import { defineRoute, userOf, type RouteContext } from "../registry.ts";
 
@@ -350,6 +355,13 @@ function settingsDto(ctx: RouteContext) {
       maxActivePerUser: s.generation?.maxActivePerUser ?? null,
       maxOutputTokens: s.generation?.maxOutputTokens ?? null,
     },
+    attachments: {
+      maxFileBytes: s.attachments?.maxFileBytes ?? null,
+      maxPerMessage: s.attachments?.maxPerMessage ?? null,
+      quotaBytes: s.attachments?.quotaBytes ?? null,
+      textInlineBytes: s.attachments?.textInlineBytes ?? null,
+    },
+    attachmentDefaults: ctx.services.attachments.defaults(),
     problem: settings.problem,
   };
 }
@@ -381,6 +393,14 @@ export const adminUpdateSettingsRoute = defineRoute({
           maxOutputTokens: z.number().int().min(16).max(65_536).nullable().optional(),
         })
         .optional(),
+      attachments: z
+        .strictObject({
+          maxFileBytes: z.number().int().min(1_024).max(1_073_741_824).nullable().optional(),
+          maxPerMessage: z.number().int().min(1).max(10).nullable().optional(),
+          quotaBytes: z.number().int().min(1_024).max(1_099_511_627_776).nullable().optional(),
+          textInlineBytes: z.number().int().min(256).max(10_000_000).nullable().optional(),
+        })
+        .optional(),
     }),
   },
   response: adminSettingsDtoSchema,
@@ -407,6 +427,15 @@ export const adminUpdateSettingsRoute = defineRoute({
               ...(maxActivePerUser === undefined ? {} : { maxActivePerUser }),
               ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
             };
+          }
+          if (body.attachments) {
+            const change = body.attachments;
+            const merged: Partial<Record<AttachmentSettingKey, number>> = {};
+            for (const key of ATTACHMENT_SETTING_KEYS) {
+              const value = change[key] === undefined ? next.attachments?.[key] : change[key];
+              if (value !== null && value !== undefined) merged[key] = value;
+            }
+            next.attachments = merged;
           }
           return next;
         });

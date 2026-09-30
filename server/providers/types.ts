@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@shared/generations";
+import type { MediaPart, PromptMessage } from "../chat/prompt.ts";
 import type { ErrorCode } from "@shared/errors";
 
 /** Minimal provider surface for generation: list models, stream, cancel (abort). */
@@ -33,7 +33,10 @@ export interface Sampling {
 
 export interface ChatRequest {
   model: string;
-  messages: ChatMessage[];
+  /** Text messages; a message with `parts` carries typed image/audio parts (Phase 12). */
+  messages: PromptMessage[];
+  /** Loads a media part's bytes (null when the attachment has disappeared). */
+  loadMedia?: ((part: MediaPart) => Promise<Buffer | null>) | undefined;
   maxTokens: number;
   /** Admin-configured per-model sampling (Phase 10); omitted fields use the server's defaults. */
   sampling?: Sampling | undefined;

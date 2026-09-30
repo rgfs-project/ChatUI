@@ -100,7 +100,15 @@ test("bundle boundaries: interaction-only chunks are absent from the initial loa
   expect(preloaded.length).toBeGreaterThan(3);
   await page.goto(`${base()}/chat/new`);
   await page.waitForSelector('html[data-hydrated="true"]');
-  for (const lazy of [/\/Menus-/, /\/Dialogs-/, /\/ReauthDialog-/, /\/settings-/])
+  for (const lazy of [
+    /\/Menus-/,
+    /\/Dialogs-/,
+    /\/ReauthDialog-/,
+    /\/settings-/,
+    // Phase 12: the composer tray and the image viewer load with the first use.
+    /\/AttachmentTray-/,
+    /\/ImageViewer-/,
+  ])
     expect(
       preloaded.some((p) => lazy.test(p)),
       String(lazy),
@@ -109,6 +117,8 @@ test("bundle boundaries: interaction-only chunks are absent from the initial loa
   expect(scripts.some((p) => p.includes("/Dialogs-"))).toBe(false);
   expect(scripts.some((p) => p.includes("/settings-"))).toBe(false);
   expect(scripts.some((p) => p.includes("/ReauthDialog-"))).toBe(false);
+  expect(scripts.some((p) => p.includes("/AttachmentTray-"))).toBe(false);
+  expect(scripts.some((p) => p.includes("/ImageViewer-"))).toBe(false);
 
   // Opening the account menu prefetches the Settings route chunk before any click.
   await page.getByTestId("signed-in-user").click();

@@ -76,29 +76,59 @@ export function measure(): Record<string, number> {
   const sizes: Record<string, number> = {};
   for (const [name, routes] of Object.entries(GROUPS))
     sizes[name] = filesFor(manifest, routes).reduce((n, f) => n + gzipBytes(f), 0);
-  // The app stylesheet (linked by the root on every page) plus the critical
-  // chat routes' own CSS; stylesheets only lazy routes use are excluded.
-  const critical = new Set(GROUPS["critical-chat-js"]);
-  const lazyCss = new Set(
-    Object.entries(manifest.routes)
-      .filter(([id]) => !critical.has(id))
-      .flatMap(([, route]) => route.css ?? []),
-  );
-  sizes["critical-css"] = readdirSync(ASSETS)
-    .filter((f) => f.endsWith(".css") && !lazyCss.has(`/assets/${f}`))
-    .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
+  // Critical CSS: the stylesheets a cold chat visit links before hydration:
+  // those the critical route modules reference as a `/assets/…css` URL (the
+  // root's `links()`), plus the critical routes' own CSS. Stylesheets that
+  // only appear in a lazy chunk's preload list (`assets/…css`, no leading
+  // slash) load on demand and are excluded.
+  const criticalRoutes = GROUPS["critical-chat-js"] ?? [];
+  const linked = new Set<string>();
+  for (const file of filesFor(manifest, criticalRoutes)) {
+    const source = readFileSync(path.join(CLIENT, file), "utf8");
+    for (const match of source.matchAll(/["'`](\/assets\/[\w.-]+\.css)["'`]/g))
+      if (match[1]) linked.add(match[1]);
+  }
+  for (const id of criticalRoutes)
+    for (const css of manifest.routes[id]?.css ?? []) linked.add(css);
+  sizes["critical-css"] = [...linked].reduce((n, f) => n + gzipBytes(f), 0);
   sizes["all-client-js"] = readdirSync(ASSETS)
     .filter((f) => f.endsWith(".js"))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
   return sizes;
 }
 
+/**
+ * Chunks that must stay out of every cold-visit group: attachment UI that a
+ * chat without attachments never needs (Phase 12), loaded on first use.
+ */
+export const LAZY_ONLY = ["AttachmentTray", "ImageViewer"] as const;
+
+/** Lazy-only chunks a route group would download on a cold visit (must be none). */
+export function lazyLeaks(manifest: Manifest = readManifest()): string[] {
+  const leaks: string[] = [];
+  for (const [name, routes] of Object.entries(GROUPS))
+    for (const file of filesFor(manifest, routes))
+      for (const lazy of LAZY_ONLY)
+        if (path.basename(file).startsWith(`${lazy}-`)) leaks.push(`${name}: ${file}`);
+  const assets = readdirSync(ASSETS);
+  for (const lazy of LAZY_ONLY)
+    if (!assets.some((f) => f.startsWith(`${lazy}-`) && f.endsWith(".js")))
+      leaks.push(`${lazy}: no separate chunk was built`);
+  return leaks;
+}
+
 export function check(
   sizes: Record<string, number>,
   budget: Budget,
+  leaks: string[] = [],
 ): { ok: boolean; lines: string[] } {
   const lines: string[] = [];
-  let ok = true;
+  let ok = leaks.length === 0;
+  lines.push(
+    leaks.length === 0
+      ? `PASS  lazy chunks (${LAZY_ONLY.join(", ")}) are outside every cold-visit group`
+      : `FAIL  lazy chunks leaked: ${leaks.join("; ")}`,
+  );
   for (const [name, limit] of Object.entries(budget.budgets)) {
     const actual = sizes[name];
     if (actual === undefined) {
@@ -128,7 +158,7 @@ if (import.meta.main) {
   const at = args.indexOf("--budget");
   const file = at >= 0 && args[at + 1] ? path.resolve(args[at + 1] ?? "") : BUDGET_FILE;
   const budget = JSON.parse(readFileSync(file, "utf8")) as Budget;
-  const result = check(sizes, budget);
+  const result = check(sizes, budget, lazyLeaks());
   process.stdout.write(`${result.lines.join("\n")}\n`);
   process.stdout.write(`perf-check: ${result.ok ? "within budget" : "BUDGET EXCEEDED"}\n`);
   process.exit(result.ok ? 0 : 1);

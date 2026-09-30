@@ -670,6 +670,104 @@ button.nav-row.current {
   height: 30px;
 }
 
+/* Attachments of a sent message: square thumbnails above the bubble, chips for files. */
+.message-attachments {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(560px, 85%);
+  margin-bottom: 8px;
+}
+
+.attachment-thumbs,
+.attachment-files {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment-thumb {
+  display: block;
+  width: 144px;
+  height: 144px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bubble);
+  cursor: zoom-in;
+}
+
+.attachment-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-file {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  max-width: 320px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--fg);
+  text-decoration: none;
+}
+
+a.attachment-file:hover {
+  background: var(--hover);
+}
+
+.attachment-file.missing {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.attachment-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.attachment-name {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.attachment-file audio {
+  width: 260px;
+  max-width: 100%;
+  height: 36px;
+}
+
 /* Queued: waits for the running reply, then sends. */
 .turn-queued .bubble {
   background: transparent;
@@ -975,7 +1073,7 @@ button.nav-row.current {
   align-items: flex-end;
   gap: 6px;
   min-height: 56px;
-  padding: 10px 10px 10px 22px;
+  padding: 10px 10px 10px 10px;
   background: var(--field);
   border: 1px solid var(--line);
   border-radius: 28px;
@@ -983,6 +1081,20 @@ button.nav-row.current {
 
 .composer-box:focus-within {
   border-color: var(--faint);
+}
+
+/* "+": attach files (Phase 12). The picker opens only from this button. */
+.attach-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  color: var(--fg-2);
+}
+
+.composer.dragging .composer-box {
+  border-color: var(--fg-2);
+  border-style: dashed;
+  background: var(--hover);
 }
 
 .composer-box textarea {
@@ -1214,6 +1326,12 @@ button.danger-outline {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--field);
+}
+
+.settings-select {
+  flex: none;
+  width: auto;
+  max-width: 50%;
 }
 
 .text-input:focus {
@@ -1625,9 +1743,15 @@ button.danger-outline {
 
   .turn-actions .icon-btn,
   .code-toolbar .icon-btn,
-  .queued-meta .icon-btn {
+  .queued-meta .icon-btn,
+  .attach-btn {
     width: 44px;
     height: 44px;
+  }
+
+  .attachment-thumb {
+    width: 112px;
+    height: 112px;
   }
 
   .composer-box {

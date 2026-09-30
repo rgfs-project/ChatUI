@@ -19,6 +19,8 @@ export const MOCK_MODELS = {
   flood: "mock-flood",
   length: "mock-length",
   long: "mock-long",
+  /** Reports image and audio input (Phase 12) and describes the parts it received. */
+  vision: "mock-vision",
 } as const;
 
 /** A long Markdown answer (fences, tables, nested lists) for UI streaming tests. */
@@ -127,10 +129,38 @@ function usageChunk(model: string) {
   };
 }
 
-function lastUserText(body: unknown): string {
+type MockContent = string | { type: string; text?: string }[];
+
+function textOf(content: MockContent | undefined): string {
+  if (typeof content === "string") return content;
+  return (content ?? [])
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("\n\n");
+}
+
+function lastUser(body: unknown): { role: string; content: MockContent } | undefined {
   const messages =
-    (body as { messages?: { role: string; content: string }[] } | undefined)?.messages ?? [];
-  return [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+    (body as { messages?: { role: string; content: MockContent }[] } | undefined)?.messages ?? [];
+  return [...messages].reverse().find((m) => m.role === "user");
+}
+
+function lastUserText(body: unknown): string {
+  return textOf(lastUser(body)?.content);
+}
+
+/** Media parts across the whole request, by OpenAI part type. */
+export function mediaParts(body: unknown): { images: number; audio: number } {
+  const messages = (body as { messages?: { content: MockContent }[] } | undefined)?.messages ?? [];
+  let images = 0;
+  let audio = 0;
+  for (const m of messages)
+    if (Array.isArray(m.content))
+      for (const part of m.content) {
+        if (part.type === "image_url") images++;
+        if (part.type === "input_audio") audio++;
+      }
+  return { images, audio };
 }
 
 export async function startMockLlama(options: MockLlamaOptions = {}): Promise<MockLlama> {
@@ -191,6 +221,14 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
               args: ["/app/llama-server", "--model", `/secret/path/${id}.gguf`],
             },
             ...(index === 0 ? { meta: { n_ctx: 32_768, n_params: 123 } } : {}),
+            ...(id === MOCK_MODELS.vision
+              ? {
+                  architecture: {
+                    input_modalities: ["text", "image", "audio"],
+                    output_modalities: ["text"],
+                  },
+                }
+              : {}),
           })),
         });
         return;
@@ -220,6 +258,11 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
       if (req.method === "POST" && url.pathname === "/apply-template") {
         const messages =
           (body as { messages?: { role: string; content: string }[] } | undefined)?.messages ?? [];
+        // Media parts never reach apply-template (ChatUI counts them by reserve).
+        if (messages.some((m) => typeof m.content !== "string")) {
+          json(res, 400, { error: { message: "non-text content", type: "invalid_request_error" } });
+          return;
+        }
         const prompt =
           messages.map((m) => `<|${m.role}|>\n${m.content}<|end|>\n`).join("") + "<|assistant|>\n";
         json(res, 200, { prompt });
@@ -301,6 +344,16 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
           send(chunk(model, { content: word }));
           if (delay) await sleep(delay);
         }
+        finish();
+        return;
+      }
+      case MOCK_MODELS.vision: {
+        const { images, audio } = mediaParts(body);
+        send(
+          chunk(model, {
+            content: `Saw ${String(images)} image(s) and ${String(audio)} audio part(s). ${lastUserText(body)}`,
+          }),
+        );
         finish();
         return;
       }

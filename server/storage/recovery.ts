@@ -16,6 +16,7 @@ export interface RecoveryReport {
   operationConflicts: number;
   operationsExpired: number;
   generations: GenerationRecoveryReport | null;
+  attachments: { incompleteRemoved: number; linked: number; collected: number } | null;
 }
 
 /** Top-level entries must be user UUIDs, `_system` or `.gitkeep` (logged, never deleted). */
@@ -122,8 +123,9 @@ export async function resolveOperations(
 }
 
 /**
- * Phase 3 startup recovery in contracts §2 order: (1) temp files, (4) pending
- * operation records, (8) derived indexes. Runs before requests are accepted.
+ * Startup recovery in contracts §2 order: (1) temp files, (4) pending
+ * operation records, (5) generation checkpoints, (7) attachments, (8) derived
+ * indexes. Runs before requests are accepted.
  */
 export async function recoverStorage(options: {
   paths: DataPaths;
@@ -134,6 +136,10 @@ export async function recoverStorage(options: {
   startedAt: Date;
   now?: Date;
   generations?: { store: ConversationStore; checkpoints: CheckpointStore; retentionMs: number };
+  /** Step 7 per account (Phase 12): reconcile links, GC pending attachments. */
+  attachments?: (
+    userId: string,
+  ) => Promise<{ incompleteRemoved: number; linked: number; collected: number }>;
 }): Promise<RecoveryReport> {
   const { paths, logger } = options;
   await ensureDir(paths.root);
@@ -169,8 +175,19 @@ export async function recoverStorage(options: {
         now: options.now ?? new Date(),
       })
     : null;
+  let attachments: RecoveryReport["attachments"] = null;
+  if (options.attachments) {
+    attachments = { incompleteRemoved: 0, linked: 0, collected: 0 };
+    for (const userId of users) {
+      const r = await options.attachments(userId);
+      attachments.incompleteRemoved += r.incompleteRemoved;
+      attachments.linked += r.linked;
+      attachments.collected += r.collected;
+    }
+  }
+  // Step 8: derived indexes.
   for (const userId of users) await options.index.load(userId);
-  const report = { tempFilesRemoved, unexpectedEntries, ...totals, generations };
+  const report = { tempFilesRemoved, unexpectedEntries, ...totals, generations, attachments };
   logger.info(report, "storage recovery complete");
   return report;
 }

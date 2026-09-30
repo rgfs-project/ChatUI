@@ -11,7 +11,12 @@ import {
 import type { PromptMessage } from "../chat/prompt.ts";
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
-import { ProviderError, type Provider, type Sampling } from "../providers/types.ts";
+import {
+  ProviderError,
+  type ChatRequest,
+  type Provider,
+  type Sampling,
+} from "../providers/types.ts";
 import type { CheckpointStore, GenerationCheckpoint } from "../storage/checkpoints.ts";
 
 /** Receives events for one generation. Must never block (INV-06, INV-62). */
@@ -300,6 +305,8 @@ export class GenerationManager {
       model: string;
       operationKey?: string;
       messages: PromptMessage[];
+      /** Loads attachment bytes for media parts at request time (Phase 12). */
+      loadMedia?: ChatRequest["loadMedia"];
       persist: PersistOutcome;
       /** Per-send output cap and sampling (instance/model settings, Phase 10). */
       maxTokens?: number;
@@ -355,13 +362,18 @@ export class GenerationManager {
     void this.run(generation, input.messages, {
       maxTokens: input.maxTokens ?? this.options.maxOutputTokens,
       sampling: input.sampling,
+      loadMedia: input.loadMedia,
     });
   }
 
   private async run(
     generation: Generation,
     messages: PromptMessage[],
-    request: { maxTokens: number; sampling: Sampling | undefined },
+    request: {
+      maxTokens: number;
+      sampling: Sampling | undefined;
+      loadMedia?: ChatRequest["loadMedia"];
+    },
   ): Promise<void> {
     const signal = generation.controller.signal;
     try {
@@ -371,6 +383,7 @@ export class GenerationManager {
           messages,
           maxTokens: request.maxTokens,
           ...(request.sampling ? { sampling: request.sampling } : {}),
+          ...(request.loadMedia ? { loadMedia: request.loadMedia } : {}),
         },
         signal,
       );

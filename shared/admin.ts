@@ -66,6 +66,19 @@ export const adminSettingsDtoSchema = z.strictObject({
     maxActivePerUser: z.number().int().nullable(),
     maxOutputTokens: z.number().int().nullable(),
   }),
+  /** Attachment limits: saved overrides (null: the environment default applies) and the defaults. */
+  attachments: z.strictObject({
+    maxFileBytes: z.number().int().nullable(),
+    maxPerMessage: z.number().int().nullable(),
+    quotaBytes: z.number().int().nullable(),
+    textInlineBytes: z.number().int().nullable(),
+  }),
+  attachmentDefaults: z.strictObject({
+    maxFileBytes: z.number().int(),
+    maxPerMessage: z.number().int(),
+    quotaBytes: z.number().int(),
+    textInlineBytes: z.number().int(),
+  }),
   /** settings.json could not be read: defaults are in effect. */
   problem: z.string().nullable(),
 });
