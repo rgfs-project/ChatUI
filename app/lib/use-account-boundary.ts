@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useAuth } from "./auth-store";
 import { purgeOtherAccounts } from "./query";
 
@@ -10,16 +10,29 @@ import { purgeOtherAccounts } from "./query";
  * its cached queries and mutations dropped. The first render keeps the
  * SSR-seeded cache so hydrated data is reused without a duplicate fetch.
  */
+/**
+ * The account the page's cache belongs to. Module state (browser only), so a
+ * change is noticed even across the shell unmounting (e.g. sign-in page).
+ */
+let cacheAccount: string | null | undefined;
+
 export function useAccountBoundary(client: QueryClient): void {
   const auth = useAuth();
   const userId = auth.status === "authenticated" ? (auth.session?.user?.id ?? null) : null;
-  const previous = useRef(userId);
   useEffect(() => {
-    if (previous.current === userId) return;
-    previous.current = userId;
+    if (cacheAccount === undefined || cacheAccount === userId) {
+      cacheAccount = userId;
+      return;
+    }
+    cacheAccount = userId;
     void client.cancelQueries({
       predicate: (query) => query.queryKey[0] !== "user" || query.queryKey[1] !== userId,
     });
     purgeOtherAccounts(client, userId);
   }, [client, userId]);
+}
+
+/** Test helper: a new page load. */
+export function resetAccountBoundaryForTests(): void {
+  cacheAccount = undefined;
 }

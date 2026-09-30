@@ -1,4 +1,3 @@
-import * as Menu from "@radix-ui/react-dropdown-menu";
 import {
   useMutation,
   useMutationState,
@@ -7,7 +6,15 @@ import {
   type Mutation,
 } from "@tanstack/react-query";
 import { ArrowDown, ChevronDown, PanelLeft, SquarePen, X } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import type { ConversationDto } from "@shared/conversations";
 import { isTerminalState, type GenerationState } from "@shared/generation-state";
@@ -15,6 +22,7 @@ import type { StartGenerationResponse } from "@shared/generations";
 import { AccountChangedError } from "../lib/api";
 import { authStore, useAuth } from "../lib/auth-store";
 import { paths, type OverlayState } from "../lib/paths";
+import { markAccepted, markGeneration, markOnce } from "../lib/perf";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
 import {
   lookUpOperation,
@@ -30,10 +38,15 @@ import { useLiveGeneration } from "../lib/use-live-generation";
 import { useScrollPin } from "../lib/use-scroll-pin";
 import type { Command } from "./CommandMenu";
 import { Composer, type ModelChoice } from "./Composer";
-import { useConversationActions } from "./ConversationActions";
-import { ConfirmDialog } from "./Dialogs";
+import { preloadDialogs, useConversationActions } from "./ConversationActions";
 import { Markdown } from "./Markdown";
 import { Message, Reasoning } from "./Message";
+
+// Interaction-only UI loads on demand (Phase 9): the title menu shows a
+// same-looking placeholder until its chunk arrives; the malformed-state
+// dialog loads only when needed.
+const TitleMenu = lazy(() => import("./Menus").then((m) => ({ default: m.TitleMenu })));
+const ConfirmDialog = lazy(() => preloadDialogs().then((m) => ({ default: m.ConfirmDialog })));
 
 const noopSubscribe = () => () => undefined;
 function useHydrated(): boolean {
@@ -115,6 +128,9 @@ export function ConversationView(props: {
   const titleTriggerRef = useRef<HTMLButtonElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmUsed, setConfirmUsed] = useState(false);
+  // The title placeholder was clicked before the menu chunk arrived.
+  const [titleMenuRequested, setTitleMenuRequested] = useState(false);
 
   const conversationQuery = useQuery({
     ...queries.conversation(userId, conversationId ?? ""),
@@ -176,11 +192,30 @@ export function ConversationView(props: {
         shell.setDraft(vars.conversationKey, vars.content);
     },
     onSuccess: (result, vars) => {
+      markAccepted(result.generationId, result.conversationId);
       shell.setModel(result.conversationId, [vars.providerId, vars.model]);
       void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
     },
   });
   const pending = usePendingSends(userId, draftKey, conversationId);
+
+  // The requested conversation's transcript is on screen.
+  const visibleId = props.inert ? undefined : conversation?.id;
+  useEffect(() => {
+    if (visibleId)
+      markOnce("chatui:conversation-visible", visibleId, { conversationId: visibleId });
+  }, [visibleId]);
+  // The first streamed assistant output has been painted (next frame).
+  const liveOutputId = live && (live.content || live.reasoning) ? live.generationId : null;
+  useEffect(() => {
+    if (!liveOutputId) return;
+    const frame = requestAnimationFrame(() => {
+      markGeneration("chatui:first-assistant-paint", liveOutputId);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [liveOutputId]);
 
   // Keep the live reply on screen until the stored copy is in the transcript.
   const storedIds = new Set(conversation?.messages.map((m) => m.id));
@@ -338,20 +373,25 @@ export function ConversationView(props: {
           type="button"
           className="secondary danger-outline"
           onClick={() => {
+            setConfirmUsed(true);
             setConfirmDelete(true);
           }}
           disabled={!hydrated}
         >
           Delete conversation
         </button>
-        <ConfirmDialog
-          open={confirmDelete}
-          onOpenChange={setConfirmDelete}
-          title="Delete this conversation?"
-          description="The unreadable file will be permanently deleted."
-          confirmLabel="Delete"
-          onConfirm={() => void deleteMalformed()}
-        />
+        {confirmUsed ? (
+          <Suspense fallback={null}>
+            <ConfirmDialog
+              open={confirmDelete}
+              onOpenChange={setConfirmDelete}
+              title="Delete this conversation?"
+              description="The unreadable file will be permanently deleted."
+              confirmLabel="Delete"
+              onConfirm={() => void deleteMalformed()}
+            />
+          </Suspense>
+        ) : null}
       </main>
     );
   }
@@ -416,32 +456,33 @@ export function ConversationView(props: {
         )}
         {conversation ? (
           <h1 className="chat-title">
-            <Menu.Root modal={false}>
-              <Menu.Trigger ref={titleTriggerRef} className="title-trigger">
-                <span className="title-text">{conversation.title}</span>
-                <ChevronDown size={16} aria-hidden />
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Content className="menu-popover" align="start" sideOffset={6}>
-                  <Menu.Item
-                    className="menu-item"
-                    onSelect={() => {
-                      actions.rename(conversation, titleTriggerRef.current);
-                    }}
-                  >
-                    Rename
-                  </Menu.Item>
-                  <Menu.Item
-                    className="menu-item danger"
-                    onSelect={() => {
-                      actions.remove(conversation, titleTriggerRef.current);
-                    }}
-                  >
-                    Delete
-                  </Menu.Item>
-                </Menu.Content>
-              </Menu.Portal>
-            </Menu.Root>
+            <Suspense
+              fallback={
+                <button
+                  type="button"
+                  className="title-trigger"
+                  onClick={() => {
+                    setTitleMenuRequested(true);
+                  }}
+                >
+                  <span className="title-text">{conversation.title}</span>
+                  <ChevronDown size={16} aria-hidden />
+                </button>
+              }
+            >
+              <TitleMenu
+                title={conversation.title}
+                defaultOpen={titleMenuRequested}
+                triggerRef={titleTriggerRef}
+                onOpen={() => void preloadDialogs()}
+                onRename={() => {
+                  actions.rename(conversation, titleTriggerRef.current);
+                }}
+                onDelete={() => {
+                  actions.remove(conversation, titleTriggerRef.current);
+                }}
+              />
+            </Suspense>
           </h1>
         ) : null}
       </header>

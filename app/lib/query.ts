@@ -32,6 +32,25 @@ export function isDehydratable(key: readonly unknown[]): boolean {
   return key[0] === "user" && typeof key[2] === "string" && DEHYDRATE_ALLOWLIST.has(key[2]);
 }
 
+let browserClient: QueryClient | undefined;
+
+/**
+ * The page's QueryClient: one per page load in the browser (shared by the
+ * root provider and route clientLoaders), a fresh one per call on the server
+ * (never module-global there, INV-55).
+ */
+export function getQueryClient(): QueryClient {
+  if (typeof window === "undefined") return createQueryClient();
+  browserClient ??= createQueryClient();
+  return browserClient;
+}
+
+/** Test helper: a new page load. */
+export function resetQueryClientForTests(): void {
+  browserClient?.clear();
+  browserClient = undefined;
+}
+
 export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
@@ -95,11 +114,11 @@ export const fetchers = {
         signal ? { signal } : {},
       )
     ).conversations,
-  conversation: (id: string, signal?: AbortSignal) =>
-    apiJson<ConversationDto>(
-      `/api/conversations/${encodeURIComponent(id)}`,
-      signal ? { signal } : {},
-    ),
+  conversation: (id: string, signal?: AbortSignal, priority?: RequestPriority) =>
+    apiJson<ConversationDto>(`/api/conversations/${encodeURIComponent(id)}`, {
+      ...(signal ? { signal } : {}),
+      ...(priority ? { priority } : {}),
+    }),
   models: (refresh = false, signal?: AbortSignal) =>
     apiJson<ModelListDto>(`/api/models${refresh ? "?refresh=1" : ""}`, signal ? { signal } : {}),
 };

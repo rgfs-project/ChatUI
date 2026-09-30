@@ -2,8 +2,9 @@ import { HydrationBoundary } from "@tanstack/react-query";
 import { data } from "react-router";
 import { ConversationView } from "../components/ConversationView";
 import { appContext } from "../context";
-import { useUserId } from "../lib/auth-store";
-import { queryKeys } from "../lib/query";
+import { authStore, useUserId } from "../lib/auth-store";
+import { claimIntent } from "../lib/prefetch";
+import { ApiError, getQueryClient, queries, queryKeys } from "../lib/query";
 import { prefetchForRequest } from "../lib/server-query";
 import type { Route } from "./+types/chat-conversation";
 
@@ -55,6 +56,42 @@ export async function loader({ context, params }: Route.LoaderArgs) {
     { dehydratedState, error: result.error, title: result.title },
     { status: result.error?.status ?? 200 },
   );
+}
+
+type LoadError = { status: number; code: string } | null;
+
+/**
+ * Client navigations read through the page's QueryClient instead of a server
+ * data request: the same `queries.conversation` options the view consumes and
+ * an intent prefetch warms (INV-31), so a hovered-then-clicked conversation
+ * reuses the cached or in-flight request. Cached data renders at once (the
+ * view refetches it if stale); only a cold conversation is awaited.
+ */
+export async function clientLoader({ params }: Route.ClientLoaderArgs) {
+  const id = params.conversationId;
+  const auth = authStore.get();
+  const userId = auth.status === "authenticated" ? auth.session?.user?.id : undefined;
+  const result = (error: LoadError, title: string | null = null) => ({
+    dehydratedState: undefined,
+    error,
+    title,
+  });
+  if (!userId) return result({ status: 401, code: "UNAUTHENTICATED" });
+  if (!UUID.test(id)) return result({ status: 404, code: "NOT_FOUND" });
+  claimIntent(id);
+  const client = getQueryClient();
+  const options = queries.conversation(userId, id);
+  const cached = client.getQueryData(options.queryKey);
+  if (cached) return result(null, cached.title);
+  try {
+    const dto = await client.query(options);
+    return result(null, dto.title);
+  } catch (error) {
+    // Data errors render in the route; anything else is retried by the view.
+    if (error instanceof ApiError && [401, 404, 422].includes(error.status))
+      return result({ status: error.status, code: error.code ?? "NOT_FOUND" });
+    return result(null);
+  }
 }
 
 export default function ChatConversation({ loaderData, params }: Route.ComponentProps) {

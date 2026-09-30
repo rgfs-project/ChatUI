@@ -231,6 +231,46 @@ describe("render isolation (INV-32 groundwork)", () => {
   });
 });
 
+describe("INV-32: streaming into a 200-message conversation", () => {
+  it("incomplete Markdown tokens re-render only the growing reply", () => {
+    const long = Array.from({ length: 200 }, (_, n) =>
+      message(n + 1, n % 2 ? "assistant" : "user", `message ${String(n)} with *markdown*`),
+    );
+    renderAt(`/chat/${CONV}`, seededClient(conversation(long, GEN)));
+    const source = FakeEventSource.latest();
+    act(() => {
+      source.emit("snapshot", {
+        generationId: GEN,
+        assistantMessageId: REPLY,
+        state: "streaming",
+        content: "",
+        reasoning: "",
+        error: null,
+      });
+    });
+    const before = { ...renderCounters };
+    expect(before.messageMounts).toBe(200);
+    // Prose, an open fence, a growing table and nested lists, token by token.
+    const answer =
+      "Intro with **bold** text.\n\n```ts\nconst x = 1;\nconst y = 2;\n```\n\n| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n\n- one\n  - two\n    1. three\n";
+    for (let i = 0; i < answer.length; i += 4) {
+      act(() => {
+        source.emit("delta", { content: answer.slice(i, i + 4) });
+      });
+    }
+    expect(renderCounters.messageMounts).toBe(before.messageMounts);
+    expect(renderCounters.messageRenders).toBe(before.messageRenders);
+    expect(renderCounters.sidebarMounts).toBe(1);
+    expect(renderCounters.sidebarRenders).toBe(before.sidebarRenders);
+    const content = screen.getByTestId("content");
+    expect(content.querySelector("pre code")?.textContent).toContain("const y = 2;");
+    expect(content.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect(content.querySelector("ul ul ol li")?.textContent).toBe("three");
+    // Older text is still in the document (no virtualization): find-in-page works.
+    expect(screen.getByText("message 3 with", { exact: false })).toBeTruthy();
+  });
+});
+
 describe("malformed and missing conversations", () => {
   it("malformed: explains the problem and offers only delete (with confirmation)", async () => {
     const user = userEvent.setup();

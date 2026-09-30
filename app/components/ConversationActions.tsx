@@ -1,9 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
 import { paths } from "../lib/paths";
 import { apiJson, queryKeys } from "../lib/query";
-import { ConfirmDialog, RenameDialog } from "./Dialogs";
+
+// Interaction-only UI loads on demand (Phase 9): never in the critical bundle.
+/** Starts loading the dialog chunk (on menu intent) before it is needed. */
+export const preloadDialogs = () => import("./Dialogs");
+const RenameDialog = lazy(() => preloadDialogs().then((m) => ({ default: m.RenameDialog })));
+const ConfirmDialog = lazy(() => preloadDialogs().then((m) => ({ default: m.ConfirmDialog })));
 
 export interface ConversationTarget {
   id: string;
@@ -30,6 +35,8 @@ export function useConversationActions(userId: string): ConversationActions {
   const client = useQueryClient();
   const [renaming, setRenaming] = useState<ConversationTarget | null>(null);
   const [deleting, setDeleting] = useState<ConversationTarget | null>(null);
+  // Dialogs mount on first use, then stay mounted (Radix restores focus on close).
+  const [used, setUsed] = useState(false);
   // The control that opened a dialog: focus returns there (INV-47).
   const origin = useRef<HTMLElement | null>(null);
   const returnFocus = () => origin.current;
@@ -64,14 +71,16 @@ export function useConversationActions(userId: string): ConversationActions {
   return {
     rename: (target, from) => {
       remember(from);
+      setUsed(true);
       setRenaming(target);
     },
     remove: (target, from) => {
       remember(from);
+      setUsed(true);
       setDeleting(target);
     },
-    dialogs: (
-      <>
+    dialogs: used ? (
+      <Suspense fallback={null}>
         {/* Keyed so the field starts from the chosen conversation's title. */}
         <RenameDialog
           key={renaming?.id ?? "none"}
@@ -98,7 +107,7 @@ export function useConversationActions(userId: string): ConversationActions {
             if (deleting) deleteMutation.mutate(deleting.id);
           }}
         />
-      </>
-    ),
+      </Suspense>
+    ) : null,
   };
 }

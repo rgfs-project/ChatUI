@@ -1,4 +1,4 @@
-import { HydrationBoundary } from "@tanstack/react-query";
+import { HydrationBoundary, QueryClientProvider } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import {
   Outlet,
@@ -14,10 +14,11 @@ import { SignedOutShell } from "../components/SignedOutShell";
 import { appContext } from "../context";
 import { useAuth } from "../lib/auth-store";
 import { documentPathOf, paths, type OverlayState } from "../lib/paths";
-import { queryKeys } from "../lib/query";
+import { getQueryClient, queryKeys } from "../lib/query";
 import { prefetchForRequest } from "../lib/server-query";
 import { ShellProvider } from "../lib/shell-context";
 import { SidebarProvider } from "../lib/sidebar-context";
+import { useAccountBoundary } from "../lib/use-account-boundary";
 import { NARROW_QUERY, useMediaQuery } from "../lib/use-media-query";
 import type { Route } from "./+types/app-layout";
 
@@ -76,7 +77,23 @@ export function shouldRevalidate({
   return false;
 }
 
-export default function AppLayout({ loaderData }: Route.ComponentProps) {
+/**
+ * The chat shell owns TanStack Query: the page's one browser QueryClient (a
+ * module singleton, so it survives the shell remounting) or, on the server, a
+ * fresh client per request. Public and sign-in pages don't download it.
+ */
+export default function AppLayout(props: Route.ComponentProps) {
+  const [queryClient] = useState(getQueryClient);
+  // Account boundary: a changed account purges the previous user's cache.
+  useAccountBoundary(queryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Shell {...props} />
+    </QueryClientProvider>
+  );
+}
+
+function Shell({ loaderData }: Route.ComponentProps) {
   // Wide screens: a column that can be hidden. Narrow screens: an overlay
   // drawer, closed by default and after choosing a destination.
   const narrow = useMediaQuery(NARROW_QUERY);

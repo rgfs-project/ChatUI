@@ -1,23 +1,19 @@
-import * as Menu from "@radix-ui/react-dropdown-menu";
-import { useQuery } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  LogOut,
-  MoreHorizontal,
-  PanelLeft,
-  Pencil,
-  Settings,
-  Shield,
-  SquarePen,
-  Trash2,
-} from "lucide-react";
-import { memo, useEffect, useRef } from "react";
-import { Link, useLocation, useMatches, useNavigate, useParams } from "react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, MoreHorizontal, PanelLeft, SquarePen } from "lucide-react";
+import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
+import { Link, useLocation, useMatches, useParams } from "react-router";
 import { paths, type OverlayState } from "../lib/paths";
+import { endIntent, prefetchIntent } from "../lib/prefetch";
 import { queries } from "../lib/query";
 import { count } from "../lib/render-counters";
 import { useSignOut } from "../lib/use-sign-out";
-import { useConversationActions } from "./ConversationActions";
+import { AccountLabel } from "./AccountLabel";
+import { preloadDialogs, useConversationActions } from "./ConversationActions";
+
+// Menus load on demand (Phase 9); a same-looking placeholder stands in.
+const loadMenus = () => import("./Menus");
+const RowMenu = lazy(() => loadMenus().then((m) => ({ default: m.RowMenu })));
+const AccountMenu = lazy(() => loadMenus().then((m) => ({ default: m.AccountMenu })));
 
 export interface SidebarUser {
   id: string;
@@ -41,12 +37,15 @@ function SidebarImpl({ user, hidden, drawer, onHide, onNavigate }: SidebarProps)
     count("sidebarMounts");
   }, []);
   const { conversationId } = useParams();
+  const client = useQueryClient();
   // Secondary data: loaded after hydration, never gating the composer.
   const list = useQuery(queries.conversations(user.id));
   const conversations = list.data ?? [];
   const actions = useConversationActions(user.id);
   // The row menu trigger last used: dialogs return focus there (INV-47).
   const menuTrigger = useRef<HTMLElement | null>(null);
+  // A placeholder trigger clicked before the menu chunk arrived opens it then.
+  const [openRequest, setOpenRequest] = useState<string | null>(null);
 
   return (
     <nav
@@ -98,107 +97,98 @@ function SidebarImpl({ user, hidden, drawer, onHide, onNavigate }: SidebarProps)
               to={paths.chat(item.id)}
               aria-current={item.id === conversationId ? "page" : undefined}
               onClick={onNavigate}
+              // Route chunk on intent; the data through the shared query cache.
+              prefetch="intent"
+              onPointerEnter={(event) => {
+                if (event.pointerType === "mouse") prefetchIntent(client, user.id, item.id);
+              }}
+              onPointerLeave={endIntent}
+              onFocus={() => {
+                prefetchIntent(client, user.id, item.id, 0);
+              }}
+              onBlur={endIntent}
             >
               {item.malformed ? <AlertTriangle size={14} aria-label="Unreadable" /> : null}
               <span className="row-title">
                 {item.malformed ? `${item.title} (unreadable)` : item.title}
               </span>
             </Link>
-            <Menu.Root modal={false}>
-              <Menu.Trigger asChild>
+            <Suspense
+              fallback={
                 <button
                   type="button"
                   className="icon-btn row-menu"
                   aria-label={`Actions for ${item.title}`}
                   title="More"
-                  onFocus={(event) => {
-                    menuTrigger.current = event.currentTarget;
+                  onClick={() => {
+                    setOpenRequest(item.id);
                   }}
                 >
                   <MoreHorizontal size={16} aria-hidden />
                 </button>
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Content className="menu-popover" align="start" sideOffset={4}>
-                  {item.malformed ? null : (
-                    <Menu.Item
-                      className="menu-item"
-                      onSelect={() => {
-                        actions.rename(item, menuTrigger.current);
-                      }}
-                    >
-                      <Pencil size={16} aria-hidden /> Rename
-                    </Menu.Item>
-                  )}
-                  <Menu.Item
-                    className="menu-item danger"
-                    onSelect={() => {
-                      actions.remove(item, menuTrigger.current);
-                    }}
-                  >
-                    <Trash2 size={16} aria-hidden /> Delete
-                  </Menu.Item>
-                </Menu.Content>
-              </Menu.Portal>
-            </Menu.Root>
+              }
+            >
+              <RowMenu
+                title={item.title}
+                malformed={item.malformed}
+                defaultOpen={openRequest === item.id}
+                onTriggerFocus={(element) => {
+                  menuTrigger.current = element;
+                }}
+                onOpen={() => {
+                  // Intent: fetch the dialog chunk before it is needed.
+                  void preloadDialogs();
+                }}
+                onRename={() => {
+                  actions.rename(item, menuTrigger.current);
+                }}
+                onDelete={() => {
+                  actions.remove(item, menuTrigger.current);
+                }}
+              />
+            </Suspense>
           </li>
         ))}
       </ul>
-      <AccountMenu user={user} onNavigate={onNavigate} />
+      <Account user={user} onNavigate={onNavigate} />
       {actions.dialogs}
     </nav>
   );
 }
 
-/** Avatar and name at the bottom, opening Settings and Sign out. */
-function AccountMenu({ user, onNavigate }: { user: SidebarUser; onNavigate: () => void }) {
-  const navigate = useNavigate();
+/** Avatar and name at the bottom, opening Settings, Administration and Sign out. */
+function Account({ user, onNavigate }: { user: SidebarUser; onNavigate: () => void }) {
   const location = useLocation();
   const matches = useMatches();
   const signOut = useSignOut();
+  const [openRequest, setOpenRequest] = useState(false);
   const inOverlay = matches.some((m) => /routes\/(settings|admin)$/.test(m.id));
   const background = inOverlay
     ? (location.state as OverlayState | null)?.background
     : location.pathname;
-  const openOverlay = (to: string) => {
-    onNavigate();
-    void navigate(to, { state: { background } satisfies OverlayState });
-  };
   return (
-    <Menu.Root modal={false}>
-      <Menu.Trigger className="account-trigger">
-        <span className="avatar" aria-hidden>
-          {(user.username.at(0) ?? "?").toUpperCase()}
-        </span>
-        <span data-testid="signed-in-user">{user.username}</span>
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Content className="menu-popover account-popover" side="top" sideOffset={6}>
-          <Menu.Item
-            className="menu-item"
-            onSelect={() => {
-              openOverlay(paths.settings());
-            }}
-          >
-            <Settings size={16} aria-hidden /> Settings
-          </Menu.Item>
-          {user.role === "admin" ? (
-            <Menu.Item
-              className="menu-item"
-              onSelect={() => {
-                openOverlay(paths.admin());
-              }}
-            >
-              <Shield size={16} aria-hidden /> Administration
-            </Menu.Item>
-          ) : null}
-          <Menu.Separator className="menu-separator" />
-          <Menu.Item className="menu-item" onSelect={() => void signOut()}>
-            <LogOut size={16} aria-hidden /> Sign out
-          </Menu.Item>
-        </Menu.Content>
-      </Menu.Portal>
-    </Menu.Root>
+    <Suspense
+      fallback={
+        <button
+          type="button"
+          className="account-trigger"
+          onClick={() => {
+            setOpenRequest(true);
+          }}
+        >
+          <AccountLabel username={user.username} />
+        </button>
+      }
+    >
+      <AccountMenu
+        username={user.username}
+        isAdmin={user.role === "admin"}
+        defaultOpen={openRequest}
+        overlayState={background ? { background } : {}}
+        onNavigate={onNavigate}
+        onSignOut={() => void signOut()}
+      />
+    </Suspense>
   );
 }
 

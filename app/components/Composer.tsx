@@ -1,7 +1,8 @@
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { ArrowUp, ChevronDown, Square } from "lucide-react";
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ModelListDto } from "@shared/generations";
+import { markOnce } from "../lib/perf";
 import { fetchers, queryKeys } from "../lib/query";
 import { useShell } from "../lib/shell-context";
 import {
@@ -111,6 +112,12 @@ export function Composer({
   const commandOpen = shown.length > 0;
   const activeIndex = Math.min(activeCommand, shown.length - 1);
   const active = shown[activeIndex];
+
+  // Send controls are usable (hydrated, a server-known model): ComposerTTI ends.
+  const interactive = hydrated && state.kind === "ready" && !inert;
+  useEffect(() => {
+    if (interactive) markOnce("chatui:composer-interactive");
+  }, [interactive]);
 
   function refreshModels() {
     setRefreshing(true);

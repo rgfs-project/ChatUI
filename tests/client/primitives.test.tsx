@@ -69,11 +69,30 @@ function renderSidebar() {
   );
 }
 
+/** The Radix trigger, once the lazily loaded menu chunk has replaced the placeholder. */
+async function menuTrigger(name = "Actions for Trip plans") {
+  return waitFor(() => {
+    const button = screen.getByRole("button", { name });
+    expect(button.getAttribute("aria-haspopup")).toBe("menu");
+    return button;
+  });
+}
+
 describe("INV-47: menus (Radix DropdownMenu)", () => {
+  it("a click before the menu chunk has loaded opens the menu once it arrives", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+    const placeholder = screen.getByRole("button", { name: "Actions for Trip plans" });
+    expect(placeholder.getAttribute("aria-haspopup")).toBeNull();
+    await user.click(placeholder);
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(2);
+  });
+
   it("opens from the keyboard, moves with arrows, closes on Escape and restores focus", async () => {
     const user = userEvent.setup();
     renderSidebar();
-    const trigger = screen.getByRole("button", { name: "Actions for Trip plans" });
+    const trigger = await menuTrigger();
     trigger.focus();
     await user.keyboard("{Enter}");
     const menu = await screen.findByRole("menu");
@@ -96,7 +115,7 @@ describe("INV-47: dialogs (Radix Dialog)", () => {
   it("rename: labelled, prefilled, traps focus, Escape closes and focus returns", async () => {
     const user = userEvent.setup();
     renderSidebar();
-    const trigger = screen.getByRole("button", { name: "Actions for Trip plans" });
+    const trigger = await menuTrigger();
     trigger.focus();
     await user.keyboard("{Enter}");
     await screen.findByRole("menu");
