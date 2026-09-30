@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs
 import { createServer, request as httpRequest, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AttachmentDto } from "../../shared/attachments.ts";
 import type { ConversationDto } from "../../shared/conversations.ts";
 import type { TestAppOptions } from "./helpers.ts";
@@ -397,9 +397,14 @@ describe("attachment uploads (Phase 12)", () => {
       { abortAfter: 3, delayMs: 10 },
     );
     expect(aborted).toBe("aborted");
-    await new Promise((r) => setTimeout(r, 100));
+    // The server notices the abort asynchronously; wait for its cleanup (not a fixed delay).
+    await vi.waitFor(
+      () => {
+        expect(chatui.services.attachments.uploadsInFlight()).toBe(0);
+      },
+      { timeout: 5_000, interval: 20 },
+    );
     expect(attachmentDirs(dataDir, alice.userId)).toEqual([]);
-    expect(chatui.services.attachments.uploadsInFlight()).toBe(0);
     // Account closure cancels uploads in flight (contracts §6 step 3).
     const pending = chunkedUpload(
       base,
@@ -412,8 +417,12 @@ describe("attachment uploads (Phase 12)", () => {
     chatui.services.attachments.cancelUploads(alice.userId);
     const result = await pending;
     expect(result === "aborted" || result.status >= 400).toBe(true);
-    await new Promise((r) => setTimeout(r, 50));
-    expect(attachmentDirs(dataDir, alice.userId)).toEqual([]);
+    await vi.waitFor(
+      () => {
+        expect(attachmentDirs(dataDir, alice.userId)).toEqual([]);
+      },
+      { timeout: 5_000, interval: 20 },
+    );
   });
 
   it("rejects requests that are not a single multipart file", async () => {
