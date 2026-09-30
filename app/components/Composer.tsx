@@ -26,6 +26,16 @@ function filesOf(list: FileList | null | undefined): File[] {
   return list ? Array.from(list) : [];
 }
 
+/**
+ * An Enter that belongs to an input method (IME) composition, which must never
+ * send. Safari reports the Enter that commits a composition with
+ * `isComposing: false` but the legacy keyCode 229, so both are checked.
+ */
+function composing(event: KeyboardEvent): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the only Safari signal
+  return event.isComposing || event.keyCode === 229;
+}
+
 /** A `(providerId, modelId)` pair; the server validates it on every send. */
 export type ModelChoice = [string, string];
 
@@ -342,6 +352,8 @@ export function Composer({
           name="message"
           ref={textareaRef}
           rows={1}
+          // Right-to-left scripts type right to left.
+          dir="auto"
           placeholder={running ? "Queue a message" : "Ask anything"}
           aria-autocomplete="list"
           aria-controls={commandOpen ? COMMAND_MENU_ID : undefined}
@@ -382,7 +394,7 @@ export function Composer({
                 return;
               }
             }
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            if (event.key === "Enter" && !event.shiftKey && !composing(event.nativeEvent)) {
               event.preventDefault();
               submit();
             }

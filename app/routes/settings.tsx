@@ -93,7 +93,7 @@ export default function SettingsOverlay() {
         {section === "data" && user ? (
           <Suspense
             fallback={
-              <section className="settings-body">
+              <section className="settings-body" tabIndex={0}>
                 <p className="settings-hint">Loading…</p>
               </section>
             }
@@ -107,7 +107,7 @@ export default function SettingsOverlay() {
         ) : section === "memories" && user ? (
           <Suspense
             fallback={
-              <section className="settings-body">
+              <section className="settings-body" tabIndex={0}>
                 <p className="settings-hint">Loading memories…</p>
               </section>
             }
@@ -117,7 +117,7 @@ export default function SettingsOverlay() {
         ) : section === "files" && user ? (
           <Suspense
             fallback={
-              <section className="settings-body">
+              <section className="settings-body" tabIndex={0}>
                 <p className="settings-hint">Loading files…</p>
               </section>
             }
@@ -127,7 +127,12 @@ export default function SettingsOverlay() {
         ) : section === "attachments" && user ? (
           <AttachmentSettings userId={user.id} />
         ) : (
-          <section className="settings-body" id="account" aria-labelledby="settings-account">
+          <section
+            className="settings-body"
+            tabIndex={0}
+            id="account"
+            aria-labelledby="settings-account"
+          >
             <h2 id="settings-account">Account</h2>
             <div className="settings-row">
               <div>

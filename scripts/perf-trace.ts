@@ -42,11 +42,14 @@ const OBSERVER = () => {
   const note = (name: string) => {
     w.__trace[name] ??= performance.now();
   };
+  // The Send button: icon-only with an accessible name, or text in older builds.
+  const isSend = (b: HTMLButtonElement) =>
+    b.getAttribute("aria-label") === "Send" || b.textContent.trim() === "Send";
   document.addEventListener(
     "click",
     (event) => {
       const button = (event.target as Element | null)?.closest("button");
-      if (button?.textContent.includes("Send")) note("sendClick");
+      if (button && isSend(button)) note("sendClick");
     },
     true,
   );
@@ -55,9 +58,7 @@ const OBSERVER = () => {
   }).observe({ type: "paint", buffered: true });
   const check = () => {
     if (document.documentElement.dataset.hydrated === "true") note("hydrated");
-    const send = [...document.querySelectorAll("button")].find((b) =>
-      b.textContent.includes("Send"),
-    );
+    const send = [...document.querySelectorAll("button")].find(isSend);
     if (w.__trace.hydrated && send && !send.disabled) note("composerInteractive");
     const content = document.querySelector('[data-testid="content"]');
     if (content?.textContent.trim()) note("firstPaintedContent");

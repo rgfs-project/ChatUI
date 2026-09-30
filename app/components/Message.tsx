@@ -206,7 +206,9 @@ function MessageImpl({
         {editor ??
           (content ? (
             <div className="bubble">
-              <p className="plain-text">{content}</p>
+              <p className="plain-text" dir="auto">
+                {content}
+              </p>
             </div>
           ) : null)}
         {editor ? null : (

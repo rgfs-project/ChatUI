@@ -4,6 +4,7 @@ import { MessageSquare, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { SEARCH_LIMITS, type SearchResult } from "@shared/conversations";
+import { useFocusReturn } from "../lib/focus-return";
 import { paths } from "../lib/paths";
 import "./operations.css";
 import { queries } from "../lib/query";
@@ -37,6 +38,7 @@ export function SearchDialog({
   onNavigate: () => void;
 }) {
   const navigate = useNavigate();
+  const focus = useFocusReturn();
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -83,7 +85,12 @@ export function SearchDialog({
     >
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content search-dialog" data-testid="search-dialog">
+        <Dialog.Content
+          className="dialog-content search-dialog"
+          data-testid="search-dialog"
+          onOpenAutoFocus={focus.onOpenAutoFocus}
+          onCloseAutoFocus={focus.onCloseAutoFocus}
+        >
           <Dialog.Title className="visually-hidden">Search chats</Dialog.Title>
           <Dialog.Description className="visually-hidden">
             Type to search; use the arrow keys to choose a result and Enter to open it.

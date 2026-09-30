@@ -21,7 +21,7 @@ export default function ArtifactSettings({ userId }: { userId: string }) {
     null,
   );
   return (
-    <section className="settings-body" aria-labelledby="settings-files">
+    <section className="settings-body" tabIndex={0} aria-labelledby="settings-files">
       <h2 id="settings-files">Files</h2>
       <p className="settings-hint">
         Source files from replies. A code block becomes a file when the model labels it, like{" "}

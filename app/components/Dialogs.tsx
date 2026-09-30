@@ -1,20 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useState, type ReactNode } from "react";
-
-/**
- * Where focus goes when a dialog closes. Radix restores it to the element
- * focused at open time; a dialog opened from a menu item would restore it to
- * that (unmounted) item, so callers pass the menu's trigger instead.
- */
-function restoreFocus(target: (() => HTMLElement | null) | undefined) {
-  return (event: Event) => {
-    const element = target?.();
-    if (element?.isConnected) {
-      event.preventDefault();
-      element.focus();
-    }
-  };
-}
+import { useFocusReturn } from "../lib/focus-return";
 
 /**
  * Dialog primitives (Radix Dialog): focus trap, focus restoration, Escape,
@@ -27,15 +13,18 @@ export function ConfirmDialog(props: {
   description: ReactNode;
   confirmLabel: string;
   onConfirm: () => void;
+  /** Where focus goes on close (a menu's trigger); otherwise the element that opened it. */
   returnFocus?: () => HTMLElement | null;
 }) {
+  const focus = useFocusReturn(props.returnFocus);
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content
           className="dialog-content"
-          onCloseAutoFocus={restoreFocus(props.returnFocus)}
+          onOpenAutoFocus={focus.onOpenAutoFocus}
+          onCloseAutoFocus={focus.onCloseAutoFocus}
         >
           <Dialog.Title className="dialog-title">{props.title}</Dialog.Title>
           <Dialog.Description className="dialog-description">
@@ -72,13 +61,15 @@ export function RenameDialog(props: {
   returnFocus?: () => HTMLElement | null;
 }) {
   const [value, setValue] = useState(props.initial);
+  const focus = useFocusReturn(props.returnFocus);
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content
           className="dialog-content"
-          onCloseAutoFocus={restoreFocus(props.returnFocus)}
+          onOpenAutoFocus={focus.onOpenAutoFocus}
+          onCloseAutoFocus={focus.onCloseAutoFocus}
         >
           <Dialog.Title className="dialog-title">Rename conversation</Dialog.Title>
           <Dialog.Description className="dialog-description">

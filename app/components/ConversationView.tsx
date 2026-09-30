@@ -423,6 +423,9 @@ export function ConversationView(props: {
   /** The composer's Send/Enter: send now, or queue while a reply is running. */
   function submit(content: string, choice: ModelChoice) {
     const attachments = takeReady(userId, draftKey);
+    // A second Enter in the same tick sees the previous render's state: the
+    // box is already empty and the attachments taken, so there is nothing to send.
+    if (content === "" && attachments.length === 0) return;
     if (running || sending) {
       shell.enqueue(draftKey, {
         id: crypto.randomUUID(),

@@ -91,7 +91,7 @@
 
 .search-snippet {
   overflow-wrap: anywhere;
-  color: var(--muted);
+  color: var(--fg-2);
   font-size: 14px;
 }
 

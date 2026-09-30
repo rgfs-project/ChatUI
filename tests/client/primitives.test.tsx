@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConfirmDialog } from "../../app/components/Dialogs";
 import { Sidebar } from "../../app/components/Sidebar";
 import { queryKeys } from "../../app/lib/query";
 import {
@@ -183,5 +185,47 @@ describe("screen-reader smoke", () => {
     expect(current.getAttribute("aria-current")).toBe("page");
     for (const button of within(nav).getAllByRole("button"))
       expect(button.getAttribute("aria-label") ?? button.textContent).toBeTruthy();
+  });
+});
+
+describe("INV-47: focus returns to the opener (Phase 15)", () => {
+  function Opener() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(true);
+          }}
+        >
+          Open confirm
+        </button>
+        <ConfirmDialog
+          open={open}
+          onOpenChange={setOpen}
+          title="Sure?"
+          description="A confirmation without a Radix Trigger."
+          confirmLabel="Yes"
+          onConfirm={noop}
+        />
+      </>
+    );
+  }
+
+  it("INV-47: a dialog opened through its open prop returns focus to the element that opened it", async () => {
+    const user = userEvent.setup();
+    render(<Opener />);
+    const opener = screen.getByRole("button", { name: "Open confirm" });
+    await user.click(opener);
+    const dialog = await screen.findByRole("dialog", { name: "Sure?" });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(opener);
+    });
   });
 });

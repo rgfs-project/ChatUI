@@ -40,7 +40,7 @@ export function FeatureSettings({ userId }: { userId: string }) {
   }
 
   return (
-    <section className="settings-body" aria-labelledby="settings-features">
+    <section className="settings-body" tabIndex={0} aria-labelledby="settings-features">
       <h2 id="settings-features">Features</h2>
       {GROUPS.map((group) => (
         <section

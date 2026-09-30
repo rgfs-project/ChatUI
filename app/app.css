@@ -32,6 +32,7 @@
   --fg: #1f1f1f;
   --fg-2: #454545;
   --muted: #6b6b6b;
+  /* Decorative only (borders, dividers): below text contrast. Text uses --muted. */
   --faint: #9b9b9b;
   --send: #1f1f1f;
   --on-send: #ffffff;
@@ -405,7 +406,7 @@ button.nav-row.current {
 
 .section-label {
   margin: 22px 10px 6px;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12.5px;
 }
 
@@ -788,7 +789,7 @@ a.attachment-file:hover {
   align-items: center;
   gap: 2px;
   margin-top: 2px;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12.5px;
 }
 
@@ -922,6 +923,12 @@ a.attachment-file:hover {
 
 .markdown > :first-child {
   margin-top: 0;
+}
+
+/* Each paragraph, item, heading and cell takes its direction from its own
+   text, so right-to-left replies read correctly inside the LTR interface. */
+.markdown :is(p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th) {
+  unicode-bidi: plaintext;
 }
 
 .markdown > :last-child {
@@ -1152,7 +1159,7 @@ a.attachment-file:hover {
 }
 
 .composer-box textarea::placeholder {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 /* The model reads as "name ⌄" inside the pill. */
@@ -1255,7 +1262,7 @@ a.attachment-file:hover {
 
 .command-group {
   margin: 6px 10px 2px;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -1416,6 +1423,12 @@ button.danger-outline {
 .settings-body {
   padding: 24px 32px;
   overflow-y: auto;
+}
+
+/* The pane scrolls on its own: focusable so the keyboard can scroll it. */
+.settings-body:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
 }
 
 .settings-body h2 {
