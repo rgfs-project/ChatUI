@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import type { SkillDto } from "@shared/skills";
+import type { SkillsStore } from "../storage/skills.ts";
+import { expandSkill } from "./skills.ts";
+import type { ResolvedModelSettings, SettingsStore } from "../admin/settings.ts";
+import type { Sampling } from "../providers/types.ts";
 import { ErrorCode } from "@shared/errors";
 import type { StartGenerationRequest, StartGenerationResponse } from "@shared/generations";
 import { AppError } from "../errors.ts";
@@ -61,6 +66,16 @@ export interface SendServiceOptions {
   hooks?: SendHooks;
   /** Overrides token counting (tests). */
   counterFor?: (providerId: string, model: string) => Promise<TokenCounter>;
+  /** Instance and per-model settings (Phase 10): visibility, prompts, sampling, limits. */
+  settings?: SettingsStore;
+  /** The sender's skills ("/name" messages are expanded in the prompt). */
+  skills?: SkillsStore;
+}
+
+/** Who is sending: the username feeds prompt templates, the role model visibility. */
+export interface Sender {
+  username: string;
+  role: "user" | "admin";
 }
 
 function resultOf(record: OperationRecord): StartGenerationResponse {
@@ -101,7 +116,11 @@ export class SendService {
     );
   }
 
-  async send(userId: string, request: StartGenerationRequest): Promise<StartGenerationResponse> {
+  async send(
+    userId: string,
+    request: StartGenerationRequest,
+    sender: Sender = { username: "", role: "user" },
+  ): Promise<StartGenerationResponse> {
     const flightKey = `${userId}:${request.operationKey}`;
     // Wait for an in-flight request with the same key, then decide from its record.
     for (;;) {
@@ -109,7 +128,7 @@ export class SendService {
       if (!inflight) break;
       await inflight.catch(() => undefined);
     }
-    const work = this.accept(userId, request);
+    const work = this.accept(userId, request, sender);
     this.inflight.set(flightKey, work);
     try {
       return await work;
@@ -157,6 +176,7 @@ export class SendService {
   private async accept(
     userId: string,
     request: StartGenerationRequest,
+    sender: Sender,
   ): Promise<StartGenerationResponse> {
     const payloadHash = SendService.payloadHash(request);
     const known = await this.checkKey(userId, request, payloadHash);
@@ -171,9 +191,21 @@ export class SendService {
     if (request.conversationId) this.o.generations.assertIdle(conversationKey);
     // The browser's (provider, model) pair is untrusted: validate it (INV-18).
     const model = await this.o.catalog.resolve(request.providerId, request.model);
+    // Hidden models exist only for admins (Phase 10).
+    if (sender.role !== "admin" && this.o.settings?.isHidden(model.providerId, model.id))
+      throw new AppError(ErrorCode.MODEL_NOT_FOUND, "The selected model is not available");
     const provider = this.o.catalog.provider(model.providerId);
+    // Prompt-relevant settings are a revision too (contracts §4.1).
+    const settingsFor = () =>
+      this.o.settings?.resolve(model.providerId, model.id, {
+        username: sender.username,
+        now: this.now(),
+      });
 
+    // Read once per send: every attempt assembles the same skills.
+    const skills = (await this.o.skills?.enabled(userId)) ?? new Map<string, SkillDto>();
     for (let attempt = 0; attempt < 2; attempt++) {
+      const resolved = settingsFor();
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
       const snapshot = request.conversationId
         ? await this.o.store.withLock(userId, conversationId, () =>
@@ -187,6 +219,8 @@ export class SendService {
         model.providerId,
         model.id,
         model.contextTokens,
+        resolved,
+        skills,
       );
       await this.o.hooks?.beforeRecheck?.();
 
@@ -202,6 +236,8 @@ export class SendService {
           throw new AppError(ErrorCode.CONFLICT, "Conversation id collision; retry");
         }
         if ((current?.revision ?? null) !== (snapshot?.revision ?? null)) return "changed" as const;
+        if ((settingsFor()?.revision ?? null) !== (resolved?.revision ?? null))
+          return "changed" as const;
         const again = await this.checkKey(userId, request, payloadHash);
         if (again) return { response: again, launch: undefined };
         const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
@@ -216,6 +252,7 @@ export class SendService {
           current,
           prompt,
           reservation,
+          sampling: resolved?.sampling,
         });
       });
       if (outcome !== "changed") {
@@ -228,6 +265,11 @@ export class SendService {
       ErrorCode.CONFLICT,
       "The conversation changed while sending; reload and try again",
     );
+  }
+
+  /** Reserved output tokens: the instance setting, else MAX_OUTPUT_TOKENS. */
+  private maxOutputTokens(): number {
+    return this.o.settings?.get().generation?.maxOutputTokens ?? this.o.maxOutputTokens;
   }
 
   private async readExisting(userId: string, conversationId: string) {
@@ -250,6 +292,8 @@ export class SendService {
     providerId: string,
     model: string,
     contextTokens: number,
+    resolved: ResolvedModelSettings | undefined,
+    skills: ReadonlyMap<string, SkillDto>,
   ): Promise<AssembledPrompt> {
     const draft: ConversationModel = current ?? {
       title: NEW_CONVERSATION_TITLE,
@@ -261,7 +305,7 @@ export class SendService {
       ...draft,
       blocks: [...draft.blocks, { type: "user", id: randomUUID(), body: content }],
     };
-    const budget = Math.max(0, contextTokens - this.o.maxOutputTokens);
+    const budget = Math.max(0, contextTokens - this.maxOutputTokens());
     const counter = this.o.counterFor
       ? await this.o.counterFor(providerId, model)
       : await counterFor(provider, model, this.o.templateOverheadTokens);
@@ -270,6 +314,9 @@ export class SendService {
         budget,
         trimStep: this.o.contextTrimStep ?? Math.max(1, Math.floor(budget * 0.25)),
         counter,
+        instructions: resolved?.instructions,
+        contextBlock: resolved?.contextBlock,
+        expandUser: skills.size > 0 ? (body) => expandSkill(body, skills) : undefined,
       });
     } catch (error) {
       if (error instanceof ContextTooLargeError) {
@@ -296,6 +343,7 @@ export class SendService {
       current: { model: ConversationModel; revision: string } | null;
       prompt: AssembledPrompt;
       reservation: ReturnType<GenerationManager["reserve"]>;
+      sampling: Sampling | undefined;
     },
   ): Promise<{ response: StartGenerationResponse; launch: (() => void) | undefined }> {
     const { conversationId, reservation } = input;
@@ -364,6 +412,8 @@ export class SendService {
           model: input.model,
           operationKey: record.operationKey,
           messages: input.prompt.messages,
+          maxTokens: this.maxOutputTokens(),
+          sampling: input.sampling,
           persist: (outcome) =>
             this.persistOutcome(
               userId,

@@ -26,6 +26,11 @@ export const providerEntrySchema = z.strictObject({
   maxActiveGenerations: z.number().int().min(1).max(1_000).optional(),
   capabilities: capabilitiesSchema,
   contextTokens: z.number().int().min(256).max(10_000_000).optional(),
+  /**
+   * The server accepts llama.cpp's extra sampling fields (top_k, min_p,
+   * repeat_penalty). Default true; set false for plain OpenAI-compatible APIs.
+   */
+  samplingExtensions: z.boolean().optional(),
 });
 export type ProviderEntry = z.infer<typeof providerEntrySchema>;
 

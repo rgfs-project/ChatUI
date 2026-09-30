@@ -22,10 +22,21 @@ export interface ProviderModel {
   status: "loaded" | "unloaded" | "loading" | "unknown";
 }
 
+export interface Sampling {
+  temperature?: number;
+  topP?: number;
+  /** llama.cpp extensions (not part of the OpenAI API). */
+  topK?: number;
+  minP?: number;
+  repeatPenalty?: number;
+}
+
 export interface ChatRequest {
   model: string;
   messages: ChatMessage[];
   maxTokens: number;
+  /** Admin-configured per-model sampling (Phase 10); omitted fields use the server's defaults. */
+  sampling?: Sampling | undefined;
 }
 
 export type ProviderEvent =

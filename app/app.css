@@ -388,6 +388,20 @@ textarea {
   background: var(--hover);
 }
 
+/* Section buttons (Settings) look like the link rows. */
+button.nav-row {
+  width: 100%;
+  background: transparent;
+  font: inherit;
+  font-size: 14.5px;
+  text-align: left;
+}
+
+button.nav-row:hover,
+button.nav-row.current {
+  background: var(--hover);
+}
+
 .section-label {
   margin: 22px 10px 6px;
   color: var(--faint);
@@ -1088,6 +1102,12 @@ textarea {
 
 .command-option[aria-selected="true"] {
   background: var(--hover);
+}
+
+.command-group {
+  margin: 6px 10px 2px;
+  color: var(--faint);
+  font-size: 12px;
 }
 
 .command-name {

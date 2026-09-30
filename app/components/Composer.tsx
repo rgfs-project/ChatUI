@@ -69,6 +69,7 @@ export function Composer({
   commands,
   onSubmit,
   onCommand,
+  onCommandIntent,
   onCancel,
 }: {
   userId: string;
@@ -84,6 +85,8 @@ export function Composer({
   commands: readonly Command[];
   onSubmit: (content: string, choice: ModelChoice) => void;
   onCommand: (name: string) => void;
+  /** The user started a "/" command (load anything the list needs). */
+  onCommandIntent?: () => void;
   onCancel: () => void;
 }) {
   const shell = useShell();
@@ -101,6 +104,11 @@ export function Composer({
   const preferred =
     (remembered &&
       allModels.find((m) => m.providerId === remembered[0] && m.id === remembered[1])) ??
+    allModels.find(
+      (m) =>
+        m.providerId === models.data?.defaultModel?.providerId &&
+        m.id === models.data.defaultModel.modelId,
+    ) ??
     allModels.find((m) => m.status === "loaded") ??
     allModels[0];
   const selectedValue =
@@ -157,6 +165,17 @@ export function Composer({
   }
 
   function runCommand(command: Command) {
+    if (command.kind === "skill") {
+      // A skill applies to the message: insert "/name " and keep typing.
+      const el = textareaRef.current;
+      if (el) {
+        el.value = `/${command.name} `;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+      return;
+    }
     clear();
     if (command.name !== "model") {
       onCommand(command.name);
@@ -236,6 +255,7 @@ export function Composer({
             shell.setDraft(draftKey, value);
             setHasDraft(value.trim() !== "");
             const query = commandQuery(value);
+            if (query !== null) onCommandIntent?.();
             if (query !== slash) setActiveCommand(0);
             setSlash(query);
           }}

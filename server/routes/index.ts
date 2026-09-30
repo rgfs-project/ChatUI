@@ -22,7 +22,27 @@ import {
 import { healthRoute } from "./health.ts";
 import { getPreferencesRoute, updatePreferencesRoute } from "./preferences.ts";
 import { getOperationRoute } from "./operations.ts";
+import { createSkillRoute, deleteSkillRoute, listSkillsRoute, updateSkillRoute } from "./skills.ts";
 import { listModelsRoute, listProvidersRoute } from "./models.ts";
+import {
+  adminAuditRoute,
+  adminCreateProviderRoute,
+  adminCreateUserRoute,
+  adminDeleteProviderRoute,
+  adminDeleteUserRoute,
+  adminGetSettingsRoute,
+  adminGetUserRoute,
+  adminListModelsRoute,
+  adminListProvidersRoute,
+  adminListUsersRoute,
+  adminModelSettingsRoute,
+  adminRebuildIndexRoute,
+  adminSetPasswordRoute,
+  adminTestProviderRoute,
+  adminUpdateProviderRoute,
+  adminUpdateSettingsRoute,
+  adminUpdateUserRoute,
+} from "./admin.ts";
 
 /** The complete API route inventory. */
 export const apiRoutes: readonly AnyApiRoute[] = [
@@ -46,4 +66,27 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(getConversationRoute),
   erase(renameConversationRoute),
   erase(deleteConversationRoute),
+  // Skills (user request, Phase 10).
+  erase(listSkillsRoute),
+  erase(createSkillRoute),
+  erase(updateSkillRoute),
+  erase(deleteSkillRoute),
+  // Phase 10 administration (registry `admin` policy on every route).
+  erase(adminListUsersRoute),
+  erase(adminGetUserRoute),
+  erase(adminCreateUserRoute),
+  erase(adminUpdateUserRoute),
+  erase(adminSetPasswordRoute),
+  erase(adminDeleteUserRoute),
+  erase(adminListProvidersRoute),
+  erase(adminCreateProviderRoute),
+  erase(adminUpdateProviderRoute),
+  erase(adminDeleteProviderRoute),
+  erase(adminTestProviderRoute),
+  erase(adminListModelsRoute),
+  erase(adminModelSettingsRoute),
+  erase(adminGetSettingsRoute),
+  erase(adminUpdateSettingsRoute),
+  erase(adminRebuildIndexRoute),
+  erase(adminAuditRoute),
 ];

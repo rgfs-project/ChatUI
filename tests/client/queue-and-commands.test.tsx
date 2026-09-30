@@ -220,6 +220,40 @@ describe('"/" commands', () => {
     expect(posts("/api/generations")).toHaveLength(0);
   });
 
+  it("enabled skills are listed as a group; choosing one inserts /name and keeps typing", async () => {
+    const user = userEvent.setup();
+    const client = seededClient(conversation(history));
+    const skill = (name: string, enabled: boolean) => ({
+      id: crypto.randomUUID(),
+      name,
+      description: `${name} skill`,
+      instructions: "x",
+      enabled,
+      createdAt: "",
+      updatedAt: "",
+    });
+    client.setQueryData(queryKeys.skills(USER), [skill("haiku", true), skill("off", false)]);
+    renderAt(`/chat/${CONV}`, client);
+    await user.type(box(), "/ha");
+    const group = screen.getByRole("group", { name: "Skills" });
+    expect(
+      within(group)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["haikuhaiku skill"]);
+    await user.keyboard("{Enter}");
+    expect(box().value).toBe("/haiku ");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(document.activeElement).toBe(box());
+    await user.type(box(), "a poem{Enter}");
+    await waitFor(() => {
+      expect(posts("/api/generations")).toHaveLength(1);
+    });
+    expect(JSON.parse(posts("/api/generations")[0]?.[1]?.body as string)).toMatchObject({
+      content: "/haiku a poem",
+    });
+  });
+
   it("a new chat offers no rename/delete; clicking /settings opens settings", async () => {
     const user = userEvent.setup();
     renderAt("/chat/new");

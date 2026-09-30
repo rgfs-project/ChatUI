@@ -2,6 +2,8 @@
 export interface Command {
   name: string;
   description: string;
+  /** A built-in action (runs now) or one of the user's skills (inserted as "/name "). */
+  kind?: "command" | "skill";
 }
 
 /** The "/filter" typed so far, or null when the message is not a command. */
@@ -31,29 +33,41 @@ export function CommandMenu(props: {
   onPick: (command: Command) => void;
   onHover: (index: number) => void;
 }) {
+  const option = (command: Command, index: number) => (
+    <div
+      key={command.name}
+      id={commandOptionId(command.name)}
+      role="option"
+      aria-selected={index === props.activeIndex}
+      className="command-option"
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
+      onClick={() => {
+        props.onPick(command);
+      }}
+      onMouseEnter={() => {
+        props.onHover(index);
+      }}
+    >
+      <span className="command-name">{command.name}</span>
+      <span className="command-description">{command.description}</span>
+    </div>
+  );
+  const indexed = props.commands.map((command, index) => ({ command, index }));
+  const builtIn = indexed.filter(({ command }) => command.kind !== "skill");
+  const skills = indexed.filter(({ command }) => command.kind === "skill");
   return (
     <div className="command-menu" id={COMMAND_MENU_ID} role="listbox" aria-label="Commands">
-      {props.commands.map((command, index) => (
-        <div
-          key={command.name}
-          id={commandOptionId(command.name)}
-          role="option"
-          aria-selected={index === props.activeIndex}
-          className="command-option"
-          onMouseDown={(event) => {
-            event.preventDefault();
-          }}
-          onClick={() => {
-            props.onPick(command);
-          }}
-          onMouseEnter={() => {
-            props.onHover(index);
-          }}
-        >
-          <span className="command-name">{command.name}</span>
-          <span className="command-description">{command.description}</span>
+      {builtIn.map(({ command, index }) => option(command, index))}
+      {skills.length > 0 ? (
+        <div role="group" aria-labelledby="command-group-skills">
+          <div className="command-group" id="command-group-skills" role="presentation">
+            Skills
+          </div>
+          {skills.map(({ command, index }) => option(command, index))}
         </div>
-      ))}
+      ) : null}
     </div>
   );
 }

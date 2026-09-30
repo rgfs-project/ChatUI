@@ -1,0 +1,243 @@
+/* Settings → Skills (loaded only with the settings route chunk). */
+
+.skills-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.skills-head h2 {
+  flex: 1;
+  margin: 0;
+}
+
+.skills-head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skills-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--muted);
+}
+
+.skills-search:focus-within {
+  border-color: var(--faint);
+}
+
+.skills-search input {
+  width: 14rem;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+}
+
+.skills-search input:focus {
+  outline: none;
+}
+
+.skills-empty {
+  padding: 24px;
+  border-radius: 14px;
+  background: var(--hover);
+}
+
+.skills-empty h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.skills-empty p {
+  margin: 0 0 16px;
+  color: var(--fg-2);
+}
+
+.skills-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skills-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skill-row {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 4px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  font-weight: 400;
+  text-align: left;
+}
+
+.skill-row:hover .skill-name {
+  text-decoration: underline;
+}
+
+.skill-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--hover);
+  color: var(--fg-2);
+}
+
+.skill-text {
+  display: grid;
+  min-width: 0;
+}
+
+.skill-name {
+  font-weight: 500;
+}
+
+.skill-description {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* On/off switch (role="switch"), monochrome. */
+.switch {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--send-off);
+}
+
+.switch[aria-checked="true"] {
+  background: var(--send);
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: transform 0.12s ease;
+}
+
+.switch[aria-checked="true"] .switch-thumb {
+  transform: translateX(18px);
+}
+
+.link-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px -2px;
+  padding: 4px 2px;
+  background: transparent;
+  color: var(--fg-2);
+  font-weight: 400;
+}
+
+.link-back:hover {
+  color: var(--fg);
+}
+
+.skill-form {
+  display: grid;
+  gap: 6px;
+  max-width: 40rem;
+}
+
+.skill-form label {
+  margin-top: 10px;
+  color: var(--fg-2);
+  font-size: 14px;
+}
+
+.skill-form input:not([type="checkbox"]),
+.skill-form textarea {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--fg);
+}
+
+.skill-form textarea {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.skill-form input:focus,
+.skill-form textarea:focus {
+  border-color: var(--faint);
+  outline: none;
+}
+
+.skill-name-field {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+}
+
+.skill-name-field:focus-within {
+  border-color: var(--faint);
+}
+
+.skill-name-field span {
+  padding-left: 12px;
+  color: var(--muted);
+}
+
+.skill-name-field input:not([type="checkbox"]) {
+  flex: 1;
+  padding-left: 2px;
+  border: 0;
+}
+
+.skill-enabled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skill-form .spacer {
+  flex: 1;
+}
+
+.settings-body kbd,
+.settings-body code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--hover);
+  font-family: var(--mono);
+  font-size: 0.9em;
+}

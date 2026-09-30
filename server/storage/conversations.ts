@@ -1,6 +1,7 @@
 // Canonical conversation storage (contracts §1–§3). Loadable natively by Node.
 import { randomUUID } from "node:crypto";
 import { entryFor, stampOf, type ChatIndex, type IndexEntry } from "./chat-index.ts";
+import type { AccountWrites } from "./account.ts";
 import { atomicWrite, durableUnlink, ensureDir, readOrNull } from "./fs.ts";
 import { lockKeys, type KeyedLocks } from "./locks.ts";
 import {
@@ -62,11 +63,20 @@ export class ConversationStore {
     locks: KeyedLocks;
     index: ChatIndex;
     now?: () => Date;
+    /** Account write guard (INV-61); every canonical write runs through it. */
+    writes?: AccountWrites;
   }) {
     this.paths = options.paths;
     this.locks = options.locks;
     this.index = options.index;
     this.now = options.now ?? (() => new Date());
+    this.writes = options.writes;
+  }
+
+  private readonly writes: AccountWrites | undefined;
+
+  private guarded<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    return this.writes ? this.writes.run(userId, fn) : fn();
   }
 
   /** The data paths (for recovery-style checks by callers). */
@@ -113,23 +123,27 @@ export class ConversationStore {
         `refusing to write an invalid conversation: ${check.reason}`,
       );
     const bytes = Buffer.from(text, "utf8");
-    return this.index.mutate(userId, id, async () => {
-      await ensureDir(this.paths.chatsDir(userId));
-      const file = this.paths.chatFile(userId, id);
-      await atomicWrite(file, bytes);
-      const stamp = (await stampOf(file)) ?? { fileSize: bytes.length, fileMtimeMs: Date.now() };
-      return {
-        entry: entryFor(id, model, stamp),
-        result: { id, model, bytes, revision: sha256Hex(bytes) },
-      };
-    });
+    return this.guarded(userId, () =>
+      this.index.mutate(userId, id, async () => {
+        await ensureDir(this.paths.chatsDir(userId));
+        const file = this.paths.chatFile(userId, id);
+        await atomicWrite(file, bytes);
+        const stamp = (await stampOf(file)) ?? { fileSize: bytes.length, fileMtimeMs: Date.now() };
+        return {
+          entry: entryFor(id, model, stamp),
+          result: { id, model, bytes, revision: sha256Hex(bytes) },
+        };
+      }),
+    );
   }
 
   async deleteUnlocked(userId: string, id: string): Promise<boolean> {
-    return this.index.mutate(userId, id, async () => {
-      const removed = await durableUnlink(this.paths.chatFile(userId, id));
-      return { entry: null, result: removed };
-    });
+    return this.guarded(userId, () =>
+      this.index.mutate(userId, id, async () => {
+        const removed = await durableUnlink(this.paths.chatFile(userId, id));
+        return { entry: null, result: removed };
+      }),
+    );
   }
 
   list(userId: string): IndexEntry[] {

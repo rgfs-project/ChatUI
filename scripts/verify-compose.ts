@@ -135,10 +135,16 @@ async function main(): Promise<void> {
     CHATUI_IMAGE: `localhost/chatui:verify-${id}`,
     PUBLIC_ORIGIN: `http://127.0.0.1:${String(hostPort)}`,
   };
-  const compose = (args: string[], quiet = false, files: string[] = ["compose.yaml"]) =>
+  const compose = (
+    args: string[],
+    quiet = false,
+    files: string[] = ["compose.yaml"],
+    input?: string,
+  ) =>
     run(engine, ["compose", "-p", project, ...files.flatMap((f) => ["-f", f]), ...args], {
       env,
       quiet,
+      ...(input === undefined ? {} : { input }),
     });
   const base = `http://127.0.0.1:${String(hostPort)}`;
   // Engine-level lookup by the standard Compose labels (set by Docker Compose and
@@ -289,6 +295,31 @@ async function main(): Promise<void> {
         page.headers.get("cache-control") === "private, no-store" &&
         pageHtml.includes('id="message"'),
     );
+    // Operator password reset (Phase 10): stdin only, signs the account out everywhere.
+    const reset = await compose(
+      [
+        "exec",
+        "-T",
+        "chatui",
+        "node",
+        "server/cli.ts",
+        "user:reset-password",
+        "--username",
+        "admin",
+      ],
+      true,
+      ["compose.yaml"],
+      "a reset admin password\n",
+    );
+    const oldSession = session
+      ? await fetch(`${base}/api/conversations`, { headers: sessionHeaders(session) })
+      : undefined;
+    const relogin = await apiLogin(base, "admin", "a reset admin password");
+    check(
+      "container: user:reset-password (stdin) signs the account out and sets the new password",
+      reset.code === 0 && oldSession?.status === 401 && relogin !== undefined,
+      reset.stderr.trim(),
+    );
     const healthJson = (await (await fetch(`${base}/api/health`)).json()) as { version?: string };
     check("container serves this build's version", healthJson.version === version);
 
@@ -360,6 +391,17 @@ async function main(): Promise<void> {
     check("/data is writable by the app user", write.code === 0, write.stderr.trim());
     const down = await compose(["down"]);
     check("compose down keeps the volume", down.code === 0);
+    // Index rebuild is an offline operator command (single process: server stopped).
+    const rebuild = await compose(
+      // `run` uses the image entrypoint (`node server/cli.ts`); `exec` does not.
+      ["run", "--rm", "--no-deps", "chatui", "index:rebuild"],
+      true,
+    );
+    check(
+      "container: index:rebuild runs against /data with the server stopped",
+      rebuild.code === 0 && rebuild.stdout.includes("conversation(s) indexed"),
+      (rebuild.stderr + rebuild.stdout).trim(),
+    );
     const recreate = await compose(["up", "-d", "--force-recreate"]);
     check("compose up after recreate", recreate.code === 0 && (await waitForHealth(base)));
     const read = await compose(["exec", "-T", "chatui", "cat", "/data/.verify-sentinel"], true);

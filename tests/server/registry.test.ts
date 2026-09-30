@@ -83,7 +83,9 @@ describe("API route registry", () => {
       expect(route.path.startsWith("/api/")).toBe(true);
       if (route.kind !== "sse") expect(route.response).toBeInstanceOf(z.ZodType);
       for (const schema of Object.values(route.request)) expect(schema).toBeInstanceOf(z.ZodType);
-      expect(route.auth, key(route)).toBe(PUBLIC.has(key(route)) ? "public" : "user");
+      expect(route.auth, key(route)).toBe(
+        PUBLIC.has(key(route)) ? "public" : route.path.startsWith("/api/admin/") ? "admin" : "user",
+      );
       if (route.method === "get") expect(route.csrf, key(route)).toBe("none");
       else expect(["token", "origin"], key(route)).toContain(route.csrf);
       if (route.csrf === "origin") expect(route.auth).toBe("public");
@@ -92,7 +94,7 @@ describe("API route registry", () => {
 
   it("INV-15: unauthenticated access to every protected route is a JSON 401", async () => {
     const { base } = await serve();
-    const protectedRoutes = apiRoutes.filter((route) => route.auth === "user");
+    const protectedRoutes = apiRoutes.filter((route) => route.auth !== "public");
     expect(protectedRoutes.length).toBeGreaterThanOrEqual(14);
     for (const route of protectedRoutes) {
       const res = await call(base, route, {});
@@ -103,10 +105,12 @@ describe("API route registry", () => {
 
   it("INV-16: every state-changing route rejects a missing or wrong CSRF token and a stale expected user", async () => {
     const { base, chatui } = await serve();
-    const session = await signIn(base, chatui);
+    const user = await signIn(base, chatui);
+    const admin = await signIn(base, chatui, "root", "admin");
     const mutations = apiRoutes.filter((route) => route.csrf === "token");
     expect(mutations.length).toBeGreaterThanOrEqual(7);
     for (const route of mutations) {
+      const session = route.auth === "admin" ? admin : user;
       const none = await call(base, route, {
         Cookie: session.cookie,
         "X-Expected-User": session.userId,
@@ -142,12 +146,14 @@ describe("API route registry", () => {
 
   it("every route answers its fixture with a DTO or a contract error (signed in where required)", async () => {
     const { base, chatui } = await serve();
-    const session: TestSession = await signIn(base, chatui);
+    const user: TestSession = await signIn(base, chatui);
+    const admin: TestSession = await signIn(base, chatui, "root", "admin");
     for (const route of apiRoutes) {
+      const session = route.auth === "admin" ? admin : user;
       // Covered by the auth tests; calling them here would end this session.
       if (key(route) === "POST /api/auth/logout" || key(route) === "POST /api/auth/password")
         continue;
-      const headers = route.auth === "user" ? session.headers(route.csrf === "token") : {};
+      const headers = route.auth === "public" ? {} : session.headers(route.csrf === "token");
       const res = await call(base, route, headers);
       const expected =
         route.auth === "user" && route.fixture.expectStatus === 401
@@ -184,18 +190,25 @@ describe("API route registry", () => {
 
   it("INV-14: no route takes identity from the request", () => {
     const identityKeys = /^(userId|ownerId|user|owner|role)$/;
+    // Admin routes name a *target* account (its id or new role); the acting
+    // identity still comes only from the session.
+    const targetKeys = /^(userId|role)$/;
     for (const route of apiRoutes) {
       for (const schema of Object.values(route.request)) {
         const shape = (schema as { shape?: Record<string, unknown> }).shape ?? {};
-        for (const name of Object.keys(shape))
-          expect(identityKeys.test(name), `${key(route)} ${name}`).toBe(false);
+        for (const name of Object.keys(shape)) {
+          const allowed = route.auth === "admin" && targetKeys.test(name);
+          expect(identityKeys.test(name) && !allowed, `${key(route)} ${name}`).toBe(false);
+        }
       }
     }
     const dir = path.resolve(import.meta.dirname, "../../server/routes");
     for (const file of readdirSync(dir)) {
       const source = readFileSync(path.join(dir, file), "utf8");
       expect(source, file).not.toMatch(/req\.(headers|query|body|params|cookies)/);
-      expect(source, file).not.toMatch(/params\.userId|body\.userId|query\.userId/);
+      // admin.ts: `body.userId` names the *target* of maintenance, never the actor.
+      if (file !== "admin.ts")
+        expect(source, file).not.toMatch(/params\.userId|body\.userId|query\.userId/);
     }
   });
 

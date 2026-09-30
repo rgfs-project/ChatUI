@@ -1,3 +1,7 @@
+import { AccountAdmin } from "./admin/accounts.ts";
+import { AuditLog } from "./admin/audit.ts";
+import { ProviderAdmin } from "./admin/providers.ts";
+import { SettingsStore } from "./admin/settings.ts";
 import path from "node:path";
 import express, { type Express, type RequestHandler } from "express";
 import { pinoHttp } from "pino-http";
@@ -9,17 +13,19 @@ import { DEFAULT_SSE_OPTIONS, SseConnections, type SseOptions } from "./generati
 import { createLlamaCppProvider } from "./providers/llamacpp.ts";
 import type { Provider } from "./providers/types.ts";
 import { loadProviders, type ProviderEntry } from "./providers/config.ts";
-import { createSafeFetch, type Resolver } from "./providers/ssrf.ts";
+import { createSafeFetch, systemResolver, type Resolver } from "./providers/ssrf.ts";
 import { PasswordHasher } from "./auth/passwords.ts";
 import { AuthService, type AuthContext } from "./auth/service.ts";
 import { SessionStore } from "./auth/sessions.ts";
 import { PreferencesStore } from "./storage/preferences.ts";
+import { SkillsStore } from "./storage/skills.ts";
 import { UserStore } from "./storage/users.ts";
 import { SendService, type SendServiceOptions } from "./chat/send-service.ts";
 import { ChatIndex } from "./storage/chat-index.ts";
 import { CheckpointStore } from "./storage/checkpoints.ts";
 import { ConversationStore } from "./storage/conversations.ts";
-import { KeyedLocks } from "./storage/locks.ts";
+import { KeyedLocks, UserBarrier } from "./storage/locks.ts";
+import { AccountWrites } from "./storage/account.ts";
 import { OperationStore } from "./storage/operations.ts";
 import { DataPaths } from "./storage/paths.ts";
 import {
@@ -151,9 +157,23 @@ export function createApp(options: AppOptions): ChatUiApp {
   });
 
   const locks = new KeyedLocks();
+  // Every write into a user's directory runs under the account barrier (INV-61).
+  const barrier = new UserBarrier();
+  const accountWrites = new AccountWrites(paths, barrier);
+  const skills = new SkillsStore(paths, locks, accountWrites, now);
   const index = new ChatIndex(paths, logger);
-  const conversations = new ConversationStore({ paths, locks, index, now });
-  const operations = new OperationStore(paths);
+  const conversations = new ConversationStore({ paths, locks, index, now, writes: accountWrites });
+  const operations = new OperationStore(paths, accountWrites);
+  // Instance settings (Phase 10) apply live: generation limits and registration.
+  const settings = new SettingsStore({
+    paths,
+    locks,
+    logger,
+    onChange: (next) => {
+      generations.setMaxActivePerUser(next.generation?.maxActivePerUser);
+    },
+  });
+  const audit = new AuditLog({ paths, locks, now });
   const send = new SendService({
     store: conversations,
     checkpoints,
@@ -166,6 +186,8 @@ export function createApp(options: AppOptions): ChatUiApp {
     contextTrimStep: storageConfig.contextTrimStep,
     templateOverheadTokens: storageConfig.templateOverheadTokens,
     now,
+    settings,
+    skills,
     ...options.send,
   });
   const users = new UserStore({ paths, locks, now });
@@ -188,6 +210,18 @@ export function createApp(options: AppOptions): ChatUiApp {
     onAccountRejected: (userId) => {
       generations.cancelForUser(userId);
     },
+    registrationMode: () => settings.get().registrationMode,
+  });
+  const accountAdmin = new AccountAdmin({
+    users,
+    sessions,
+    auth,
+    generations,
+    barrier,
+    paths,
+    index,
+    checkpoints,
+    logger,
   });
   const sseConnections = new SseConnections({
     maxPerUser: authConfig.maxSsePerUser,
@@ -200,6 +234,8 @@ export function createApp(options: AppOptions): ChatUiApp {
 
   // Startup recovery (contracts §2) and account/session housekeeping.
   const ready: Promise<RecoveryReport> = (async () => {
+    // Finish interrupted account closures before anything reads accounts (INV-61).
+    await accountAdmin.resumeClosures();
     const report = await recoverStorage({
       paths,
       operations,
@@ -216,7 +252,16 @@ export function createApp(options: AppOptions): ChatUiApp {
     });
     await users.rebuildIndex();
     await sessions.sweep();
+    await settings.load();
     // Providers: authoritative providers.json (bootstrapped once from LLAMA_*).
+    await installProviders();
+    // Discovery never blocks startup.
+    models.warmUp();
+    return report;
+  })();
+
+  /** (Re)loads providers.json into the running registry (startup and admin edits). */
+  async function installProviders() {
     const loaded = await loadProviders({
       paths,
       policy: providerConfig.ssrf,
@@ -238,13 +283,24 @@ export function createApp(options: AppOptions): ChatUiApp {
       })),
       loaded.invalid,
     );
+    slotsLearned.clear();
     for (const entry of loaded.valid)
       generations.setProviderLimit(entry.id, entry.maxActiveGenerations ?? 1);
     updateGlobalLimit();
-    // Discovery never blocks startup.
-    models.warmUp();
-    return report;
-  })();
+    return loaded;
+  }
+  const providerAdmin = new ProviderAdmin({
+    paths,
+    locks,
+    policy: providerConfig.ssrf,
+    resolver: options.resolver ?? systemResolver,
+    catalog: models,
+    reload: async () => {
+      const loaded = await installProviders();
+      models.warmUp();
+      return { invalid: loaded.invalid };
+    },
+  });
   // Expired sessions and committed operation records are removed hourly.
   const retentionTimer = setInterval(() => {
     void (async () => {
@@ -270,7 +326,40 @@ export function createApp(options: AppOptions): ChatUiApp {
       toConversationDto(await conversations.get(userId, id), services, userId),
     auth,
     users,
-    preferences: new PreferencesStore(paths, locks),
+    preferences: new PreferencesStore(paths, locks, accountWrites),
+    skills,
+    modelList: async (role, listOptions) => {
+      const providers = await models.listModels(listOptions);
+      const visible =
+        role === "admin"
+          ? providers
+          : providers.map((group) => ({
+              ...group,
+              models: group.models.filter((m) => !settings.isHidden(m.providerId, m.id)),
+            }));
+      const fallback = settings.get().defaultModel ?? null;
+      const defaultModel =
+        fallback &&
+        visible.some((g) =>
+          g.models.some((m) => m.providerId === fallback.providerId && m.id === fallback.modelId),
+        )
+          ? fallback
+          : null;
+      return { providers: visible, defaultModel };
+    },
+    admin: {
+      accounts: accountAdmin,
+      providers: providerAdmin,
+      settings,
+      audit,
+      rebuildIndex: async (userId) => {
+        const ids = userId ? [userId] : await accountIds(paths);
+        let total = 0;
+        for (const id of ids)
+          total += (await accountWrites.run(id, () => index.rebuild(id))).length;
+        return total;
+      },
+    },
     sseConnections,
     health: createHealthService(options.version),
     models,

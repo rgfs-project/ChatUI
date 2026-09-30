@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "../../app/components/Sidebar";
@@ -80,11 +80,12 @@ async function menuTrigger(name = "Actions for Trip plans") {
 
 describe("INV-47: menus (Radix DropdownMenu)", () => {
   it("a click before the menu chunk has loaded opens the menu once it arrives", async () => {
-    const user = userEvent.setup();
     renderSidebar();
     const placeholder = screen.getByRole("button", { name: "Actions for Trip plans" });
     expect(placeholder.getAttribute("aria-haspopup")).toBeNull();
-    await user.click(placeholder);
+    // One synchronous click on the placeholder (a multi-event pointer sequence
+    // could straddle the chunk arriving).
+    fireEvent.click(placeholder);
     const menu = await screen.findByRole("menu");
     expect(within(menu).getAllByRole("menuitem")).toHaveLength(2);
   });

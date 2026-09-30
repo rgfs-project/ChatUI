@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { modelListDtoSchema, providerListDtoSchema } from "@shared/generations";
-import { defineRoute } from "../registry.ts";
+import { defineRoute, userOf } from "../registry.ts";
 
 /** Non-sensitive provider list: never base URLs or API keys. */
 export const listProvidersRoute = defineRoute({
@@ -22,8 +22,7 @@ export const listModelsRoute = defineRoute({
   csrf: "none",
   request: { query: z.strictObject({ refresh: z.enum(["1"]).optional() }) },
   response: modelListDtoSchema,
-  handler: async ({ query }, ctx) => ({
-    providers: await ctx.services.models.listModels({ fresh: query.refresh === "1" }),
-  }),
+  handler: ({ query }, ctx) =>
+    ctx.services.modelList(userOf(ctx).role, { fresh: query.refresh === "1" }),
   fixture: {},
 });

@@ -42,6 +42,8 @@ export const GROUPS: Record<string, string[]> = {
   "critical-chat-js": ["root", "routes/app-layout", "routes/chat-conversation"],
   "new-chat-js": ["root", "routes/app-layout", "routes/chat-new"],
   "login-js": ["root", "routes/login"],
+  /** The lazy admin route (Phase 10): never part of the chat groups above. */
+  "admin-route-js": ["root", "routes/app-layout", "routes/admin"],
 };
 
 export function readManifest(): Manifest {
@@ -74,9 +76,16 @@ export function measure(): Record<string, number> {
   const sizes: Record<string, number> = {};
   for (const [name, routes] of Object.entries(GROUPS))
     sizes[name] = filesFor(manifest, routes).reduce((n, f) => n + gzipBytes(f), 0);
-  // The app stylesheet is linked by the root route on every page.
+  // The app stylesheet (linked by the root on every page) plus the critical
+  // chat routes' own CSS; stylesheets only lazy routes use are excluded.
+  const critical = new Set(GROUPS["critical-chat-js"]);
+  const lazyCss = new Set(
+    Object.entries(manifest.routes)
+      .filter(([id]) => !critical.has(id))
+      .flatMap(([, route]) => route.css ?? []),
+  );
   sizes["critical-css"] = readdirSync(ASSETS)
-    .filter((f) => f.endsWith(".css"))
+    .filter((f) => f.endsWith(".css") && !lazyCss.has(`/assets/${f}`))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
   sizes["all-client-js"] = readdirSync(ASSETS)
     .filter((f) => f.endsWith(".js"))

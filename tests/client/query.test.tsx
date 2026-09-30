@@ -63,15 +63,13 @@ function requestContext(userId: string | null, titles: Record<string, string[]>)
           summary(`00000000-0000-4000-8000-${String(n).padStart(12, "0")}`, title),
         ),
     },
-    models: {
-      // Resolves on a later tick so concurrent requests interleave.
-      listModels: () =>
-        new Promise((resolve) =>
-          setTimeout(() => {
-            resolve(MODELS.providers);
-          }, 5),
-        ),
-    },
+    // Resolves on a later tick so concurrent requests interleave.
+    modelList: () =>
+      new Promise((resolve) =>
+        setTimeout(() => {
+          resolve({ providers: MODELS.providers, defaultModel: null });
+        }, 5),
+      ),
   };
   context.set(appContext, {
     services,

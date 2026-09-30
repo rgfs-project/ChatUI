@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 9 (performance).** A server-rendered, monochrome chat interface built composer-first: the page is readable and typeable before JavaScript loads, the critical bundle is budgeted and served precompressed, interaction-only code loads on demand, and hovering a conversation prefetches it. Messages appear the moment you send them, an expired session asks you to sign in again in place, and generations survive disconnects and restarts. Admin, mobile layout and uploads arrive in later phases.
+> **Status: Phase 10 (administration).** A server-rendered, monochrome chat interface built composer-first, plus an admin dashboard: users (create, reset passwords, roles, disable, delete), providers (write-only API keys, network-policy checks), per-model visibility, sampling and system prompts, instance settings, index maintenance and an audit log. Authorization is always enforced on the server. Skills (Settings → Customize → Skills) let you save instructions and apply them to a message by starting it with `/name` or picking it from the `/` list. Mobile layout and uploads arrive in later phases.
 
 ## Prerequisites
 
@@ -46,6 +46,7 @@ Operator commands are introduced as their services exist. Until then they exit w
 | `provider:check` (reachability and credentials of `LLAMA_BASE_URL`)      | Phase 2        |
 | `index:rebuild` (rebuild derived indexes; server stopped)                | Phase 3        |
 | `user:create --username <name> [--admin]` (password via prompt or stdin) | Phase 4        |
+| `user:reset-password --username <name>` (prompt or stdin; signs out)     | Phase 10       |
 | `backup`, `restore`                                                      | Phase 16       |
 
 Updating: `git pull && docker compose up -d --build`. The `/data` volume is reused.
@@ -67,6 +68,18 @@ docker compose exec chatui node server/cli.ts user:create --username admin --adm
 ```
 
 Then open the URL in `PUBLIC_ORIGIN` (default `http://localhost:3000`) and sign in. `REGISTRATION_MODE=open` lets people create their own accounts at `/register`. Changing your password at `/account` signs you out everywhere.
+
+## Administration
+
+Admins find **Administration** in Settings (`/admin`):
+
+- **Users:** create accounts, set passwords (signs the user out everywhere), change role or status, and delete accounts (type the username to confirm; all their data is removed). The last active admin can't be demoted, disabled or deleted.
+- **Providers:** add, edit, test and remove OpenAI-compatible providers. Every save re-checks the endpoint against the network policy. API keys are write-only: they're never shown again, and you can replace or remove them.
+- **Models:** hide models from users, set per-model temperature, top-p, top-k, min-p, repeat penalty and system prompts (with `{{username}}`, `{{date}}`, `{{timezone}}`), and optionally tell the model the current time. Refresh discovery.
+- **Settings:** registration (overrides `REGISTRATION_MODE`), default model, time zone and generation limits.
+- **Maintenance and audit log:** rebuild conversation indexes, and see who changed what (never the values).
+
+Operators without the UI: `docker compose exec chatui node server/cli.ts user:reset-password --username <name>` (password on the prompt or stdin). `providers.json` is created from `LLAMA_*` only on a fresh volume; afterwards admin edits are authoritative across restarts.
 
 ## Chatting (development)
 

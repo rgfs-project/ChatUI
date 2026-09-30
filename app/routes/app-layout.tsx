@@ -46,7 +46,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const userId = auth.userId;
   const dehydratedState = await prefetchForRequest(async (client) => {
     const models = await Promise.race([
-      services.models.listModels().then((providers) => ({ providers })),
+      services.modelList(auth.role),
       new Promise<null>((resolve) => {
         setTimeout(() => {
           resolve(null);

@@ -344,4 +344,36 @@ test.describe("composer", () => {
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await page.keyboard.press("Escape");
   });
+
+  test('a skill created in Settings is offered by "/" and reaches the model', async ({ page }) => {
+    await page.goto(`${base()}/chat/new`);
+    await hydrated(page);
+    await openSettings(page);
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await settings.getByRole("button", { name: "Skills" }).click();
+    await settings
+      .getByRole("button", { name: /^(Add|Create a skill)$/ })
+      .first()
+      .click();
+    await settings.getByLabel("Name").fill("pirate");
+    await settings.getByLabel("Description").fill("Talk like a pirate");
+    await settings.getByLabel("Instructions").fill("PIRATE-MODE-ON");
+    await settings.getByRole("button", { name: "Save" }).click();
+    await expect(settings.getByRole("list", { name: "Your skills" })).toContainText("/pirate");
+    await page.keyboard.press("Escape");
+    await expect(settings).toBeHidden();
+
+    await page.locator("#model").selectOption(CHAT);
+    await page.locator("#message").pressSequentially("/pir");
+    const group = page.getByRole("group", { name: "Skills" });
+    await expect(group.getByRole("option")).toHaveCount(1);
+    await page.locator("#message").press("Enter");
+    await expect(page.locator("#message")).toHaveValue("/pirate ");
+    await page.locator("#message").pressSequentially("ahoy");
+    await page.locator("#message").press("Enter");
+    await expect(page.getByTestId("message-user").last()).toContainText("/pirate ahoy");
+    await expect(page.getByTestId("message-assistant").last()).toContainText("PIRATE-MODE-ON", {
+      timeout: 20_000,
+    });
+  });
 });

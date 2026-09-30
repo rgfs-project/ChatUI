@@ -137,6 +137,9 @@ export function ConversationView(props: {
     enabled: conversationId !== undefined && !props.initialError,
   });
   const modelsQuery = useQuery(queries.models(userId));
+  // Skills are only needed once the user types "/": never a startup request.
+  const [wantSkills, setWantSkills] = useState(false);
+  const skillsQuery = useQuery({ ...queries.skills(userId), enabled: wantSkills });
   const conversation: ConversationDto | undefined = conversationQuery.data;
   const loadError =
     conversationQuery.error instanceof ApiError
@@ -427,6 +430,13 @@ export function ConversationView(props: {
         ]
       : []),
     { name: "settings", description: "Open settings" },
+    ...(skillsQuery.data ?? [])
+      .filter((skill) => skill.enabled)
+      .map((skill) => ({
+        name: skill.name,
+        description: skill.description || "Skill",
+        kind: "skill" as const,
+      })),
   ];
 
   return (
@@ -626,6 +636,9 @@ export function ConversationView(props: {
         commands={commands}
         onSubmit={submit}
         onCommand={runCommand}
+        onCommandIntent={() => {
+          setWantSkills(true);
+        }}
         onCancel={() => void cancel()}
       />
       {actions.dialogs}

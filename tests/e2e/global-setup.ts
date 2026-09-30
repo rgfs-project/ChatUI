@@ -21,17 +21,19 @@ export const E2E_USER = "e2e";
 export const E2E_PASSWORD = "e2e password 1234";
 /** A second account for account-switch tests. */
 export const E2E_OTHER_USER = "e2e-other";
+/** An administrator (Phase 10 admin UI tests). */
+export const E2E_ADMIN = "e2e-admin";
 /** A seeded 200-message conversation owned by E2E_USER. */
 export const LONG_CONVERSATION = "7e0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d";
 export const LONG_TITLE = "Long seeded conversation";
 /** Unique text in an older message (find-in-page). */
 export const OLDER_NEEDLE = "needle-older-message-17";
 
-function createUser(dataDir: string, username: string): Promise<void> {
+function createUser(dataDir: string, username: string, admin = false): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ["server/cli.ts", "user:create", "--username", username],
+      ["server/cli.ts", "user:create", "--username", username, ...(admin ? ["--admin"] : [])],
       {
         cwd: ROOT,
         env: { ...process.env, DATA_DIR: dataDir },
@@ -112,6 +114,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
   await createUser(dataDir, E2E_USER);
   await createUser(dataDir, E2E_OTHER_USER);
+  await createUser(dataDir, E2E_ADMIN, true);
   seedLongConversation(dataDir, userIdOf(dataDir, E2E_USER));
   const port = await freePort();
   const base = `http://127.0.0.1:${String(port)}`;
@@ -152,11 +155,15 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
   process.env.E2E_BASE_URL = base;
   process.env.E2E_DATA_DIR = dataDir;
+  // Signed-in storage states for this run (see tests/e2e/auth.ts).
+  const stateDir = mkdtempSync(path.join(tmpdir(), "chatui-e2e-state-"));
+  process.env.E2E_STATE_DIR = stateDir;
   return async () => {
     const exited = new Promise((resolve) => server.once("exit", resolve));
     server.kill("SIGTERM");
     await exited;
     await llama.close();
     rmSync(dataDir, { recursive: true, force: true });
+    rmSync(stateDir, { recursive: true, force: true });
   };
 }

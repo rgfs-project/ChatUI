@@ -1,3 +1,4 @@
+import type { SkillDto } from "@shared/skills";
 import { QueryClient, queryOptions } from "@tanstack/react-query";
 import type { SessionDto } from "@shared/auth";
 import type { ConversationDto, ConversationSummary } from "@shared/conversations";
@@ -16,6 +17,7 @@ export const queryKeys = {
   generation: (userId: string, id: string) => ["user", userId, "generation", id] as const,
   models: (userId: string) => ["user", userId, "models"] as const,
   preferences: (userId: string) => ["user", userId, "preferences"] as const,
+  skills: (userId: string) => ["user", userId, "skills"] as const,
   /** Mutation key for sends (optimistic messages are read from its state). */
   sends: (userId: string) => ["user", userId, "send"] as const,
 };
@@ -119,6 +121,8 @@ export const fetchers = {
       ...(signal ? { signal } : {}),
       ...(priority ? { priority } : {}),
     }),
+  skills: async (signal?: AbortSignal) =>
+    (await apiJson<{ skills: SkillDto[] }>("/api/skills", signal ? { signal } : {})).skills,
   models: (refresh = false, signal?: AbortSignal) =>
     apiJson<ModelListDto>(`/api/models${refresh ? "?refresh=1" : ""}`, signal ? { signal } : {}),
 };
@@ -143,6 +147,13 @@ export const queries = {
     queryOptions({
       queryKey: queryKeys.conversations(userId),
       queryFn: ({ signal }) => fetchers.conversations(signal),
+      retry: retryable,
+    }),
+  // The user's skills: loaded after hydration (secondary; the "/" list and Settings).
+  skills: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.skills(userId),
+      queryFn: ({ signal }) => fetchers.skills(signal),
       retry: retryable,
     }),
   conversation: (userId: string, id: string) =>

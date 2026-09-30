@@ -52,7 +52,11 @@ export const providerModelsDtoSchema = z.strictObject({
 });
 export type ProviderModelsDto = z.infer<typeof providerModelsDtoSchema>;
 
-export const modelListDtoSchema = z.strictObject({ providers: z.array(providerModelsDtoSchema) });
+export const modelListDtoSchema = z.strictObject({
+  providers: z.array(providerModelsDtoSchema),
+  /** Instance default (Phase 10), preselected when nothing else applies. */
+  defaultModel: z.strictObject({ providerId: z.string(), modelId: z.string() }).nullable(),
+});
 export type ModelListDto = z.infer<typeof modelListDtoSchema>;
 
 export const chatMessageSchema = z.strictObject({

@@ -26,14 +26,18 @@ export interface HistoryGroups {
   groups: PromptMessage[][];
 }
 
-export function historyGroups(model: ConversationModel): HistoryGroups {
+export function historyGroups(
+  model: ConversationModel,
+  /** Rewrites each user body for the provider (skills); stored text is untouched. */
+  expandUser: (body: string) => string = (body) => body,
+): HistoryGroups {
   const system: PromptMessage[] = [];
   const groups: PromptMessage[][] = [];
   for (const block of model.blocks) {
     if (block.type === "system") {
       system.push({ role: "system", content: block.body });
     } else if (block.type === "user") {
-      groups.push([{ role: "user", content: block.body }]);
+      groups.push([{ role: "user", content: expandUser(block.body) }]);
     } else if (block.type === "assistant" && block.body !== "") {
       groups.at(-1)?.push({ role: "assistant", content: block.body });
     }
@@ -95,12 +99,36 @@ export function anchorsFor(costs: number[], step: number): number[] {
  */
 export async function assemblePrompt(
   model: ConversationModel,
-  options: { budget: number; trimStep: number; counter: TokenCounter },
+  options: {
+    budget: number;
+    trimStep: number;
+    counter: TokenCounter;
+    /** Configured system instructions (Phase 10), before the file's system blocks. */
+    instructions?: string | undefined;
+    /**
+     * Volatile server context (e.g. time of day), placed only in front of the
+     * newest user message so it never changes the prompt prefix (contracts §4 item 3).
+     */
+    contextBlock?: string | undefined;
+    /** Expands user messages that invoke a skill ("/name …"). */
+    expandUser?: ((body: string) => string) | undefined;
+  },
 ): Promise<AssembledPrompt> {
   const { budget, counter } = options;
-  const { system, groups } = historyGroups(model);
+  const history = historyGroups(model, options.expandUser);
+  const system = options.instructions
+    ? [{ role: "system" as const, content: options.instructions }, ...history.system]
+    : history.system;
+  const groups = history.groups;
   const newest = groups.length - 1;
   if (newest < 0) throw new Error("assemblePrompt requires a newest user message");
+  const newestGroup = groups[newest];
+  const newestUser = newestGroup?.[0];
+  if (options.contextBlock && newestGroup && newestUser)
+    groups[newest] = [
+      { ...newestUser, content: `${options.contextBlock}\n\n${newestUser.content}` },
+      ...newestGroup.slice(1),
+    ];
 
   const systemCost = system.length > 0 ? await counter.countGroup(system) : 0;
   const costs = await Promise.all(groups.map((group) => counter.countGroup(group)));
