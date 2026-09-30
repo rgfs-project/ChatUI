@@ -40,7 +40,8 @@ RUN mkdir -p /data && chown node:node /data && chmod 0700 /data
 COPY package.json ./
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/build ./build
-COPY server/cli.ts server/main.ts server/config.ts server/logger.ts server/loopback.ts ./server/
+COPY server/cli.ts server/main.ts server/config.ts server/logger.ts server/loopback.ts \
+  server/backup.ts server/http-limits.ts ./server/
 COPY server/storage ./server/storage
 COPY server/auth/passwords.ts server/auth/sessions.ts ./server/auth/
 COPY server/providers/ssrf.ts ./server/providers/ssrf.ts

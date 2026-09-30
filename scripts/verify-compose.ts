@@ -243,13 +243,15 @@ async function main(): Promise<void> {
       true,
     );
     check("CLI healthcheck exits 0", cliHealth.code === 0);
-    const planned = await compose(
-      ["exec", "-T", "chatui", "node", "server/cli.ts", "backup"],
+    // One process owns /data (Phase 16): a backup refuses while the server runs.
+    const busy = await compose(
+      ["exec", "-T", "chatui", "node", "server/cli.ts", "backup", "/tmp/chatui-backup"],
       true,
     );
     check(
-      "planned CLI commands fail clearly instead of succeeding",
-      planned.code === 2 && planned.stderr.includes("Phase 16"),
+      "INV-50: backup refuses while the server holds /data",
+      busy.code === 1 && busy.stderr.includes("in use"),
+      busy.stderr.trim(),
     );
 
     // Application behaviour inside the container.

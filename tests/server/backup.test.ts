@@ -222,6 +222,11 @@ describe("INV-50: backup and restore", () => {
     const dest = path.join(tempDir("chatui-backup-"), "snapshot");
     await createBackup(dataDir, dest);
     await expect(createBackup(dataDir, dest)).rejects.toThrow(/new or empty/);
+    // A backup inside DATA_DIR would copy itself.
+    await expect(createBackup(dataDir, path.join(dataDir, "backups", "b1"))).rejects.toThrow(
+      /outside DATA_DIR/,
+    );
+    await expect(createBackup(dataDir, dataDir)).rejects.toThrow(/outside DATA_DIR/);
 
     // Into existing data: never merged.
     await expect(restoreBackup(dest, dataDir)).rejects.toThrow(/not empty/);

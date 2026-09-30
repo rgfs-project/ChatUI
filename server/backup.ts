@@ -126,6 +126,9 @@ export async function createBackup(
 ): Promise<BackupManifest> {
   const includeSessions = options.includeSessions ?? false;
   if (!existsSync(dataDir)) throw new BackupError(`DATA_DIR does not exist: ${dataDir}`);
+  const inside = path.relative(path.resolve(dataDir), path.resolve(dest));
+  if (inside === "" || (!inside.startsWith("..") && !path.isAbsolute(inside)))
+    throw new BackupError("the backup directory must be outside DATA_DIR");
   if (!(await emptyOrMissing(dest)))
     throw new BackupError("the backup directory must be new or empty");
   await mkdir(path.join(dest, "data"), { recursive: true, mode: 0o700 });
