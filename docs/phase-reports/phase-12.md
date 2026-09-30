@@ -59,7 +59,7 @@
     - Paste an image; drop a file; remove → DELETE.
     - SVG refused with a message; text-model warning.
     - Audio chip with `preload="none"`.
-    - A 40-image conversation loads fewer than 20 image payloads and no audio/text bytes.
+    - A 120-image conversation loads fewer than half of its image payloads on open, no audio/text bytes, and more images when scrolled to. (CI fix: with the first 40-image seed, Chromium 153 loaded exactly half, because its lazy-loading margin is larger and the pre-hydration view starts at the top.)
     - Attachment endpoints never answer with HTML.
     - Phone 390×844: the picker opens only from `+`; at 390×480 (keyboard) the chips and Send stay inside the viewport; 44 px targets; no overflow.
   - `scripts/verify.ts` (+8 checks): JSON 401/404/400 for attachment endpoints in production, sniffed PNG, id-named directory, content headers, SVG refused, a planted lazy-chunk leak fails `perf:check`.

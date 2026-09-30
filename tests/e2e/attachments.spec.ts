@@ -196,15 +196,28 @@ test.describe("attachments (desktop)", () => {
     });
     await page.goto(`${base()}/chat/${ATTACHMENTS_CONVERSATION}`);
     await page.waitForSelector('html[data-hydrated="true"]');
-    // The transcript opens pinned to the latest message; the images are in the earliest ones.
+    // Only thumbnails near what is on screen load: native lazy loading fetches
+    // within the browser's distance margin (Chromium: ~1,250-2,500 px), and the
+    // pre-hydration view starts at the top before the transcript pins to the end.
     await expect(page.getByTestId("message-assistant").last()).toContainText("Reply 59");
     await page.waitForTimeout(500);
     expect(await page.getByTestId("attachment-thumbnail").count()).toBe(SEEDED_IMAGES);
     expect(contents.length).toBeLessThan(SEEDED_IMAGES / 2);
+    // Audio (preload="none") and text (download links) load nothing.
     expect(contents.every((url) => !url.includes("download=1"))).toBe(true);
-    // Scrolling to the top loads the thumbnails there.
-    await page.getByTestId("attachment-thumbnail").first().scrollIntoViewIfNeeded();
-    await expect.poll(() => contents.length).toBeGreaterThan(0);
+    const audioSrc = await page
+      .getByTestId("attachment-audio")
+      .locator("audio")
+      .getAttribute("src");
+    expect(audioSrc).toMatch(/\/content$/);
+    expect(contents.some((url) => url.endsWith(audioSrc ?? "-"))).toBe(false);
+    // Scrolling to a middle message loads the thumbnails there on demand.
+    const before = contents.length;
+    await page
+      .getByTestId("attachment-thumbnail")
+      .nth(SEEDED_IMAGES / 2)
+      .scrollIntoViewIfNeeded();
+    await expect.poll(() => contents.length).toBeGreaterThan(before);
   });
 
   test("attachment endpoints never answer with HTML (production routing)", async ({ page }) => {

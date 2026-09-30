@@ -32,10 +32,10 @@ export const LONG_TITLE = "Long seeded conversation";
 export const WIDE_CONVERSATION = "9a1b2c3d-4e5f-4a6b-8c7d-8e9fa0b1c2d3";
 export const WIDE_TITLE = "Wide content";
 
-/** A conversation whose early messages carry many images, audio and text (Phase 12). */
+/** A 120-message conversation: every user message carries two images; the first also audio and text (Phase 12). */
 export const ATTACHMENTS_CONVERSATION = "5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f";
 export const ATTACHMENTS_TITLE = "Many attachments";
-export const SEEDED_IMAGES = 40;
+export const SEEDED_IMAGES = 120;
 
 /** Unique text in an older message (find-in-page). */
 export const OLDER_NEEDLE = "needle-older-message-17";
@@ -167,7 +167,7 @@ function seedAttachmentsConversation(dataDir: string, userId: string): void {
     const at = new Date(Date.UTC(2026, 0, 3, 0, i)).toISOString();
     const userId_ = randomUUID();
     const attachments: string[] = [];
-    // Two images per early message (the first 20 messages), plus audio and text once.
+    // Two images per user message, plus audio and text once.
     if (i < SEEDED_IMAGES / 2)
       for (let k = 0; k < 2; k++)
         attachments.push(
