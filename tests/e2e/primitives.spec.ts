@@ -238,3 +238,28 @@ test("measured: dialog open and keystroke latency (recorded, not asserted)", asy
     "measuring keystroke latency in the native composer",
   );
 });
+
+test("INV-47: Enter on a lazy menu's placeholder (chunk still loading) focuses the first item", async ({
+  page,
+}) => {
+  // Hold the menu chunk back so the key press always reaches the placeholder.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/\/assets\/Menus-[\w-]+\.js$/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await open(page, LONG_CONVERSATION);
+  const trigger = page.getByRole("button", { name: `Actions for ${LONG_TITLE}` });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  release();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem").first()).toBeFocused();
+  // Pointer requests keep Radix's behavior: the menu, not an item, takes focus.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+});

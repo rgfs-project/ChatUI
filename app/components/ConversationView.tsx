@@ -1,3 +1,4 @@
+import { menuRequest, type MenuRequest } from "../lib/menu-request";
 import {
   useMutation,
   useMutationState,
@@ -180,7 +181,7 @@ export function ConversationView(props: {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmUsed, setConfirmUsed] = useState(false);
   // The title placeholder was clicked before the menu chunk arrived.
-  const [titleMenuRequested, setTitleMenuRequested] = useState(false);
+  const [titleMenuRequested, setTitleMenuRequested] = useState<MenuRequest>(false);
   // Attachments on the composer (tab memory, per draft) and the open image viewer.
   const tray = useTray(userId, draftKey);
   const [attachNotice, setAttachNotice] = useState<string | null>(null);
@@ -747,8 +748,8 @@ export function ConversationView(props: {
                 <button
                   type="button"
                   className="title-trigger"
-                  onClick={() => {
-                    setTitleMenuRequested(true);
+                  onClick={(event) => {
+                    setTitleMenuRequested(menuRequest(event));
                   }}
                 >
                   <span className="title-text">{conversation.title}</span>

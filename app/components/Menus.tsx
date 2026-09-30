@@ -1,4 +1,5 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
+import type { MenuRequest } from "../lib/menu-request";
 import {
   ChevronDown,
   LogOut,
@@ -49,12 +50,29 @@ function Items({ items }: { items: (MenuItemSpec | "separator")[] }) {
 }
 
 /** The "…" menu on a sidebar row. */
+/**
+ * Radix focuses a menu's first item only when it saw the key press itself;
+ * the press that opened a lazy menu reached its placeholder instead, before
+ * the menu existed. A keyboard request therefore focuses the first item here
+ * (WAI-ARIA menu button pattern), once, when the content mounts.
+ */
+function focusFirstItem(request: MenuRequest) {
+  return (content: HTMLElement | null) => {
+    if (!content || request !== "keyboard") return;
+    requestAnimationFrame(() => {
+      if (content.contains(document.activeElement) && document.activeElement !== content) return;
+      content.querySelector<HTMLElement>('[role="menuitem"]:not([data-disabled])')?.focus();
+    });
+  };
+}
+
 export function RowMenu(props: {
   title: string;
   malformed: boolean;
   pinned: boolean;
   onTogglePin: () => void;
-  defaultOpen: boolean;
+  /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
+  defaultOpen: MenuRequest;
   onTriggerFocus: (element: HTMLElement) => void;
   onOpen: () => void;
   onRename: () => void;
@@ -63,7 +81,7 @@ export function RowMenu(props: {
   return (
     <Menu.Root
       modal={false}
-      defaultOpen={props.defaultOpen}
+      defaultOpen={props.defaultOpen !== false}
       onOpenChange={(open) => {
         if (open) props.onOpen();
       }}
@@ -82,7 +100,12 @@ export function RowMenu(props: {
         </button>
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Content className="menu-popover" align="start" sideOffset={4}>
+        <Menu.Content
+          ref={focusFirstItem(props.defaultOpen)}
+          className="menu-popover"
+          align="start"
+          sideOffset={4}
+        >
           <Items
             items={[
               ...(props.malformed
@@ -134,7 +157,8 @@ export function TitleMenu({
   onTogglePin: () => void;
   /** Downloads the chat's exact Markdown (Phase 13d). */
   onExport?: () => void;
-  defaultOpen: boolean;
+  /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
+  defaultOpen: MenuRequest;
   triggerRef: Ref<HTMLButtonElement>;
   onOpen: () => void;
   onRename: () => void;
@@ -143,7 +167,7 @@ export function TitleMenu({
   return (
     <Menu.Root
       modal={false}
-      defaultOpen={defaultOpen}
+      defaultOpen={defaultOpen !== false}
       onOpenChange={(open) => {
         if (open) onOpen();
       }}
@@ -153,7 +177,12 @@ export function TitleMenu({
         <ChevronDown size={16} aria-hidden />
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Content className="menu-popover" align="start" sideOffset={6}>
+        <Menu.Content
+          ref={focusFirstItem(defaultOpen)}
+          className="menu-popover"
+          align="start"
+          sideOffset={6}
+        >
           <Items
             items={[
               { label: "Rename", onSelect: onRename },
@@ -172,7 +201,8 @@ export function TitleMenu({
 export function AccountMenu(props: {
   username: string;
   isAdmin: boolean;
-  defaultOpen: boolean;
+  /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
+  defaultOpen: MenuRequest;
   /** Settings/Administration keep the current view behind them (URL-backed overlays). */
   overlayState: OverlayState;
   onNavigate: () => void;
@@ -189,12 +219,17 @@ export function AccountMenu(props: {
     </Menu.Item>
   );
   return (
-    <Menu.Root modal={false} defaultOpen={props.defaultOpen}>
+    <Menu.Root modal={false} defaultOpen={props.defaultOpen !== false}>
       <Menu.Trigger className="account-trigger">
         <AccountLabel username={props.username} />
       </Menu.Trigger>
       <Menu.Portal>
-        <Menu.Content className="menu-popover account-popover" side="top" sideOffset={6}>
+        <Menu.Content
+          ref={focusFirstItem(props.defaultOpen)}
+          className="menu-popover account-popover"
+          side="top"
+          sideOffset={6}
+        >
           {overlayItem(paths.settings(), "Settings", <Settings size={16} aria-hidden />)}
           {overlayItem(
             paths.settings("data"),

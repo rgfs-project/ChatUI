@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { menuRequest, type MenuRequest } from "../lib/menu-request";
 import { AlertTriangle, MoreHorizontal, PanelLeft, Search, SquarePen } from "lucide-react";
 import type { ConversationSummary } from "@shared/conversations";
 import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
@@ -62,7 +63,7 @@ function SidebarImpl({
   // The row menu trigger last used: dialogs return focus there (INV-47).
   const menuTrigger = useRef<HTMLElement | null>(null);
   // A placeholder trigger clicked before the menu chunk arrived opens it then.
-  const [openRequest, setOpenRequest] = useState<string | null>(null);
+  const [openRequest, setOpenRequest] = useState<{ id: string; mode: MenuRequest } | null>(null);
   const [searching, setSearching] = useState(false);
   const searchTrigger = useRef<HTMLButtonElement>(null);
   const pinned = conversations
@@ -114,8 +115,8 @@ function SidebarImpl({
             className="icon-btn row-menu"
             aria-label={`Actions for ${item.title}`}
             title="More"
-            onClick={() => {
-              setOpenRequest(item.id);
+            onClick={(event) => {
+              setOpenRequest({ id: item.id, mode: menuRequest(event) });
             }}
           >
             <MoreHorizontal size={16} aria-hidden />
@@ -129,7 +130,7 @@ function SidebarImpl({
           onTogglePin={() => {
             actions.togglePin({ ...item, pinned: typeof item.pinnedRank === "number" });
           }}
-          defaultOpen={openRequest === item.id}
+          defaultOpen={openRequest?.id === item.id ? openRequest.mode : false}
           onTriggerFocus={(element) => {
             menuTrigger.current = element;
           }}
@@ -239,7 +240,7 @@ function Account({ user, onNavigate }: { user: SidebarUser; onNavigate: () => vo
   const location = useLocation();
   const matches = useMatches();
   const signOut = useSignOut();
-  const [openRequest, setOpenRequest] = useState(false);
+  const [openRequest, setOpenRequest] = useState<MenuRequest>(false);
   const inOverlay = matches.some((m) => /routes\/(settings|admin)$/.test(m.id));
   const background = inOverlay
     ? (location.state as OverlayState | null)?.background
@@ -250,8 +251,8 @@ function Account({ user, onNavigate }: { user: SidebarUser; onNavigate: () => vo
         <button
           type="button"
           className="account-trigger"
-          onClick={() => {
-            setOpenRequest(true);
+          onClick={(event) => {
+            setOpenRequest(menuRequest(event));
           }}
         >
           <AccountLabel username={user.username} />
