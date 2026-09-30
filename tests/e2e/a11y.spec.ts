@@ -42,7 +42,7 @@ test.describe("signed out", () => {
     test(`public pages (${scheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       const found = [];
-      for (const url of ["/", "/login", "/register"]) {
+      for (const url of ["/status", "/login", "/register"]) {
         await page.goto(`${base()}${url}`);
         await hydrated(page);
         found.push(...(await scan(page, `${url} ${scheme}`)));

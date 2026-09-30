@@ -35,7 +35,14 @@ export async function httpChecks(base: string): Promise<string[]> {
   );
 
   // Server-rendered document, inspected WITHOUT executing JavaScript.
-  const doc = await fetch(`${base}/`);
+  // `/` sends signed-out visitors to sign-in; the status page lives at /status.
+  const root = await fetch(`${base}/`, { redirect: "manual" });
+  check(
+    "/ redirects a signed-out visitor to /login",
+    [302, 303].includes(root.status) && (root.headers.get("location") ?? "").startsWith("/login"),
+    `${String(root.status)} ${root.headers.get("location") ?? ""}`,
+  );
+  const doc = await fetch(`${base}/status`);
   const html = await doc.text();
   const csp = doc.headers.get("content-security-policy");
   const nonce = nonceOf(csp);
@@ -70,7 +77,7 @@ export async function httpChecks(base: string): Promise<string[]> {
     scripts.filter((tag) => !tag.includes(`nonce="${nonce ?? "?"}"`)).join(" "),
   );
   check("no inline event handler attributes", !/\son[a-z]+="/i.test(html));
-  const second = nonceOf((await fetch(`${base}/`)).headers.get("content-security-policy"));
+  const second = nonceOf((await fetch(`${base}/status`)).headers.get("content-security-policy"));
   check("nonce differs between responses", Boolean(second) && second !== nonce);
 
   // Boundaries and statuses.
@@ -131,7 +138,7 @@ export async function browserChecks(base: string): Promise<void> {
     // Without JavaScript: the server HTML alone is useful.
     const noJs = await browser.newContext({ javaScriptEnabled: false });
     const staticPage = await noJs.newPage();
-    await staticPage.goto(`${base}/`);
+    await staticPage.goto(`${base}/status`);
     check(
       "INV-54: without JS: heading visible",
       await staticPage.getByRole("heading", { name: "ChatUI" }).isVisible(),
@@ -152,7 +159,7 @@ export async function browserChecks(base: string): Promise<void> {
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
     page.on("requestfailed", (req) => problems.push(`requestfailed: ${req.url()}`));
-    await page.goto(`${base}/`);
+    await page.goto(`${base}/status`);
     await page.waitForSelector('html[data-hydrated="true"]', { timeout: 10_000 });
     check("hydration completes", true);
     check(

@@ -89,7 +89,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <h1>{title}</h1>
       <p>{message}</p>
       <p>
-        <a href="/">Return to the status page</a>
+        <a href="/status">Return to the status page</a>
       </p>
     </main>
   );

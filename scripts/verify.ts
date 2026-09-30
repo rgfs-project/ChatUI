@@ -147,12 +147,12 @@ async function developmentHydrationCheck(dataDir: string, llamaUrl: string): Pro
       }
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
-    for (const path of ["/", "/login"]) {
+    for (const path of ["/status", "/login"]) {
       await page.goto(`http://127.0.0.1:${String(port)}${path}`);
       await page.waitForSelector('html[data-hydrated="true"]', { timeout: 30_000 });
     }
     check(
-      "INV-56: development build: / and /login hydrate without mismatch or console warnings",
+      "INV-56: development build: /status and /login hydrate without mismatch or console warnings",
       problems.length === 0,
       problems.map((p) => p.slice(0, 300)).join(" | "),
     );

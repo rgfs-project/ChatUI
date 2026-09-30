@@ -1238,6 +1238,7 @@ The review, with each requirement mapped to code and tests, the operator backup/
 
 ## Deviations from the written specification
 
+- **`/` redirects; the status page is `/status`** (owner's decision, Phase 18). Phase 1a specified the public SSR health/status page at `/`. Now `/` is a loader-only redirect: to `/chat/new` when signed in, `/login` otherwise; the unchanged status page (heading, server-rendered health, "Sign in") is at `/status`. Verified by `verify` (redirect check, INV-54/56 on `/status`) and `tests/e2e/ssr.spec.ts`.
 - **React Router 8.4 instead of 7.** The project owner asked for the latest dependencies. v8 is the direct successor with the same Framework Mode SSR, route modules and `@react-router/express` adapter. Its breaking changes (ESM-only packages, always-on middleware, `RouterContextProvider` for load context, Node ≥ 22.22, React ≥ 19.2.7) don't affect the required architecture.
 - **Node 24 LTS instead of 22.x.** The spec allows a newer supported LTS; 24.21.0 is the current Active LTS.
 - **TypeScript 6.0.3 instead of 7.0.** typescript-eslint (required for type-aware linting) supports `<6.1`.

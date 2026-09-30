@@ -76,6 +76,11 @@ test("statuses: unknown route 404, missing conversation 404 with the shell, admi
   const alice = await contextFor(browser, undefined);
   await alice.close();
   const ctx = await browser.newContext({ storageState: await signedInState(browser) });
+  // `/` goes straight into the app when signed in; the status page is /status.
+  const root = await html(ctx.request, "/");
+  expect([302, 303]).toContain(root.status);
+  expect(root.headers.location).toBe("/chat/new");
+  expect((await html(ctx.request, "/status")).status).toBe(200);
   const unknown = await html(ctx.request, "/no/such/page");
   expect(unknown.status).toBe(404);
   const missing = await html(ctx.request, "/chat/00000000-0000-4000-8000-000000000000");
