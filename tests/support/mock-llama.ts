@@ -18,7 +18,41 @@ export const MOCK_MODELS = {
   earlyEnd: "mock-early-end",
   flood: "mock-flood",
   length: "mock-length",
+  long: "mock-long",
 } as const;
+
+/** A long Markdown answer (fences, tables, nested lists) for UI streaming tests. */
+export function longAnswer(): string {
+  const sections: string[] = [];
+  for (let s = 1; s <= 8; s++) {
+    sections.push(
+      `## Section ${String(s)}`,
+      "",
+      `Paragraph ${String(s)} explains *one* idea with **emphasis** and \`inline code\`. `.repeat(
+        3,
+      ),
+      "",
+      "```ts",
+      ...Array.from(
+        { length: 8 },
+        (_, i) => `const value${String(s)}_${String(i)} = ${String(i)};`,
+      ),
+      "```",
+      "",
+      "| key | value |",
+      "| --- | ----- |",
+      ...Array.from({ length: 4 }, (_, i) => `| k${String(i)} | v${String(i)} |`),
+      "",
+      "- item one",
+      "  - nested item",
+      "    1. deep item",
+      "- item two",
+      "",
+    );
+  }
+  sections.push("LONG-ANSWER-END");
+  return sections.join("\n");
+}
 
 /** Upstream error text that must never reach a ChatUI client (INV-04). */
 export const UPSTREAM_SECRET = "UPSTREAM-SECRET-DETAIL-7f3a";
@@ -40,6 +74,8 @@ export interface MockLlamaOptions {
   floodChunks?: number;
   /** Delay between chunks for mock-chat (the browser demo streams visibly). */
   chatChunkDelayMs?: number;
+  /** Delay between chunks for mock-long (default 10 ms, ~40 chars per chunk). */
+  longChunkDelayMs?: number;
 }
 
 export interface RecordedRequest {
@@ -274,6 +310,15 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
           if (stream.closed) return;
           send(chunk(model, { content: `part${String(i)} ` }));
           await sleep(options.chunkDelayMs ?? 50);
+        }
+        finish();
+        return;
+      }
+      case MOCK_MODELS.long: {
+        const text = longAnswer();
+        for (let i = 0; i < text.length && !stream.closed; i += 40) {
+          send(chunk(model, { content: text.slice(i, i + 40) }));
+          await sleep(options.longChunkDelayMs ?? 10);
         }
         finish();
         return;

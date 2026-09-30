@@ -1,0 +1,71 @@
+import { HydrationBoundary } from "@tanstack/react-query";
+import { data, useRouteLoaderData } from "react-router";
+import { ConversationView } from "../components/ConversationView";
+import { appContext } from "../context";
+import { queryKeys } from "../lib/query";
+import { prefetchForRequest } from "../lib/server-query";
+import type { loader as layoutLoader } from "./app-layout";
+import type { Route } from "./+types/chat-conversation";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
+  return [{ title: `${loaderData.title ?? "Conversation"} · ChatUI` }];
+}
+
+/**
+ * Authorized transcript for SSR (INV-54): ownership is enforced by the
+ * service (another user's id is not-found). A missing id is a data error in
+ * an existing route: it never creates or mutates anything.
+ */
+export async function loader({ context, params }: Route.LoaderArgs) {
+  const { services, auth } = context.get(appContext);
+  const id = params.conversationId;
+  if (!auth)
+    return {
+      dehydratedState: undefined,
+      error: { status: 401, code: "UNAUTHENTICATED" },
+      title: null,
+    };
+  if (!UUID.test(id))
+    return data(
+      { dehydratedState: undefined, error: { status: 404, code: "NOT_FOUND" }, title: null },
+      { status: 404 },
+    );
+  const result: { title: string | null; error: { status: number; code: string } | null } = {
+    title: null,
+    error: null,
+  };
+  const dehydratedState = await prefetchForRequest(async (client) => {
+    try {
+      const dto = await services.conversationDto(auth.userId, id);
+      result.title = dto.title;
+      client.setQueryData(queryKeys.conversation(auth.userId, id), dto);
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      result.error =
+        code === "CONVERSATION_MALFORMED"
+          ? { status: 422, code }
+          : { status: 404, code: "NOT_FOUND" };
+    }
+  });
+  // Missing or malformed data keeps the shell but carries its HTTP status.
+  return data(
+    { dehydratedState, error: result.error, title: result.title },
+    { status: result.error?.status ?? 200 },
+  );
+}
+
+export default function ChatConversation({ loaderData, params }: Route.ComponentProps) {
+  const layout = useRouteLoaderData<typeof layoutLoader>("routes/app-layout");
+  return (
+    <HydrationBoundary state={loaderData.dehydratedState}>
+      <ConversationView
+        key={params.conversationId}
+        userId={layout?.user.id ?? ""}
+        conversationId={params.conversationId}
+        initialError={loaderData.error}
+      />
+    </HydrationBoundary>
+  );
+}

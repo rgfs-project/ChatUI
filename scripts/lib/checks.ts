@@ -89,13 +89,15 @@ export async function httpChecks(base: string): Promise<string[]> {
     assetMissing.status === 404 &&
       !(assetMissing.headers.get("content-type") ?? "").includes("text/html"),
   );
-  const pageMissing = await fetch(`${base}/no/such/page`);
-  const pageMissingHtml = await pageMissing.text();
+  // Unmatched document routes live inside the guarded shell: signed out they
+  // redirect to sign-in (the signed-in HTML 404 is checked in the chat demo).
+  const pageMissing = await fetch(`${base}/no/such/page`, { redirect: "manual" });
+  await pageMissing.arrayBuffer();
   check(
-    "INV-57: unknown document route is an HTML 404 rendered by the framework",
-    pageMissing.status === 404 &&
-      (pageMissing.headers.get("content-type") ?? "").startsWith("text/html") &&
-      pageMissingHtml.includes("Page not found"),
+    "INV-57: unknown document route redirects signed-out visitors to sign-in",
+    pageMissing.status === 302 &&
+      pageMissing.headers.get("location") === "/login?returnTo=%2Fno%2Fsuch%2Fpage",
+    `${String(pageMissing.status)} ${pageMissing.headers.get("location") ?? ""}`,
   );
   const tooLarge = await fetch(`${base}/api/health`, {
     method: "POST",
@@ -171,23 +173,6 @@ export async function browserChecks(base: string): Promise<void> {
     );
     check("no service worker registered", sw === 0);
 
-    // The 404 document also hydrates cleanly.
-    problems.length = 0;
-    const missingUrl = `${base}/missing-page`;
-    // Chromium reports the document's own intended 404 status as a console error; ignore only that.
-    page.removeAllListeners("console");
-    page.on("console", (msg: ConsoleMessage) => {
-      const own = msg.location().url === missingUrl && msg.text().includes("404");
-      if (!own && (msg.type() === "error" || msg.type() === "warning"))
-        problems.push(`${msg.type()}: ${msg.text()}`);
-    });
-    const notFound = await page.goto(missingUrl);
-    await page.waitForSelector('html[data-hydrated="true"]', { timeout: 10_000 });
-    check(
-      "404 document hydrates without problems",
-      notFound?.status() === 404 && problems.length === 0,
-      problems.join(" | "),
-    );
     await context.close();
   } finally {
     await browser.close();
@@ -272,7 +257,7 @@ export async function chatChecks(
   check("API sign-in with the CLI-created account", session !== undefined);
   if (!session) return;
   // Raw server HTML, no JavaScript executed.
-  const res = await fetch(`${base}/chat`, { headers: sessionHeaders(session) });
+  const res = await fetch(`${base}/chat/new`, { headers: sessionHeaders(session) });
   const html = await res.text();
   check(
     "INV-54: /chat server HTML contains the native textarea",
@@ -317,7 +302,7 @@ export async function chatChecks(
     const noJs = await browser.newContext({ javaScriptEnabled: false });
     await noJs.addCookies([cookie]);
     const staticPage = await noJs.newPage();
-    await staticPage.goto(`${base}/chat?c=${sent.conversationId}`);
+    await staticPage.goto(`${base}/chat/${sent.conversationId}`);
     check(
       "INV-54: without JS the transcript and textarea are server-rendered",
       (await staticPage.getByTestId("message-assistant").first().textContent())?.includes(
@@ -329,7 +314,10 @@ export async function chatChecks(
     const context = await browser.newContext();
     const page = await context.newPage();
     const problems: string[] = [];
+    // Chromium reports the 404 document's own intended status as a console error.
+    const missingUrl = `${base}/no/such/page`;
     page.on("console", (msg: ConsoleMessage) => {
+      if (msg.location().url === missingUrl && msg.text().includes("404")) return;
       if (msg.type() === "error" || msg.type() === "warning")
         problems.push(`${msg.type()}: ${msg.text()}`);
     });
@@ -343,7 +331,7 @@ export async function chatChecks(
     await page.locator("#username").fill(account.username);
     await page.locator("#password").fill(account.password);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(/\/chat$/);
+    await page.waitForURL(/\/chat\/new$/);
     check("browser sign-in redirects back to the protected page", true);
 
     // Hold back every script so the user types before hydration.
@@ -355,7 +343,7 @@ export async function chatChecks(
       await gate;
       await route.continue();
     });
-    await page.goto(`${base}/chat`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${base}/chat/new`, { waitUntil: "domcontentloaded" });
     await page.locator("#message").fill("typed before hydration");
     release();
     await page.waitForSelector('html[data-hydrated="true"]', { timeout: 15_000 });
@@ -372,7 +360,7 @@ export async function chatChecks(
       .filter({ hasText: "Echo: typed before hydration" })
       .waitFor({ timeout: 15_000 });
     check("browser send streams and stores the reply", true);
-    check("the URL identifies the new conversation", /\/chat\?c=[0-9a-f-]{36}$/.test(page.url()));
+    check("the URL identifies the new conversation", /\/chat\/[0-9a-f-]{36}$/.test(page.url()));
     check(
       "the conversation is listed with its auto-title",
       (await page.getByTestId("conversation-list").textContent())?.includes(
@@ -405,25 +393,33 @@ export async function chatChecks(
       .waitFor({ timeout: 10_000 });
     check("Stop cancels and stores a cancelled reply", true);
 
-    // Rename and delete.
-    await page.getByTestId("conversation-menu").click();
+    // Rename and delete through the sidebar menu and dialogs (Radix).
+    const current = page.getByTestId("conversation-list").locator("li.current");
+    await current.getByRole("button", { name: /Actions for/ }).click();
     await page.getByRole("menuitem", { name: "Rename" }).click();
-    await page.locator("#title").fill("Renamed in verify");
-    await page.locator("#title").press("Enter");
+    await page.locator("#rename-title").fill("Renamed in verify");
+    await page.getByRole("dialog").getByRole("button", { name: "Rename" }).click();
     await page
       .getByTestId("conversation-list")
       .filter({ hasText: "Renamed in verify" })
       .waitFor({ timeout: 5_000 });
     check("rename updates the title", true);
-    await page.getByTestId("conversation-menu").click();
+    await current.getByRole("button", { name: /Actions for/ }).click();
     await page.getByRole("menuitem", { name: "Delete" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
-    await page.waitForURL(/\/chat$/);
+    await page.waitForURL(/\/chat\/new$/);
+    await page
+      .getByTestId("conversation-list")
+      .filter({ hasNotText: "Renamed in verify" })
+      .waitFor({ timeout: 5_000 });
+    check("delete removes the conversation", true);
+    // Signed in, an unmatched document route is the framework's HTML 404.
+    const notFound = await page.goto(missingUrl);
+    await page.waitForSelector('html[data-hydrated="true"]', { timeout: 10_000 });
     check(
-      "delete removes the conversation",
-      !((await page.getByTestId("conversation-list").textContent()) ?? "").includes(
-        "Renamed in verify",
-      ),
+      "INV-57: unknown document route is an HTML 404 rendered by the framework",
+      notFound?.status() === 404 &&
+        (await page.getByRole("heading", { name: "Page not found" }).isVisible()),
     );
     check(
       "chat demo: no console errors, warnings or CSP violations",
@@ -438,7 +434,7 @@ export async function chatChecks(
 
 /** Container: private surfaces require a session (no pre-auth chat). */
 export async function chatDisabledChecks(base: string): Promise<void> {
-  const page = await fetch(`${base}/chat`, { redirect: "manual" });
+  const page = await fetch(`${base}/chat/new`, { redirect: "manual" });
   await page.arrayBuffer();
   const api = await fetch(`${base}/api/conversations`);
   await api.arrayBuffer();

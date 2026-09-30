@@ -28,7 +28,8 @@ export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
     "default-src": ["'self'"],
     "script-src": ["'self'", nonce],
     "script-src-attr": ["'none'"],
-    "style-src": ["'self'"],
+    // Nonce'd <style> elements only (Radix scroll lock); no unsafe-inline.
+    "style-src": ["'self'", nonce],
     "img-src": ["'self'"],
     "font-src": ["'self'"],
     "connect-src": ["'self'"],

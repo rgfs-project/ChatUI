@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 6 (production streaming).** Signed-in chat with per-user canonical Markdown storage, several OpenAI-compatible providers, server-owned generations that survive disconnects (reconnect replays exactly what was missed) and are recovered after a restart (partial replies are stored as interrupted), plus browser E2E tests. Admin, the full UI and uploads arrive in later phases.
+> **Status: Phase 7 (core UI).** A server-rendered, monochrome chat interface: a collapsible sidebar, an independently scrolling transcript that follows streaming replies only while you are at the bottom, safe Markdown with code blocks, deep links (`/chat/<id>`), and URL-backed Settings. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. Admin, mobile layout and uploads arrive in later phases.
 
 ## Prerequisites
 
@@ -75,7 +75,7 @@ LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
 # create an account (above), then open http://localhost:3000/chat
 ```
 
-The page renders the composer on the server (you can type before JavaScript loads). Replies stream with the model's reasoning shown separately. Reloading keeps watching the running reply, and Stop cancels it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
+`/chat/new` is an unsaved draft; your first message creates the conversation and the URL becomes `/chat/<id>` (bookmarkable, reload-safe). The page renders on the server, so you can type before JavaScript loads. Enter sends and Shift+Enter adds a newline. Replies stream as Markdown with the model's reasoning collapsed, and the view follows new text only while you are scrolled to the bottom ("Jump to latest" otherwise). Reloading keeps watching the running reply, and Stop cancels it. Anything you send while a reply is still streaming is queued (shown as "Queued" under your bubble) and goes out as soon as the reply finishes; Stop puts queued messages back into the box. Type `/` in an empty box for commands (`model`, `new`, `rename`, `delete`, `settings`). The model list refreshes itself when you come back to the tab. Rename and delete are in each conversation's "…" menu in the sidebar and in the title menu at the top. Settings (account menu at the bottom of the sidebar, or `/settings`) opens over the current chat, and browser Back closes it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
 
 ## Providers (`providers.json`)
 
@@ -175,7 +175,7 @@ npm run dev                 # http://127.0.0.1:3000 with HMR
 | `format` / `format:check` | Prettier                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `user:create`             | Creates an account (`-- --username <name> [--admin]`); the password is read from a prompt or stdin                                                                                                                                                                                                                                                                                                        |
 | `index:rebuild`           | Rebuilds the derived conversation index from the Markdown files (stop the server first)                                                                                                                                                                                                                                                                                                                   |
-| `test:e2e`                | Builds, then runs the Playwright browser suite (reload mid-generation, network drop and reconnect, cancel) against the production server with a mock provider                                                                                                                                                                                                                                             |
+| `test:e2e`                | Builds, then runs the Playwright browser suite (streaming: reload mid-generation, network drop and reconnect, cancel; UI: 200-message scrolling, scroll intent while streaming, overlays, menus, routing and account switch) against the production server with a mock provider                                                                                                                           |
 | `verify:compose`          | Builds the image and verifies the Compose runtime on Docker or Podman (loopback-only publishing, non-root, read-only rootfs, healthcheck, in-container SSR/hydration checks, `/data` persistence across recreate, clean shutdown). Exits 2 with `NOT RUN` if no container engine is available                                                                                                             |
 | `verify`                  | Builds, then runs the real production server on an ephemeral loopback port with a temporary `DATA_DIR`. It checks health JSON, server HTML without JS, CSP nonce wiring, API/asset/document 404 separation, browser hydration (production and development builds) with no warnings, the signed-in chat flow, persistence across restarts, account isolation, logout, disabled accounts and clean shutdown |
 
@@ -193,10 +193,11 @@ CI (`.github/workflows/ci.yml`) runs every gate on every push, plus `verify:comp
 ## Layout
 
 ```text
-app/        React Router route modules, root layout, server/client entries
+app/        React Router route modules, root layout, server/client entries,
+            components/ (shell, transcript, Markdown, dialogs) and lib/ (query, paths, API adapter)
 server/     Express app, config, logging, CSP, errors, validation, API registry
 shared/     Types and schemas shared by client and server (@shared/*)
-tests/      Vitest + Supertest tests
+tests/      Vitest (server, storage, jsdom components) and Playwright (e2e/) tests
 scripts/    verify and dev orchestration
 public/     Static files copied into the client build
 data/       Persistent data (git-ignored): canonical Markdown, derived index, operation records

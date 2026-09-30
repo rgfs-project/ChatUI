@@ -16,8 +16,11 @@
     -apple-system-body, ui-sans-serif, -apple-system, system-ui, "Segoe UI", Roboto, Helvetica,
     "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
 
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
   --canvas: #ffffff;
   --sidebar: #f9f9f9;
+  --code: #f7f7f7;
   --surface: #ffffff;
   --raised: #ffffff;
   --field: #ffffff;
@@ -45,6 +48,7 @@
   :root {
     --canvas: #212121;
     --sidebar: #171717;
+    --code: #1a1a1a;
     --surface: #212121;
     --raised: #2a2a2a;
     --field: #2a2a2a;
@@ -318,13 +322,23 @@ textarea {
   margin-top: 18px;
 }
 
-/* ---- Chat shell ---------------------------------------------------------------- */
+/* ---- App shell ------------------------------------------------------------------ */
 
-.chat-layout {
+.app-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
 }
 
 .sidebar {
@@ -334,6 +348,10 @@ textarea {
   padding: 12px 10px 14px;
   background: var(--sidebar);
   border-right: 1px solid var(--line);
+}
+
+.sidebar[hidden] {
+  display: none;
 }
 
 .sidebar-top {
@@ -365,7 +383,8 @@ textarea {
   text-decoration: none;
 }
 
-.nav-row:hover {
+.nav-row:hover,
+.nav-row.current {
   background: var(--hover);
 }
 
@@ -387,29 +406,60 @@ textarea {
 }
 
 .chat-list li {
+  position: relative;
   min-width: 0;
 }
 
 .chat-list a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   height: 36px;
   padding: 0 10px;
-  overflow: hidden;
   border-radius: 8px;
   color: var(--fg);
   font-size: 14.5px;
-  line-height: 36px;
   text-decoration: none;
+}
+
+.chat-list a svg {
+  flex: none;
+  color: var(--danger);
+}
+
+.row-title {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-list a:hover {
+.chat-list li:hover a,
+.chat-list li:focus-within a {
+  padding-right: 38px;
   background: var(--hover);
 }
 
 .chat-list li.current a {
+  padding-right: 38px;
   background: var(--active);
+}
+
+/* "…" per row: shown on hover, focus and for the open chat. */
+.row-menu {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 30px;
+  height: 30px;
+  opacity: 0;
+}
+
+.chat-list li:hover .row-menu,
+.chat-list li.current .row-menu,
+.row-menu:focus-visible,
+.row-menu[data-state="open"] {
+  opacity: 1;
 }
 
 .account-trigger {
@@ -450,13 +500,19 @@ textarea {
   width: var(--radix-dropdown-menu-trigger-width);
 }
 
-.nav-backdrop {
-  display: none;
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: rgb(0 0 0 / 0.5);
 }
 
-/* The main area fills everything right of the sidebar. */
+/* ---- Conversation --------------------------------------------------------------- */
+
 .chat {
+  position: relative;
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
@@ -473,21 +529,16 @@ textarea {
   padding: 0 12px;
 }
 
-.collapsed-only {
-  display: none;
+.header-nav {
+  display: inline-flex;
   gap: 2px;
 }
 
-.chat-layout.nav-closed .sidebar {
-  display: none;
-}
-
-.chat-layout.nav-closed {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.chat-layout.nav-closed .collapsed-only {
-  display: inline-flex;
+.chat-title {
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .title-trigger {
@@ -495,13 +546,13 @@ textarea {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  max-width: min(60vw, 32rem);
+  max-width: min(60vw, 36rem);
   height: 36px;
   padding: 0 10px;
   border-radius: 8px;
   background: transparent;
   color: var(--fg);
-  font-weight: 400;
+  font: inherit;
 }
 
 .title-trigger:hover,
@@ -514,38 +565,10 @@ textarea {
   color: var(--muted);
 }
 
-.chat-title {
-  margin: 0;
+.title-text {
   overflow: hidden;
-  font-size: 16px;
-  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-h1.chat-title {
-  padding: 0 10px;
-}
-
-.title-form input {
-  width: min(60vw, 28rem);
-  height: 36px;
-  padding: 0 10px;
-  background: var(--field);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.title-form input:focus {
-  border-color: var(--faint);
-  outline: none;
-}
-
-.chat > .error {
-  width: min(100% - 32px, 760px);
-  margin: 0 auto 8px;
 }
 
 .scroll {
@@ -557,18 +580,18 @@ h1.chat-title {
   scrollbar-width: thin;
 }
 
-.history,
-.response {
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 0 14px;
+.scroll:focus-visible {
+  outline-offset: -2px;
 }
 
 .history {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 28px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 14px;
   list-style: none;
 }
 
@@ -577,17 +600,18 @@ h1.chat-title {
 }
 
 .turn {
+  min-width: 0;
   font-size: 15.5px;
   line-height: 1.65;
 }
 
-.turn p {
+.plain-text {
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-/* User: a tinted bubble on the right, copy on hover. */
+/* User: a neutral bubble on the right, copy on hover. */
 .turn-user {
   position: relative;
   display: flex;
@@ -619,7 +643,6 @@ h1.chat-title {
   right: 0;
   margin-top: 2px;
   opacity: 0;
-  transition: opacity 0.12s ease;
 }
 
 .turn-user:hover .turn-actions,
@@ -632,6 +655,27 @@ h1.chat-title {
   height: 30px;
 }
 
+/* Queued: waits for the running reply, then sends. */
+.turn-queued .bubble {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg-2);
+}
+
+.queued-meta {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 12.5px;
+}
+
+.queued-meta .icon-btn {
+  width: 26px;
+  height: 26px;
+}
+
 .badge {
   display: inline-block;
   margin-bottom: 6px;
@@ -642,7 +686,7 @@ h1.chat-title {
   font-size: 12.5px;
 }
 
-/* Reasoning: "Thinking completed ›", expands in place. */
+/* Reasoning: "Thought process ›", collapsed, expands in place. */
 .reasoning {
   margin-bottom: 12px;
 }
@@ -650,7 +694,7 @@ h1.chat-title {
 .reasoning > summary {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 2px 0;
   color: var(--fg-2);
   cursor: pointer;
@@ -667,39 +711,33 @@ h1.chat-title {
 
 .reasoning .chevron {
   color: var(--muted);
-  transition: transform 0.15s ease;
 }
 
 .reasoning[open] .chevron {
   transform: rotate(90deg);
 }
 
-.turn .reasoning p,
-.reasoning p {
-  margin: 8px 0 4px 8px;
+.reasoning-body {
+  margin: 8px 0 4px 4px;
   padding-left: 16px;
   border-left: 2px solid var(--line);
   color: var(--muted);
   font-size: 14px;
   line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.response {
-  margin-top: 28px;
-}
-
-.response .gen-status {
-  margin-top: 6px;
+.live .gen-status {
+  margin: 6px 0 0;
 }
 
 .cursor {
   display: inline-block;
   width: 10px;
   height: 10px;
-  margin-left: 6px;
   border-radius: 50%;
   background: var(--fg);
-  vertical-align: middle;
   animation: pulse 1s ease-in-out infinite;
 }
 
@@ -716,9 +754,186 @@ h1.chat-title {
   }
 }
 
+.jump-to-latest {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--fg);
+  font-size: 13.5px;
+  box-shadow: var(--menu-shadow);
+  transform: translateX(-50%);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  text-align: center;
+}
+
+.empty-state h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.empty-state p {
+  max-width: 32rem;
+  margin: 0 0 12px;
+  color: var(--fg-2);
+}
+
+/* ---- Markdown ----------------------------------------------------------------- */
+
+.markdown {
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown .code-block,
+.markdown table {
+  margin: 0 0 14px;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.5em;
+}
+
+.markdown li + li {
+  margin-top: 4px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 22px 0 10px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.markdown h1 {
+  font-size: 1.4em;
+}
+
+.markdown h2 {
+  font-size: 1.25em;
+}
+
+.markdown h3 {
+  font-size: 1.1em;
+}
+
+.markdown a {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown blockquote {
+  padding-left: 14px;
+  border-left: 3px solid var(--line);
+  color: var(--fg-2);
+}
+
+.markdown hr {
+  margin: 20px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.markdown :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--hover);
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+.markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+
+.markdown th,
+.markdown td {
+  min-width: 6rem;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--hover);
+  font-weight: 600;
+}
+
+.code-block {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--code);
+}
+
+.code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 4px 0 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.code-toolbar .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.image-placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* ---- Composer: one slim pill -------------------------------------------------- */
 
 .composer {
+  position: relative;
   flex: none;
   width: 100%;
   max-width: 792px;
@@ -735,6 +950,11 @@ h1.chat-title {
   text-align: center;
 }
 
+.composer > .error {
+  margin: 0 0 8px;
+  text-align: center;
+}
+
 .composer-box {
   display: flex;
   align-items: flex-end;
@@ -744,7 +964,6 @@ h1.chat-title {
   background: var(--field);
   border: 1px solid var(--line);
   border-radius: 28px;
-  transition: border-color 0.15s ease;
 }
 
 .composer-box:focus-within {
@@ -773,7 +992,7 @@ h1.chat-title {
   color: var(--faint);
 }
 
-/* The model reads as "name ⌄", like Qwen's "Auto ⌄" and Gemini's "Flash-Lite ⌄". */
+/* The model reads as "name ⌄" inside the pill. */
 .model-picker {
   position: relative;
   display: inline-flex;
@@ -816,10 +1035,6 @@ h1.chat-title {
   color: var(--fg);
 }
 
-.icon-btn.round {
-  border-radius: 50%;
-}
-
 .send-btn {
   display: inline-grid;
   flex: none;
@@ -836,6 +1051,56 @@ h1.chat-title {
   opacity: 1;
   background: var(--send-off);
   color: var(--surface);
+}
+
+.send-btn.secondary-send {
+  background: var(--active);
+  color: var(--fg);
+}
+
+/* "/" commands: a list above the composer. */
+.command-menu {
+  position: absolute;
+  bottom: calc(100% - 12px);
+  left: 16px;
+  z-index: 10;
+  display: grid;
+  gap: 1px;
+  width: min(360px, calc(100% - 32px));
+  max-height: 320px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--raised);
+  box-shadow: var(--menu-shadow);
+}
+
+.command-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.command-option[aria-selected="true"] {
+  background: var(--hover);
+}
+
+.command-name {
+  color: var(--fg);
+  font-size: 14.5px;
+}
+
+.command-description {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Empty chat: greeting and composer sit together just above the middle. */
@@ -860,29 +1125,45 @@ h1.chat-title {
   text-align: center;
 }
 
-/* Confirm dialog over a blurred page (ChatUI prototype). */
-.confirm-dialog {
+/* ---- Dialogs and overlays (Radix) --------------------------------------------- */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(6px);
+}
+
+.dialog-content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 41;
   width: min(100% - 32px, 440px);
+  max-height: calc(100dvh - 32px);
   padding: 24px;
+  overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--raised);
   color: var(--fg);
   box-shadow: var(--menu-shadow);
+  transform: translate(-50%, -50%);
 }
 
-.confirm-dialog::backdrop {
-  background: rgb(0 0 0 / 0.45);
-  backdrop-filter: blur(6px);
+.dialog-content:focus {
+  outline: none;
 }
 
-.confirm-dialog h2 {
-  margin: 0 0 12px;
+.dialog-title {
+  margin: 0 0 10px;
   font-size: 17px;
+  font-weight: 600;
 }
 
-.confirm-dialog p {
-  margin: 0;
+.dialog-description {
+  margin: 0 0 16px;
   color: var(--fg-2);
   line-height: 1.55;
 }
@@ -891,7 +1172,13 @@ h1.chat-title {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 24px;
+  margin-top: 20px;
+}
+
+.dialog-actions button.danger {
+  background: transparent;
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
 }
 
 button.danger-outline {
@@ -899,38 +1186,124 @@ button.danger-outline {
   box-shadow: inset 0 0 0 1px var(--danger);
 }
 
+.text-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+}
+
+.text-input:focus {
+  border-color: var(--faint);
+  outline: none;
+}
+
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -6px -8px 12px 0;
+}
+
+.overlay-header .dialog-title {
+  margin: 0;
+}
+
+/* Settings: a large panel with its sections on the left (like Claude's). */
+.overlay-wide {
+  display: flex;
+  flex-direction: column;
+  width: min(100% - 32px, 960px);
+  height: min(100dvh - 64px, 640px);
+  padding: 20px 20px 0;
+}
+
+.settings-layout {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 0;
+  margin: 0 -20px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-nav {
+  padding: 8px 10px;
+  border-right: 1px solid var(--line);
+}
+
+.settings-nav .section-label {
+  margin: 10px 10px 6px;
+}
+
+.settings-body {
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
+.settings-body h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-label {
+  margin: 0;
+  font-weight: 500;
+}
+
+.settings-hint {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: var(--fg);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.button-link.secondary {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.button-link.secondary:hover {
+  background: var(--hover);
+}
+
 /* ---- Narrow screens: the sidebar becomes an overlay drawer -------------------- */
 
 @media (max-width: 767.98px) {
-  .chat-layout,
-  .chat-layout.nav-closed {
+  .app-shell {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .sidebar {
+  /* Before hydration the drawer state is unknown: keep it closed. */
+  .sidebar:not(.drawer) {
+    display: none;
+  }
+
+  .sidebar.drawer {
     position: fixed;
     inset: 0 auto 0 0;
     z-index: 30;
-    display: none;
     width: min(290px, 85vw);
-  }
-
-  .chat-layout.nav-open .sidebar {
-    display: flex;
-  }
-
-  .chat-layout.nav-open .nav-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 25;
-    display: block;
-    padding: 0;
-    border-radius: 0;
-    background: rgb(0 0 0 / 0.5);
-  }
-
-  .collapsed-only {
-    display: inline-flex;
   }
 
   .chat-header {
@@ -952,5 +1325,24 @@ button.danger-outline {
 
   .greeting {
     font-size: 23px;
+  }
+
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-nav {
+    display: flex;
+    gap: 4px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .settings-nav .section-label {
+    display: none;
+  }
+
+  .settings-body {
+    padding: 16px;
   }
 }

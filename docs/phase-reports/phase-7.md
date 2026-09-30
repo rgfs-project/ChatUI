@@ -1,0 +1,85 @@
+## Phase 7 report
+
+- **Scope completed (files/features):**
+  - Routing (INV-53): `app/routes.ts` with a persistent layout route `routes/app-layout.tsx`, whose loader is the single auth guard for every protected route including `*`. Routes:
+    - `/chat` → `/chat/new` (legacy `?c=<id>` → `/chat/<id>`)
+    - `/chat/new` (a draft)
+    - `/chat/:conversationId`
+    - `/settings` and `/admin` as URL-backed overlays (`state.background`, Radix Dialog, Back/Escape/close return to the conversation)
+    - `not-found`
+  - Other routing pieces: centralized encoded path builders (`app/lib/paths.ts`); `documentPathOf` so a return-to never names the single-fetch `.data` endpoint; drafts and per-conversation model choice in `ShellProvider`; the draft URL is replaced by `/chat/<id>` after the first send.
+  - Shell (`app/app.css`), rebuilt on the approved monochrome redesign (`b628dc1`): a `100dvh` grid with a rectangular sidebar (brand, hide toggle, New chat, list, account menu), a full-bleed main area with its own fixed header (title menu; Show sidebar/New chat while hidden), an independently scrolling transcript and the pill composer pinned below it. The document never scrolls. Sidebar collapse uses `aria-expanded`/`aria-controls`; narrow screens get an overlay drawer. Lucide icons; system font stack.
+  - Conversations: sidebar list with the active state (`aria-current`), new chat, a "…" Radix menu per row and the header title menu (both Rename/Delete through shared dialogs, `useConversationActions`), and a malformed state that explains the problem and offers only delete. A missing id is a 404 data state inside the shell.
+  - Messages: safe Markdown (`react-markdown` + `remark-gfm`, `skipHtml`, `rehype-sanitize`, scheme allowlist, `rel="noopener noreferrer"`, image placeholders); code blocks with copy and in-block horizontal scroll; reasoning collapsed; status badges. The live reply streams through the same renderer.
+  - Composer: native uncontrolled textarea; Enter sends, Shift+Enter adds a newline (IME-safe); Stop during generation. The model `<select>` sits inside the pill, has provider optgroups and remembers the choice per conversation.
+  - User-requested additions (see Deviations): **queued messages** (sending while a reply runs queues it as a "Queued" bubble; it goes out when the reply finishes; Stop or a failed reply returns queued text to the box), a **"/" command list** (`model`, `new`, `rename`, `delete`, `settings`; keyboard and pointer, the box keeps focus), and **automatic model-list refresh** when the tab regains focus (the refresh button is gone; Try again appears only when the list failed to load).
+  - Scroll intent (`app/lib/use-scroll-pin.ts`): explicit user-intent detection (upward movement, wheel, touch, keys); following runs in a layout effect plus a `ResizeObserver`, so a pinned transcript never paints a lagging frame; "Jump to latest".
+  - TanStack Query:
+    - one browser client, one key factory keyed by user id, one adapter (`apiJson` over `apiFetch`)
+    - a fresh server client per request (`prefetchForRequest`) with a dehydration allowlist, and `HydrationBoundary` in the layout and conversation routes
+    - `useAccountBoundary` drops the previous account's cache on any identity change and keeps the SSR seed on first render
+  - Primitive decision record in `ARCHITECTURE.md` (menus and dialogs: Radix; model selector, tooltips, drawer, toasts, composer: native).
+  - CSP: `style-src` allows only this response's nonce, and `get-nonce` gives Radix's scroll-lock `<style>` that nonce. There is no `unsafe-inline` in production.
+  - Settings overlay as a large panel with a section list (Account: username, change password, sign out; Administration link for admins), opened from the account menu. `/admin` is a server-role-gated "arrives in a later release" page.
+- **Required tests:**
+  - Component (jsdom), `tests/client/`:
+    - `markdown.test.tsx`: XSS payloads (`<script>`, `<img onerror>`, `javascript:`/`data:`/mixed-case links, HTML in fences) inert; every streaming prefix of fences, tables and nested lists renders stably; rendering never mutates the stored message.
+    - `scroll-pin.test.tsx`: pin/unpin, threshold, programmatic scrolls and growth are not intent, wheel/keys/touch unpin, jump to latest.
+    - `conversation-view.test.tsx`: pending → streaming → terminal (composer locked, stored copy replaces the live one); resync; failed error text; status badges; render counters show no message or sidebar re-render or remount per token; malformed (only delete, confirmation) and missing states; Shift+Enter newline and Enter send with an operation key; empty composer; drafts across navigation.
+    - `query.test.tsx`: two concurrent users' loaders dehydrate only their own data; signed-out loader redirects before reading; allowlist excludes session/CSRF, generation, errors and non-user keys; no initial fetch after hydration; account switch, sign-out and adapter account-change purge.
+    - `primitives.test.tsx`: keyboard menu (open, arrows, Escape, focus return), dialog focus trap, `aria-hidden` background, focus return to the trigger, portal outside the clipping ancestor, confirmation Cancel, rename through the adapter, labelled navigation landmark.
+    - `paths.test.ts`: builders and `.data` return-to normalization.
+    - `queue-and-commands.test.tsx`: queue while running, queued bubble, send after the reply with its own model and the conversation id, queue button, remove, Stop restores in order before the draft, failed reply restores and sends nothing; "/" list, filtering, arrow keys with wrap and kept focus, Escape, Enter runs instead of sending, new chat offers no rename/delete, pointer pick; model list re-read on focus when stale and not when fresh.
+    - `api.test.ts` (from Phase 4) already covers the adapter's CSRF refetch-and-retry.
+  - Browser, `tests/e2e/ui.spec.ts`, against a seeded 200-message conversation and a paced long Markdown answer (`mock-long`):
+    - independent transcript scroll with a fixed header and composer
+    - find-in-page reaches an older message
+    - pinned streaming without viewport jumps (sampled after every paint)
+    - scrolled-up stays put, then jump to latest re-pins
+    - sidebar collapse
+    - menu unclipped, on top and portaled
+    - INV-53: deep-link hard reload; overlay Back/Forward/Escape; direct overlay load and close; draft URL replacement with Back skipping the draft; missing id (404 in the shell) vs unmatched URL (framework 404); expired session → login → same deep link; account switch shows no previous data
+    - composer: a message sent during a slow reply is queued and then sent after it; "/" opens the list and Enter runs the command
+  - `verify`: updated for `/chat/new`/`/chat/<id>`, menu/dialog rename and delete, signed-out unmatched routes → login, a signed-in HTML 404 that hydrates cleanly, and no console or CSP errors in the chat demo.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (25 files, 397 tests)
+  - `verify`: PASS (70/70)
+  - `test:e2e`: PASS (18/18)
+  - `verify:compose` (Docker, rootless Podman) and the full suite run in CI on push
+  - `npm audit`: 0 vulnerabilities
+- **Invariants:**
+  - INV-22 → `Markdown.tsx` → `markdown.test.tsx`
+  - INV-47 (Phase 7 portion) → Radix wrappers and native controls → `primitives.test.tsx`, e2e menu test
+  - INV-53 → layout guard, path builders, overlays, shell state → e2e routing and component tests
+  - INV-55 (Query portion) → `prefetchForRequest`, allowlist, account boundary → `query.test.tsx`, e2e account switch
+  - INV-56 (Query portion) → `HydrationBoundary` + `staleTime` + first-render seed kept → `query.test.tsx`, verify
+  - INV-57 (Phase 7 portion) → 404/422 statuses for data errors, framework 404, CSP style nonce → verify and e2e
+  - INV-32 groundwork → memoized tree and render counters → `conversation-view.test.tsx`
+- **Behaviour changes from earlier phases:**
+  - `/chat?c=<id>` became `/chat/<id>` (the old form redirects).
+  - Unmatched URLs are inside the guarded shell: signed-out visitors are redirected to sign-in; signed-in users get the HTML 404.
+  - A missing conversation document now answers HTTP 404 (422 when malformed) instead of 200.
+  - Sign out, Settings and Administration are in the account menu at the bottom of the sidebar (Sign out also in Settings).
+- **Bugs found and fixed while testing:**
+  - the root cleared the SSR-seeded cache on first mount, causing a duplicate fetch
+  - the rename field opened empty
+  - focus fell to `<body>` after a dialog opened from a menu
+  - the `hidden` sidebar stayed visible because of a CSS `display` rule
+  - the return-to pointed at `.data`
+  - the live reply's first appearance was not followed before paint
+  - (redesign port) the verify check for the pre-hydration disabled Send depended on attribute order; it now matches either order
+  - (redesign port) the Settings panel lit its close button's focus ring on open; it now focuses the panel
+- **Dependencies:**
+  - runtime: `@tanstack/react-query` 5.104.0, `react-markdown` 10.1.0, `remark-gfm` 4.0.1, `rehype-sanitize` 6.0.0, `@radix-ui/react-dialog` 1.1.23, `@radix-ui/react-dropdown-menu` 2.1.24, `lucide-react` 1.49.0, `get-nonce` 1.0.1 (already transitive via Radix; made explicit for the CSP nonce)
+  - dev: `@testing-library/react` 16.3.3, `@testing-library/user-event` 14.6.7, `jsdom` 30.1.1
+- **Deviations / limitations / unverified items:**
+  - **Composer lock replaced by a queue (user request).** The phase text says the composer is disabled while a generation is active. At the user's request the box stays usable and messages sent during a reply are queued and sent afterwards; nothing is ever sent into a running conversation, so the server rule (`GENERATION_IN_PROGRESS`) is unchanged.
+  - **Additions not in the phase text (user requests):** the "/" command list and the automatic model refresh (the refresh button was removed). Skills (named instruction sets in Settings, invoked from the same "/" list) need server-side prompt assembly and are scheduled with Phase 10's prompt templates.
+  - This implementation re-does Phase 7 on top of the approved redesign after main was reset to Phase 6; the earlier Phase 7 (tag `phase-7` at 3f641d6) was the reference for routing, Query and rendering. The tag is moved to this commit.
+  - Mobile Back/Forward and the full mobile drawer belong to Phase 11; desktop cases are covered here (a basic narrow-screen drawer exists).
+  - Browser find-in-page is exercised through Chromium's `window.find` (the same text search as Ctrl+F); the native find bar UI can't be automated.
+  - The screen-reader smoke test uses accessibility-tree roles and names (Testing Library and Playwright), not a real screen reader.
+  - Bundle costs in the decision record are measured per production chunk, not per package.
+- **Commit/tag status:** commit `feat(phase-7): core chat interface and conversation navigation` (squash-merged from `ci/phase-7`) and tag `phase-7`, pushed to `origin/main`.
+- **Questions needing approval:** none.

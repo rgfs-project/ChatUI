@@ -10,7 +10,11 @@ import {
 } from "react-router";
 import type { Route } from "./+types/root";
 import { appContext } from "./context";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { useState as useClientState } from "react";
 import { setSession } from "./lib/api";
+import { createQueryClient } from "./lib/query";
+import { useAccountBoundary } from "./lib/use-account-boundary";
 import stylesheet from "./app.css?url";
 
 export const links: LinksFunction = () => [
@@ -55,11 +59,19 @@ function useHydrationMarker() {
 
 export default function App({ loaderData }: Route.ComponentProps) {
   useHydrationMarker();
+  // One browser QueryClient per page load (the server uses one per request).
+  const [queryClient] = useClientState(createQueryClient);
   // Client-only: the shared fetch wrapper learns the session after hydration.
   useEffect(() => {
     setSession(loaderData.session);
   }, [loaderData.session]);
-  return <Outlet />;
+  // Account boundary: a changed account purges the previous user's cache.
+  useAccountBoundary(queryClient, loaderData.session.user?.id ?? null);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Outlet />
+    </QueryClientProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

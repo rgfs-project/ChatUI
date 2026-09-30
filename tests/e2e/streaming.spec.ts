@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { E2E_PASSWORD, E2E_USER } from "./global-setup.ts";
+import { signedInState } from "./auth.ts";
 
 const base = () => process.env.E2E_BASE_URL ?? "";
 const SLOW = JSON.stringify(["local", "mock-slow"]);
@@ -7,13 +7,14 @@ const EXPECTED = Array.from({ length: 30 }, (_, i) => `part${String(i)} `)
   .join("")
   .trimEnd();
 
+test.use({
+  storageState: async ({ browser }, use) => {
+    await use(await signedInState(browser));
+  },
+});
+
 async function signIn(page: Page) {
-  await page.goto(`${base()}/login?returnTo=%2Fchat`);
-  await page.waitForSelector('html[data-hydrated="true"]');
-  await page.locator("#username").fill(E2E_USER);
-  await page.locator("#password").fill(E2E_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/chat$/);
+  await page.goto(`${base()}/chat/new`);
   await page.waitForSelector('html[data-hydrated="true"]');
 }
 
