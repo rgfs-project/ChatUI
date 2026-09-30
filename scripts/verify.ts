@@ -463,6 +463,20 @@ function budgetChecks(): void {
  * bytes are served inert, and attachment endpoints are part of the API
  * boundary (JSON errors, never SSR HTML; INV-27, INV-28, INV-57).
  */
+/** Waits until a generation is terminal (the provider's single slot is free again). */
+async function waitForGeneration(base: string, session: ApiSession, id: string): Promise<void> {
+  for (let i = 0; i < 300; i++) {
+    const res = await fetch(`${base}/api/generations/${id}`, { headers: sessionHeaders(session) });
+    const body = (await res.json()) as { state?: string; revision?: string | null };
+    if (
+      ["completed", "failed", "cancelled", "timed_out"].includes(body.state ?? "") &&
+      body.revision
+    )
+      return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
 /** Phase 13b: approved memories are user-owned files; tools only for tool-capable models. */
 async function memoryChecks(
   base: string,
@@ -499,7 +513,8 @@ async function memoryChecks(
       operationIssuedAt: new Date().toISOString(),
     }),
   });
-  await sent.json();
+  const started = (await sent.json()) as { generationId?: string };
+  if (started.generationId) await waitForGeneration(base, session, started.generationId);
   interface ChatBody {
     tools?: unknown;
     messages?: { role: string; content: unknown }[];
@@ -529,6 +544,63 @@ async function memoryChecks(
     String(accept.status),
   );
   await accept.arrayBuffer();
+}
+
+/** Phase 13c: a complete reply's labelled block becomes an inert, id-named source file. */
+async function artifactChecks(base: string, dataDir: string, session: ApiSession): Promise<void> {
+  const json = { ...sessionHeaders(session, true), "Content-Type": "application/json" };
+  const sent = await fetch(`${base}/api/generations`, {
+    method: "POST",
+    headers: json,
+    body: JSON.stringify({
+      providerId: "local",
+      model: MOCK_MODELS.chat,
+      content: 'Page\n```html file=page.html\n<script>alert("x")</script>\n```',
+      operationKey: randomUUID(),
+      operationIssuedAt: new Date().toISOString(),
+    }),
+  });
+  const started = (await sent.json()) as { generationId?: string };
+  check("the artifact demo send is accepted (202)", sent.status === 202, String(sent.status));
+  if (started.generationId) await waitForGeneration(base, session, started.generationId);
+  let list: { artifacts: { id: string; name: string }[] } = { artifacts: [] };
+  for (let i = 0; i < 150 && list.artifacts.length === 0; i++) {
+    const res = await fetch(`${base}/api/artifacts`, { headers: sessionHeaders(session) });
+    list = (await res.json()) as typeof list;
+    if (list.artifacts.length === 0) await new Promise((r) => setTimeout(r, 20));
+  }
+  const [artifact] = list.artifacts;
+  const root = path.join(dataDir, session.userId, "artifacts");
+  const dirs = existsSync(root) ? readdirSync(root) : [];
+  check(
+    "INV-40/INV-41: the reply's labelled block is captured once, in a directory named by id",
+    list.artifacts.length === 1 && artifact?.name === "page.html" && dirs.join() === artifact.id,
+    JSON.stringify(list.artifacts),
+  );
+  const source = await fetch(`${base}/api/artifacts/${artifact?.id ?? ""}/source`, {
+    headers: sessionHeaders(session),
+  });
+  const body = await source.text();
+  check(
+    "INV-41: HTML source is served as nosniff text/plain with a sandbox CSP",
+    source.headers.get("content-type") === "text/plain; charset=utf-8" &&
+      source.headers.get("x-content-type-options") === "nosniff" &&
+      source.headers.get("content-security-policy") === "sandbox; default-src 'none'" &&
+      body === '<script>alert("x")</script>\n',
+    [...source.headers].map(([k, v]) => `${k}: ${v}`).join("; "),
+  );
+  const upload = await fetch(`${base}/api/artifacts`, {
+    method: "POST",
+    headers: json,
+    body: "{}",
+  });
+  check(
+    "INV-41: there is no artifact upload endpoint (JSON 404)",
+    upload.status === 404 &&
+      (upload.headers.get("content-type") ?? "").startsWith("application/json"),
+    String(upload.status),
+  );
+  await upload.arrayBuffer();
 }
 
 async function attachmentChecks(base: string, dataDir: string, session: ApiSession): Promise<void> {
@@ -643,6 +715,7 @@ async function main(): Promise<void> {
     const again = await apiLogin(base, "admin", PASSWORD);
     if (again) await attachmentChecks(base, dataDir, again);
     if (again) await memoryChecks(base, dataDir, again, llama);
+    if (again) await artifactChecks(base, dataDir, again);
   } finally {
     const exited = new Promise<number | null>((resolve) =>
       child.once("exit", (code) => {
@@ -691,5 +764,6 @@ try {
   process.stderr.write(
     `verify failed: ${error instanceof Error ? error.message : String(error)}\n`,
   );
-  process.exitCode = 1;
+  // Exit now: a failure part-way can leave the mock provider listening.
+  process.exit(1);
 }

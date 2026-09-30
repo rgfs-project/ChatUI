@@ -1,3 +1,4 @@
+import type { ArtifactStore } from "./storage/artifacts.ts";
 import type { MemoryStore } from "./storage/memories.ts";
 import type { ProposalService } from "./chat/proposals.ts";
 import { Router, type Request, type Response } from "express";
@@ -58,6 +59,10 @@ export interface RouteServices {
   proposals: ProposalService;
   /** MEMORY_PROMPT_BUDGET: approved-note bytes a prompt may include. */
   memoryPromptBudgetBytes: number;
+  /** Generated source artifacts (Phase 13c). */
+  artifacts: ArtifactStore;
+  /** Marks a generation's checkpoint `terminal` (artifact deletion, INV-40). */
+  finalizeGeneration: (generationId: string) => Promise<void>;
   /** Models a role may use: hidden pairs are removed for non-admins (Phase 10). */
   modelList: (role: "user" | "admin", options?: { fresh?: boolean }) => Promise<ModelListDto>;
   /** Phase 10 administration. */

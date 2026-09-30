@@ -48,6 +48,8 @@ import type { ToolSession } from "../generations/manager.ts";
 import type { ProposalRecord } from "../storage/proposals.ts";
 import { continuationCost, type ProposalService } from "./proposals.ts";
 import { MEMORY_TOOLS } from "./memory-tools.ts";
+import { captureSources, type StagedCapture } from "../artifacts/capture.ts";
+import type { ArtifactStore } from "../storage/artifacts.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -101,6 +103,8 @@ export interface SendServiceOptions {
   /** Proposal-only memory tools (Phase 13b), offered to tool-capable models. */
   proposals?: ProposalService;
   memoryConfig?: MemoryConfig;
+  /** Generated source artifacts (Phase 13c), captured from complete replies. */
+  artifacts?: ArtifactStore;
 }
 
 /** The approved notes a prompt includes and the whole set's revision (contracts §4.1 step 2). */
@@ -594,6 +598,42 @@ export class SendService {
     };
   }
 
+  /** Staged captures of a reply's final text (bounded; rejections logged without content). */
+  private capture(generationId: string, content: string): StagedCapture[] {
+    const store = this.o.artifacts;
+    if (!store) return [];
+    const { captures, rejected } = captureSources(content, store.config);
+    if (rejected.length > 0)
+      this.o.logger.info(
+        { generationId, rejected: rejected.map((r) => r.reason) },
+        "source blocks not captured",
+      );
+    return captures;
+  }
+
+  private async stageCaptures(
+    userId: string,
+    conversationId: string,
+    record: Pick<OperationRecord, "assistantMessageId" | "generationId">,
+    model: ConversationModel,
+    staged: readonly StagedCapture[],
+  ): Promise<void> {
+    if (!this.o.artifacts || staged.length === 0) return;
+    const reply = model.blocks.find(
+      (b) => b.type === "assistant" && b.id === record.assistantMessageId,
+    );
+    if (reply?.type !== "assistant" || reply.status !== "complete") return;
+    await this.o.artifacts.captureStaged(
+      userId,
+      {
+        conversationId,
+        assistantMessageId: record.assistantMessageId,
+        generationId: record.generationId,
+      },
+      staged,
+    );
+  }
+
   private async stageProposals(
     userId: string,
     conversationId: string,
@@ -853,6 +893,9 @@ export class SendService {
           messages: input.prompt.prompt.messages,
           tools: this.toolSession(userId, conversationId, ids, input),
           memorySnapshot: input.prompt.memory.snapshot,
+          capture: this.o.artifacts
+            ? (content) => this.capture(ids.generationId, content)
+            : undefined,
           loadMedia: (part) =>
             this.o.attachments?.readBlob(userId, part.attachmentId) ?? Promise.resolve(null),
           maxTokens: this.maxOutputTokens(),
@@ -952,10 +995,13 @@ export class SendService {
         return null;
       }
       const conversation = read.conversation;
-      const stage = (model: ConversationModel) =>
-        outcome.state === "completed"
-          ? this.stageProposals(userId, conversationId, model, outcome.proposals)
-          : Promise.resolve();
+      // Terminal sequence (contracts §4.3): proposals, then artifacts, then
+      // (in the manager) the `terminal` checkpoint. Only a complete reply.
+      const stage = async (model: ConversationModel) => {
+        if (outcome.state !== "completed") return;
+        await this.stageProposals(userId, conversationId, model, outcome.proposals);
+        await this.stageCaptures(userId, conversationId, record, model, outcome.captures);
+      };
       if (
         conversation.model.blocks.some(
           (block) => block.type === "assistant" && block.id === record.assistantMessageId,

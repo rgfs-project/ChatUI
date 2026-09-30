@@ -19,6 +19,7 @@ import {
 } from "react";
 import type { AttachmentDto, MessageAttachmentDto } from "@shared/attachments";
 import type { ProposalDto } from "@shared/memories";
+import type { MessageArtifactDto } from "@shared/artifacts";
 import {
   addFiles,
   moveTray,
@@ -68,6 +69,8 @@ const MessageEditor = lazy(() =>
 );
 // The image viewer loads on the first click of a thumbnail (Phase 12).
 const ImageViewer = lazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
+// The source panel loads on the first click of a file card (Phase 13c).
+const ArtifactPanel = lazy(() => import("./ArtifactPanel"));
 
 const USER_ACTIONS: readonly MessageAction[] = ["edit", "delete"];
 const USER_UNANSWERED_ACTIONS: readonly MessageAction[] = ["edit", "regenerate", "delete"];
@@ -211,6 +214,13 @@ export function ConversationView(props: {
     },
     [],
   );
+  const [openArtifact, setOpenArtifact] = useState<{
+    artifact: MessageArtifactDto;
+    trigger: HTMLElement;
+  } | null>(null);
+  const onOpenArtifact = useCallback((artifact: MessageArtifactDto, trigger: HTMLElement) => {
+    setOpenArtifact({ artifact, trigger });
+  }, []);
 
   const conversationQuery = useQuery({
     ...queries.conversation(userId, conversationId ?? ""),
@@ -506,6 +516,7 @@ export function ConversationView(props: {
 
   // Which user turn each regular reply answers, and which turns are unanswered.
   const suggestionsByReply = groupSuggestions(conversation?.proposals);
+  const artifactsByReply = groupByReply(conversation?.artifacts);
   const answers = new Map<string, string>();
   const unanswered = new Set<string>();
   conversation?.messages.forEach((message, index, all) => {
@@ -792,6 +803,8 @@ export function ConversationView(props: {
               attachments={message.attachments}
               onOpenImage={openImage}
               suggestions={suggestionsByReply.get(message.id)}
+              artifacts={artifactsByReply.get(message.id)}
+              onOpenArtifact={onOpenArtifact}
               userId={userId}
               conversationId={conversationId}
               actions={
@@ -986,6 +999,18 @@ export function ConversationView(props: {
           />
         </Suspense>
       ) : null}
+      {openArtifact ? (
+        <Suspense fallback={null}>
+          <ArtifactPanel
+            userId={userId}
+            artifact={openArtifact.artifact}
+            trigger={openArtifact.trigger}
+            onClose={() => {
+              setOpenArtifact(null);
+            }}
+          />
+        </Suspense>
+      ) : null}
       {viewer ? (
         <Suspense fallback={null}>
           <ImageViewer
@@ -1006,6 +1031,28 @@ export function ConversationView(props: {
 }
 
 /** An optimistic user message: sending, sent (awaiting the stored copy) or unknown. */
+const NO_ARTIFACTS = new Map<string, MessageArtifactDto[]>();
+const groupedArtifacts = new WeakMap<
+  readonly MessageArtifactDto[],
+  Map<string, MessageArtifactDto[]>
+>();
+
+/** Captured files by the reply that produced them (cached per query-data array). */
+function groupByReply(artifacts: readonly MessageArtifactDto[] | undefined) {
+  if (!artifacts || artifacts.length === 0) return NO_ARTIFACTS;
+  let byReply = groupedArtifacts.get(artifacts);
+  if (!byReply) {
+    byReply = new Map();
+    for (const artifact of artifacts) {
+      const list = byReply.get(artifact.assistantMessageId) ?? [];
+      list.push(artifact);
+      byReply.set(artifact.assistantMessageId, list);
+    }
+    groupedArtifacts.set(artifacts, byReply);
+  }
+  return byReply;
+}
+
 const NO_SUGGESTIONS = new Map<string, ProposalDto[]>();
 const grouped = new WeakMap<readonly ProposalDto[], Map<string, ProposalDto[]>>();
 

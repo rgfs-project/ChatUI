@@ -91,6 +91,12 @@ export function measure(): Record<string, number> {
   for (const id of criticalRoutes)
     for (const css of manifest.routes[id]?.css ?? []) linked.add(css);
   sizes["critical-css"] = [...linked].reduce((n, f) => n + gzipBytes(f), 0);
+  // On-demand cost of the source panel (Phase 13c): its own chunk and
+  // stylesheet, downloaded only when a file is first opened.
+  const assets = readdirSync(ASSETS);
+  sizes["artifact-panel-on-demand"] = assets
+    .filter((f) => /^ArtifactPanel-[\w-]+\.js$/.test(f) || /^artifacts-[\w-]+\.css$/.test(f))
+    .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
   sizes["all-client-js"] = readdirSync(ASSETS)
     .filter((f) => f.endsWith(".js"))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
@@ -106,6 +112,8 @@ export const LAZY_ONLY = [
   "ImageViewer",
   "MemorySuggestions",
   "MemorySettings",
+  "ArtifactPanel",
+  "ArtifactSettings",
 ] as const;
 
 /** Lazy-only chunks a route group would download on a cold visit (must be none). */

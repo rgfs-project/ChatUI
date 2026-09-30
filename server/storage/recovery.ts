@@ -24,6 +24,7 @@ export interface RecoveryReport {
   generations: GenerationRecoveryReport | null;
   attachments: { incompleteRemoved: number; linked: number; collected: number } | null;
   memoryIntents: { applied: number; retryable: number; conflicts: number } | null;
+  artifacts: { incompleteRemoved: number; unfinalizedRemoved: number } | null;
 }
 
 /** Top-level entries must be user UUIDs, `_system` or `.gitkeep` (logged, never deleted). */
@@ -146,8 +147,11 @@ export async function recoverStorage(options: {
     store: ConversationStore;
     checkpoints: CheckpointStore;
     retentionMs: number;
-    /** Writes a completed checkpoint's staged proposals (Phase 13b), under the conversation lock. */
-    proposals?: StageProposals;
+    /**
+     * Writes a completed checkpoint's staged proposals (13b) and source
+     * captures (13c), under the conversation lock after the reply.
+     */
+    staged?: StageRecords;
   };
   /** Step 6 per account (Phase 13b): settle memory acceptance intents by hashes. */
   memoryIntents?: (
@@ -157,6 +161,10 @@ export async function recoverStorage(options: {
   attachments?: (
     userId: string,
   ) => Promise<{ incompleteRemoved: number; linked: number; collected: number }>;
+  /** Step 7 per account (Phase 13c): remove interrupted and orphaned artifact captures. */
+  artifacts?: (
+    userId: string,
+  ) => Promise<{ incompleteRemoved: number; unfinalizedRemoved: number }>;
 }): Promise<RecoveryReport> {
   const { paths, logger } = options;
   await ensureDir(paths.root);
@@ -213,6 +221,15 @@ export async function recoverStorage(options: {
       attachments.collected += r.collected;
     }
   }
+  let artifacts: RecoveryReport["artifacts"] = null;
+  if (options.artifacts) {
+    artifacts = { incompleteRemoved: 0, unfinalizedRemoved: 0 };
+    for (const userId of users) {
+      const r = await options.artifacts(userId);
+      artifacts.incompleteRemoved += r.incompleteRemoved;
+      artifacts.unfinalizedRemoved += r.unfinalizedRemoved;
+    }
+  }
   // Step 8: derived indexes.
   for (const userId of users) await options.index.load(userId);
   const report = {
@@ -222,6 +239,7 @@ export async function recoverStorage(options: {
     generations,
     memoryIntents,
     attachments,
+    artifacts,
   };
   logger.info(report, "storage recovery complete");
   return report;
@@ -294,11 +312,12 @@ async function writeReplyOnce(
 }
 
 /**
- * Idempotently writes a completed checkpoint's staged proposals (keyed by
- * generation id and call index) into the conversation's sidecar. Called under
- * the conversation lock with the canonical model after the reply write.
+ * Idempotently writes a completed checkpoint's staged records: proposals
+ * keyed by `(generationId, callIndex)`, then artifacts keyed by
+ * `(assistantMessageId, captureIndex)` (contracts §4.3). Called under the
+ * conversation lock with the canonical model after the reply write.
  */
-export type StageProposals = (
+export type StageRecords = (
   checkpoint: GenerationCheckpoint,
   model: ConversationModel,
 ) => Promise<void>;
@@ -328,7 +347,7 @@ export async function recoverGenerations(options: {
   logger: IndexLogger;
   retentionMs: number;
   now: Date;
-  proposals?: StageProposals;
+  staged?: StageRecords;
 }): Promise<GenerationRecoveryReport> {
   const { store, operations, checkpoints, logger, now } = options;
   const report: GenerationRecoveryReport = {
@@ -362,11 +381,14 @@ export async function recoverGenerations(options: {
     const source = checkpoint.operationKey
       ? await operations.read(checkpoint.userId, checkpoint.operationKey).catch(() => null)
       : null;
-    // Staged proposals survive only a completed outcome (contracts §4.3); a
-    // `running` checkpoint's are discarded with the interrupted reply.
+    // Staged proposals and captures survive only a completed outcome
+    // (contracts §4.3); a `running` checkpoint's are discarded with the
+    // interrupted reply. Nothing else is ever scanned for captures.
     const stage =
-      decided?.state === "completed" && (decided.proposals?.length ?? 0) > 0 && options.proposals
-        ? options.proposals
+      decided?.state === "completed" &&
+      (decided.proposals?.length ?? 0) + (decided.captures?.length ?? 0) > 0 &&
+      options.staged
+        ? options.staged
         : undefined;
     const result = await writeReplyOnce(
       store,

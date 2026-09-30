@@ -16,6 +16,7 @@ import {
 import { MemoryStore } from "./storage/memories.ts";
 import { ProposalStore } from "./storage/proposals.ts";
 import { ProposalService, type ProposalHooks } from "./chat/proposals.ts";
+import { ArtifactStore, type ArtifactConfig, type ArtifactHooks } from "./storage/artifacts.ts";
 import { AttachmentStore, type AttachmentStoreHooks } from "./storage/attachments.ts";
 import { ModelCatalog } from "./generations/catalog.ts";
 import { GenerationManager } from "./generations/manager.ts";
@@ -71,6 +72,8 @@ export interface AppOptions {
     attachments?: Partial<AttachmentConfig>;
     /** Memory and proposal-tool limits (Phase 13b); defaults when omitted (tests). */
     memories?: Partial<MemoryConfig>;
+    /** Artifact capture limits (Phase 13c); defaults when omitted (tests). */
+    artifacts?: Partial<ArtifactConfig>;
   };
   logger: Logger;
   version: string;
@@ -100,6 +103,8 @@ export interface AppOptions {
   attachmentHooks?: AttachmentStoreHooks;
   /** Proposal acceptance crash-simulation hooks (tests). */
   proposalHooks?: ProposalHooks;
+  /** Artifact capture crash-simulation hooks (tests). */
+  artifactHooks?: ArtifactHooks;
   /** Process start, for temp-file cleanup (defaults to now). */
   startedAt?: Date;
 }
@@ -209,6 +214,15 @@ export function createApp(options: AppOptions): ChatUiApp {
   const memoryConfig: MemoryConfig = { ...DEFAULT_MEMORY_CONFIG, ...options.config.memories };
   const memories = new MemoryStore({ paths, locks, writes: accountWrites, now });
   const proposalStore = new ProposalStore({ paths, locks, writes: accountWrites });
+  const artifacts = new ArtifactStore({
+    paths,
+    locks,
+    writes: accountWrites,
+    logger,
+    now,
+    ...(options.config.artifacts ? { config: options.config.artifacts } : {}),
+  });
+  if (options.artifactHooks) artifacts.hooks = options.artifactHooks;
   const conversations = new ConversationStore({
     paths,
     locks,
@@ -275,6 +289,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     memories,
     proposals,
     memoryConfig,
+    artifacts,
     ...options.send,
   });
   const users = new UserStore({ paths, locks, now });
@@ -311,6 +326,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     logger,
     onClosing: (id) => {
       attachments.cancelUploads(id);
+      artifacts.forget(id);
     },
   });
   const sseConnections = new SseConnections({
@@ -338,20 +354,43 @@ export function createApp(options: AppOptions): ChatUiApp {
         store: conversations,
         checkpoints,
         retentionMs: storageConfig.generationRetentionMs,
-        // A completed reply's staged proposals go into the sidecar exactly once.
-        proposals: async (checkpoint, model) => {
+        // A completed reply's staged proposals, then its captures, exactly once.
+        staged: async (checkpoint, model) => {
           await proposals.persistStaged(
             checkpoint.userId,
             checkpoint.conversationId,
             model,
             checkpoint.outcome?.proposals ?? [],
           );
+          const captures = checkpoint.outcome?.captures ?? [];
+          const reply = model.blocks.find(
+            (b) => b.type === "assistant" && b.id === checkpoint.assistantMessageId,
+          );
+          if (captures.length > 0 && reply?.type === "assistant" && reply.status === "complete")
+            await artifacts.captureStaged(
+              checkpoint.userId,
+              {
+                conversationId: checkpoint.conversationId,
+                assistantMessageId: checkpoint.assistantMessageId,
+                generationId: checkpoint.generationId,
+              },
+              captures,
+            );
         },
       },
       // Step 6: memory acceptance intents, by before/after hashes.
       memoryIntents: (userId) => proposals.recoverIntents(userId),
       // Step 7: link attachments the Markdown references, GC stale pending ones.
       attachments: (userId) => attachments.reconcile(userId, { startup: true, now: now() }),
+      // After step 5 every capture that can still be finalized has been.
+      artifacts: async (userId) => {
+        const open = new Set(
+          (await checkpoints.all())
+            .filter((c) => c.state === "terminal-decided")
+            .map((c) => c.generationId),
+        );
+        return artifacts.reconcile(userId, open);
+      },
     });
     await users.rebuildIndex();
     await sessions.sweep();
@@ -437,6 +476,18 @@ export function createApp(options: AppOptions): ChatUiApp {
     memories,
     proposals,
     memoryPromptBudgetBytes: memoryConfig.promptBudgetBytes,
+    artifacts,
+    // Deleting an artifact finalizes its generation's checkpoint first, so no
+    // recovery can recreate it (INV-40).
+    finalizeGeneration: async (generationId) => {
+      const checkpoint = await checkpoints.read(generationId);
+      if (checkpoint && checkpoint.state !== "terminal")
+        await checkpoints.write({
+          ...checkpoint,
+          state: "terminal",
+          updatedAt: now().toISOString(),
+        });
+    },
     modelList: async (role, listOptions) => {
       const providers = await models.listModels(listOptions);
       const visible =

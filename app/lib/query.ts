@@ -5,6 +5,7 @@ import type { ConversationDto, ConversationSummary, SearchResponse } from "@shar
 import type { ModelListDto } from "@shared/generations";
 import type { AttachmentLimitsDto } from "@shared/attachments";
 import type { MemoryList } from "@shared/memories";
+import type { ArtifactList } from "@shared/artifacts";
 import { apiFetch } from "./api";
 
 /**
@@ -24,6 +25,9 @@ export const queryKeys = {
   search: (userId: string, q: string) => ["user", userId, "search", q] as const,
   /** Approved memories (Phase 13b); proposals ride on the conversation DTO. */
   memories: (userId: string) => ["user", userId, "memories"] as const,
+  /** Generated source artifacts (Phase 13c): the list and one file's source text. */
+  artifacts: (userId: string) => ["user", userId, "artifacts"] as const,
+  artifactSource: (userId: string, id: string) => ["user", userId, "artifact-source", id] as const,
   /** Attachment limits and the user's used bytes (Phase 12); read when attaching. */
   attachmentLimits: (userId: string) => ["user", userId, "attachment-limits"] as const,
   /** Mutation key for sends (optimistic messages are read from its state). */
@@ -160,6 +164,16 @@ export const fetchers = {
     apiJson<PreferencesDto>("/api/preferences", signal ? { signal } : {}),
   memories: (signal?: AbortSignal) =>
     apiJson<MemoryList>("/api/memories", signal ? { signal } : {}),
+  artifacts: (signal?: AbortSignal) =>
+    apiJson<ArtifactList>("/api/artifacts", signal ? { signal } : {}),
+  /** The inert source as text (never parsed as HTML). */
+  artifactSource: async (id: string, signal?: AbortSignal) => {
+    const response = await apiFetch(`/api/artifacts/${encodeURIComponent(id)}/source`, {
+      ...(signal ? { signal } : {}),
+    });
+    if (!response.ok) throw new ApiError(response.status, null, "The file couldn’t be loaded");
+    return response.text();
+  },
   attachmentLimits: (signal?: AbortSignal) =>
     apiJson<AttachmentLimitsDto>("/api/attachments/limits", signal ? { signal } : {}),
   models: (refresh = false, signal?: AbortSignal) =>
@@ -213,6 +227,20 @@ export const queries = {
       queryKey: queryKeys.memories(userId),
       queryFn: ({ signal }) => fetchers.memories(signal),
       retry: retryable,
+    }),
+  artifacts: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.artifacts(userId),
+      queryFn: ({ signal }) => fetchers.artifacts(signal),
+      retry: retryable,
+    }),
+  artifactSource: (userId: string, id: string) =>
+    queryOptions({
+      queryKey: queryKeys.artifactSource(userId, id),
+      queryFn: ({ signal }) => fetchers.artifactSource(id, signal),
+      retry: retryable,
+      // Artifacts are immutable: the source never changes once captured.
+      staleTime: Number.POSITIVE_INFINITY,
     }),
   attachmentLimits: (userId: string) =>
     queryOptions({

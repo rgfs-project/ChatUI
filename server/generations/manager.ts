@@ -24,6 +24,7 @@ import { TOOL_RESULTS, type StreamedCall } from "../chat/memory-tools.ts";
 import type { CheckpointStore, GenerationCheckpoint } from "../storage/checkpoints.ts";
 import type { MemorySnapshotEntry } from "../storage/memories.ts";
 import type { ProposalRecord } from "../storage/proposals.ts";
+import type { StagedCapture } from "../artifacts/capture.ts";
 
 /** Calls tracked per generation at all; later fragments are ignored (bounded memory). */
 const MAX_TRACKED_CALLS = 32;
@@ -68,6 +69,8 @@ export interface GenerationOutcome {
   finishedAt: string;
   /** Staged proposals; persisted only for a `completed` outcome (contracts §4.3). */
   proposals: ProposalRecord[];
+  /** Staged source captures (Phase 13c); only a `completed` outcome has any. */
+  captures: StagedCapture[];
 }
 
 /**
@@ -154,6 +157,8 @@ interface Generation {
   continuation: ContinuationMessages | null;
   /** Wall-clock start, for the continuation's remaining time. */
   startedAtMs: number;
+  /** Stages source captures from the final text (Phase 13c). */
+  capture: ((content: string) => StagedCapture[]) | undefined;
 }
 
 type AbortReason = "cancel" | "max" | "shutdown";
@@ -357,6 +362,8 @@ export class GenerationManager {
       /** Proposal tools (Phase 13b); omitted for models without verified tool support. */
       tools?: ToolSession | undefined;
       memorySnapshot?: MemorySnapshotEntry[] | undefined;
+      /** Source capture (Phase 13c): run on the final text of a completed reply only. */
+      capture?: ((content: string) => StagedCapture[]) | undefined;
     },
   ): void {
     let settle!: () => void;
@@ -399,6 +406,7 @@ export class GenerationManager {
       previews: [],
       continuation: null,
       startedAtMs: Date.now(),
+      capture: input.capture,
     };
     this.generations.set(generation.id, generation);
     this.active.set(reservation.conversationKey, {
@@ -708,6 +716,7 @@ export class GenerationManager {
             error: outcome.error,
             finishedAt: outcome.finishedAt,
             ...(outcome.proposals.length > 0 ? { proposals: outcome.proposals } : {}),
+            ...(outcome.captures.length > 0 ? { captures: outcome.captures } : {}),
           }
         : null,
       ...(generation.memorySnapshot ? { memorySnapshot: generation.memorySnapshot } : {}),
@@ -773,7 +782,20 @@ export class GenerationManager {
       error,
       finishedAt: this.now().toISOString(),
       proposals: generation.proposals,
+      captures: [],
     };
+    // Only a successful, complete reply is captured (INV-40); a failing
+    // capture never changes the reply's outcome.
+    if (state === "completed" && generation.capture) {
+      try {
+        outcome.captures = generation.capture(generation.content);
+      } catch (captureError) {
+        this.options.logger.warn(
+          { err: captureError, generationId: generation.id },
+          "source capture failed",
+        );
+      }
+    }
     void (async () => {
       let revision: string | null = null;
       try {

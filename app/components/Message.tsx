@@ -1,10 +1,12 @@
-import { Check, ChevronRight, Copy, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Copy, FileCode, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { lazy, memo, Suspense, useEffect, useState, type ReactNode } from "react";
 import type { MessageAttachmentDto } from "@shared/attachments";
 import type { MessageDto } from "@shared/conversations";
 import type { ProposalDto } from "@shared/memories";
+import type { MessageArtifactDto } from "@shared/artifacts";
 import { MessageAttachments } from "./MessageAttachments";
 import { count } from "../lib/render-counters";
+import { formatBytes } from "../lib/format";
 import { Markdown } from "./Markdown";
 
 /** Memory suggestion cards (Phase 13b): loaded only for replies that have some. */
@@ -92,6 +94,42 @@ export interface MessageViewProps {
   /** Owner and conversation of the suggestions (primitives keep the memo effective). */
   userId?: string;
   conversationId?: string;
+  /** Assistant only: source files captured from this reply (Phase 13c). */
+  artifacts?: readonly MessageArtifactDto[] | undefined;
+  onOpenArtifact?: (artifact: MessageArtifactDto, trigger: HTMLElement) => void;
+}
+
+/** A captured file under its reply: opens the lazy source panel. */
+function ArtifactCards({
+  artifacts,
+  onOpen,
+}: {
+  artifacts: readonly MessageArtifactDto[];
+  onOpen: NonNullable<MessageViewProps["onOpenArtifact"]>;
+}) {
+  return (
+    <ul className="artifact-cards" aria-label="Files from this reply">
+      {artifacts.map((artifact) => (
+        <li key={artifact.id}>
+          <button
+            type="button"
+            className="artifact-card"
+            data-testid="artifact-card"
+            onClick={(event) => {
+              onOpen(artifact, event.currentTarget);
+            }}
+          >
+            <FileCode size={18} aria-hidden />
+            <span className="artifact-card-name">{artifact.name}</span>
+            <span className="artifact-card-meta">
+              {artifact.language ?? "file"} · {formatBytes(artifact.size)}
+            </span>
+            <span className="visually-hidden">, view source</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 const ACTION_LABEL: Record<MessageAction, string> = {
@@ -158,6 +196,8 @@ function MessageImpl({
   suggestions,
   userId,
   conversationId,
+  artifacts,
+  onOpenArtifact,
 }: MessageViewProps) {
   count("messageRenders");
   useEffect(() => {
@@ -203,6 +243,9 @@ function MessageImpl({
       {statusLabel ? <span className={`badge status-${status ?? ""}`}>{statusLabel}</span> : null}
       {reasoning ? <Reasoning text={reasoning} done /> : null}
       {role === "assistant" ? <Markdown text={content} /> : <p className="plain-text">{content}</p>}
+      {role === "assistant" && artifacts?.length && onOpenArtifact ? (
+        <ArtifactCards artifacts={artifacts} onOpen={onOpenArtifact} />
+      ) : null}
       {role === "assistant" && (content || buttons) ? (
         <div className="turn-actions">
           {content ? <CopyButton text={content} label="Copy reply" /> : null}

@@ -8,6 +8,7 @@ import {
   DEFAULT_MEMORY_CONFIG,
   loadConfig,
 } from "../../server/config.ts";
+import { DEFAULT_ARTIFACT_CONFIG as DEFAULT_ARTIFACT_CONFIG_STORE } from "../../server/storage/artifacts.ts";
 
 let root: string;
 
@@ -48,6 +49,7 @@ describe("configuration", () => {
       // The environment defaults match the in-code defaults tests use.
       attachments: DEFAULT_ATTACHMENT_CONFIG,
       memories: DEFAULT_MEMORY_CONFIG,
+      artifacts: DEFAULT_ARTIFACT_CONFIG_STORE,
       provider: {
         baseUrl: undefined,
         apiKey: undefined,

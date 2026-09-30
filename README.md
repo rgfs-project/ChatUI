@@ -177,6 +177,13 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 - Tool support depends on the llama.cpp server (`--jinja` and the model's chat template). Run `scripts/probe-provider.ts` and see [docs/provider-notes.md](docs/provider-notes.md#tool-calls-phase-13b) before turning it on.
 - Memories are stored as Markdown files in `DATA_DIR/<user>/memories/`, and suggestions in `DATA_DIR/<user>/proposals/`.
 
+## Files from replies
+
+- A code block becomes a **file** when the model labels it with `file=<name>` after the language, for example ` ```python file=hello.py `. ChatUI doesn't instruct models to do this; add it to a model's system prompt (Administration → Models) if you want files.
+- Files appear as cards under the reply. A card opens the source (shown as text: HTML, SVG and scripts are never run), with Copy, Download and Delete.
+- **Settings → Customize → Files** lists every file. Files stay when their chat is deleted ("Chat deleted"), and are removed with the account.
+- Only complete replies are captured. Names must be plain file names with a known extension. Limits: `ARTIFACT_MAX_BYTES` per file, `ARTIFACT_MAX_PER_REPLY` per reply, `ARTIFACT_QUOTA_BYTES` per user. Files are stored under `DATA_DIR/<user>/artifacts/<id>/`.
+
 ## Data, backups and limits
 
 - Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).

@@ -1708,6 +1708,47 @@ button.danger-outline {
   }
 }
 
+/* Captured source files under a reply (Phase 13c); the panel styles load with it. */
+.artifact-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.artifact-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-weight: 400;
+  text-align: left;
+}
+
+.artifact-card:hover {
+  background: var(--hover);
+}
+
+.artifact-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.artifact-card-meta {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 /* Memory suggestion previews while a reply streams (Phase 13b). */
 .memory-previews {
   margin: 8px 0 0;

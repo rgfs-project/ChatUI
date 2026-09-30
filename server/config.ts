@@ -1,6 +1,7 @@
 // Loaded natively by Node (type stripping) from server/main.ts, so relative
 // imports carry explicit .ts extensions and no path aliases are used.
 import { statSync } from "node:fs";
+import type { ArtifactConfig } from "./storage/artifacts.ts";
 import { isIP } from "node:net";
 import path from "node:path";
 import { z } from "zod";
@@ -91,6 +92,11 @@ const envSchema = z.object({
   MEMORY_TOOL_MAX_CALLS: intFrom(1, 16).default(4),
   MEMORY_TOOL_MAX_ARGUMENT_BYTES: intFrom(256, 65_536).default(8_192),
   CONTINUATION_TOKEN_RESERVE: intFrom(0, 100_000).default(256),
+
+  // Generated source artifacts (Phase 13c).
+  ARTIFACT_MAX_BYTES: intFrom(1_024, 16 * 1024 * 1024).default(256 * 1024),
+  ARTIFACT_MAX_PER_REPLY: intFrom(1, 100).default(16),
+  ARTIFACT_QUOTA_BYTES: intFrom(1_024, 1_099_511_627_776).default(100 * 1024 * 1024),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -113,7 +119,11 @@ export interface Config {
   auth: AuthConfig;
   attachments: AttachmentConfig;
   memories: MemoryConfig;
+  artifacts: ArtifactConfig;
 }
+
+/** Generated source artifact limits (contracts §12); the store holds the defaults. */
+export type { ArtifactConfig } from "./storage/artifacts.ts";
 
 /** Approved memories and proposal-only tools (contracts §4.3, §12). */
 export interface MemoryConfig {
@@ -389,6 +399,11 @@ export function loadConfig(
       maxUploadsPerUser: parsed.data.MAX_UPLOADS_PER_USER,
       maxUploadsTotal: parsed.data.MAX_UPLOADS_TOTAL,
       mediaTokenReserve: parsed.data.MEDIA_TOKEN_RESERVE,
+    },
+    artifacts: {
+      maxBytes: parsed.data.ARTIFACT_MAX_BYTES,
+      maxPerReply: parsed.data.ARTIFACT_MAX_PER_REPLY,
+      quotaBytes: parsed.data.ARTIFACT_QUOTA_BYTES,
     },
     memories: {
       promptBudgetBytes: parsed.data.MEMORY_PROMPT_BUDGET,

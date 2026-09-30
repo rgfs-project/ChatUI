@@ -1,4 +1,4 @@
-import { Brain, CircleUserRound, Paperclip, ScrollText, Shield } from "lucide-react";
+import { Brain, CircleUserRound, FileCode, Paperclip, ScrollText, Shield } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
@@ -14,12 +14,14 @@ import type { Route } from "./+types/settings";
 
 /** Settings → Memories (Phase 13b): loaded when its tab opens. */
 const MemorySettings = lazy(() => import("../components/MemorySettings"));
+/** Settings → Files (Phase 13c): loaded when its tab opens. */
+const ArtifactSettings = lazy(() => import("../components/ArtifactSettings"));
 
 export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings · ChatUI" }];
 }
 
-type Section = "account" | "skills" | "memories" | "attachments";
+type Section = "account" | "skills" | "memories" | "files" | "attachments";
 
 /**
  * Settings: a large panel with its sections listed on the left (Account;
@@ -57,6 +59,7 @@ export default function SettingsOverlay() {
           <p className="section-label">Customize</p>
           {tab("skills", "Skills", <ScrollText size={18} aria-hidden />)}
           {tab("memories", "Memories", <Brain size={18} aria-hidden />)}
+          {tab("files", "Files", <FileCode size={18} aria-hidden />)}
           {tab("attachments", "Attachments", <Paperclip size={18} aria-hidden />)}
         </nav>
         {section === "skills" && user ? (
@@ -70,6 +73,16 @@ export default function SettingsOverlay() {
             }
           >
             <MemorySettings userId={user.id} />
+          </Suspense>
+        ) : section === "files" && user ? (
+          <Suspense
+            fallback={
+              <section className="settings-body">
+                <p className="settings-hint">Loading files…</p>
+              </section>
+            }
+          >
+            <ArtifactSettings userId={user.id} />
           </Suspense>
         ) : section === "attachments" && user ? (
           <AttachmentSettings userId={user.id} />

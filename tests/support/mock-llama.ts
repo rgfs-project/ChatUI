@@ -491,6 +491,9 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
       }
       case MOCK_MODELS.slow: {
         const count = options.slowChunks ?? 20;
+        // A message with a fenced block is echoed first (artifact tests, Phase 13c).
+        if (lastUserText(body).includes("```"))
+          send(chunk(model, { content: `${lastUserText(body)}\n\n` }));
         for (let i = 0; i < count; i++) {
           if (stream.closed) return;
           send(chunk(model, { content: `part${String(i)} ` }));
@@ -522,6 +525,8 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
         return;
       case MOCK_MODELS.earlyEnd:
         send(chunk(model, { content: "cut " }));
+        if (lastUserText(body).includes("```"))
+          send(chunk(model, { content: `\n${lastUserText(body)}` }));
         res.end();
         return;
       case MOCK_MODELS.huge: {

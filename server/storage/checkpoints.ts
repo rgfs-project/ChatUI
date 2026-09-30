@@ -5,6 +5,7 @@ import { isUuid, type DataPaths } from "./paths.ts";
 import type { ContinuationMessages } from "../providers/types.ts";
 import type { MemorySnapshotEntry } from "./memories.ts";
 import type { ProposalRecord } from "./proposals.ts";
+import type { StagedCapture } from "../artifacts/capture.ts";
 
 export type CheckpointState = "running" | "terminal-decided" | "terminal";
 
@@ -20,6 +21,8 @@ export interface CheckpointOutcome {
    * only when `state` is `completed`; discarded otherwise.
    */
   proposals?: ProposalRecord[];
+  /** Staged source captures (Phase 13c), written after the proposals. */
+  captures?: StagedCapture[];
 }
 
 export interface GenerationCheckpoint {

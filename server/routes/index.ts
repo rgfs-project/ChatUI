@@ -36,6 +36,12 @@ import {
 } from "./attachments.ts";
 import { getPreferencesRoute, updatePreferencesRoute } from "./preferences.ts";
 import {
+  artifactSourceRoute,
+  deleteArtifactRoute,
+  getArtifactRoute,
+  listArtifactsRoute,
+} from "./artifacts.ts";
+import {
   acceptProposalRoute,
   createMemoryRoute,
   deleteMemoryRoute,
@@ -105,6 +111,11 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(listProposalsRoute),
   erase(acceptProposalRoute),
   erase(rejectProposalRoute),
+  // Generated source artifacts (Phase 13c); no upload route exists.
+  erase(listArtifactsRoute),
+  erase(getArtifactRoute),
+  erase(artifactSourceRoute),
+  erase(deleteArtifactRoute),
   // Attachments (Phase 12). The literal /limits path is registered before /:id.
   erase(uploadAttachmentRoute),
   erase(attachmentLimitsRoute),

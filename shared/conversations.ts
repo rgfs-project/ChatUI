@@ -3,6 +3,7 @@ import { MAX_ATTACHMENTS_PER_MESSAGE } from "./attachment-media";
 import { messageAttachmentSchema } from "./attachments";
 import { canonicalUuid } from "./ids";
 import { proposalDtoSchema } from "./memories";
+import { messageArtifactSchema } from "./artifacts";
 
 /** Conversation DTOs (Phase 3). Browser code imports only the types. */
 
@@ -51,6 +52,8 @@ export const conversationDtoSchema = z.strictObject({
   activeGeneration: z.strictObject({ generationId: z.uuid() }).nullable(),
   /** Memory suggestions made in this conversation (Phase 13b), oldest first. */
   proposals: z.array(proposalDtoSchema).optional(),
+  /** Source files captured from this conversation's replies (Phase 13c). */
+  artifacts: z.array(messageArtifactSchema).optional(),
 });
 export type ConversationDto = z.infer<typeof conversationDtoSchema>;
 

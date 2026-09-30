@@ -126,6 +126,27 @@ export class DataPaths {
     );
   }
 
+  artifactsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "artifacts");
+  }
+
+  /** One artifact, named by its server-minted id (never its display name, INV-41). */
+  artifactDir(userId: string, artifactId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "artifacts",
+      this.uuid(artifactId, "artifact id"),
+    );
+  }
+
+  artifactBlob(userId: string, artifactId: string): string {
+    return path.join(this.artifactDir(userId, artifactId), "blob");
+  }
+
+  artifactMeta(userId: string, artifactId: string): string {
+    return path.join(this.artifactDir(userId, artifactId), "meta.json");
+  }
+
   /** Account directories being removed by closure (contracts §6). */
   deletingDir(): string {
     return this.inside(SYSTEM_DIR, "deleting");
