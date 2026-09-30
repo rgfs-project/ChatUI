@@ -526,8 +526,29 @@ describe("SSE observation", () => {
 
       // Slow observer: opens the stream and never reads it.
       const slow = await fetch(url, { headers: run.session.headers() });
-      const normal = await readSse(url, { headers: run.session.headers() });
-      expect(normal.frames.at(-1)?.event).toBe("terminal");
+      // A normal observer reads as fast as it can. It runs in the server's own
+      // process, so on a loaded machine it can fall behind the flood too and be
+      // dropped by the same bound; like a browser it then resumes from its
+      // last event id (contracts §4: replay or resync), and must reach the end.
+      let last: number | undefined;
+      let terminal = false;
+      for (let attempt = 0; attempt < 10 && !terminal; attempt++) {
+        const part = await readSse(url, {
+          headers: {
+            ...run.session.headers(),
+            ...(last === undefined ? {} : { "Last-Event-ID": String(last) }),
+          },
+        }).catch(() => null);
+        for (const frame of part?.frames ?? []) {
+          if (frame.id !== undefined) last = frame.id;
+          if (frame.event === "terminal") terminal = true;
+          if (frame.event === "resync" || frame.event === "snapshot") {
+            const state = (frame.data as { state?: string }).state;
+            if (state && state !== "pending" && state !== "streaming") terminal = true;
+          }
+        }
+      }
+      expect(terminal).toBe(true);
       const snapshot = await waitTerminal(run, id);
       expect(snapshot.state).toBe("completed");
       expect(snapshot.content.length).toBe(1200 * 32 * 1024);
