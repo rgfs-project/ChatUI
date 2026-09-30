@@ -1,3 +1,4 @@
+import { afterAll } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -95,15 +96,32 @@ export function testHasher(options: { concurrency?: number; queue?: number } = {
 export const TEST_PASSWORD = "correct horse battery staple";
 
 const tempDirs: string[] = [];
-process.on("exit", () => {
-  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+/** Apps built by testApp(): settled and shut down before their data is removed. */
+const apps: { ready: Promise<unknown>; shutdown: () => Promise<void> }[] = [];
+function removeTempDirs(): void {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+}
+// After each test file (Vitest workers are not guaranteed a normal exit, so an
+// exit hook alone leaked every data directory into the /tmp quota). Apps some
+// tests never awaited are finished first, so no late write hits a removed dir.
+afterAll(async () => {
+  const pending = apps.splice(0);
+  await Promise.allSettled(pending.map((app) => app.ready));
+  await Promise.allSettled(pending.map((app) => app.shutdown()));
+  removeTempDirs();
 });
+process.on("exit", removeTempDirs);
 
-/** A fresh DATA_DIR removed when the test process exits. */
-export function tempDataDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), "chatui-data-"));
+/** A fresh temporary directory removed after the test file. */
+export function tempDir(prefix = "chatui-data-"): string {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
   tempDirs.push(dir);
   return dir;
+}
+
+/** A fresh DATA_DIR removed after the test file. */
+export function tempDataDir(): string {
+  return tempDir("chatui-data-");
 }
 
 export interface TestAppOptions extends Partial<Omit<AppOptions, "config">> {
@@ -171,6 +189,7 @@ export function testApp(overrides: TestAppOptions = {}) {
       ...config,
     },
   });
+  apps.push(chatui);
   return { app: chatui.handler, chatui, logs };
 }
 

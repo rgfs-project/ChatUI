@@ -119,7 +119,14 @@ export function ConversationView(props: {
   const location = useLocation();
   const client = useQueryClient();
   const shell = useShell();
-  const sidebar = useSidebar();
+  const {
+    visible: sidebarVisible,
+    show: showSidebar,
+    narrow,
+    drawerOpen,
+    setDrawerTrigger,
+    warmDrawer,
+  } = useSidebar();
   const username = useAuth().session?.user?.username;
   const actions = useConversationActions(userId);
   const draftKey = conversationId ?? NEW_DRAFT;
@@ -446,16 +453,23 @@ export function ConversationView(props: {
       inert={props.inert}
     >
       <header className="chat-header app-header">
-        {sidebar.visible ? null : (
+        {sidebarVisible ? null : (
           <span className="header-nav">
             <button
+              ref={setDrawerTrigger}
               type="button"
               className="icon-btn"
-              aria-label="Show sidebar"
-              aria-expanded={false}
-              aria-controls="sidebar"
-              title="Show sidebar"
-              onClick={sidebar.show}
+              aria-label={narrow ? "Open conversations" : "Show sidebar"}
+              aria-expanded={narrow ? drawerOpen : false}
+              aria-controls={narrow ? undefined : "sidebar"}
+              aria-haspopup={narrow ? "dialog" : undefined}
+              title={narrow ? "Conversations" : "Show sidebar"}
+              // Warm the drawer chunk on intent (touch or mouse), never required.
+              onPointerDown={warmDrawer}
+              onFocus={() => {
+                if (narrow) warmDrawer();
+              }}
+              onClick={showSidebar}
             >
               <PanelLeft size={18} aria-hidden />
             </button>

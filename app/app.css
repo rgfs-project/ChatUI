@@ -203,7 +203,8 @@ textarea {
 
 /* Floating menus (account, conversation title). */
 .menu-popover {
-  z-index: 20;
+  /* Above the drawer (50) and dialogs (40–41): an open menu is always on top. */
+  z-index: 60;
   display: grid;
   min-width: 180px;
   gap: 2px;
@@ -1418,36 +1419,107 @@ button.danger-outline {
   font-size: 14px;
 }
 
-/* ---- Narrow screens: the sidebar becomes an overlay drawer -------------------- */
+/* ---- Responsive layout and touch (Phase 11) ---------------------------------- */
+
+/* The visible height: dynamic viewport units, or the visual viewport on
+   browsers whose on-screen keyboard overlays the page (set by the layout). */
+.app-shell {
+  height: var(--app-height, 100dvh);
+}
+
+/* Safe areas (viewport-fit=cover): nothing sits under a notch or home indicator. */
+.sidebar {
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  padding-left: max(10px, env(safe-area-inset-left));
+}
+
+.chat-header {
+  padding-top: env(safe-area-inset-top);
+  padding-right: max(12px, env(safe-area-inset-right));
+}
+
+.composer {
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+
+/* Nested scrollers keep their scroll: no chaining into the page. */
+.sidebar,
+.chat-list,
+.drawer-content,
+.dialog-content {
+  overscroll-behavior: contain;
+}
+
+.code-block pre,
+.markdown table {
+  overscroll-behavior-x: contain;
+}
+
+/* The drawer (below the breakpoint): a modal panel from the leading edge. */
+.drawer-content {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  width: min(290px, 85vw);
+  background: var(--sidebar);
+  border-right: 1px solid var(--line);
+}
+
+.drawer-content:focus {
+  outline: none;
+}
+
+.drawer-content .sidebar {
+  flex: 1;
+  min-height: 0;
+  border-right: 0;
+}
+
+/* No hover on touch screens: actions that appear on hover are always shown. */
+@media (hover: none) {
+  .row-menu,
+  .turn-user .turn-actions {
+    opacity: 1;
+  }
+
+  .chat-list li a {
+    padding-right: 44px;
+  }
+}
 
 @media (max-width: 767.98px) {
-  .app-shell {
+  .app-shell,
+  .app-shell.sidebar-collapsed {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* Before hydration the drawer state is unknown: keep it closed. */
-  .sidebar:not(.drawer) {
+  /* The in-grid sidebar gives way to the drawer (before hydration too). */
+  .app-shell > .sidebar {
     display: none;
   }
 
-  .sidebar.drawer {
-    position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 30;
-    width: min(290px, 85vw);
-  }
-
   .chat-header {
-    height: 52px;
-    padding: 0 6px;
+    height: calc(52px + env(safe-area-inset-top));
+    padding-left: max(6px, env(safe-area-inset-left));
+    padding-right: max(6px, env(safe-area-inset-right));
   }
 
   .scroll {
     padding: 12px 4px 24px;
   }
 
+  .history {
+    padding: 0 10px;
+  }
+
   .composer {
-    padding: 0 10px 8px;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
   }
 
   .model-select {
@@ -1458,13 +1530,40 @@ button.danger-outline {
     font-size: 23px;
   }
 
+  .jump-to-latest {
+    bottom: 88px;
+  }
+
+  /* Dialogs and overlays become bottom sheets: full width, viewport-safe. */
+  .dialog-content,
+  .overlay-panel,
+  .overlay-wide {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: 90dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    transform: none;
+  }
+
+  .overlay-wide {
+    height: 90dvh;
+  }
+
   .settings-layout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .settings-nav {
     display: flex;
     gap: 4px;
+    overflow-x: auto;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
@@ -1473,7 +1572,73 @@ button.danger-outline {
     display: none;
   }
 
+  .settings-nav .nav-row {
+    width: auto;
+    white-space: nowrap;
+  }
+
   .settings-body {
     padding: 16px;
+  }
+}
+
+/* Touch targets: at least 44x44 CSS px on narrow screens and coarse pointers. */
+@media (max-width: 767.98px), (pointer: coarse) {
+  button,
+  select,
+  .icon-btn,
+  .brand,
+  .nav-row,
+  .chat-list a,
+  .menu-item,
+  .account-trigger,
+  .title-trigger,
+  .command-option,
+  .button-link,
+  .reasoning > summary {
+    min-height: 44px;
+  }
+
+  button,
+  .icon-btn {
+    min-width: 44px;
+  }
+
+  .send-btn,
+  .row-menu {
+    width: 44px;
+    height: 44px;
+  }
+
+  .row-menu {
+    top: 0;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .chat-list a {
+    height: 44px;
+  }
+
+  .turn-actions .icon-btn,
+  .code-toolbar .icon-btn,
+  .queued-meta .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .composer-box {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  /* 16px text inputs: iOS does not zoom the page when they are focused. */
+  textarea,
+  input,
+  select {
+    font-size: max(1rem, 16px);
   }
 }

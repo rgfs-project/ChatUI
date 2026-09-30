@@ -161,6 +161,23 @@ describe("scroll intent", () => {
     expect(box.scrollTop).toBe(500);
   });
 
+  it("a viewport resize (on-screen keyboard closing) clamps the scroll down but never unpins", async () => {
+    const { rerender } = render(<Harness version={0} />);
+    await frame();
+    // Keyboard open: the container shrank and the pin was kept at the bottom.
+    box.clientHeight = 200;
+    box.scrollTop = 800;
+    // Keyboard closes: the container grows; the browser clamps scrollTop down
+    // and fires a scroll event. Upward movement, yet still at the bottom.
+    box.clientHeight = 400;
+    userScrollTo(600);
+    box.scrollHeight = 1300;
+    rerender(<Harness version={1} />);
+    await frame();
+    expect(box.scrollTop).toBe(900);
+    expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull();
+  });
+
   it("jump to latest re-pins and hides itself", async () => {
     const { rerender } = render(<Harness version={0} />);
     await frame();

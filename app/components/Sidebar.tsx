@@ -24,14 +24,26 @@ export interface SidebarUser {
 interface SidebarProps {
   user: SidebarUser;
   hidden: boolean;
-  /** Overlay drawer on narrow screens. */
+  /** Rendered inside the narrow-screen drawer (Phase 11). */
   drawer: boolean;
+  /** The drawer instance needs its own id. */
+  navId?: string;
+  /** Accessible name of the hide/close button. */
+  hideLabel?: string;
   onHide: () => void;
   /** Called after choosing a destination (closes the drawer). */
   onNavigate: () => void;
 }
 
-function SidebarImpl({ user, hidden, drawer, onHide, onNavigate }: SidebarProps) {
+function SidebarImpl({
+  user,
+  hidden,
+  drawer,
+  navId = "sidebar",
+  hideLabel = "Hide sidebar",
+  onHide,
+  onNavigate,
+}: SidebarProps) {
   count("sidebarRenders");
   useEffect(() => {
     count("sidebarMounts");
@@ -49,8 +61,8 @@ function SidebarImpl({ user, hidden, drawer, onHide, onNavigate }: SidebarProps)
 
   return (
     <nav
-      id="sidebar"
-      className={`sidebar${drawer ? " drawer" : ""}`}
+      id={navId}
+      className={`sidebar${drawer ? " in-drawer" : ""}`}
       aria-label="Conversations"
       hidden={hidden}
     >
@@ -61,10 +73,10 @@ function SidebarImpl({ user, hidden, drawer, onHide, onNavigate }: SidebarProps)
         <button
           type="button"
           className="icon-btn"
-          aria-label="Hide sidebar"
-          aria-expanded
-          aria-controls="sidebar"
-          title="Hide sidebar"
+          aria-label={hideLabel}
+          aria-expanded={drawer ? undefined : true}
+          aria-controls={drawer ? undefined : navId}
+          title={hideLabel}
           onClick={onHide}
         >
           <PanelLeft size={18} aria-hidden />

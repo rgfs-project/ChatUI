@@ -30,7 +30,13 @@ export function Layout({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* resizes-content: the on-screen keyboard shrinks the layout viewport (and so
+            100dvh), keeping the composer visible; viewport-fit=cover enables the
+            safe-area insets used in app.css. */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+        />
         <meta name="color-scheme" content="light dark" />
         <Meta />
         {/* Stylesheets need no nonce (style-src 'self'). An explicit empty nonce keeps

@@ -1,14 +1,14 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { acceptedEncodings, precompressedAssets } from "../../server/static-compressed.ts";
+import { tempDir } from "./helpers.ts";
 
 function app() {
-  const dir = mkdtempSync(path.join(tmpdir(), "chatui-assets-"));
+  const dir = tempDir("chatui-assets-");
   const js = Buffer.from("console.log('x');".repeat(200));
   writeFileSync(path.join(dir, "app-abc123.js"), js);
   writeFileSync(path.join(dir, "app-abc123.js.br"), brotliCompressSync(js));

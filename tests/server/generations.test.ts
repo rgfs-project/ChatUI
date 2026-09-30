@@ -512,7 +512,9 @@ describe("SSE observation", () => {
   });
 
   it("INV-62: a slow observer is disconnected while the generation and a normal observer continue", async () => {
-    const flood = await startMockLlama({ floodChunks: 600, floodChunkBytes: 32 * 1024 });
+    // Far more than kernel socket buffers can absorb for the unread stream
+    // (several MB on loopback), so the 6 MiB queue must overflow under any load.
+    const flood = await startMockLlama({ floodChunks: 1200, floodChunkBytes: 32 * 1024 });
     try {
       const run = await start(
         { baseUrl: flood.url, apiKey: undefined, maxResponseBytes: 64 * 1024 * 1024 },
@@ -528,13 +530,16 @@ describe("SSE observation", () => {
       expect(normal.frames.at(-1)?.event).toBe("terminal");
       const snapshot = await waitTerminal(run, id);
       expect(snapshot.state).toBe("completed");
-      expect(snapshot.content.length).toBe(600 * 32 * 1024);
-      await vi.waitFor(() => {
-        expect(JSON.stringify(run.logs.lines())).toContain("disconnecting slow SSE observer");
-      });
+      expect(snapshot.content.length).toBe(1200 * 32 * 1024);
+      await vi.waitFor(
+        () => {
+          expect(JSON.stringify(run.logs.lines())).toContain("disconnecting slow SSE observer");
+        },
+        { timeout: 10_000 },
+      );
       await slow.body?.cancel().catch(() => undefined);
     } finally {
       await flood.close();
     }
-  });
+  }, 30_000);
 });
