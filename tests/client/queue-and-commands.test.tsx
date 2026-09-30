@@ -17,6 +17,7 @@ import {
   MODELS,
   REPLY,
   seededClient,
+  signInStore,
   USER,
 } from "./support";
 
@@ -51,6 +52,7 @@ const posts = (url: string) =>
   fetchMock.mock.calls.filter(([u, init]) => u === url && init?.method === "POST");
 
 beforeEach(() => {
+  signInStore();
   Element.prototype.scrollTo = () => undefined;
   FakeEventSource.instances = [];
   vi.stubGlobal("EventSource", FakeEventSource);

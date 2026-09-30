@@ -17,22 +17,19 @@ const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const csrfInvalid = () => json(403, { error: { code: "CSRF_INVALID", message: "x" } });
 
-let events: string[];
-
 beforeEach(() => {
   vi.resetModules();
-  events = [];
-  const target = new EventTarget();
-  target.addEventListener("chatui:account-changed", () => events.push("changed"));
-  vi.stubGlobal("window", target);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** A fresh page: the adapter plus its auth store (epoch counts account changes). */
 async function load() {
-  return import("../../app/lib/api.ts");
+  const api = await import("../../app/lib/api.ts");
+  const { authStore } = await import("../../app/lib/auth-store.ts");
+  return { ...api, store: authStore };
 }
 
 describe("INV-59: shared fetch wrapper", () => {
@@ -69,7 +66,7 @@ describe("INV-59: shared fetch wrapper", () => {
       "/api/auth/session -",
       "/api/conversations tok-a2",
     ]);
-    expect(events).toEqual([]);
+    expect(api.store.get().epoch).toBe(0);
   });
 
   it("another account signed in meanwhile: the request is discarded, never executed as B, and state is cleared", async () => {
@@ -88,7 +85,7 @@ describe("INV-59: shared fetch wrapper", () => {
       api.AccountChangedError,
     );
     expect(mutations).toEqual([A.user?.id]); // exactly one attempt, as A
-    expect(events.length).toBeGreaterThan(0);
+    expect(api.store.get().epoch).toBe(1); // the account boundary purges on this
     expect(api.currentSession()?.user?.id).toBe(B.user?.id);
   });
 
@@ -126,7 +123,63 @@ describe("INV-59: shared fetch wrapper", () => {
     await expect(api.apiFetch("/api/x", { method: "DELETE" })).rejects.toBeInstanceOf(
       api.AccountChangedError,
     );
-    expect(events).toEqual(["changed"]);
+    expect(api.store.get().epoch).toBe(1);
+  });
+});
+
+describe("contracts §12: session expiry mid-use", () => {
+  const unauthenticated = () =>
+    json(401, { error: { code: "UNAUTHENTICATED", message: "Sign in" } });
+
+  it("any 401 (read or mutation) moves auth to unauthenticated exactly once", async () => {
+    const api = await load();
+    api.setSession(A);
+    const seen: string[] = [];
+    api.store.subscribe(() => seen.push(api.store.get().status));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(unauthenticated())),
+    );
+    await expect(api.apiFetch("/api/conversations")).rejects.toBeInstanceOf(
+      api.SessionExpiredError,
+    );
+    await expect(api.apiFetch("/api/x", { method: "POST" })).rejects.toBeInstanceOf(
+      api.SessionExpiredError,
+    );
+    expect(seen).toEqual(["unauthenticated"]);
+    expect(api.store.get().expired).toEqual({ userId: A.user?.id, username: "alice" });
+    expect(api.store.get().session?.csrfToken).toBeNull();
+  });
+
+  it("a signed-out session answer while signed in counts as expiry", async () => {
+    const api = await load();
+    api.setSession(A);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(json(200, { ...A, user: null, csrfToken: null }))),
+    );
+    await api.refreshSession();
+    expect(api.store.get().status).toBe("unauthenticated");
+    expect(api.store.get().expired?.userId).toBe(A.user?.id);
+  });
+
+  it("the same user re-authenticating keeps the epoch; another user bumps it", async () => {
+    const api = await load();
+    api.setSession(A);
+    api.store.expire();
+    api.setSession(A2);
+    expect(api.store.get()).toMatchObject({ status: "authenticated", epoch: 0, expired: null });
+    api.store.expire();
+    api.setSession(B);
+    expect(api.store.get()).toMatchObject({ status: "authenticated", epoch: 1, expired: null });
+  });
+
+  it("an anonymous revalidation while re-authentication is pending keeps the dialog state", async () => {
+    const api = await load();
+    api.setSession(A);
+    api.store.expire();
+    api.setSession({ ...A, user: null, csrfToken: null });
+    expect(api.store.get().expired?.userId).toBe(A.user?.id);
   });
 });
 

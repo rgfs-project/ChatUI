@@ -1,9 +1,9 @@
 import { CircleUserRound, Shield } from "lucide-react";
-import { Link, useRouteLoaderData } from "react-router";
+import { Link } from "react-router";
 import { Overlay } from "../components/Overlay";
+import { useAuth } from "../lib/auth-store";
 import { paths } from "../lib/paths";
 import { useSignOut } from "../lib/use-sign-out";
-import type { loader as layoutLoader } from "./app-layout";
 import type { Route } from "./+types/settings";
 
 export function meta(): Route.MetaDescriptors {
@@ -16,9 +16,9 @@ export function meta(): Route.MetaDescriptors {
  * example Skills under "Customize").
  */
 export default function SettingsOverlay() {
-  const layout = useRouteLoaderData<typeof layoutLoader>("routes/app-layout");
+  const user = useAuth().session?.user;
   const signOut = useSignOut();
-  const isAdmin = layout?.user.role === "admin";
+  const isAdmin = user?.role === "admin";
   return (
     <Overlay title="Settings" wide>
       <div className="settings-layout">
@@ -39,7 +39,7 @@ export default function SettingsOverlay() {
             <div>
               <p className="settings-label">Username</p>
               <p className="settings-hint">
-                {layout?.user.username}
+                {user?.username}
                 {isAdmin ? " · administrator" : ""}
               </p>
             </div>

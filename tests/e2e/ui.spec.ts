@@ -62,7 +62,8 @@ test.use({
 
 test("200 messages: the transcript scrolls independently of the fixed shell", async ({ page }) => {
   await openLong(page);
-  expect(await page.getByTestId("message-user").count()).toBe(100);
+  // 100 seeded exchanges (other specs may have added to this conversation).
+  expect(await page.getByTestId("message-user").count()).toBeGreaterThanOrEqual(100);
   const start = await layout(page);
   expect(start.pageScrollable).toBe(false);
   expect(start.scrollHeight).toBeGreaterThan(start.clientHeight * 3);
@@ -266,14 +267,12 @@ test.describe("INV-53 routing", () => {
     await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
   });
 
-  test("an expired session returns to the same deep link after sign-in", async ({
+  test("a signed-out deep link returns to the same page after sign-in", async ({
     page,
     context,
   }) => {
-    await openLong(page);
-    await context.clearCookies();
-    await page.getByRole("link", { name: "New chat" }).click();
-    await expect(page).toHaveURL(/\/login\?returnTo=%2Fchat%2Fnew$/);
+    // Expiry mid-use (in-app dialog) is covered in state.spec.ts; this is the
+    // document-load path: a signed-out request is redirected with a return-to.
     await context.clearCookies();
     await page.goto(`${base()}/chat/${LONG_CONVERSATION}`);
     await expect(page).toHaveURL(new RegExp(`/login\\?returnTo=%2Fchat%2F${LONG_CONVERSATION}$`));

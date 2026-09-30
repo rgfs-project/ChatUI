@@ -4,7 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "../../app/components/Sidebar";
 import { queryKeys } from "../../app/lib/query";
-import { AppHarness, CONV, json, noop, seededClient, TEST_USER, USER } from "./support";
+import {
+  AppHarness,
+  CONV,
+  json,
+  noop,
+  seededClient,
+  signInStore,
+  TEST_USER,
+  USER,
+} from "./support";
 
 /** jsdom lacks the pointer/layout APIs Radix probes. */
 beforeAll(() => {
@@ -25,6 +34,7 @@ beforeAll(() => {
 
 let fetchMock: ReturnType<typeof vi.fn<(url: string, init?: RequestInit) => Promise<Response>>>;
 beforeEach(() => {
+  signInStore();
   fetchMock = vi.fn(() => Promise.resolve(json(200, { conversations: [] })));
   vi.stubGlobal("fetch", fetchMock);
 });

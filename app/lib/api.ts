@@ -1,34 +1,27 @@
 import type { SessionDto } from "@shared/auth";
 
-/**
- * Browser session state and the shared fetch wrapper (contracts §5, INV-59).
- * Module state is only touched in the browser (never during SSR).
- */
-let current: SessionDto | null = null;
-/** Increments on every observed change of signed-in account. */
-let epoch = 0;
+import { authStore } from "./auth-store";
 
-export const ACCOUNT_CHANGED_EVENT = "chatui:account-changed";
+/**
+ * The shared browser fetch adapter (contracts §5, INV-59). Session state
+ * lives in the auth store; this module never holds its own copy.
+ */
 
 export class AccountChangedError extends Error {
   override name = "AccountChangedError";
 }
 
-export function setSession(session: SessionDto): void {
-  if (current !== null && current.user?.id !== session.user?.id) {
-    epoch++;
-    window.dispatchEvent(new CustomEvent(ACCOUNT_CHANGED_EVENT));
-  }
-  current = session;
+/** The session ended mid-use (a 401): the request was not executed. */
+export class SessionExpiredError extends Error {
+  override name = "SessionExpiredError";
 }
 
-/** Read through a function: `epoch` can change while a request is awaited. */
-function currentEpoch(): number {
-  return epoch;
+export function setSession(session: SessionDto): void {
+  authStore.applySession(session);
 }
 
 export function currentSession(): SessionDto | null {
-  return current;
+  return authStore.get().session;
 }
 
 async function errorCode(response: Response): Promise<string | undefined> {
@@ -45,10 +38,14 @@ function isMutation(method: string): boolean {
 }
 
 /**
- * fetch() that attaches X-CSRF-Token and X-Expected-User to mutations. On
- * CSRF_INVALID it refetches the session once and retries once only if the
- * account and epoch are unchanged and the request is still current;
- * otherwise the request is discarded and user-bound client state is cleared.
+ * fetch() for every API call:
+ * - mutations carry X-CSRF-Token and X-Expected-User;
+ * - any 401 UNAUTHENTICATED moves auth to `unauthenticated` once (the app
+ *   opens the re-authentication dialog) and throws SessionExpiredError;
+ * - on CSRF_INVALID it refetches the session once and retries once only if the
+ *   account and epoch are unchanged and the request is still current;
+ *   otherwise the request is discarded (the account boundary purges state).
+ * Aborts (`init.signal`) propagate as the platform AbortError.
  */
 export async function apiFetch(
   url: string,
@@ -56,16 +53,22 @@ export async function apiFetch(
 ): Promise<Response> {
   const method = init.method ?? "GET";
   const mutation = isMutation(method);
-  const origin = { userId: current?.user?.id ?? null, epoch };
+  const origin = { userId: currentSession()?.user?.id ?? null, epoch: authStore.get().epoch };
+  const { isCurrent, ...requestInit } = init;
   const send = () => {
-    const headers = new Headers(init.headers);
-    if (mutation && current?.csrfToken && current.user) {
-      headers.set("X-CSRF-Token", current.csrfToken);
-      headers.set("X-Expected-User", current.user.id);
+    const headers = new Headers(requestInit.headers);
+    const session = currentSession();
+    if (mutation && session?.csrfToken && session.user) {
+      headers.set("X-CSRF-Token", session.csrfToken);
+      headers.set("X-Expected-User", session.user.id);
     }
-    return fetch(url, { ...init, headers });
+    return fetch(url, { ...requestInit, headers });
   };
   const response = await send();
+  if (response.status === 401 && (await errorCode(response)) === "UNAUTHENTICATED") {
+    authStore.expire();
+    throw new SessionExpiredError("The session has ended");
+  }
   if (!mutation) return response;
   const code = await errorCode(response);
   if (code === "SESSION_CHANGED") {
@@ -76,23 +79,31 @@ export async function apiFetch(
   const fresh = await refreshSession(false);
   if (
     fresh?.user?.id === origin.userId &&
-    currentEpoch() === origin.epoch &&
-    (init.isCurrent?.() ?? true)
+    authStore.get().epoch === origin.epoch &&
+    (isCurrent?.() ?? true)
   ) {
-    current = fresh;
+    authStore.applySession(fresh);
     return send();
   }
-  if (fresh) setSession(fresh);
-  window.dispatchEvent(new CustomEvent(ACCOUNT_CHANGED_EVENT));
+  if (fresh && !fresh.user) authStore.expire();
+  else if (fresh) authStore.applySession(fresh);
   throw new AccountChangedError("The signed-in account changed");
 }
 
+/**
+ * Reads the server's view of the session. With `apply`, a signed-out answer
+ * while signed in counts as expiry (re-authentication dialog), anything else
+ * is applied as the current session.
+ */
 export async function refreshSession(apply = true): Promise<SessionDto | null> {
   try {
     const response = await fetch("/api/auth/session", { headers: { Accept: "application/json" } });
     if (!response.ok) return null;
     const session = (await response.json()) as SessionDto;
-    if (apply) setSession(session);
+    if (apply) {
+      if (!session.user) authStore.expire();
+      else authStore.applySession(session);
+    }
     return session;
   } catch {
     return null;

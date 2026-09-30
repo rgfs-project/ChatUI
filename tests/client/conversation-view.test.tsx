@@ -18,6 +18,7 @@ import {
   noop,
   REPLY,
   seededClient,
+  signInStore,
   TEST_USER,
   USER,
 } from "./support";
@@ -58,6 +59,7 @@ function renderAt(
 let fetchMock: ReturnType<typeof vi.fn<(url: string, init?: RequestInit) => Promise<Response>>>;
 
 beforeEach(() => {
+  signInStore();
   // jsdom has no layout or scrolling.
   Element.prototype.scrollTo = () => undefined;
   FakeEventSource.instances = [];

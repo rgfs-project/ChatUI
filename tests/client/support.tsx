@@ -1,8 +1,10 @@
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router";
+import type { SessionDto } from "@shared/auth";
 import type { ConversationDto, MessageDto } from "@shared/conversations";
 import type { ModelListDto } from "@shared/generations";
+import { authStore, resetAuthStoreForTests } from "../../app/lib/auth-store";
 import { createQueryClient, queryKeys } from "../../app/lib/query";
 import { ShellProvider } from "../../app/lib/shell-context";
 
@@ -72,9 +74,13 @@ export const MODELS = {
 
 /** A controllable EventSource: tests push named SSE events by hand. */
 export class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
   static instances: FakeEventSource[] = [];
   readonly url: string;
   closed = false;
+  readyState = 1;
   private listeners = new Map<string, ((event: MessageEvent<string>) => void)[]>();
   constructor(url: string) {
     this.url = url;
@@ -85,6 +91,7 @@ export class FakeEventSource {
   }
   close() {
     this.closed = true;
+    this.readyState = 2;
   }
   emit(type: string, data: unknown) {
     const event = new MessageEvent(type, { data: JSON.stringify(data) });
@@ -124,6 +131,18 @@ export function AppHarness(props: {
 
 export const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+export const SESSION: SessionDto = {
+  user: { id: USER, username: "alice", role: "user" },
+  csrfToken: "csrf-alice",
+  registrationOpen: false,
+};
+
+/** A signed-in browser: the auth store as the root would bootstrap it. */
+export function signInStore(session: SessionDto = SESSION): void {
+  resetAuthStoreForTests();
+  authStore.applySession(session);
+}
 
 /** The signed-in user the Sidebar shows in tests. */
 export const TEST_USER = { id: USER, username: "tester", role: "user" };

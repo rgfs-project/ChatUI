@@ -52,8 +52,8 @@ server/chat/            send acceptance, prompt assembly, token counting
 server/generations/     model catalog, generation manager, SSE writer
 server/providers/       llama.cpp provider
 app/                    React Router route modules and entries
-app/components/         shell UI: ConversationView, Sidebar, Message, Markdown, Dialogs, Overlay
-app/lib/                browser/SSR helpers: API adapter, query keys/client, SSR prefetch, paths, shell state, scroll intent
+app/components/         shell UI: ConversationView, Composer, Sidebar, Message, Markdown, Dialogs, Overlay, SectionBoundary, SignedOutShell
+app/lib/                browser/SSR helpers: auth store, API adapter, query keys/options, SSR prefetch, sends, live generation, paths, shell state, scroll intent
 shared/                 types/schemas shared by client and server (`@shared/*`)
 ```
 
@@ -359,7 +359,7 @@ Conversation list, draft, open, rename, delete and send now live in the Phase 7 
 ### Browser (INV-59)
 
 - The root loader renders a browser-safe `SessionDto` `{user, csrfToken, registrationOpen}` into private no-store HTML; the cookie and its hash never appear.
-- `app/lib/api.ts` (`apiFetch`) attaches the CSRF token and expected user to mutations. On `CSRF_INVALID` it refetches `/api/auth/session` once and retries once **only** if the account is unchanged, the authentication epoch is unchanged and the request is still current. Otherwise it discards the request, dispatches `chatui:account-changed` (the browser QueryClient is cleared) and throws. `SESSION_CHANGED` is handled the same way. Unit tests cover the retry, discard, superseded and SESSION_CHANGED paths.
+- `app/lib/api.ts` (`apiFetch`) attaches the CSRF token and expected user to mutations. Session state lives in the auth store (`app/lib/auth-store.ts`), not in the adapter. Any `401 UNAUTHENTICATED` moves auth to `unauthenticated` once (see "State and loading"). On `CSRF_INVALID` it refetches `/api/auth/session` once and retries once **only** if the account is unchanged, the authentication epoch is unchanged and the request is still current. Otherwise it discards the request (the account boundary then purges the old account's state) and throws. `SESSION_CHANGED` is handled the same way. Unit tests cover the retry, discard, superseded, SESSION_CHANGED and expiry paths.
 - Pages: `/login` (validated `returnTo`: only `/chat`, `/chat/<id>`, `/account` and `/settings`; anything else → `/chat`), `/register` (404 when closed), `/account` (change password), and sign out in Settings.
 
 ### Authenticated SSR (INV-54, INV-55, INV-57)
@@ -477,9 +477,9 @@ All runtime JS/CSS/icons are built into `build/client` and served from the ChatU
 ### Client server state: TanStack Query
 
 - **One layer.** One browser `QueryClient` per page load (`app/root.tsx`, `useState(createQueryClient)`): `staleTime` 30 s, one retry, no refetch on focus (except the model list, above). One adapter (`apiJson` → `apiFetch`: CSRF token, `X-Expected-User`, epoch, same-user-only CSRF refetch-and-retry). One key factory (`queryKeys` in `app/lib/query.ts`): `["session"]` and `["user", userId, "conversations" | "conversation", id | "generation", id | "models" | "preferences"]`. Every user-scoped key carries the account id. Components never run their own fetch lifecycles: mutations go through `useMutation`/`apiJson` and invalidate by key. The terminal SSE event invalidates the conversation and the list; rename, delete and send invalidate the list.
-- **SSR bootstrap.** `prefetchForRequest(seed)` (`app/lib/server-query.ts`) creates a fresh `QueryClient` per document or data request, never module-global. The layout loader seeds `conversations` and `models` (2.5 s budget; models may be omitted). The conversation loader seeds `conversation(id)`. Only successful queries whose key family is on `DEHYDRATE_ALLOWLIST` (conversations, conversation, models, preferences: browser-safe DTOs) are dehydrated; session/CSRF data, generations and errors never are. Each route passes its state through `HydrationBoundary` with identical keys.
+- **SSR bootstrap.** `prefetchForRequest(seed)` (`app/lib/server-query.ts`) creates a fresh `QueryClient` per document or data request, never module-global. The layout loader seeds `models` (critical, 2.5 s budget; may be omitted). The conversation list is secondary and is loaded by the sidebar after hydration (Phase 8). The conversation loader seeds `conversation(id)`. Only successful queries whose key family is on `DEHYDRATE_ALLOWLIST` (conversations, conversation, models, preferences: browser-safe DTOs) are dehydrated; session/CSRF data, generations and errors never are. Each route passes its state through `HydrationBoundary` with identical keys.
 - **After hydration** the browser reuses the seeded data (fresh for `staleTime`) and makes no duplicate initial fetch (tested). Render functions never touch browser globals on the server.
-- **Account boundary** (`useAccountBoundary`): when the root session's user id changes (sign-in, sign-out, switch, expiry) every query not belonging to the new account is removed and pending mutations are dropped. The first render keeps the SSR seed. `chatui:account-changed` from the adapter clears the whole cache. Sign-out in Settings also clears it before navigating to `/login`.
+- **Account boundary** (`useAccountBoundary`, driven by the auth store): when the authenticated account changes (sign-in, sign-out, switch, or a session expiring mid-use) the previous account's in-flight queries are aborted, its queries removed and pending mutations dropped. The first render keeps the SSR seed.
 - Keys for preferences exist for Phase 8 and later; Phases 12–13 add their own families.
 
 ### Interactive primitives decision record (INV-47; audited in Phase 15)
@@ -517,9 +517,88 @@ Wrappers live in `app/components/Dialogs.tsx` and `Overlay.tsx` and are styled w
 
 Monochrome and flat (user direction): a rectangular sidebar with a hairline divider beside a full-bleed main area, the platform's system font stack (no webfonts), grey surfaces only (red just for errors and destructive actions), a single-row pill composer with the model inline and a round send button, neutral right-aligned user bubbles, plain assistant prose with a copy action, and "Thought process ›" for reasoning. Colours are semantic CSS variables on `:root`, switched for dark mode with `prefers-color-scheme`; icons are `lucide-react`.
 
+## State and loading (Phase 8)
+
+### Startup dependency graph (contracts §9.2; INV-29 is verified in Phase 9)
+
+```text
+document request
+ └─ session middleware ............ critical, first by necessity (authorization precedes any private read)
+     ├─ root loader: session DTO .. critical, synchronous
+     ├─ layout loader: models ..... critical (validates the model selection), ≤ 2.5 s budget, catalog stale-while-revalidate
+     └─ chat loader: conversation . critical, includes activeGeneration (so the stream is observed at once)
+         (these loaders run concurrently in React Router's loader pass)
+HTML streams: shell + authorized transcript + native composer (typing works before JS)
+hydrate (no refetch of seeded queries)
+ ├─ SSE for the active generation ..... critical, starts right after hydration
+ └─ GET /api/conversations (sidebar) .. secondary, never awaited by the server, never gates the composer
+```
+
+- Classification. The critical path is: session, the active conversation, its active generation, and enough model state to establish a selection. Secondary: the full conversation list, settings not on the active surface, provider detail, and (later) admin data.
+- No session waterfall on the client: the session comes from SSR. Nothing waits on a `/api/auth/session` round trip before starting other requests.
+- On client navigations the layout guard is not re-run (`shouldRevalidate`). Each route's own data request carries the auth check, and a 401 there (or from any API call) opens re-authentication instead of navigating. Explicit revalidation after re-authentication re-runs every loader.
+- Evidence:
+  - `tests/client/startup.test.tsx` drives the real loaders through React Router's static handler with controllable services. Models and the conversation both start before either resolves, two 150 ms dependencies finish in about 150 ms, and the list is never called.
+  - `tests/e2e/state.spec.ts` holds the list response open under throttled networking and proves the composer sends and stores a reply meanwhile.
+
+### Auth state (contracts §5, §12)
+
+- `app/lib/auth-store.ts` is an external store with an explicit `unknown | authenticated | unauthenticated` status, the session DTO, the authentication epoch and `expired` (whose session ended mid-use).
+- `useAuth()` derives the state from the root loader's session until the browser store is initialized. SSR and the hydration render therefore agree, and neither a login form nor a neutral placeholder ever flashes (tested with a DOM observer).
+- `unknown` renders a neutral placeholder with no private content. It is reachable only when no server session is known.
+- `applySession` is used for SSR bootstrap, revalidation and login. The epoch increments when the account changes; the same user re-authenticating keeps it. `expire()` handles a 401 once. `signedOut()` handles explicit sign-out.
+
+### Request lifecycle and INV-23
+
+- One adapter (`apiFetch`) and one set of `queryOptions` factories (`queries.*` in `app/lib/query.ts`: identical key and fetcher for every consumer). Each fetcher takes the query's `AbortSignal`.
+- TanStack Query deduplicates identical in-flight queries. It aborts a query whose observers unmount or whose key changes (rapid conversation switching), and `invalidateQueries` cancels an in-flight refetch before starting a new one.
+- React Router aborts a superseded navigation's data request and never commits it.
+- The account boundary aborts and drops the previous account's work on every identity transition.
+- SSE events are applied only for the generation currently observed; a late event from a superseded stream is ignored.
+- Retries: only network failures and 5xx get one retry; 4xx answers, expiry and account changes are final.
+- No per-component fetch lifecycles, no `useRef` run-once flags, and mutations are only started by user events, so Strict Mode double-mounting never duplicates one (tested).
+
+### Optimistic sends (contracts §4.1 client rules)
+
+- A send is a TanStack mutation (`app/lib/send.ts`, key `["user", id, "send"]`). Its variables carry a client-temporary message id, the operation key and the auth epoch.
+- The optimistic message is rendered from mutation state (`useMutationState`), so there is no second source of truth. A pending send shows "Sending…". An accepted send stays visible until the conversation contains its `userMessageId`; then only the stored copy is shown.
+- Queued messages (Phase 7, user request) live in tab memory until their turn; each is then sent through this same mutation, so it gets its own operation key, optimistic bubble, bounded resends and unknown-outcome handling. A rejected queued send returns it and the rest of the queue to the box. The queue is scoped to the account with the rest of the shell state, so an expiry followed by another account's sign-in discards it.
+- Outcomes:
+  - **Rejected:** a contract error other than `INTERNAL`, including a 401 before acceptance. The message is removed, the text returns to the composer (and its draft), and the error is shown.
+  - **Unknown:** `INTERNAL`, a network error or a non-contract response. The identical request (same bytes, same key) is resent with 1 s, 2 s and 3 s backoff.
+  - **Outcome unknown:** `OPERATION_EXPIRED` or exhausted retries. The bubble offers "Refresh conversation", which looks the key up with `GET /api/operations/:key`: a hit reconciles; a miss says it was probably not saved and offers "Edit and resend", where the user sends explicitly with a new key.
+  - An account change or expiry during retries discards the send.
+- A new key is never minted for an unresolved send.
+
+### Session expiry mid-use (contracts §12)
+
+- Any 401 (API call, route data, or a closed SSE stream followed by a session check) moves auth to `unauthenticated` once.
+- In response, the account boundary aborts and removes the account's queries and mutations. The layout stops rendering private content (sidebar, transcript, composer) and opens the re-authentication dialog (Radix Dialog, not dismissible, no document navigation).
+- Drafts live only in the shell's tab memory, and the shell state is keyed by the account the tab belongs to (kept through the expiry).
+  - Re-authenticating as the same user remounts the views and restores the draft.
+  - Another identity changes the key: shell state is discarded, the URL is replaced with `/chat/new`, and the cache is purged.
+  - The "Sign-in page" link, explicit logout, reload or tab close all leave the shell, so the draft is gone.
+- Nothing is written to browser storage (tested in jsdom and in the browser).
+
+### Error boundaries and empty states
+
+- Boundaries:
+  - The shell has the layout route's `ErrorBoundary` ("Try again" reloads).
+  - The sidebar and the main area each have a `SectionBoundary` (`react-error-boundary` + `QueryErrorResetBoundary`). "Try again" resets that section's queries and re-renders it; navigating resets the main section.
+  - Query errors that are not render failures show inline with a retry (transcript load failure, conversation list failure, model list failure).
+- Empty states:
+  - no conversations (sidebar)
+  - no provider configured (send disabled)
+  - all providers unavailable (explained, with Retry forcing discovery via `?refresh=1`)
+  - unreachable providers with a stale list (warning; sending allowed, the server validates)
+  - an empty conversation
+
+### Future cache integrations
+
+Phase 12 and each Phase 13 subphase add their own `queries.*` entries (keys under `["user", id, …]`), mutation invalidation and account-switch tests. No keys exist yet for absent features.
+
 ## Later sections
 
-- Loading resilience: N/A until Phase 8.
 - Performance budgets and instrumentation: N/A until Phase 9.
 - Admin, mobile, uploads, continuity, rendering, component audit, security hardening, reliability, polish: N/A until Phases 10–18.
 - Interactive artifacts: optional Phase 19, separately approved.
@@ -559,13 +638,13 @@ Tests name the invariant in their title (e.g. `INV-01: …`). "Pending" rows are
 | INV-20 | SSE replay never silently skips events; a too-old `Last-Event-ID` triggers a full resync                                                                                                                                    | 6              | `GenerationManager.observe` (ring buffer, `resync`), cursor rules in `server/routes/generations.ts`                                                                                                                                                        | `tests/server/streaming.test.ts` (INV-20), `scripts/verify.ts` (reconnect), `tests/e2e/streaming.spec.ts`                                                                                | Implemented (6)                                                                              |
 | INV-21 | After a restart, no generation remains non-terminal; partial output of a running generation is persisted once as `interrupted`, and a terminal-decided outcome is persisted once with its recorded status                   | 6              | `recoverGenerations` in `server/storage/recovery.ts`; `GenerationManager.shutdown`                                                                                                                                                                         | `tests/server/streaming.test.ts` (INV-21 / INV-60)                                                                                                                                       | Implemented (6)                                                                              |
 | INV-22 | Rendered Markdown never executes script or raw HTML                                                                                                                                                                         | 7              | `app/components/Markdown.tsx`: `skipHtml`, `rehype-sanitize`, `safeUrl` scheme allowlist, hardened links, image placeholders                                                                                                                               | `tests/client/markdown.test.tsx` (`<script>`, `<img onerror>`, `javascript:`/`data:` links, HTML in fences)                                                                              | Implemented (Phase 14 extends rendering)                                                     |
-| INV-23 | A stale response never overwrites newer client state                                                                                                                                                                        | 8              | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 8                                                                              |
+| INV-23 | A stale response never overwrites newer client state                                                                                                                                                                        | 8              | Query keys per identity + AbortSignal in every fetcher, `invalidateQueries` cancel-refetch, React Router navigation abort, account-boundary cancellation, SSE events filtered by observed generation id, epoch-tagged sends                                | `tests/client/state.test.tsx` (reordered responses, rapid switching), `tests/client/query.test.tsx` (expiry aborts), `tests/e2e/state.spec.ts` (rapid switching with random latency)     | Implemented                                                                                  |
 | INV-24 | Admin authorization is enforced server-side on every admin route                                                                                                                                                            | 10             | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 10                                                                             |
 | INV-25 | Secrets are write-only: no API response ever contains a configured secret                                                                                                                                                   | 10             | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 10                                                                             |
 | INV-26 | There is always at least one active admin                                                                                                                                                                                   | 10             | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 10                                                                             |
 | INV-27 | Attachment bytes are never served as executable content; media type is sniffed, not trusted                                                                                                                                 | 12             | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 12                                                                             |
 | INV-28 | Attachment storage paths never derive from the uploaded filename                                                                                                                                                            | 12             | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 12                                                                             |
-| INV-29 | Independent critical startup requests never form an accidental serial waterfall                                                                                                                                             | 9              | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 9                                                                              |
+| INV-29 | Independent critical startup requests never form an accidental serial waterfall                                                                                                                                             | 9              | Phase 8 groundwork: classified startup graph (models and conversation loaders concurrent, list deferred)                                                                                                                                                   | `tests/client/startup.test.tsx` (overlap and timing), `tests/e2e/state.spec.ts` (held list, slow network)                                                                                | Groundwork in Phase 8; budgets pending Phase 9                                               |
 | INV-30 | Secondary startup work never blocks composer interactivity                                                                                                                                                                  | 9              | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 9                                                                              |
 | INV-31 | Prefetch and consume paths use the same canonical cache identity; prefetched data cannot bypass INV-23 stale-response protection                                                                                            | 9              | —                                                                                                                                                                                                                                                          | —                                                                                                                                                                                        | Pending Phase 9                                                                              |
 | INV-32 | Streaming an assistant response never remounts the application shell or unrelated transcript/sidebar trees                                                                                                                  | 9              | Phase 7 groundwork: memoized `Message`/`Markdown`/`Sidebar`, persistent layout route, test-only render counters                                                                                                                                            | `tests/client/conversation-view.test.tsx` (render isolation)                                                                                                                             | Groundwork in Phase 7; budget pending Phase 9                                                |

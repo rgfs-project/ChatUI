@@ -14,7 +14,7 @@ import {
 import { memo, useEffect, useRef } from "react";
 import { Link, useLocation, useMatches, useNavigate, useParams } from "react-router";
 import { paths, type OverlayState } from "../lib/paths";
-import { fetchers, queryKeys } from "../lib/query";
+import { queries } from "../lib/query";
 import { count } from "../lib/render-counters";
 import { useSignOut } from "../lib/use-sign-out";
 import { useConversationActions } from "./ConversationActions";
@@ -41,10 +41,9 @@ function SidebarImpl({ user, hidden, drawer, onHide, onNavigate }: SidebarProps)
     count("sidebarMounts");
   }, []);
   const { conversationId } = useParams();
-  const { data: conversations = [] } = useQuery({
-    queryKey: queryKeys.conversations(user.id),
-    queryFn: fetchers.conversations,
-  });
+  // Secondary data: loaded after hydration, never gating the composer.
+  const list = useQuery(queries.conversations(user.id));
+  const conversations = list.data ?? [];
   const actions = useConversationActions(user.id);
   // The row menu trigger last used: dialogs return focus there (INV-47).
   const menuTrigger = useRef<HTMLElement | null>(null);
@@ -76,6 +75,22 @@ function SidebarImpl({ user, hidden, drawer, onHide, onNavigate }: SidebarProps)
         <SquarePen size={18} aria-hidden /> New chat
       </Link>
       <p className="section-label">All chats</p>
+      {list.isPending ? (
+        <p className="sidebar-note" aria-busy="true" data-testid="conversations-loading">
+          Loading conversations…
+        </p>
+      ) : list.isError && !list.data ? (
+        <div className="sidebar-note" role="alert" data-testid="conversations-error">
+          <p>Conversations couldn’t be loaded.</p>
+          <button type="button" className="link-button" onClick={() => void list.refetch()}>
+            Try again
+          </button>
+        </div>
+      ) : conversations.length === 0 ? (
+        <p className="sidebar-note" data-testid="conversations-empty">
+          No conversations yet. Your chats will appear here.
+        </p>
+      ) : null}
       <ul className="chat-list" data-testid="conversation-list">
         {conversations.map((item) => (
           <li key={item.id} className={item.id === conversationId ? "current" : undefined}>

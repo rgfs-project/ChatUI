@@ -1,50 +1,39 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, ChevronDown, PanelLeft, Square, SquarePen, X } from "lucide-react";
 import {
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type SyntheticEvent,
-} from "react";
-import { Link, useLocation, useNavigate, useRouteLoaderData } from "react-router";
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+  type Mutation,
+} from "@tanstack/react-query";
+import { ArrowDown, ChevronDown, PanelLeft, SquarePen, X } from "lucide-react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import type { ConversationDto } from "@shared/conversations";
-import {
-  isTerminalState,
-  type GenerationState,
-  type TerminalState,
-} from "@shared/generation-state";
-import type {
-  GenerationError,
-  GenerationSnapshot,
-  ModelListDto,
-  StartGenerationResponse,
-} from "@shared/generations";
+import { isTerminalState, type GenerationState } from "@shared/generation-state";
+import type { StartGenerationResponse } from "@shared/generations";
 import { AccountChangedError } from "../lib/api";
+import { authStore, useAuth } from "../lib/auth-store";
 import { paths, type OverlayState } from "../lib/paths";
-import { ApiError, apiJson, fetchers, queryKeys } from "../lib/query";
-import { NEW_DRAFT, useQueue, useShell, type QueuedMessage } from "../lib/shell-context";
-import { useSidebar } from "../lib/sidebar-context";
-import { useScrollPin } from "../lib/use-scroll-pin";
+import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
 import {
-  COMMAND_MENU_ID,
-  CommandMenu,
-  commandOptionId,
-  commandQuery,
-  filterCommands,
-  type Command,
-} from "./CommandMenu";
+  lookUpOperation,
+  newSendVariables,
+  SendRejectedError,
+  sendWithRetries,
+  SendUnknownError,
+  type SendVariables,
+} from "../lib/send";
+import { NEW_DRAFT, useQueue, useShell } from "../lib/shell-context";
+import { useSidebar } from "../lib/sidebar-context";
+import { useLiveGeneration } from "../lib/use-live-generation";
+import { useScrollPin } from "../lib/use-scroll-pin";
+import type { Command } from "./CommandMenu";
+import { Composer, type ModelChoice } from "./Composer";
 import { useConversationActions } from "./ConversationActions";
 import { ConfirmDialog } from "./Dialogs";
 import { Markdown } from "./Markdown";
 import { Message, Reasoning } from "./Message";
-
-/** Resends of an unresolved send with the same operation key (contracts §4.1). */
-const SEND_RETRIES = 3;
-/** The model list is re-read when the tab regains focus, at most this often. */
-const MODEL_REFRESH_MS = 30_000;
 
 const noopSubscribe = () => () => undefined;
 function useHydrated(): boolean {
@@ -53,15 +42,6 @@ function useHydrated(): boolean {
     () => true,
     () => false,
   );
-}
-
-interface Live {
-  generationId: string;
-  assistantMessageId: string;
-  state: GenerationState;
-  content: string;
-  reasoning: string;
-  error: GenerationError | null;
 }
 
 const STATE_LABEL: Record<GenerationState, string> = {
@@ -73,8 +53,32 @@ const STATE_LABEL: Record<GenerationState, string> = {
   timed_out: "Timed out",
 };
 
-function pairKey(pair: [string, string]): string {
-  return JSON.stringify(pair);
+type SendMutation = Mutation<StartGenerationResponse, Error, SendVariables>;
+
+/** Optimistic user messages of this view, read from the send mutations' state. */
+function usePendingSends(userId: string, draftKey: string, conversationId: string | undefined) {
+  return useMutationState({
+    filters: { mutationKey: queryKeys.sends(userId) },
+    select: (mutation) => {
+      const m = mutation as SendMutation;
+      return { mutation: m, state: m.state };
+    },
+  }).filter(({ state }) => {
+    const vars = state.variables;
+    if (!vars) return false;
+    // A rejected send is rolled back: its text returns to the composer.
+    if (state.status === "error" && !(state.error instanceof SendUnknownError)) return false;
+    // Once accepted, a send belongs to the conversation the server named.
+    if (state.data)
+      return conversationId !== undefined && state.data.conversationId === conversationId;
+    return vars.conversationKey === draftKey;
+  });
+}
+
+/** Sets the message box as if typed (the composer's input handler runs). */
+function setBox(el: HTMLTextAreaElement, value: string) {
+  el.value = value;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 /** The empty-chat greeting: the page heading on a new chat. */
@@ -85,9 +89,9 @@ function Greeting({ level, text }: { level: 1 | 2; text: string }) {
 /**
  * One conversation (or the /chat/new draft). Server-owned state only: the
  * transcript comes from the conversation query, the running reply from the
- * generation's SSE stream (replay/resync aware), reconciled by server ids.
- * Browser lifecycle events never cancel a generation. Messages sent while a
- * reply streams wait in the shell's queue and go out one at a time.
+ * generation's SSE stream, optimistic user messages from send mutations;
+ * everything reconciles by server-issued ids. Messages sent while a reply
+ * runs wait in the shell's queue and go out one at a time afterwards.
  */
 export function ConversationView(props: {
   userId: string;
@@ -103,36 +107,20 @@ export function ConversationView(props: {
   const client = useQueryClient();
   const shell = useShell();
   const sidebar = useSidebar();
+  const username = useAuth().session?.user?.username;
   const actions = useConversationActions(userId);
-  const layout = useRouteLoaderData<{ user?: { username: string } }>("routes/app-layout");
   const draftKey = conversationId ?? NEW_DRAFT;
   const queued = useQueue(draftKey);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const modelRef = useRef<HTMLSelectElement>(null);
   const titleTriggerRef = useRef<HTMLButtonElement>(null);
-  const [live, setLive] = useState<Live | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [hasDraft, setHasDraft] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // "/" commands: the typed filter (null: closed) and the highlighted option.
-  const [slash, setSlash] = useState<string | null>(null);
-  const [activeCommand, setActiveCommand] = useState(0);
 
   const conversationQuery = useQuery({
-    queryKey: queryKeys.conversation(userId, conversationId ?? ""),
-    queryFn: () => fetchers.conversation(conversationId ?? ""),
+    ...queries.conversation(userId, conversationId ?? ""),
     enabled: conversationId !== undefined && !props.initialError,
-    retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 1,
   });
-  // Re-read (bypassing the server's cache) when the tab regains focus, so
-  // models loaded or unloaded on the provider show up without a button.
-  const modelsQuery = useQuery({
-    queryKey: queryKeys.models(userId),
-    queryFn: () => fetchers.models(true),
-    staleTime: MODEL_REFRESH_MS,
-    refetchOnWindowFocus: true,
-  });
+  const modelsQuery = useQuery(queries.models(userId));
   const conversation: ConversationDto | undefined = conversationQuery.data;
   const loadError =
     conversationQuery.error instanceof ApiError
@@ -141,77 +129,37 @@ export function ConversationView(props: {
         ? new ApiError(props.initialError.status, props.initialError.code, "")
         : null;
 
-  // The running generation: the one we started here, else the server's view.
-  const serverActive = conversation?.activeGeneration?.generationId ?? null;
-  const observedId = live && !isTerminalState(live.state) ? live.generationId : serverActive;
-
-  /** Puts queued messages back into the message box (Stop, or a failed reply). */
-  function restoreQueue(reason: string | null, first?: QueuedMessage) {
-    const items = [...(first ? [first] : []), ...shell.takeQueue(draftKey)];
-    const box = textareaRef.current;
-    if (items.length === 0 || !box) return;
-    box.value = [...items.map((m) => m.content), box.value].filter((t) => t !== "").join("\n\n");
-    shell.setDraft(draftKey, box.value);
-    setHasDraft(true);
+  /**
+   * Puts queued messages back into the box, in order and before any draft
+   * (Stop, a failed reply, or a rejected send whose text is `first`).
+   */
+  function restoreQueue(reason: string | null, first?: string) {
+    const texts = [
+      ...(first !== undefined ? [first] : []),
+      ...shell.takeQueue(draftKey).map((m) => m.content),
+    ];
+    const el = textareaRef.current;
+    if (texts.length === 0 || !el) return;
+    setBox(el, [...texts, el.value].filter((t) => t !== "").join("\n\n"));
     if (reason) setStatus(reason);
   }
-  const onTerminal = useEffectEvent((state: TerminalState) => {
-    if (state === "failed" || state === "timed_out")
-      restoreQueue("The reply did not finish, so your queued messages are back in the box.");
+
+  const { live, observedId, started } = useLiveGeneration({
+    userId,
+    conversationId,
+    serverActive: conversation?.activeGeneration?.generationId ?? null,
+    disabled: props.inert === true,
+    onTerminal: (state) => {
+      if (state === "failed" || state === "timed_out")
+        restoreQueue("The reply did not finish, so your queued messages are back in the box.");
+    },
   });
 
+  // The loader saw no session (client navigation after expiry): re-authenticate.
+  const unauthenticated = props.initialError?.status === 401;
   useEffect(() => {
-    if (!observedId || props.inert) return;
-    const source = new EventSource(`/api/generations/${observedId}/stream`);
-    const onFullState = (event: MessageEvent<string>) => {
-      const s = JSON.parse(event.data) as GenerationSnapshot;
-      setLive({
-        generationId: s.generationId,
-        assistantMessageId: s.assistantMessageId,
-        state: s.state,
-        content: s.content,
-        reasoning: s.reasoning,
-        error: s.error,
-      });
-      if (isTerminalState(s.state)) source.close();
-    };
-    // snapshot (fresh observer) and resync (cursor outside the replay window)
-    // both carry the full state; deltas then continue exactly (INV-20).
-    source.addEventListener("snapshot", onFullState);
-    source.addEventListener("resync", onFullState);
-    source.addEventListener("state", (event: MessageEvent<string>) => {
-      const { state } = JSON.parse(event.data) as { state: GenerationState };
-      setLive((v) => (v?.generationId === observedId ? { ...v, state } : v));
-    });
-    source.addEventListener("delta", (event: MessageEvent<string>) => {
-      const delta = JSON.parse(event.data) as { content?: string; reasoning?: string };
-      setLive((v) =>
-        v?.generationId === observedId
-          ? {
-              ...v,
-              content: v.content + (delta.content ?? ""),
-              reasoning: v.reasoning + (delta.reasoning ?? ""),
-            }
-          : v,
-      );
-    });
-    source.addEventListener("terminal", (event: MessageEvent<string>) => {
-      const t = JSON.parse(event.data) as { state: TerminalState; error: GenerationError | null };
-      setLive((v) =>
-        v?.generationId === observedId ? { ...v, state: t.state, error: t.error } : v,
-      );
-      source.close();
-      onTerminal(t.state);
-      // The reply is stored now: refresh the canonical transcript and list.
-      void client.invalidateQueries({
-        queryKey: queryKeys.conversation(userId, conversationId ?? ""),
-      });
-      void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
-    });
-    return () => {
-      source.close();
-    };
-  }, [observedId, props.inert, client, userId, conversationId]);
+    if (unauthenticated) authStore.expire();
+  }, [unauthenticated]);
 
   // Drafts live in tab memory, keyed by conversation, and survive navigation.
   useEffect(() => {
@@ -219,32 +167,37 @@ export function ConversationView(props: {
     if (el?.value === "") el.value = shell.getDraft(draftKey);
   }, [draftKey, shell]);
 
+  const sendMutation = useMutation({
+    mutationKey: queryKeys.sends(userId),
+    mutationFn: (vars: SendVariables) => sendWithRetries(vars),
+    // Runs even if this view unmounted: a rejected message returns to its draft.
+    onError: (error, vars) => {
+      if (error instanceof SendRejectedError && !shell.getDraft(vars.conversationKey))
+        shell.setDraft(vars.conversationKey, vars.content);
+    },
+    onSuccess: (result, vars) => {
+      shell.setModel(result.conversationId, [vars.providerId, vars.model]);
+      void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
+    },
+  });
+  const pending = usePendingSends(userId, draftKey, conversationId);
+
   // Keep the live reply on screen until the stored copy is in the transcript.
   const storedIds = new Set(conversation?.messages.map((m) => m.id));
   const showLive =
     live !== null && (!isTerminalState(live.state) || !storedIds.has(live.assistantMessageId));
+  const optimistic = pending.filter(
+    ({ state }) => !(state.data && storedIds.has(state.data.userMessageId)),
+  );
   const running = observedId !== null;
+  const sending = pending.some(({ state }) => state.status === "pending");
 
-  const groups = modelsQuery.data?.providers ?? [];
-  const allModels = groups.flatMap((g) => g.models);
-  const lastReply = [...(conversation?.messages ?? [])]
-    .reverse()
-    .find((m) => m.role === "assistant");
-  const remembered = shell.getModel(draftKey);
-  const preferred =
-    (remembered &&
-      allModels.find((m) => m.providerId === remembered[0] && m.id === remembered[1])) ??
-    allModels.find((m) => m.providerId === lastReply?.provider && m.id === lastReply.model) ??
-    allModels.find((m) => m.status === "loaded") ??
-    allModels[0];
-  const [selected, setSelected] = useState<string | undefined>(undefined);
-  const selectedValue =
-    selected ?? (preferred ? pairKey([preferred.providerId, preferred.id]) : "");
-
-  // Anything that changes the transcript's height: stored messages, the live
-  // reply appearing, its state line, its growing text and queued messages.
+  // Anything that changes the transcript's height: stored messages, optimistic
+  // messages, the live reply appearing, its state line, its growing text and
+  // queued messages.
   const contentVersion = [
     conversation?.messages.length ?? 0,
+    optimistic.map(({ state }) => `${state.variables?.tempId ?? ""}:${state.status}`).join(","),
     showLive ? `${live.generationId}:${live.state}:${live.error ? "e" : ""}` : "-",
     live?.content.length ?? 0,
     live?.reasoning.length ?? 0,
@@ -257,118 +210,84 @@ export function ConversationView(props: {
     jumpToLatest,
   } = useScrollPin<HTMLDivElement>(contentVersion);
 
-  function clearBox() {
-    if (textareaRef.current) textareaRef.current.value = "";
-    shell.clearDraft(draftKey);
-    setHasDraft(false);
-    setSlash(null);
-  }
+  const lastReply = [...(conversation?.messages ?? [])]
+    .reverse()
+    .find((m) => m.role === "assistant");
 
-  /** Starts a generation; true once the server accepted it. */
-  async function submit(content: string, pair: [string, string], fromBox: boolean) {
-    setBusy(true);
-    setStatus("Sending…");
-    const body = JSON.stringify({
+  function send(content: string, choice: ModelChoice, fromBox: boolean) {
+    const vars = newSendVariables({
+      userId,
+      conversationKey: draftKey,
       ...(conversationId ? { conversationId } : {}),
-      providerId: pair[0],
-      model: pair[1],
+      providerId: choice[0],
+      model: choice[1],
       content,
-      operationKey: crypto.randomUUID(),
-      operationIssuedAt: new Date().toISOString(),
     });
-    try {
-      for (let attempt = 0; attempt <= SEND_RETRIES; attempt++) {
-        try {
-          const started = await apiJson<StartGenerationResponse>("/api/generations", {
-            method: "POST",
-            body,
-          });
-          if (fromBox) clearBox();
-          shell.setModel(started.conversationId, pair);
-          setStatus(null);
-          setLive({
-            generationId: started.generationId,
-            assistantMessageId: started.assistantMessageId,
-            state: "pending",
-            content: "",
-            reasoning: "",
-            error: null,
-          });
-          void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
-          if (started.conversationId !== conversationId) {
-            // Messages queued on the draft follow it into the new conversation.
-            shell.moveQueue(draftKey, started.conversationId);
-            // The draft becomes a real conversation: replace the draft URL so
-            // Back does not resurrect the empty draft (INV-53).
-            await navigate(paths.chat(started.conversationId), {
-              replace: true,
-              state: { live: started },
-            });
-          } else {
-            await client.invalidateQueries({
-              queryKey: queryKeys.conversation(userId, conversationId),
-            });
-          }
-          return true;
-        } catch (error) {
-          if (error instanceof AccountChangedError) return false; // discarded, never re-sent
-          // A contract error other than INTERNAL means rejected: nothing was saved.
-          if (error instanceof ApiError && error.code && error.code !== "INTERNAL") {
-            setStatus(error.message);
-            return false;
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1_000 * (attempt + 1)));
-      }
-      setStatus(
-        "The outcome of this send is unknown. Check the conversation, then send again if needed.",
-      );
-      return false;
-    } finally {
-      setBusy(false);
+    // The optimistic message is visible immediately; the composer is cleared.
+    if (fromBox) {
+      if (textareaRef.current) setBox(textareaRef.current, "");
+      shell.clearDraft(draftKey);
     }
+    setStatus(null);
+    sendMutation.mutate(vars, {
+      // Only while this view is still mounted.
+      onSuccess: (result) => {
+        started(result);
+        if (result.conversationId !== conversationId) {
+          // Messages queued on the draft follow it into the new conversation.
+          shell.moveQueue(draftKey, result.conversationId);
+          // The draft becomes a real conversation: replace the draft URL so
+          // Back does not resurrect the empty draft (INV-53).
+          void navigate(paths.chat(result.conversationId), { replace: true });
+        } else {
+          void client.invalidateQueries({
+            queryKey: queryKeys.conversation(userId, result.conversationId),
+          });
+        }
+      },
+      onError: (error) => {
+        if (error instanceof AccountChangedError) return; // discarded, never re-sent
+        if (error instanceof SendRejectedError) {
+          setStatus(error.message);
+          // It and anything queued after it go back to the box.
+          const el = textareaRef.current;
+          if (el?.value.includes(vars.content)) restoreQueue(null);
+          else restoreQueue(null, vars.content);
+        }
+      },
+    });
   }
 
-  /** Enter or the send button: send now, or queue while a reply is running. */
-  function send(event?: SyntheticEvent) {
-    event?.preventDefault();
-    const content = textareaRef.current?.value.trim() ?? "";
-    if (!content) {
-      textareaRef.current?.focus();
+  /** The composer's Send/Enter: send now, or queue while a reply is running. */
+  function submit(content: string, choice: ModelChoice) {
+    if (running || sending) {
+      shell.enqueue(draftKey, { id: crypto.randomUUID(), content, pair: choice });
+      const el = textareaRef.current;
+      if (el) setBox(el, "");
+      shell.clearDraft(draftKey);
       return;
     }
-    let pair: [string, string];
-    try {
-      pair = JSON.parse(selectedValue) as [string, string];
-    } catch {
-      setStatus("Choose a model first.");
-      return;
-    }
-    if (running || busy) {
-      shell.enqueue(draftKey, { id: crypto.randomUUID(), content, pair });
-      clearBox();
-      return;
-    }
-    void submit(content, pair, true);
+    send(content, choice, true);
   }
 
   // Drain the queue: the next message goes out once the reply has finished
   // and the stored transcript is back (so it follows the reply it answers).
-  const sendNextQueued = useEffectEvent(async (next: QueuedMessage) => {
+  const sendNextQueued = useEffectEvent(() => {
+    const next = shell.getQueue(draftKey)[0];
+    if (!next) return;
     shell.removeQueued(draftKey, next.id);
-    // Rejected (the status says why): it and the rest go back to the box.
-    if (!(await submit(next.content, next.pair, false))) restoreQueue(null, next);
+    send(next.content, next.pair, false);
   });
-  const nextQueued = queued.at(0);
+  const hasQueued = queued.length > 0;
   const transcriptReady = conversationId === undefined || conversation !== undefined;
   useEffect(() => {
-    if (!nextQueued || running || busy || props.inert || !hydrated || !transcriptReady) return;
-    // Next task, so a re-run before the send starts cancels it (no double send).
-    const timer = setTimeout(() => void sendNextQueued(nextQueued), 0);
+    if (!hasQueued || running || sending || props.inert || !hydrated || !transcriptReady) return;
+    // Next task, so a re-render before the send starts cancels it (no double send).
+    const timer = setTimeout(sendNextQueued, 0);
     return () => {
       clearTimeout(timer);
     };
-  }, [nextQueued, running, busy, props.inert, hydrated, transcriptReady]);
+  }, [hasQueued, running, sending, props.inert, hydrated, transcriptReady]);
 
   async function cancel() {
     if (!observedId) return;
@@ -386,6 +305,25 @@ export function ConversationView(props: {
     }).catch(() => undefined);
     void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
     await navigate(paths.newChat(), { replace: true });
+  }
+
+  function runCommand(name: string) {
+    switch (name) {
+      case "new":
+        void navigate(paths.newChat());
+        break;
+      case "rename":
+        if (conversation) actions.rename(conversation, textareaRef.current);
+        break;
+      case "delete":
+        if (conversation) actions.remove(conversation, textareaRef.current);
+        break;
+      case "settings":
+        void navigate(paths.settings(), {
+          state: { background: location.pathname } satisfies OverlayState,
+        });
+        break;
+    }
   }
 
   if (loadError?.code === "CONVERSATION_MALFORMED") {
@@ -427,11 +365,16 @@ export function ConversationView(props: {
     );
   }
 
-  const modelCount = allModels.length;
-  const canSend = hydrated && modelCount > 0 && !running && !busy && !props.inert;
+  const loading =
+    conversationId !== undefined && conversationQuery.isPending && !props.initialError;
+  const fetchError =
+    conversationQuery.isError && !loadError?.code ? conversationQuery.error : undefined;
   const empty =
+    !loading &&
+    !fetchError &&
     (conversationId === undefined || conversation?.messages.length === 0) &&
     !showLive &&
+    optimistic.length === 0 &&
     queued.length === 0;
 
   const commands: Command[] = [
@@ -445,38 +388,6 @@ export function ConversationView(props: {
       : []),
     { name: "settings", description: "Open settings" },
   ];
-  const shownCommands = slash === null ? [] : filterCommands(commands, slash);
-  const commandOpen = shownCommands.length > 0;
-  const active = shownCommands[Math.min(activeCommand, shownCommands.length - 1)];
-  function runCommand(command: Command) {
-    clearBox();
-    switch (command.name) {
-      case "model": {
-        const select = modelRef.current;
-        select?.focus();
-        try {
-          select?.showPicker();
-        } catch {
-          // Not supported or not allowed here: focus is enough.
-        }
-        break;
-      }
-      case "new":
-        void navigate(paths.newChat());
-        break;
-      case "rename":
-        if (conversation) actions.rename(conversation, textareaRef.current);
-        break;
-      case "delete":
-        if (conversation) actions.remove(conversation, textareaRef.current);
-        break;
-      case "settings":
-        void navigate(paths.settings(), {
-          state: { background: location.pathname } satisfies OverlayState,
-        });
-        break;
-    }
-  }
 
   return (
     <main
@@ -543,12 +454,13 @@ export function ConversationView(props: {
         tabIndex={0}
         role="region"
         aria-label="Transcript"
+        aria-busy={loading}
         data-testid="transcript"
       >
         {empty ? (
           <Greeting
             level={conversation ? 2 : 1}
-            text={layout?.user ? `How can I help, ${layout.user.username}?` : "How can I help?"}
+            text={username ? `How can I help, ${username}?` : "How can I help?"}
           />
         ) : null}
         <ol className="history" aria-label="Messages">
@@ -561,6 +473,30 @@ export function ConversationView(props: {
               status={message.status}
             />
           ))}
+          {optimistic.map(({ mutation, state }) =>
+            state.variables ? (
+              <PendingMessage
+                key={state.variables.tempId}
+                vars={state.variables}
+                status={state.status}
+                error={state.error}
+                onResolved={() => {
+                  client.getMutationCache().remove(mutation);
+                  void client.invalidateQueries({
+                    queryKey: queryKeys.conversation(userId, conversationId ?? ""),
+                  });
+                }}
+                onEdit={(text) => {
+                  client.getMutationCache().remove(mutation);
+                  const el = textareaRef.current;
+                  if (el) {
+                    setBox(el, text);
+                    el.focus();
+                  }
+                }}
+              />
+            ) : null,
+          )}
           {showLive ? (
             <li className="turn turn-assistant live" data-testid="response" aria-busy={running}>
               <span className="visually-hidden">Assistant</span>
@@ -605,6 +541,22 @@ export function ConversationView(props: {
             </li>
           ))}
         </ol>
+        {loading ? (
+          <p className="placeholder" data-testid="transcript-loading">
+            Loading conversation…
+          </p>
+        ) : fetchError ? (
+          <div className="placeholder" role="alert" data-testid="transcript-error">
+            <p>This conversation couldn’t be loaded.</p>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void conversationQuery.refetch()}
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
       </div>
       {showJump ? (
         <button
@@ -616,170 +568,95 @@ export function ConversationView(props: {
           <ArrowDown size={16} aria-hidden /> Jump to latest
         </button>
       ) : null}
-
-      <form
-        className="composer"
-        onSubmit={(event) => {
-          send(event);
-        }}
-        aria-label="Message composer"
-      >
-        <p
-          className="gen-status composer-status"
-          role="status"
-          aria-live="polite"
-          data-testid="status"
-        >
-          {status ?? ""}
-        </p>
-        {modelsQuery.isError && modelCount === 0 ? (
-          <p className="error" role="alert">
-            Couldn’t load the model list.{" "}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => void modelsQuery.refetch()}
-            >
-              Try again
-            </button>
-          </p>
-        ) : null}
-        {commandOpen ? (
-          <CommandMenu
-            commands={shownCommands}
-            activeIndex={Math.min(activeCommand, shownCommands.length - 1)}
-            onPick={runCommand}
-            onHover={setActiveCommand}
-          />
-        ) : null}
-        <div className="composer-box">
-          <label htmlFor="message" className="visually-hidden">
-            Message
-          </label>
-          <textarea
-            id="message"
-            name="message"
-            ref={textareaRef}
-            rows={1}
-            placeholder={running ? "Queue a message" : "Ask anything"}
-            aria-autocomplete="list"
-            aria-controls={commandOpen ? COMMAND_MENU_ID : undefined}
-            aria-activedescendant={commandOpen && active ? commandOptionId(active.name) : undefined}
-            onInput={(event) => {
-              const value = event.currentTarget.value;
-              shell.setDraft(draftKey, value);
-              setHasDraft(value.trim() !== "");
-              const query = commandQuery(value);
-              if (query !== slash) setActiveCommand(0);
-              setSlash(query);
-            }}
-            onKeyDown={(event) => {
-              if (commandOpen) {
-                const n = shownCommands.length;
-                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  const step = event.key === "ArrowDown" ? 1 : n - 1;
-                  setActiveCommand((i) => (Math.min(i, n - 1) + step) % n);
-                  return;
-                }
-                if ((event.key === "Enter" || event.key === "Tab") && active) {
-                  event.preventDefault();
-                  runCommand(active);
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setSlash(null);
-                  return;
-                }
-              }
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                if (hydrated && modelCount > 0 && !props.inert) send();
-              }
-            }}
-          />
-          <span className="model-picker">
-            <label htmlFor="model" className="visually-hidden">
-              Model
-            </label>
-            <select
-              id="model"
-              name="model"
-              ref={modelRef}
-              className="model-select"
-              value={selectedValue}
-              disabled={modelCount === 0 || props.inert}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                setSelected(value);
-                try {
-                  const pair = JSON.parse(value) as [string, string];
-                  shell.setModel(draftKey, pair);
-                } catch {
-                  // placeholder option
-                }
-              }}
-            >
-              {modelCount === 0 ? <option value="">No models available</option> : null}
-              {groups.map((group: ModelListDto["providers"][number]) => (
-                <optgroup
-                  key={group.provider.id}
-                  label={`${group.provider.name}${
-                    group.provider.status === "unavailable"
-                      ? " (unavailable)"
-                      : group.stale
-                        ? " (list may be out of date)"
-                        : ""
-                  }`}
-                >
-                  {group.models.map((model) => (
-                    <option key={model.id} value={pairKey([model.providerId, model.id])}>
-                      {model.id}
-                      {model.status === "unloaded" ? " (not loaded)" : ""}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <ChevronDown size={15} className="model-chevron" aria-hidden />
-          </span>
-          {running && hasDraft ? (
-            <button
-              type="submit"
-              className="send-btn secondary-send"
-              aria-label="Queue message"
-              title="Queue message (sent when the reply finishes)"
-              disabled={!hydrated || props.inert}
-            >
-              <ArrowUp size={18} strokeWidth={2.25} aria-hidden />
-            </button>
-          ) : null}
-          {running ? (
-            <button
-              type="button"
-              className="send-btn"
-              aria-label="Stop generating"
-              title="Stop generating"
-              onClick={() => void cancel()}
-              disabled={!hydrated}
-            >
-              <Square size={13} fill="currentColor" aria-hidden />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              className="send-btn"
-              aria-label="Send"
-              title="Send (Enter) · New line (Shift+Enter)"
-              disabled={!canSend}
-            >
-              <ArrowUp size={18} strokeWidth={2.25} aria-hidden />
-            </button>
-          )}
-        </div>
-      </form>
+      <Composer
+        userId={userId}
+        textareaRef={textareaRef}
+        draftKey={draftKey}
+        hydrated={hydrated}
+        inert={props.inert === true}
+        running={running}
+        sending={sending}
+        status={status}
+        models={modelsQuery}
+        preferred={
+          shell.getModel(draftKey) ??
+          (lastReply?.provider && lastReply.model ? [lastReply.provider, lastReply.model] : null)
+        }
+        commands={commands}
+        onSubmit={submit}
+        onCommand={runCommand}
+        onCancel={() => void cancel()}
+      />
       {actions.dialogs}
     </main>
+  );
+}
+
+/** An optimistic user message: sending, sent (awaiting the stored copy) or unknown. */
+function PendingMessage(props: {
+  vars: SendVariables;
+  status: "idle" | "pending" | "success" | "error";
+  error: Error | null;
+  onResolved: () => void;
+  onEdit: (text: string) => void;
+}) {
+  const [checking, setChecking] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const unknown = props.status === "error" && props.error instanceof SendUnknownError;
+  return (
+    <li
+      className={`turn turn-user turn-pending${unknown ? " unknown" : ""}`}
+      data-testid="message-pending"
+      data-temp-id={props.vars.tempId}
+      aria-busy={props.status === "pending"}
+    >
+      <span className="visually-hidden">You</span>
+      <div className="bubble">
+        <p className="plain-text">{props.vars.content}</p>
+      </div>
+      {props.status === "pending" ? <span className="queued-meta">Sending…</span> : null}
+      {unknown ? (
+        <div className="pending-actions" role="alert">
+          <span className="badge status-failed">Outcome unknown</span>
+          <p>
+            {notFound
+              ? "The server has no record of this message. It was probably not saved."
+              : "We couldn’t confirm whether this message was saved. Refresh the conversation to check."}
+          </p>
+          <div className="pending-buttons">
+            <button
+              type="button"
+              className="secondary"
+              disabled={checking}
+              onClick={() => {
+                setChecking(true);
+                void lookUpOperation(props.vars.operationKey)
+                  .then((result) => {
+                    if (result) props.onResolved();
+                    else setNotFound(true);
+                  })
+                  .catch(() => undefined)
+                  .finally(() => {
+                    setChecking(false);
+                  });
+              }}
+            >
+              Refresh conversation
+            </button>
+            {notFound ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  props.onEdit(props.vars.content);
+                }}
+              >
+                Edit and resend
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </li>
   );
 }
