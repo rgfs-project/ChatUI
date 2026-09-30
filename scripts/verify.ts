@@ -603,6 +603,49 @@ async function artifactChecks(base: string, dataDir: string, session: ApiSession
   await upload.arrayBuffer();
 }
 
+/** Phase 13d: the portable archive downloads, and re-importing it changes nothing. */
+async function portabilityChecks(base: string, session: ApiSession): Promise<void> {
+  const created = await fetch(`${base}/api/exports`, {
+    method: "POST",
+    headers: { ...sessionHeaders(session, true), "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const { exportId } = (await created.json()) as { exportId?: string };
+  const download = await fetch(`${base}/api/exports/${exportId ?? ""}/download`, {
+    headers: sessionHeaders(session),
+  });
+  const zip = Buffer.from(await download.arrayBuffer());
+  check(
+    "INV-43: export everything downloads a ZIP archive with a manifest",
+    created.status === 201 &&
+      download.headers.get("content-type") === "application/zip" &&
+      zip.subarray(0, 2).toString("latin1") === "PK" &&
+      zip.includes(Buffer.from("manifest.json")),
+    `${String(created.status)} ${String(download.status)} ${String(zip.length)}`,
+  );
+  const imported = await fetch(`${base}/api/imports`, {
+    method: "POST",
+    headers: { ...sessionHeaders(session, true), "Content-Type": "application/zip" },
+    body: new Uint8Array(zip),
+  });
+  const preview = (await imported.json()) as {
+    importId?: string;
+    items?: { action: string }[];
+  };
+  check(
+    "INV-42: re-importing your own archive previews everything as already present",
+    imported.status === 201 &&
+      (preview.items ?? []).length > 0 &&
+      (preview.items ?? []).every((i) => i.action === "identical"),
+    JSON.stringify(preview.items?.map((i) => i.action)),
+  );
+  const cancelled = await fetch(`${base}/api/imports/${preview.importId ?? ""}`, {
+    method: "DELETE",
+    headers: sessionHeaders(session, true),
+  });
+  await cancelled.arrayBuffer();
+}
+
 async function attachmentChecks(base: string, dataDir: string, session: ApiSession): Promise<void> {
   const unknown = "00000000-0000-4000-8000-000000000000";
   const anon = await fetch(`${base}/api/attachments/${unknown}/content`);
@@ -716,6 +759,7 @@ async function main(): Promise<void> {
     if (again) await attachmentChecks(base, dataDir, again);
     if (again) await memoryChecks(base, dataDir, again, llama);
     if (again) await artifactChecks(base, dataDir, again);
+    if (again) await portabilityChecks(base, again);
   } finally {
     const exited = new Promise<number | null>((resolve) =>
       child.once("exit", (code) => {

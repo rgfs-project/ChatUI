@@ -2,6 +2,7 @@
 // imports carry explicit .ts extensions and no path aliases are used.
 import { statSync } from "node:fs";
 import type { ArtifactConfig } from "./storage/artifacts.ts";
+import type { ImportLimits } from "./portability/archive.ts";
 import { isIP } from "node:net";
 import path from "node:path";
 import { z } from "zod";
@@ -97,6 +98,13 @@ const envSchema = z.object({
   ARTIFACT_MAX_BYTES: intFrom(1_024, 16 * 1024 * 1024).default(256 * 1024),
   ARTIFACT_MAX_PER_REPLY: intFrom(1, 100).default(16),
   ARTIFACT_QUOTA_BYTES: intFrom(1_024, 1_099_511_627_776).default(100 * 1024 * 1024),
+
+  // Portable import bounds (Phase 13d, INV-42).
+  IMPORT_MAX_ARCHIVE_BYTES: intFrom(1_024, 1_099_511_627_776).default(1024 * 1024 * 1024),
+  IMPORT_MAX_EXPANDED_BYTES: intFrom(1_024, 4_398_046_511_104).default(2 * 1024 * 1024 * 1024),
+  IMPORT_MAX_ENTRIES: intFrom(1, 10_000_000).default(50_000),
+  IMPORT_MAX_RATIO: intFrom(2, 100_000).default(200),
+  IMPORT_MAX_MS: intFrom(1_000, 24 * 3_600_000).default(600_000),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -120,6 +128,7 @@ export interface Config {
   attachments: AttachmentConfig;
   memories: MemoryConfig;
   artifacts: ArtifactConfig;
+  imports: ImportLimits;
 }
 
 /** Generated source artifact limits (contracts §12); the store holds the defaults. */
@@ -399,6 +408,13 @@ export function loadConfig(
       maxUploadsPerUser: parsed.data.MAX_UPLOADS_PER_USER,
       maxUploadsTotal: parsed.data.MAX_UPLOADS_TOTAL,
       mediaTokenReserve: parsed.data.MEDIA_TOKEN_RESERVE,
+    },
+    imports: {
+      maxArchiveBytes: parsed.data.IMPORT_MAX_ARCHIVE_BYTES,
+      maxExpandedBytes: parsed.data.IMPORT_MAX_EXPANDED_BYTES,
+      maxEntries: parsed.data.IMPORT_MAX_ENTRIES,
+      maxRatio: parsed.data.IMPORT_MAX_RATIO,
+      maxMs: parsed.data.IMPORT_MAX_MS,
     },
     artifacts: {
       maxBytes: parsed.data.ARTIFACT_MAX_BYTES,

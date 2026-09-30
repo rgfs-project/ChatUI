@@ -396,51 +396,53 @@ Compose is the supported production path; host Node is for development.
 
 Validated once at boot (`server/config.ts`); invalid values stop the process with a list of every problem. See `.env.example`.
 
-| Variable                                                   | Default                         | Rule                                                                                                      |
-| ---------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `PORT`                                                     | `3000`                          | integer 0–65535 (0 = ephemeral)                                                                           |
-| `DATA_DIR`                                                 | `./data` (`/data` in the image) | must be an existing directory; nothing writes to it yet                                                   |
-| `NODE_ENV`                                                 | `development`                   | `development` \| `production` \| `test`                                                                   |
-| `LOG_LEVEL`                                                | `info`                          | pino levels or `silent`                                                                                   |
-| `LISTEN_HOST`                                              | `127.0.0.1`                     | IP address. It must be loopback unless `CHATUI_CONTAINER=1`, which only the image sets                    |
-| `LLAMA_BASE_URL`                                           | unset                           | http(s) URL without credentials, query or fragment; unset = chat demo shows "no model server"             |
-| `LLAMA_API_KEY`                                            | unset                           | secret; sent only to the provider                                                                         |
-| `PROVIDER_TIMEOUT_MS`                                      | `300000`                        | inactivity timeout per provider request (1 s – 1 h)                                                       |
-| `GENERATION_MAX_MS`                                        | `1800000`                       | whole-generation cap                                                                                      |
-| `DEFAULT_CONTEXT_TOKENS`                                   | `8192`                          | used when the provider reports no context length                                                          |
-| `MAX_OUTPUT_TOKENS`                                        | `4096`                          | `max_tokens` per generation                                                                               |
-| `MAX_ACTIVE_GENERATIONS`                                   | discovered slots, else 1        | global admission limit                                                                                    |
-| `PROVIDER_MAX_RESPONSE_BYTES`                              | `16777216`                      | per provider response                                                                                     |
-| `OPERATION_RETENTION_MS`                                   | `604800000` (7 days)            | ≥ 2 days                                                                                                  |
-| `CONTEXT_TRIM_STEP`                                        | 25% of the budget               | truncation anchor step in tokens                                                                          |
-| `TEMPLATE_OVERHEAD_TOKENS`                                 | `16`                            | per-message overhead for the fallback estimate                                                            |
-| `GENERATION_CHECKPOINT_MS`                                 | `1000`                          | checkpoint cadence while running                                                                          |
-| `GENERATION_RETENTION_MS`                                  | `3600000`                       | terminal generations and finalized checkpoints kept                                                       |
-| `SSE_REPLAY_EVENTS`                                        | `2000`                          | replay ring buffer per generation                                                                         |
-| `PUBLIC_ORIGIN`                                            | `http://localhost:<PORT>`       | https origin, or http://localhost / 127.0.0.1 / [::1] only                                                |
-| `TRUST_PROXY`                                              | `0`                             | proxy hops trusted for the client address                                                                 |
-| `REGISTRATION_MODE`                                        | `closed`                        | `closed` \| `open`; overridden by the admin setting once saved (Phase 10)                                 |
-| `SESSION_ABSOLUTE_TTL`                                     | 30 days                         | ms                                                                                                        |
-| `SESSION_IDLE_TTL`                                         | 7 days                          | ms                                                                                                        |
-| `MAX_ACTIVE_GENERATIONS_PER_USER`                          | `2`                             | per-user admission                                                                                        |
-| `MAX_SSE_PER_USER` / `MAX_SSE_TOTAL`                       | `8` / `256`                     | stream caps                                                                                               |
-| `PASSWORD_HASH_CONCURRENCY` / `PASSWORD_HASH_QUEUE`        | `2` / `16`                      | hashing semaphore and bounded queue                                                                       |
-| `ALLOW_PRIVATE_PROVIDER_HOSTS`                             | `true`                          | loopback/private/unique-local/CGNAT provider hosts                                                        |
-| `PROVIDER_HOST_ALLOWLIST`                                  | empty                           | comma-separated exact hostnames                                                                           |
-| `PROVIDER_LINK_LOCAL_EXCEPTIONS`                           | empty                           | `host=address:port` tuples (IPv6 in brackets)                                                             |
-| `ATTACHMENT_MAX_BYTES`                                     | `20971520` (20 MiB)             | per file; admin setting overrides (Phase 12)                                                              |
-| `ATTACHMENT_MAX_PER_MESSAGE`                               | `10`                            | 1–10 (the format's limit); admin setting overrides                                                        |
-| `ATTACHMENT_QUOTA_BYTES`                                   | `1073741824` (1 GiB)            | attachment bytes per user; admin setting overrides                                                        |
-| `ATTACHMENT_TEXT_INLINE_BYTES`                             | `100000`                        | text inlined per attachment in the prompt; admin setting overrides                                        |
-| `ATTACHMENT_PENDING_TTL`                                   | `86400000` (1 day)              | unsent uploads are garbage-collected after this (ms)                                                      |
-| `ATTACHMENT_MAX_IMAGE_PIXELS`                              | `50000000`                      | largest accepted image (width × height)                                                                   |
-| `MAX_UPLOADS_PER_USER` / `MAX_UPLOADS_TOTAL`               | `4` / `32`                      | uploads in flight                                                                                         |
-| `MEDIA_TOKEN_RESERVE`                                      | `1024`                          | context tokens counted per image/audio part                                                               |
-| `MEMORY_PROMPT_BUDGET`                                     | `4096`                          | UTF-8 bytes of approved notes per prompt (whole notes, name order; also ≤ a quarter of the prompt budget) |
-| `MEMORY_TOOL_MAX_CALLS` / `MEMORY_TOOL_MAX_ARGUMENT_BYTES` | `4` / `8192`                    | memory suggestion calls per reply and argument bytes per call                                             |
-| `CONTINUATION_TOKEN_RESERVE`                               | `256`                           | context tokens reserved for the continuation's tool-call/result messages when tools are offered           |
-| `ARTIFACT_MAX_BYTES` / `ARTIFACT_MAX_PER_REPLY`            | `262144` / `16`                 | largest captured file and captures per reply                                                              |
-| `ARTIFACT_QUOTA_BYTES`                                     | `104857600`                     | all of a user's captured files                                                                            |
+| Variable                                                    | Default                         | Rule                                                                                                      |
+| ----------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                      | `3000`                          | integer 0–65535 (0 = ephemeral)                                                                           |
+| `DATA_DIR`                                                  | `./data` (`/data` in the image) | must be an existing directory; nothing writes to it yet                                                   |
+| `NODE_ENV`                                                  | `development`                   | `development` \| `production` \| `test`                                                                   |
+| `LOG_LEVEL`                                                 | `info`                          | pino levels or `silent`                                                                                   |
+| `LISTEN_HOST`                                               | `127.0.0.1`                     | IP address. It must be loopback unless `CHATUI_CONTAINER=1`, which only the image sets                    |
+| `LLAMA_BASE_URL`                                            | unset                           | http(s) URL without credentials, query or fragment; unset = chat demo shows "no model server"             |
+| `LLAMA_API_KEY`                                             | unset                           | secret; sent only to the provider                                                                         |
+| `PROVIDER_TIMEOUT_MS`                                       | `300000`                        | inactivity timeout per provider request (1 s – 1 h)                                                       |
+| `GENERATION_MAX_MS`                                         | `1800000`                       | whole-generation cap                                                                                      |
+| `DEFAULT_CONTEXT_TOKENS`                                    | `8192`                          | used when the provider reports no context length                                                          |
+| `MAX_OUTPUT_TOKENS`                                         | `4096`                          | `max_tokens` per generation                                                                               |
+| `MAX_ACTIVE_GENERATIONS`                                    | discovered slots, else 1        | global admission limit                                                                                    |
+| `PROVIDER_MAX_RESPONSE_BYTES`                               | `16777216`                      | per provider response                                                                                     |
+| `OPERATION_RETENTION_MS`                                    | `604800000` (7 days)            | ≥ 2 days                                                                                                  |
+| `CONTEXT_TRIM_STEP`                                         | 25% of the budget               | truncation anchor step in tokens                                                                          |
+| `TEMPLATE_OVERHEAD_TOKENS`                                  | `16`                            | per-message overhead for the fallback estimate                                                            |
+| `GENERATION_CHECKPOINT_MS`                                  | `1000`                          | checkpoint cadence while running                                                                          |
+| `GENERATION_RETENTION_MS`                                   | `3600000`                       | terminal generations and finalized checkpoints kept                                                       |
+| `SSE_REPLAY_EVENTS`                                         | `2000`                          | replay ring buffer per generation                                                                         |
+| `PUBLIC_ORIGIN`                                             | `http://localhost:<PORT>`       | https origin, or http://localhost / 127.0.0.1 / [::1] only                                                |
+| `TRUST_PROXY`                                               | `0`                             | proxy hops trusted for the client address                                                                 |
+| `REGISTRATION_MODE`                                         | `closed`                        | `closed` \| `open`; overridden by the admin setting once saved (Phase 10)                                 |
+| `SESSION_ABSOLUTE_TTL`                                      | 30 days                         | ms                                                                                                        |
+| `SESSION_IDLE_TTL`                                          | 7 days                          | ms                                                                                                        |
+| `MAX_ACTIVE_GENERATIONS_PER_USER`                           | `2`                             | per-user admission                                                                                        |
+| `MAX_SSE_PER_USER` / `MAX_SSE_TOTAL`                        | `8` / `256`                     | stream caps                                                                                               |
+| `PASSWORD_HASH_CONCURRENCY` / `PASSWORD_HASH_QUEUE`         | `2` / `16`                      | hashing semaphore and bounded queue                                                                       |
+| `ALLOW_PRIVATE_PROVIDER_HOSTS`                              | `true`                          | loopback/private/unique-local/CGNAT provider hosts                                                        |
+| `PROVIDER_HOST_ALLOWLIST`                                   | empty                           | comma-separated exact hostnames                                                                           |
+| `PROVIDER_LINK_LOCAL_EXCEPTIONS`                            | empty                           | `host=address:port` tuples (IPv6 in brackets)                                                             |
+| `ATTACHMENT_MAX_BYTES`                                      | `20971520` (20 MiB)             | per file; admin setting overrides (Phase 12)                                                              |
+| `ATTACHMENT_MAX_PER_MESSAGE`                                | `10`                            | 1–10 (the format's limit); admin setting overrides                                                        |
+| `ATTACHMENT_QUOTA_BYTES`                                    | `1073741824` (1 GiB)            | attachment bytes per user; admin setting overrides                                                        |
+| `ATTACHMENT_TEXT_INLINE_BYTES`                              | `100000`                        | text inlined per attachment in the prompt; admin setting overrides                                        |
+| `ATTACHMENT_PENDING_TTL`                                    | `86400000` (1 day)              | unsent uploads are garbage-collected after this (ms)                                                      |
+| `ATTACHMENT_MAX_IMAGE_PIXELS`                               | `50000000`                      | largest accepted image (width × height)                                                                   |
+| `MAX_UPLOADS_PER_USER` / `MAX_UPLOADS_TOTAL`                | `4` / `32`                      | uploads in flight                                                                                         |
+| `MEDIA_TOKEN_RESERVE`                                       | `1024`                          | context tokens counted per image/audio part                                                               |
+| `MEMORY_PROMPT_BUDGET`                                      | `4096`                          | UTF-8 bytes of approved notes per prompt (whole notes, name order; also ≤ a quarter of the prompt budget) |
+| `MEMORY_TOOL_MAX_CALLS` / `MEMORY_TOOL_MAX_ARGUMENT_BYTES`  | `4` / `8192`                    | memory suggestion calls per reply and argument bytes per call                                             |
+| `CONTINUATION_TOKEN_RESERVE`                                | `256`                           | context tokens reserved for the continuation's tool-call/result messages when tools are offered           |
+| `ARTIFACT_MAX_BYTES` / `ARTIFACT_MAX_PER_REPLY`             | `262144` / `16`                 | largest captured file and captures per reply                                                              |
+| `ARTIFACT_QUOTA_BYTES`                                      | `104857600`                     | all of a user's captured files                                                                            |
+| `IMPORT_MAX_ARCHIVE_BYTES` / `IMPORT_MAX_EXPANDED_BYTES`    | `1073741824` / `2147483648`     | uploaded archive and expanded total                                                                       |
+| `IMPORT_MAX_ENTRIES` / `IMPORT_MAX_RATIO` / `IMPORT_MAX_MS` | `50000` / `200` / `600000`      | entries, compression ratio (entries over 1 MiB) and time per preview or commit                            |
 
 ## Logging
 
@@ -1062,9 +1064,79 @@ All canonical memory data is `memories/*.md` and `proposals/*.json` inside the u
 
 An imported artifact uses the same `blob` + `meta.json` with `source: "imported"`. The generated-only fields (`generationId`, `captureIndex`) are null, and `conversationId`/`assistantMessageId` point into the imported conversation when the archive links them (else null). Its idempotency key is the import's own `(importId, entryIndex)`, recorded by the 13d journal, never the `(assistantMessageId, captureIndex)` key. Imports go through the same name rules, caps and quota, and the same inert serving; finalization happens when the import journal commits.
 
+## Export and import (Phase 13d)
+
+### Single-chat export (`GET /api/conversations/:id/export`)
+
+- Returns the file's exact bytes: no parsing, no reserialization, malformed files included. It is served as `text/markdown; charset=utf-8` with `Content-Disposition: attachment` (a sanitized title plus `.md`), `nosniff`, a sandbox CSP and `no-store`.
+- It contains no attachments or artifacts; the UI says so, and points to the archive.
+
+### The portable archive (`server/portability/archive.ts`, format `chatui-user-archive` v1)
+
+- A ZIP with a fixed layout:
+  - `manifest.json`
+  - `conversations/<id>.md`
+  - `attachments/<id>/{meta.json,blob}` (linked only; pending drafts are excluded)
+  - `artifacts/<id>/{meta.json,blob}` (finalized only)
+  - `memories/<id>.md`
+  - `proposals/<conversation-id>.json` (all statuses)
+  - `skills.json`, `preferences.json`
+- The manifest has format, version, `exportId`, `createdAt`, generator, every other entry's `{ path, length, sha256 }`, and `activeGenerations` (conversations exported mid-reply, in their accepted state: the user block without a response).
+- Never included: `user.json` and the password hash, sessions, provider credentials, instance settings and audit, generation checkpoints, operation records, derived indexes and `import-staging/`.
+
+### Export (`server/portability/export.ts`)
+
+1. **Snapshot.** Under `AccountWrites.exclusive` (the per-user barrier, exclusively), the small mutable files are copied into `import-staging/exports/<id>/files/`, and each blob's length and SHA-256 is taken from its metadata. Canonical writes hold the barrier shared per file, so each copy is a complete version and no write is in progress during the window. The window covers small files only.
+2. **Blobs** are opened after the barrier is released. One deleted since the snapshot fails the export with `409 CONFLICT` and `details.retryable` (never a dangling reference). An opened blob stays readable after an unlink. Each blob is hashed while it is zipped, and a mismatch fails the same way.
+3. The archive (`archive.zip`) is kept for an hour for `GET /api/exports/:id/download`. Startup and the hourly sweep remove export staging. One export runs per user at a time.
+
+- **Consistency granularity:** a canonical operation that writes several files (e.g. assistant, then proposals, then artifacts) holds the barrier per file, so a snapshot can fall between them. Each file is still complete, and the importer tolerates the lag: a missing sidecar or a not-yet-linked attachment is imported as is. Making whole operations barrier-atomic would need the barrier taken before every lock in every writer; mixing both orders would deadlock with the fair queue.
+
+### Import (`server/portability/read-archive.ts`, `server/portability/import.ts`, INV-42)
+
+- `POST /api/imports` (body: the ZIP) streams into `import-staging/<importId>/archive.zip` with `IMPORT_MAX_ARCHIVE_BYTES` enforced as bytes arrive (413).
+- **Preflight** (before any canonical write), read with `yauzl` (lazy entries, validated sizes, strict names):
+  1. The central directory: at most `IMPORT_MAX_ENTRIES`. Absolute paths, `..`, backslashes, symlinks, encrypted entries, duplicates and depth beyond 4 are refused. The expanded total is at most `IMPORT_MAX_EXPANDED_BYTES`, and an entry over 1 MiB compressed beyond `IMPORT_MAX_RATIO` is refused as a ZIP bomb.
+  2. The manifest: schema, version, and one record per entry.
+  3. Every entry: its length and SHA-256 are checked while it decompresses (sizes enforced as bytes arrive), within per-kind caps.
+  - The whole read must finish within `IMPORT_MAX_MS`. Unknown well-formed entries are skipped and reported.
+  - Entries are extracted under positional names: an archive name never becomes a path.
+- **Preview** (`GET /api/imports/:id`): items are matched by original id, with counts, conflicts, skipped items and warnings. Nothing is written.
+- **Plan** (recomputed at commit against the current state):
+  - **Conversations:** absent → new; identical bytes → skipped as already present; different → conflict (skipped by default, or with `conflicts: "copy"` a copy under a new id).
+  - **Attachments** follow their conversation:
+    - They keep their ids where free, and are remapped where taken, with the Markdown rewritten through parse/serialize (reported as `rewritten`). The metadata is re-owned by the destination.
+    - Those of a skipped conversation are skipped. For an identical conversation, missing ones are restored.
+  - **A malformed conversation** is imported raw only when neither it nor its attachments need new ids; otherwise it is skipped.
+  - **Artifacts** are independent: new, identical or conflict (or a copy). Those of a skipped conversation come in with a dead backlink (`degraded`); a copied conversation's artifacts point to the copy.
+  - **Memories** come in only when explicitly selected (`memoryIds`). A name collision under the §12 rule is a conflict and is never replaced; the caps apply.
+  - **Proposal sidecars** follow their conversation. Every imported `pending` suggestion becomes `invalid` (importing never approves or re-arms one), intents are dropped, target and result memory ids are remapped, and proposals targeting a memory that wasn't imported become `invalid` (`degraded`).
+  - **Skills** need a free id and name.
+  - **Preferences:** pins are merged (remapped; skipped conversations dropped). The other settings apply only where yours are unset; differences are reported and yours are kept.
+- **Commit** (`POST /api/imports/:id/commit`, 202 with polled progress):
+  1. The journal records, **before any write**, every planned file with the SHA-256 it will have (write-ahead).
+  2. Each item is created under its lock, as a new file only. A target that appeared meanwhile is left untouched and reported.
+  3. Replaced settings files keep their previous bytes in the journal.
+  4. The derived index, attachment usage and the artifact catalog are refreshed.
+  - A failure compensates at once. A crash leaves the journal `committing`, and **startup step 3** rolls it back: planned files that still carry their hash are deleted (pre-existing or later-changed files never match), and replaced settings are restored.
+- **Duplicates:** the idempotency key is SHA-256(`manifest.json`). A committed key is kept in `import-staging/completed.json` (the last 200). Committing the same archive again is refused (`409`, `reason: "duplicate"`) unless the user confirms "Import again" (`allowRepeat`); with skip mode that re-run only restores what is missing.
+- **Staging lifecycle:** cancel (`DELETE /api/imports/:id`) removes a previewed import. Finished, failed, cancelled and abandoned staging is removed after 24 hours at startup. Export skips staging. Account deletion removes it with the user directory. Phase 16 backup must run recovery first.
+- **Isolation:** the destination is the session's user only; the archive's owner ids choose nothing.
+
+### UI
+
+- **Settings → Data** (lazy `DataSettings`, `DataSettings.css`):
+  - "Export all data", then a download link with the size.
+  - Import: choose an archive, then an upload with progress (cancellable), then a preview with a summary table, the conflict and skipped lists, a conflict choice (Skip / Import as copies), memory checkboxes (none checked) and the "import again" confirmation, then Import, polled progress, and a completion or failure report.
+  - Affected query families are invalidated afterwards (conversations, conversation, memories, artifacts, preferences, skills, search).
+- The title menu has "Export as Markdown".
+- **Performance:**
+  - `DataSettings` is lazy-only, with the `data-settings-on-demand` budget (3,915 B gzip).
+  - The E2E records the export time and the upload-to-preview time (under 5 s for a small account).
+
 ## Later sections
 
-- Portable import/export and Claude import (13d–13e), rendering, component audit, security hardening, reliability, polish: N/A until those phases.
+- Claude import (13e), rendering, component audit, security hardening, reliability, polish: N/A until those phases.
 - Interactive artifacts: optional Phase 19, separately approved.
 
 ## Deviations from the written specification
@@ -1084,6 +1156,7 @@ An imported artifact uses the same `blob` + `meta.json` with `source: "imported"
   - Tool schemas are counted as their tokenized JSON, because `/apply-template` is called without `tools` (docs/provider-notes.md).
   - The admin model-visibility checkbox label now names the provider, since the same model id can exist on several providers.
 - **Phase 13c:** capture is opt-in through the documented `file=` label (no prompt instructions are added), and the conversation DTO carries its `artifacts` cards.
+- **Phase 13d:** snapshot consistency is per file (see "Export and import"); the Settings export also carries skills (user-owned canonical data from Phase 10); a repeat import needs an explicit "Import again".
 - **Workflow.** The project owner authorized autonomous phase execution with commits pushed to `main` on GitHub. The spec's plan-approval pause and local-only commits don't apply to this repository.
 
 ## Invariant register
@@ -1133,8 +1206,8 @@ Tests name the invariant in their title (e.g. `INV-01: …`). "Pending" rows are
 | INV-39 | Memories, proposals, artifacts and preferences never cross account boundaries or survive a wrong-account cache                                                                                                              | 13b, 13c       | Per-user store paths for memories and sidecars; user-scoped `memories(user)` and conversation keys cleared by the account boundary; artifact store paths per user, `artifacts(user)`/`artifactSource(user, id)` keys                                                                                                   | `tests/server/memories.test.ts` (cross-account 404s), `tests/client/memories.test.tsx` (account switch), `tests/server/artifacts.test.ts` (cross-account 404s), `tests/client/artifacts.test.tsx` (account switch)                                                                    | Implemented (13b memories/proposals, 13c artifacts)                                      |
 | INV-40 | An artifact is captured only after successful complete generation, exactly once per `(assistantMessageId, captureIndex)`, persists independently of conversation deletion, and is never recreated after the user deletes it | 13c            | `captureSources` (documented rule), staged captures in `terminal-decided` checkpoints, `ArtifactStore.captureStaged` (idempotent key, bytes → metadata → finalize), finalized-only visibility, delete finalizes the checkpoint, no historical scan                                                                     | `tests/server/artifacts.test.ts` (complete-only, crash after creation / before creation, deletion after eviction, open-checkpoint deletion, deleted conversation, cleanup), `tests/e2e/artifacts.spec.ts`, verify                                                                     | Implemented (13c)                                                                        |
 | INV-41 | Artifacts are read as inert source, never executed, and no stored name becomes a filesystem path                                                                                                                            | 13c            | Source always `text/plain` + `nosniff` + sandbox CSP + safe Content-Disposition; directories named by id; names validated, never paths; text-node rendering; no upload route                                                                                                                                           | `tests/server/artifacts.test.ts` (XSS payloads, headers, name rules), `tests/client/artifacts.test.tsx`, `tests/e2e/artifacts.spec.ts` (no script runs in the panel or at the source URL), verify                                                                                     | Implemented (13c)                                                                        |
-| INV-42 | Import is bounded by compressed size, expanded bytes, entry count, depth and time; no traversal or silent canonical overwrite                                                                                               | 13d, 13e       | —                                                                                                                                                                                                                                                                                                                      | —                                                                                                                                                                                                                                                                                     | Pending Phase 13d, 13e                                                                   |
-| INV-43 | Exports preserve canonical Markdown; portable user archives round-trip all user canonical stores (operator backup is INV-50)                                                                                                | 13d            | —                                                                                                                                                                                                                                                                                                                      | —                                                                                                                                                                                                                                                                                     | Pending Phase 13d                                                                        |
+| INV-42 | Import is bounded by compressed size, expanded bytes, entry count, depth and time; no traversal or silent canonical overwrite                                                                                               | 13d, 13e       | `readArchive` (entry count, names, symlinks, encryption, duplicates, depth, expanded total, ratio, per-entry caps, streamed length/SHA-256, time); preview before any write; create-only commit with a write-ahead journal and hash-matched rollback; the session user is the only destination                         | `tests/server/portability.test.ts` (traversal, absolute, backslash, symlink, duplicate, ZIP bomb, entry/size/archive limits, checksums, time limit, crash rollback, isolation), `tests/client/data.test.tsx`, `tests/e2e/data.spec.ts`                                                | Implemented for ChatUI archives (13d); Claude format pending 13e                         |
+| INV-43 | Exports preserve canonical Markdown; portable user archives round-trip all user canonical stores (operator backup is INV-50)                                                                                                | 13d            | Raw-byte chat export; manifest with per-entry length and SHA-256; barrier-exclusive snapshot of small files, verified blobs; identical-skip, conflict skip/copy with consistent remapping                                                                                                                              | `tests/server/portability.test.ts` (exact raw export, manifest, full round trip into another account, restore, remap integrity, dependency rules), `tests/e2e/data.spec.ts`, verify                                                                                                   | Implemented (13d)                                                                        |
 | INV-44 | Audio/images are passed only to a server-verified model with the matching input modality                                                                                                                                    | 12             | `SendService.assertCapable` (new message) and `expansion` (earlier media only for a verified modality); catalog `inputModalities` from discovery or config                                                                                                                                                             | `tests/server/attachments.test.ts` (INV-44 capability, historyImages with a text-only model), `tests/client/attachments.test.tsx` (capability warning), `tests/e2e/attachments.spec.ts`                                                                                               | Implemented (Phase 12)                                                                   |
 | INV-45 | Response math/code/Markdown never execute raw provider content or create unsafe links                                                                                                                                       | 14             | —                                                                                                                                                                                                                                                                                                                      | —                                                                                                                                                                                                                                                                                     | Pending Phase 14                                                                         |
 | INV-46 | Incremental rendering preserves selection, focus, scroll intent and unaffected message identity                                                                                                                             | 14             | —                                                                                                                                                                                                                                                                                                                      | —                                                                                                                                                                                                                                                                                     | Pending Phase 14                                                                         |

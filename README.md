@@ -184,6 +184,19 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 - **Settings → Customize → Files** lists every file. Files stay when their chat is deleted ("Chat deleted"), and are removed with the account.
 - Only complete replies are captured. Names must be plain file names with a known extension. Limits: `ARTIFACT_MAX_BYTES` per file, `ARTIFACT_MAX_PER_REPLY` per reply, `ARTIFACT_QUOTA_BYTES` per user. Files are stored under `DATA_DIR/<user>/artifacts/<id>/`.
 
+## Export and import
+
+- **A single chat:** its title menu → "Export as Markdown" downloads the exact file ChatUI stores (no attachments).
+- **Everything:** Settings → Data → "Export all data" makes one ZIP with your chats, attachments, files, memories, memory suggestions, skills and preferences, each with a checksum. Passwords, sessions and server settings are never included.
+- **Import:** Settings → Data → "Choose archive…" shows a preview first. Nothing changes until you press Import, and nothing you have is overwritten:
+  - Items you already have are skipped.
+  - Items that differ from yours are skipped, or imported as copies if you choose.
+  - Memories come in only if you tick them.
+  - Imported memory suggestions are never actionable.
+  - Restoring chats you deleted works from your own archive.
+- Limits: `IMPORT_MAX_ARCHIVE_BYTES`, `IMPORT_MAX_EXPANDED_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_RATIO` (ZIP-bomb guard) and `IMPORT_MAX_MS`. An import interrupted by a crash is rolled back on the next start.
+- This is the user-level export; it is not an administrative backup of the whole server (Phase 16).
+
 ## Data, backups and limits
 
 - Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).

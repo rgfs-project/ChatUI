@@ -9,6 +9,7 @@ import {
   loadConfig,
 } from "../../server/config.ts";
 import { DEFAULT_ARTIFACT_CONFIG as DEFAULT_ARTIFACT_CONFIG_STORE } from "../../server/storage/artifacts.ts";
+import { DEFAULT_IMPORT_LIMITS } from "../../server/portability/archive.ts";
 
 let root: string;
 
@@ -50,6 +51,7 @@ describe("configuration", () => {
       attachments: DEFAULT_ATTACHMENT_CONFIG,
       memories: DEFAULT_MEMORY_CONFIG,
       artifacts: DEFAULT_ARTIFACT_CONFIG_STORE,
+      imports: DEFAULT_IMPORT_LIMITS,
       provider: {
         baseUrl: undefined,
         apiKey: undefined,

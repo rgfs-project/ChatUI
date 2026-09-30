@@ -1,3 +1,5 @@
+import type { ExportService } from "./portability/export.ts";
+import type { ImportService } from "./portability/import.ts";
 import type { ArtifactStore } from "./storage/artifacts.ts";
 import type { MemoryStore } from "./storage/memories.ts";
 import type { ProposalService } from "./chat/proposals.ts";
@@ -63,6 +65,9 @@ export interface RouteServices {
   artifacts: ArtifactStore;
   /** Marks a generation's checkpoint `terminal` (artifact deletion, INV-40). */
   finalizeGeneration: (generationId: string) => Promise<void>;
+  /** Portable export and import (Phase 13d). */
+  exports: ExportService;
+  imports: ImportService;
   /** Models a role may use: hidden pairs are removed for non-admins (Phase 10). */
   modelList: (role: "user" | "admin", options?: { fresh?: boolean }) => Promise<ModelListDto>;
   /** Phase 10 administration. */

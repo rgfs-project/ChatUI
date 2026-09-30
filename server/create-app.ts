@@ -17,6 +17,9 @@ import { MemoryStore } from "./storage/memories.ts";
 import { ProposalStore } from "./storage/proposals.ts";
 import { ProposalService, type ProposalHooks } from "./chat/proposals.ts";
 import { ArtifactStore, type ArtifactConfig, type ArtifactHooks } from "./storage/artifacts.ts";
+import { ExportService, type ExportHooks } from "./portability/export.ts";
+import { ImportService, type ImportHooks } from "./portability/import.ts";
+import type { ImportLimits } from "./portability/archive.ts";
 import { AttachmentStore, type AttachmentStoreHooks } from "./storage/attachments.ts";
 import { ModelCatalog } from "./generations/catalog.ts";
 import { GenerationManager } from "./generations/manager.ts";
@@ -74,6 +77,8 @@ export interface AppOptions {
     memories?: Partial<MemoryConfig>;
     /** Artifact capture limits (Phase 13c); defaults when omitted (tests). */
     artifacts?: Partial<ArtifactConfig>;
+    /** Import bounds (Phase 13d); defaults when omitted (tests). */
+    imports?: Partial<ImportLimits>;
   };
   logger: Logger;
   version: string;
@@ -105,6 +110,9 @@ export interface AppOptions {
   proposalHooks?: ProposalHooks;
   /** Artifact capture crash-simulation hooks (tests). */
   artifactHooks?: ArtifactHooks;
+  /** Export and import test hooks. */
+  exportHooks?: ExportHooks;
+  importHooks?: ImportHooks;
   /** Process start, for temp-file cleanup (defaults to now). */
   startedAt?: Date;
 }
@@ -292,6 +300,29 @@ export function createApp(options: AppOptions): ChatUiApp {
     artifacts,
     ...options.send,
   });
+  const exportsService = new ExportService({
+    paths,
+    writes: accountWrites,
+    generations,
+    logger,
+    version: options.version,
+    now,
+  });
+  if (options.exportHooks) exportsService.hooks = options.exportHooks;
+  const importsService = new ImportService({
+    paths,
+    writes: accountWrites,
+    locks,
+    index,
+    attachments,
+    artifacts,
+    memories,
+    preferences,
+    logger,
+    ...(options.config.imports ? { limits: options.config.imports } : {}),
+    now,
+  });
+  if (options.importHooks) importsService.hooks = options.importHooks;
   const users = new UserStore({ paths, locks, now });
   const sessions = new SessionStore({
     paths,
@@ -378,6 +409,12 @@ export function createApp(options: AppOptions): ChatUiApp {
             );
         },
       },
+      // Step 3: interrupted import commits roll back; old staging and exports go.
+      imports: async (userId) => {
+        const report = await importsService.recover(userId);
+        report.removed += await exportsService.sweep(userId, true);
+        return report;
+      },
       // Step 6: memory acceptance intents, by before/after hashes.
       memoryIntents: (userId) => proposals.recoverIntents(userId),
       // Step 7: link attachments the Markdown references, GC stale pending ones.
@@ -449,6 +486,7 @@ export function createApp(options: AppOptions): ChatUiApp {
       await sessions.sweep();
       for (const userId of await accountIds(paths)) {
         await attachments.reconcile(userId, { startup: false, now: now() });
+        await exportsService.sweep(userId, false);
         await resolveOperations(
           paths,
           operations,
@@ -479,6 +517,8 @@ export function createApp(options: AppOptions): ChatUiApp {
     artifacts,
     // Deleting an artifact finalizes its generation's checkpoint first, so no
     // recovery can recreate it (INV-40).
+    exports: exportsService,
+    imports: importsService,
     finalizeGeneration: async (generationId) => {
       const checkpoint = await checkpoints.read(generationId);
       if (checkpoint && checkpoint.state !== "terminal")

@@ -36,6 +36,15 @@ import {
 } from "./attachments.ts";
 import { getPreferencesRoute, updatePreferencesRoute } from "./preferences.ts";
 import {
+  cancelImportRoute,
+  commitImportRoute,
+  createExportRoute,
+  downloadExportRoute,
+  exportConversationRoute,
+  getImportRoute,
+  uploadImportRoute,
+} from "./portability.ts";
+import {
   artifactSourceRoute,
   deleteArtifactRoute,
   getArtifactRoute,
@@ -116,6 +125,14 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(getArtifactRoute),
   erase(artifactSourceRoute),
   erase(deleteArtifactRoute),
+  // Export and import (Phase 13d).
+  erase(exportConversationRoute),
+  erase(createExportRoute),
+  erase(downloadExportRoute),
+  erase(uploadImportRoute),
+  erase(getImportRoute),
+  erase(commitImportRoute),
+  erase(cancelImportRoute),
   // Attachments (Phase 12). The literal /limits path is registered before /:id.
   erase(uploadAttachmentRoute),
   erase(attachmentLimitsRoute),

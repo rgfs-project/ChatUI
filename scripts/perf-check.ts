@@ -97,6 +97,10 @@ export function measure(): Record<string, number> {
   sizes["artifact-panel-on-demand"] = assets
     .filter((f) => /^ArtifactPanel-[\w-]+\.js$/.test(f) || /^artifacts-[\w-]+\.css$/.test(f))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
+  // On-demand cost of Settings → Data (Phase 13d): export and import preview UI.
+  sizes["data-settings-on-demand"] = assets
+    .filter((f) => /^DataSettings-[\w-]+\.(?:js|css)$/.test(f))
+    .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
   sizes["all-client-js"] = readdirSync(ASSETS)
     .filter((f) => f.endsWith(".js"))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
@@ -114,6 +118,7 @@ export const LAZY_ONLY = [
   "MemorySettings",
   "ArtifactPanel",
   "ArtifactSettings",
+  "DataSettings",
 ] as const;
 
 /** Lazy-only chunks a route group would download on a cold visit (must be none). */

@@ -768,6 +768,13 @@ export function ConversationView(props: {
                 onDelete={() => {
                   actions.remove(conversation, titleTriggerRef.current);
                 }}
+                onExport={() => {
+                  // The exact canonical bytes as a download (no attachments).
+                  const link = document.createElement("a");
+                  link.href = `/api/conversations/${encodeURIComponent(conversation.id)}/export`;
+                  link.download = "";
+                  link.click();
+                }}
               />
             </Suspense>
           </h1>

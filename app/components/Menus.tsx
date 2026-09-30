@@ -116,7 +116,7 @@ export function RowMenu(props: {
   );
 }
 
-/** The conversation title in the header, opening Rename/Delete. */
+/** The conversation title in the header: Rename, Pin, Export, Delete. */
 export function TitleMenu({
   title,
   defaultOpen,
@@ -126,10 +126,13 @@ export function TitleMenu({
   onDelete,
   pinned,
   onTogglePin,
+  onExport,
 }: {
   title: string;
   pinned: boolean;
   onTogglePin: () => void;
+  /** Downloads the chat's exact Markdown (Phase 13d). */
+  onExport?: () => void;
   defaultOpen: boolean;
   triggerRef: Ref<HTMLButtonElement>;
   onOpen: () => void;
@@ -154,6 +157,7 @@ export function TitleMenu({
             items={[
               { label: "Rename", onSelect: onRename },
               { label: pinned ? "Unpin" : "Pin", onSelect: onTogglePin },
+              ...(onExport ? [{ label: "Export as Markdown", onSelect: onExport }] : []),
               { label: "Delete", danger: true, onSelect: onDelete },
             ]}
           />

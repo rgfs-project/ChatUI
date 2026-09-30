@@ -147,6 +147,39 @@ export class DataPaths {
     return path.join(this.artifactDir(userId, artifactId), "meta.json");
   }
 
+  /** Transient import/export operation state (Phase 13d); never canonical, never exported. */
+  importStagingDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "import-staging");
+  }
+
+  /** One import: its uploaded archive and durable journal. */
+  importDir(userId: string, importId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "import-staging",
+      this.uuid(importId, "import id"),
+    );
+  }
+
+  /** Completed import keys (duplicate-import idempotency), bounded. */
+  importLedger(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "import-staging", "completed.json");
+  }
+
+  exportsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "import-staging", "exports");
+  }
+
+  /** One export's snapshot and archive, removed after its retention. */
+  exportDir(userId: string, exportId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "import-staging",
+      "exports",
+      this.uuid(exportId, "export id"),
+    );
+  }
+
   /** Account directories being removed by closure (contracts §6). */
   deletingDir(): string {
     return this.inside(SYSTEM_DIR, "deleting");

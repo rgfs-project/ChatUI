@@ -48,6 +48,18 @@ export class AccountWrites {
     });
   }
 
+  /**
+   * The export snapshot (contracts §2, §12): the per-user barrier held
+   * exclusively, so no canonical write is in progress while small files are
+   * copied. `fn` must not write through `run` (it would wait for itself).
+   */
+  exclusive<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    return this.barrier.exclusive(userId, async () => {
+      await assertAccountWritable(this.paths, userId);
+      return fn();
+    });
+  }
+
   /** mkdir -p of a subdirectory inside an existing user root (never the root itself). */
   async ensureSubdir(userId: string, dir: string): Promise<void> {
     await assertAccountWritable(this.paths, userId);

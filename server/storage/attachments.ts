@@ -234,7 +234,8 @@ export class AttachmentStore {
     return out;
   }
 
-  private invalidateUsage(userId: string): void {
+  /** Forgets the cached usage (after an import wrote attachments directly). */
+  invalidateUsage(userId: string): void {
     this.used.delete(userId);
   }
 

@@ -1,0 +1,107 @@
+/* Settings → Data (Phase 13d): loaded with its component. */
+
+.data-heading {
+  margin: 20px 0 4px;
+  font-size: 15px;
+}
+
+.data-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.data-row button,
+.data-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.data-file {
+  cursor: pointer;
+}
+
+.data-file:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.data-preview {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.data-preview h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.data-summary {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-summary th,
+.data-summary td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+
+.data-summary th[scope="row"],
+.data-summary thead th:first-child {
+  text-align: left;
+}
+
+.data-items {
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.data-items ul {
+  max-height: 240px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.data-item-kind {
+  color: var(--muted);
+}
+
+.data-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.data-choice label,
+.data-again {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 32px;
+  overflow-wrap: anywhere;
+}
+
+.data-again {
+  margin-top: 12px;
+}
+
+@media (max-width: 767.98px), (pointer: coarse) {
+  .data-choice label,
+  .data-again {
+    min-height: 44px;
+  }
+}

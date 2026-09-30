@@ -55,7 +55,7 @@ interface SidecarFile {
 /** Records retained per conversation; the oldest resolved ones go first. */
 export const MAX_PROPOSALS_PER_CONVERSATION = 500;
 
-function isRecord(value: unknown): value is ProposalRecord {
+export function isProposalRecord(value: unknown): value is ProposalRecord {
   const r = value as Partial<ProposalRecord> | null;
   return (
     typeof r === "object" &&
@@ -127,7 +127,7 @@ export class ProposalStore {
       const raw = JSON.parse(bytes.toString("utf8")) as Partial<SidecarFile>;
       if (raw.version !== 1 || !Array.isArray(raw.proposals))
         return { records: [], malformed: true };
-      return { records: raw.proposals.filter(isRecord), malformed: false };
+      return { records: raw.proposals.filter(isProposalRecord), malformed: false };
     } catch {
       return { records: [], malformed: true };
     }

@@ -24,6 +24,7 @@ export interface RecoveryReport {
   generations: GenerationRecoveryReport | null;
   attachments: { incompleteRemoved: number; linked: number; collected: number } | null;
   memoryIntents: { applied: number; retryable: number; conflicts: number } | null;
+  imports: { rolledBack: number; removed: number } | null;
   artifacts: { incompleteRemoved: number; unfinalizedRemoved: number } | null;
 }
 
@@ -153,6 +154,8 @@ export async function recoverStorage(options: {
      */
     staged?: StageRecords;
   };
+  /** Step 3 per account (Phase 13d): roll back interrupted import commits, sweep staging. */
+  imports?: (userId: string) => Promise<{ rolledBack: number; removed: number }>;
   /** Step 6 per account (Phase 13b): settle memory acceptance intents by hashes. */
   memoryIntents?: (
     userId: string,
@@ -179,6 +182,16 @@ export async function recoverStorage(options: {
     operationsExpired: 0,
   };
   const users = await accountIds(paths);
+  // Step 3: import journals.
+  let imports: RecoveryReport["imports"] = null;
+  if (options.imports) {
+    imports = { rolledBack: 0, removed: 0 };
+    for (const userId of users) {
+      const r = await options.imports(userId);
+      imports.rolledBack += r.rolledBack;
+      imports.removed += r.removed;
+    }
+  }
   for (const userId of users) {
     const r = await resolveOperations(
       paths,
@@ -237,6 +250,7 @@ export async function recoverStorage(options: {
     unexpectedEntries,
     ...totals,
     generations,
+    imports,
     memoryIntents,
     attachments,
     artifacts,

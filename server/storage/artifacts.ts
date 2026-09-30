@@ -54,7 +54,7 @@ export interface ArtifactHooks {
   afterCreate?: () => void | Promise<void>;
 }
 
-function isMeta(value: unknown, id: string): value is ArtifactMeta {
+export function isArtifactMeta(value: unknown, id: string): value is ArtifactMeta {
   const m = value as Partial<ArtifactMeta> | null;
   return (
     typeof m === "object" &&
@@ -126,7 +126,7 @@ export class ArtifactStore {
     if (!bytes) return null;
     try {
       const parsed: unknown = JSON.parse(bytes.toString("utf8"));
-      return isMeta(parsed, id) ? parsed : null;
+      return isArtifactMeta(parsed, id) ? parsed : null;
     } catch {
       return null;
     }

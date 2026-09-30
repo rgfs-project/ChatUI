@@ -1,4 +1,12 @@
-import { Brain, CircleUserRound, FileCode, Paperclip, ScrollText, Shield } from "lucide-react";
+import {
+  Brain,
+  CircleUserRound,
+  Database,
+  FileCode,
+  Paperclip,
+  ScrollText,
+  Shield,
+} from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
@@ -16,12 +24,14 @@ import type { Route } from "./+types/settings";
 const MemorySettings = lazy(() => import("../components/MemorySettings"));
 /** Settings → Files (Phase 13c): loaded when its tab opens. */
 const ArtifactSettings = lazy(() => import("../components/ArtifactSettings"));
+/** Settings → Data (Phase 13d): export and import, loaded when its tab opens. */
+const DataSettings = lazy(() => import("../components/DataSettings"));
 
 export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings · ChatUI" }];
 }
 
-type Section = "account" | "skills" | "memories" | "files" | "attachments";
+type Section = "account" | "data" | "skills" | "memories" | "files" | "attachments";
 
 /**
  * Settings: a large panel with its sections listed on the left (Account;
@@ -50,6 +60,7 @@ export default function SettingsOverlay() {
         <nav className="settings-nav" aria-label="Settings sections">
           <p className="section-label">Settings</p>
           {tab("account", "Account", <CircleUserRound size={18} aria-hidden />)}
+          {tab("data", "Data", <Database size={18} aria-hidden />)}
           {isAdmin ? (
             // Intent prefetch of the admin chunk, only for admins (Phase 9 rules).
             <Link to={paths.admin()} className="nav-row" prefetch="intent">
@@ -62,7 +73,17 @@ export default function SettingsOverlay() {
           {tab("files", "Files", <FileCode size={18} aria-hidden />)}
           {tab("attachments", "Attachments", <Paperclip size={18} aria-hidden />)}
         </nav>
-        {section === "skills" && user ? (
+        {section === "data" && user ? (
+          <Suspense
+            fallback={
+              <section className="settings-body">
+                <p className="settings-hint">Loading…</p>
+              </section>
+            }
+          >
+            <DataSettings userId={user.id} />
+          </Suspense>
+        ) : section === "skills" && user ? (
           <SkillsSettings userId={user.id} />
         ) : section === "memories" && user ? (
           <Suspense
