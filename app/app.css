@@ -1037,6 +1037,34 @@ a.attachment-file:hover {
   height: 30px;
 }
 
+.code-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.code-block pre:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* Math source: shown while the math renderer loads, for an unfinished formula
+   and when a formula can't be rendered. Inert text, never interpreted. */
+.markdown .math-source {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.markdown pre.math-source,
+.markdown .math-source-display {
+  display: block;
+  margin: 0 0 14px;
+  padding: 8px 0;
+  background: none;
+  color: var(--fg-2);
+}
+
 .code-block pre {
   margin: 0;
   padding: 14px;
@@ -1428,6 +1456,65 @@ button.danger-outline {
 
 .button-link.secondary {
   box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.feature-group + .feature-group {
+  margin-top: 24px;
+}
+
+.page .feature-group-title,
+.feature-group-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.feature-list {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feature-item .settings-label {
+  margin: 0;
+}
+
+.feature-models {
+  font-style: italic;
+}
+
+.button-link.primary {
+  background: var(--send);
+  color: var(--on-send);
+}
+
+/* ---- Public home page: the sign-in action first, server status subdued ------- */
+
+.home-primary .button-link {
+  justify-content: center;
+  width: 100%;
+  height: 44px;
+}
+
+.page .home-status-heading {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.home-status {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.home-status dd {
+  color: var(--fg-2);
+}
+
+.home-status .link-button {
+  color: var(--muted);
 }
 
 .button-link.secondary:hover {

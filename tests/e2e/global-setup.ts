@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { serializeConversation, validateModel, type Block } from "../../server/storage/markdown.ts";
-import { startMockLlama } from "../support/mock-llama.ts";
+import { richAnswer, startMockLlama } from "../support/mock-llama.ts";
 import { png, wav } from "../support/media.ts";
 import { createHash } from "node:crypto";
 
@@ -40,6 +40,19 @@ export const LONG_TITLE = "Long seeded conversation";
 /** A conversation with wide content: a long code line, a wide table, a long URL. */
 export const WIDE_CONVERSATION = "9a1b2c3d-4e5f-4a6b-8c7d-8e9fa0b1c2d3";
 export const WIDE_TITLE = "Wide content";
+
+/** A stored reply with math, code and a malformed formula (Phase 14 rendering). */
+export const RICH_CONVERSATION = "3b2a1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d";
+export const RICH_TITLE = "Math and code";
+/** The malformed display formula in the rich conversation. */
+export const MALFORMED_TEX = "\\frac{a}{";
+
+/** A second 200-message conversation that the rendering spec streams into. */
+export const STREAM_CONVERSATION = "6d5c4b3a-2f1e-4d0c-9b8a-7f6e5d4c3b2a";
+export const STREAM_TITLE = "Streaming target";
+/** A plain-text 200-message conversation nothing writes to (no math, no code). */
+export const PLAIN_CONVERSATION = "8f7e6d5c-4b3a-4291-8f0e-1d2c3b4a5f6e";
+export const PLAIN_TITLE = "Plain text only";
 
 /** A 120-message conversation: every user message carries two images; the first also audio and text (Phase 12). */
 export const ATTACHMENTS_CONVERSATION = "5c4d3e2f-1a0b-4c9d-8e7f-6a5b4c3d2e1f";
@@ -108,13 +121,47 @@ function seedWideConversation(dataDir: string, userId: string): void {
   });
 }
 
+function seedRichConversation(dataDir: string, userId: string): void {
+  // Older than the other seeded chats, so their sidebar order is unchanged.
+  const at = "2025-12-15T00:00:00.000Z";
+  const model = {
+    title: RICH_TITLE,
+    createdAt: at,
+    updatedAt: at,
+    blocks: [
+      { type: "user" as const, id: randomUUID(), time: at, body: "Math and code, please" },
+      {
+        type: "assistant" as const,
+        id: randomUUID(),
+        status: "complete" as const,
+        provider: "local",
+        model: "mock-rich",
+        time: at,
+        body: `${richAnswer()}\n\nMalformed: $$${MALFORMED_TEX}$$\n\nA matrix: $$\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}$$`,
+      },
+    ],
+  };
+  const problem = validateModel(model);
+  if (problem) throw new Error(problem);
+  const dir = path.join(dataDir, userId, "chats");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  writeFileSync(path.join(dir, `${RICH_CONVERSATION}.md`), serializeConversation(model), {
+    mode: 0o600,
+  });
+}
+
 /** Writes a canonical 200-message conversation (picked up by startup reconciliation). */
-function seedLongConversation(dataDir: string, userId: string): void {
+function seedLongConversation(
+  dataDir: string,
+  userId: string,
+  id = LONG_CONVERSATION,
+  title = LONG_TITLE,
+): void {
   const blocks: Block[] = [];
   for (let i = 0; i < 100; i++) {
     const at = new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString();
     blocks.push({ type: "user", id: randomUUID(), time: at, body: `Question ${String(i)}` });
-    const needle = i === 17 ? ` ${OLDER_NEEDLE}` : "";
+    const needle = i === 17 && id === LONG_CONVERSATION ? ` ${OLDER_NEEDLE}` : "";
     blocks.push({
       type: "assistant",
       id: randomUUID(),
@@ -126,16 +173,17 @@ function seedLongConversation(dataDir: string, userId: string): void {
     });
   }
   const model = {
-    title: LONG_TITLE,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T02:00:00.000Z",
+    title,
+    // The streaming target sorts below the other seeded chats.
+    createdAt: id === LONG_CONVERSATION ? "2026-01-01T00:00:00.000Z" : "2025-12-01T00:00:00.000Z",
+    updatedAt: id === LONG_CONVERSATION ? "2026-01-01T02:00:00.000Z" : "2025-12-01T02:00:00.000Z",
     blocks,
   };
   const problem = validateModel(model);
   if (problem) throw new Error(problem);
   const dir = path.join(dataDir, userId, "chats");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  writeFileSync(path.join(dir, `${LONG_CONVERSATION}.md`), serializeConversation(model), {
+  writeFileSync(path.join(dir, `${id}.md`), serializeConversation(model), {
     mode: 0o600,
   });
 }
@@ -280,6 +328,9 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   );
   seedLongConversation(dataDir, userIdOf(dataDir, E2E_USER));
   seedWideConversation(dataDir, userIdOf(dataDir, E2E_USER));
+  seedRichConversation(dataDir, userIdOf(dataDir, E2E_USER));
+  seedLongConversation(dataDir, userIdOf(dataDir, E2E_USER), STREAM_CONVERSATION, STREAM_TITLE);
+  seedLongConversation(dataDir, userIdOf(dataDir, E2E_USER), PLAIN_CONVERSATION, PLAIN_TITLE);
   seedAttachmentsConversation(dataDir, userIdOf(dataDir, E2E_USER));
   const port = await freePort();
   const base = `http://127.0.0.1:${String(port)}`;

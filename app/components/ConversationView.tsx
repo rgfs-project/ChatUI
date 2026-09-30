@@ -877,9 +877,10 @@ export function ConversationView(props: {
                   testId="reasoning"
                 />
               ) : null}
-              {/* Streaming Markdown: unfinished fences/tables/lists render stably. */}
+              {/* Streaming Markdown, block by block: unfinished fences/tables/lists
+                  render stably, and finished blocks keep their DOM and selection. */}
               <div data-testid="content">
-                <Markdown text={live.content} />
+                <Markdown text={live.content} live growing={!isTerminalState(live.state)} />
               </div>
               {running && live.content === "" ? <span className="cursor" aria-hidden /> : null}
               <p className="gen-status" data-testid="generation-status">

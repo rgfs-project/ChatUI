@@ -4,6 +4,7 @@ import {
   Database,
   FileCode,
   Paperclip,
+  Sparkles,
   ScrollText,
   Shield,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { ConfirmDialog } from "../components/Dialogs";
 import { apiJson, queryKeys } from "../lib/query";
 import { AttachmentSettings } from "../components/AttachmentSettings";
+import { FeatureSettings } from "../components/FeatureSettings";
 import { Overlay } from "../components/Overlay";
 import { SkillsSettings } from "../components/SkillsSettings";
 import { useAuth } from "../lib/auth-store";
@@ -31,7 +33,15 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings · ChatUI" }];
 }
 
-const SECTIONS = ["account", "data", "skills", "memories", "files", "attachments"] as const;
+const SECTIONS = [
+  "account",
+  "data",
+  "features",
+  "skills",
+  "memories",
+  "files",
+  "attachments",
+] as const;
 type Section = (typeof SECTIONS)[number];
 
 /**
@@ -67,6 +77,7 @@ export default function SettingsOverlay() {
           <p className="section-label">Settings</p>
           {tab("account", "Account", <CircleUserRound size={18} aria-hidden />)}
           {tab("data", "Data", <Database size={18} aria-hidden />)}
+          {tab("features", "Features", <Sparkles size={18} aria-hidden />)}
           {isAdmin ? (
             // Intent prefetch of the admin chunk, only for admins (Phase 9 rules).
             <Link to={paths.admin()} className="nav-row" prefetch="intent">
@@ -89,6 +100,8 @@ export default function SettingsOverlay() {
           >
             <DataSettings userId={user.id} />
           </Suspense>
+        ) : section === "features" && user ? (
+          <FeatureSettings userId={user.id} />
         ) : section === "skills" && user ? (
           <SkillsSettings userId={user.id} />
         ) : section === "memories" && user ? (

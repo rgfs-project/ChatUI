@@ -4,6 +4,11 @@ import { isbot } from "isbot";
 import { renderToPipeableStream, type RenderToPipeableStreamOptions } from "react-dom/server";
 import { ServerRouter, type EntryContext, type RouterContextProvider } from "react-router";
 import { appContext } from "./context";
+import { preloadRenderers } from "./lib/renderers";
+
+// On-demand answer renderers are ready before the first document render, so
+// server HTML always contains rendered math (the browser hydrates it lazily).
+void preloadRenderers();
 
 export const streamTimeout = 5_000;
 

@@ -13,6 +13,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
+import { GRAMMARS } from "../app/lib/code-languages.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const CLIENT = path.join(ROOT, "build", "client");
@@ -101,6 +102,20 @@ export function measure(): Record<string, number> {
   sizes["data-settings-on-demand"] = assets
     .filter((f) => /^DataSettings-[\w-]+\.(?:js|css)$/.test(f))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
+  // On-demand answer renderers (Phase 14): requested only by messages with
+  // math or a labelled code block. Fonts (Temml's script face) load only when
+  // a formula uses them and are not counted.
+  sizes["math-on-demand"] = assets
+    .filter((f) => /^MathView-[\w-]+\.js$/.test(f) || /^math-[\w-]+\.css$/.test(f))
+    .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
+  sizes["highlight-on-demand"] = assets
+    .filter((f) => /^highlight-[\w-]+\.(?:js|css)$/.test(f))
+    .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
+  // One grammar per language actually used: the largest is the worst case.
+  sizes["largest-grammar-on-demand"] = Math.max(
+    0,
+    ...assets.filter(isGrammarChunk).map((f) => gzipBytes(`/assets/${f}`)),
+  );
   sizes["all-client-js"] = readdirSync(ASSETS)
     .filter((f) => f.endsWith(".js"))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
@@ -119,7 +134,14 @@ export const LAZY_ONLY = [
   "ArtifactPanel",
   "ArtifactSettings",
   "DataSettings",
+  "MathView",
+  "highlight",
 ] as const;
+
+/** A lazily loaded highlight.js grammar chunk (`python-<hash>.js`). */
+function isGrammarChunk(file: string): boolean {
+  return GRAMMARS.some((g) => file.startsWith(`${g}-`) && /^[\w+]+-[\w-]{8}\.js$/.test(file));
+}
 
 /** Lazy-only chunks a route group would download on a cold visit (must be none). */
 export function lazyLeaks(manifest: Manifest = readManifest()): string[] {
@@ -127,7 +149,8 @@ export function lazyLeaks(manifest: Manifest = readManifest()): string[] {
   for (const [name, routes] of Object.entries(GROUPS))
     for (const file of filesFor(manifest, routes))
       for (const lazy of LAZY_ONLY)
-        if (path.basename(file).startsWith(`${lazy}-`)) leaks.push(`${name}: ${file}`);
+        if (path.basename(file).startsWith(`${lazy}-`) || isGrammarChunk(path.basename(file)))
+          leaks.push(`${name}: ${file}`);
   const assets = readdirSync(ASSETS);
   for (const lazy of LAZY_ONLY)
     if (!assets.some((f) => f.startsWith(`${lazy}-`) && f.endsWith(".js")))

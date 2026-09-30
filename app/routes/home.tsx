@@ -60,8 +60,21 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <main className="page">
       <h1>ChatUI</h1>
-      <p className="lede">Self-hosted AI chat. This page reports the server status.</p>
-      <dl className="status">
+      <p className="lede">Self-hosted AI chat.</p>
+      {/* The page's purpose for a person: get to the chats. Status is secondary. */}
+      <p className="home-primary">
+        {loaderData.signedIn ? (
+          <a href="/chat" className="button-link primary">
+            Open your chats
+          </a>
+        ) : (
+          <a href="/login" className="button-link primary">
+            Sign in
+          </a>
+        )}
+      </p>
+      <h2 className="home-status-heading">Server status</h2>
+      <dl className="status home-status">
         <dt>Server</dt>
         <dd data-testid="health-status">{health.status.toUpperCase()}</dd>
         <dt>Version</dt>
@@ -71,20 +84,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {hydrated ? "Interactive" : "Server-rendered (JavaScript not yet active)"}
         </dd>
       </dl>
-      <p>
+      <p className="home-status">
         <button
           type="button"
+          className="link-button"
           onClick={() => void recheck()}
           disabled={!hydrated || check.kind === "checking"}
         >
-          {check.kind === "checking" ? "Checking…" : "Check again"}
+          {check.kind === "checking" ? "Checking…" : "Check status again"}
         </button>{" "}
         <span role="status" aria-live="polite" data-testid="check-result">
           {check.kind === "failed" ? "The server could not be reached." : ""}
         </span>
-      </p>
-      <p>
-        {loaderData.signedIn ? <a href="/chat">Open your chats</a> : <a href="/login">Sign in</a>}
       </p>
     </main>
   );

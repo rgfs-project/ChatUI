@@ -2,13 +2,16 @@
   "compression": "gzip-9",
   "tolerance": 0.1,
   "budgets": {
-    "critical-chat-js": 193934,
-    "new-chat-js": 193503,
+    "critical-chat-js": 202793,
+    "new-chat-js": 202364,
     "login-js": 115269,
-    "admin-route-js": 217649,
-    "critical-css": 5397,
-    "all-client-js": 269147,
-    "artifact-panel-on-demand": 1872,
-    "data-settings-on-demand": 3915
+    "admin-route-js": 226514,
+    "critical-css": 5724,
+    "artifact-panel-on-demand": 1864,
+    "data-settings-on-demand": 4195,
+    "math-on-demand": 62911,
+    "highlight-on-demand": 10296,
+    "largest-grammar-on-demand": 6913,
+    "all-client-js": 447101
   }
 }

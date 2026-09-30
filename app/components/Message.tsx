@@ -1,5 +1,5 @@
-import { Check, ChevronRight, Copy, FileCode, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import { lazy, memo, Suspense, useEffect, useState, type ReactNode } from "react";
+import { ChevronRight, FileCode, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { lazy, memo, Suspense, useEffect, type ReactNode } from "react";
 import type { MessageAttachmentDto } from "@shared/attachments";
 import type { MessageDto } from "@shared/conversations";
 import type { ProposalDto } from "@shared/memories";
@@ -7,7 +7,10 @@ import type { MessageArtifactDto } from "@shared/artifacts";
 import { MessageAttachments } from "./MessageAttachments";
 import { count } from "../lib/render-counters";
 import { formatBytes } from "../lib/format";
+import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
+
+export { CopyButton };
 
 /** Memory suggestion cards (Phase 13b): loaded only for replies that have some. */
 const MemorySuggestions = lazy(() => import("./MemorySuggestions"));
@@ -19,29 +22,6 @@ const STATUS_LABEL: Record<NonNullable<MessageDto["status"]>, string> = {
   timed_out: "Timed out",
   interrupted: "Interrupted",
 };
-
-/** Copies text to the clipboard, confirming briefly. */
-export function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className="icon-btn"
-      aria-label={copied ? "Copied" : label}
-      title={copied ? "Copied" : "Copy"}
-      onClick={() => {
-        void navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          setTimeout(() => {
-            setCopied(false);
-          }, 1500);
-        });
-      }}
-    >
-      {copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
-    </button>
-  );
-}
 
 /** Reasoning: collapsed by default, visually distinct from the answer. */
 export function Reasoning({

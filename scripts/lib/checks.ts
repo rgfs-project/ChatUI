@@ -158,10 +158,10 @@ export async function browserChecks(base: string): Promise<void> {
     check(
       "hydrated page becomes interactive",
       (await page.getByTestId("hydration-state").textContent()) === "Interactive" &&
-        (await page.getByRole("button", { name: "Check again" }).isEnabled()),
+        (await page.getByRole("button", { name: "Check status again" }).isEnabled()),
     );
     const healthResponse = page.waitForResponse((r) => r.url().endsWith("/api/health"));
-    await page.getByRole("button", { name: "Check again" }).click();
+    await page.getByRole("button", { name: "Check status again" }).click();
     check("client fetch to /api/health allowed by CSP", (await healthResponse).status() === 200);
     check(
       "INV-56: no hydration mismatch, CSP violation or console warnings",

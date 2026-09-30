@@ -19,6 +19,8 @@ export const MOCK_MODELS = {
   flood: "mock-flood",
   length: "mock-length",
   long: "mock-long",
+  /** Streams `richAnswer()`: math, code and Markdown (Phase 14 rendering). */
+  rich: "mock-rich",
   /** Reports image and audio input (Phase 12) and describes the parts it received. */
   vision: "mock-vision",
   /**
@@ -88,6 +90,44 @@ export function longAnswer(): string {
   return sections.join("\n");
 }
 
+/**
+ * An answer with inline and display math, fenced and unknown-language code,
+ * dollar amounts and a table (Phase 14 rendering tests). Paragraphs first, so
+ * a test can select text in finished blocks while the rest streams.
+ */
+export function richAnswer(): string {
+  const sections: string[] = [
+    "RICH-FIRST paragraph: the mass-energy relation is $E = mc^2$ and it costs $5 and $10 to print.",
+    "",
+    "A second paragraph with \\(a^2 + b^2 = c^2\\) inline.",
+    "",
+    "$$",
+    "\\int_0^1 x^2 \\, dx = \\frac{1}{3}",
+    "$$",
+    "",
+    "```python",
+    "def square(x):",
+    '    return x * x  # "quoted"',
+    "```",
+    "",
+    "```unknownlang",
+    "plain <b>text</b> here",
+    "```",
+    "",
+    "| symbol | meaning |",
+    "| --- | --- |",
+    "| $\\pi$ | ratio |",
+    "",
+  ];
+  for (let i = 0; i < 12; i++)
+    sections.push(
+      `Paragraph ${String(i)} continues with $x_{${String(i)}}^2$ and **bold** words to add length to the reply.`,
+      "",
+    );
+  sections.push("RICH-ANSWER-END");
+  return sections.join("\n");
+}
+
 /** Upstream error text that must never reach a ChatUI client (INV-04). */
 export const UPSTREAM_SECRET = "UPSTREAM-SECRET-DETAIL-7f3a";
 
@@ -110,6 +150,8 @@ export interface MockLlamaOptions {
   chatChunkDelayMs?: number;
   /** Delay between chunks for mock-long (default 10 ms, ~40 chars per chunk). */
   longChunkDelayMs?: number;
+  /** Delay between chunks for mock-rich (default 80 ms, 24 chars per chunk: ~6 s). */
+  richChunkDelayMs?: number;
 }
 
 export interface RecordedRequest {
@@ -507,6 +549,15 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
         for (let i = 0; i < text.length && !stream.closed; i += 40) {
           send(chunk(model, { content: text.slice(i, i + 40) }));
           await sleep(options.longChunkDelayMs ?? 10);
+        }
+        finish();
+        return;
+      }
+      case MOCK_MODELS.rich: {
+        const text = richAnswer();
+        for (let i = 0; i < text.length && !stream.closed; i += 24) {
+          send(chunk(model, { content: text.slice(i, i + 24) }));
+          await sleep(options.richChunkDelayMs ?? 80);
         }
         finish();
         return;

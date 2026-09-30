@@ -167,6 +167,13 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 
 - **Settings → Account → Delete all chats** removes every conversation, its attachments and its memory suggestions; settings, skills and memories stay.
 
+## Answers: math and code
+
+- **Math:** replies can use LaTeX: `$…$` or `\(…\)` inline, `$$…$$` or `\[…\]` for display, or a `$$` block. It is shown as MathML, which screen readers can read, and a display formula has **Copy LaTeX**. Copying a selection with math copies its LaTeX. Dollar amounts (`$5 and $10`) stay text. A formula that can't be rendered is shown as its source.
+- **Code:** fenced blocks show their language, colors for about 50 common languages, **Copy** and **Download** (as `snippet.<ext>`). Code is only ever shown, never run.
+- Math and highlighting load only for replies that use them. A math font (STIX Two Math) downloads only if your system has none.
+- **Settings → Features** lists what ChatUI does itself, what depends on the selected model (image and audio input, the thought process, memory suggestions), and what isn't available (web search, voice, image generation, running code).
+
 ## Memories
 
 - **Settings → Customize → Memories** lists the notes the assistant sees in every chat. You can add, edit and delete them there.

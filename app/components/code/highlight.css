@@ -1,0 +1,135 @@
+/* Syntax colors (Phase 14): loaded with the highlighter, never on the critical
+   path. Palette after GitHub's Primer themes; every token color meets WCAG AA
+   (4.5:1) on the code block background in both color schemes. */
+.hljs-comment,
+.hljs-quote {
+  color: #636c76;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-doctag,
+.hljs-template-tag,
+.hljs-type {
+  color: #cf222e;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-meta .hljs-string {
+  color: #0a3069;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable.constant_,
+.hljs-meta,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: #0550ae;
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: #8250df;
+}
+
+.hljs-built_in,
+.hljs-variable,
+.hljs-params,
+.hljs-name,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #953800;
+}
+
+.hljs-tag {
+  color: #116329;
+}
+
+.hljs-addition {
+  background: #dafbe1;
+  color: #116329;
+}
+
+.hljs-deletion {
+  background: #ffebe9;
+  color: #82071e;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .hljs-comment,
+  .hljs-quote {
+    color: #8b949e;
+  }
+
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-doctag,
+  .hljs-template-tag,
+  .hljs-type {
+    color: #ff7b72;
+  }
+
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-meta .hljs-string {
+    color: #a5d6ff;
+  }
+
+  .hljs-number,
+  .hljs-literal,
+  .hljs-attr,
+  .hljs-attribute,
+  .hljs-variable.constant_,
+  .hljs-meta,
+  .hljs-selector-attr,
+  .hljs-selector-class,
+  .hljs-selector-id {
+    color: #79c0ff;
+  }
+
+  .hljs-title,
+  .hljs-title.function_,
+  .hljs-section {
+    color: #d2a8ff;
+  }
+
+  .hljs-built_in,
+  .hljs-variable,
+  .hljs-params,
+  .hljs-name,
+  .hljs-symbol,
+  .hljs-bullet,
+  .hljs-link {
+    color: #ffa657;
+  }
+
+  .hljs-tag {
+    color: #7ee787;
+  }
+
+  .hljs-addition {
+    background: #033a16;
+    color: #aff5b4;
+  }
+
+  .hljs-deletion {
+    background: #67060c;
+    color: #ffdcd7;
+  }
+}
