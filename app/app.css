@@ -18,6 +18,19 @@
 
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
+  /* Spacing scale (Phase 18): every vertical rhythm uses these steps. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* The top bar: the sidebar's header and the chat header share it, so the
+     brand, toggles and title never move when the sidebar opens or closes. */
+  --topbar-height: 56px;
+
   --canvas: #ffffff;
   --sidebar: #f9f9f9;
   --code: #f7f7f7;
@@ -347,7 +360,7 @@ textarea {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 12px 10px 14px;
+  padding: 0 10px 14px;
   background: var(--sidebar);
   border-right: 1px solid var(--line);
 }
@@ -358,11 +371,12 @@ textarea {
 
 .sidebar-top {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
-  height: 40px;
+  height: var(--topbar-height);
   padding: 0 2px 0 10px;
-  margin-bottom: 18px;
+  margin-bottom: var(--space-3);
 }
 
 .brand {
@@ -388,6 +402,11 @@ textarea {
 .nav-row:hover,
 .nav-row.current {
   background: var(--hover);
+}
+
+/* Rows never touch: a hairline of canvas between hover/selected fills. */
+.nav-row + .nav-row {
+  margin-top: 2px;
 }
 
 /* Section buttons (Settings) look like the link rows. */
@@ -424,6 +443,19 @@ button.nav-row.current {
 .chat-list li {
   position: relative;
   min-width: 0;
+}
+
+.chat-list li + li {
+  margin-top: 2px;
+}
+
+/* Inside the scrolling lists the focus ring is drawn inset, so the list's
+   scroll edge never clips it. */
+.chat-list a:focus-visible,
+.chat-list .row-menu:focus-visible,
+.sidebar .nav-row:focus-visible,
+.settings-nav .nav-row:focus-visible {
+  outline-offset: -2px;
 }
 
 .chat-list a {
@@ -541,7 +573,7 @@ button.nav-row.current {
   flex: none;
   align-items: center;
   gap: 4px;
-  height: 56px;
+  height: var(--topbar-height);
   padding: 0 12px;
 }
 
@@ -603,7 +635,7 @@ button.nav-row.current {
 .history {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 28px;
+  gap: var(--space-4);
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
@@ -646,18 +678,23 @@ button.nav-row.current {
 .turn-actions {
   display: flex;
   gap: 2px;
-  margin-top: 6px;
+  margin-top: var(--space-1);
+}
+
+/* A reply ends an exchange: its actions sit a step below the text, and the
+   next question starts after a larger gap. */
+.turn-assistant {
+  margin-bottom: var(--space-4);
 }
 
 .turn-assistant .turn-actions {
+  margin-top: var(--space-3);
   margin-left: -8px;
 }
 
+/* The question's actions keep their space (shown on hover or focus), so they
+   never overlap the reply below and the rhythm doesn't jump. */
 .turn-user .turn-actions {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 2px;
   opacity: 0;
 }
 
@@ -810,7 +847,7 @@ a.attachment-file:hover {
 
 /* Reasoning: "Thought process ›", collapsed, expands in place. */
 .reasoning {
-  margin-bottom: 12px;
+  margin-bottom: var(--space-4);
 }
 
 .reasoning > summary {
@@ -1432,17 +1469,35 @@ button.danger-outline {
 }
 
 .settings-body h2 {
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-5);
   font-size: 18px;
 }
 
+/* Rows (after Qwen): label over a muted description, control on the right,
+   a divider between rows. */
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 0;
+  gap: var(--space-4);
+  padding: var(--space-5) 0;
   border-bottom: 1px solid var(--line);
+}
+
+.settings-row:first-of-type {
+  padding-top: 0;
+}
+
+.settings-row:last-child {
+  border-bottom: 0;
+}
+
+/* Row controls keep their one-line shape; the description wraps instead. */
+.settings-row > button,
+.settings-row > .button-link,
+.settings-row > select {
+  flex: none;
+  white-space: nowrap;
 }
 
 .settings-label {
@@ -1451,9 +1506,24 @@ button.danger-outline {
 }
 
 .settings-hint {
-  margin: 2px 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--muted);
   font-size: 14px;
+  line-height: 1.55;
+}
+
+/* Paragraphs directly in a pane (intro text, empty and loading states). */
+.settings-body > .settings-hint {
+  margin: 0 0 var(--space-4);
+}
+
+/* Empty states: one soft panel, like "Add your first skill". */
+.settings-body > [data-testid$="-empty"] {
+  margin: 0;
+  padding: var(--space-5) var(--space-6);
+  border-radius: 12px;
+  background: var(--hover);
+  color: var(--fg-2);
 }
 
 .button-link {
@@ -1472,7 +1542,7 @@ button.danger-outline {
 }
 
 .feature-group + .feature-group {
-  margin-top: 24px;
+  margin-top: var(--space-8);
 }
 
 .page .feature-group-title,
@@ -1484,10 +1554,18 @@ button.danger-outline {
 
 .feature-list {
   display: grid;
-  gap: 12px;
-  margin: 12px 0 0;
+  margin: var(--space-2) 0 0;
   padding: 0;
   list-style: none;
+}
+
+.feature-item {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.feature-item:last-child {
+  border-bottom: 0;
 }
 
 .feature-item .settings-label {
@@ -1501,6 +1579,64 @@ button.danger-outline {
 .button-link.primary {
   background: var(--send);
   color: var(--on-send);
+}
+
+/* ---- Toggles (Phase 18, after Qwen) ------------------------------------------
+   Native checkboxes drawn as switches: same semantics, keyboard and form
+   behavior; `role="switch"` only where a change takes effect at once. */
+
+input[type="checkbox"].toggle {
+  flex: none;
+  position: relative;
+  width: 40px;
+  height: 24px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--send-off);
+  cursor: pointer;
+  appearance: none;
+  transition: background-color 120ms ease;
+}
+
+input[type="checkbox"].toggle::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--canvas);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 120ms ease;
+}
+
+input[type="checkbox"].toggle:checked {
+  background: var(--send);
+}
+
+input[type="checkbox"].toggle:checked::before {
+  transform: translateX(16px);
+}
+
+input[type="checkbox"].toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"].toggle:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input[type="checkbox"].toggle,
+  input[type="checkbox"].toggle::before {
+    transition: none;
+  }
 }
 
 /* ---- Public home page: the sign-in action first, server status subdued ------- */
@@ -1655,7 +1791,7 @@ button.danger-outline {
 
 /* Safe areas (viewport-fit=cover): nothing sits under a notch or home indicator. */
 .sidebar {
-  padding-top: max(12px, env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
   padding-bottom: max(14px, env(safe-area-inset-bottom));
   padding-left: max(10px, env(safe-area-inset-left));
 }

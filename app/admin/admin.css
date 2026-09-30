@@ -148,3 +148,17 @@ td.admin-actions > * + * {
   padding: 0 6px;
   color: var(--muted);
 }
+
+/* A setting with a toggle (Phase 18, after Qwen): label left, switch right. */
+.admin-form .toggle-row {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--fg);
+  font-size: 14.5px;
+  cursor: pointer;
+}

@@ -386,41 +386,37 @@ function ProvidersTab() {
           <input name="apiKey" type="password" autoComplete="off" />
         </label>
         {editing?.hasApiKey ? (
-          <label>
-            <span>
-              <input name="clearApiKey" type="checkbox" /> Remove the stored key
-            </span>
+          <label className="toggle-row">
+            <span>Remove the stored key</span>
+            <input className="toggle" name="clearApiKey" type="checkbox" />
           </label>
         ) : null}
-        <label>
-          <span>
-            <input
-              name="samplingExtensions"
-              type="checkbox"
-              defaultChecked={editing?.samplingExtensions ?? true}
-            />{" "}
-            llama.cpp sampling (top-k, min-p, repeat penalty)
-          </span>
+        <label className="toggle-row">
+          <span>llama.cpp sampling (top-k, min-p, repeat penalty)</span>
+          <input
+            className="toggle"
+            name="samplingExtensions"
+            type="checkbox"
+            defaultChecked={editing?.samplingExtensions ?? true}
+          />
         </label>
-        <label>
-          <span>
-            <input
-              name="image"
-              type="checkbox"
-              defaultChecked={editing?.capabilities.inputModalities.includes("image") ?? false}
-            />{" "}
-            Accepts images
-          </span>
+        <label className="toggle-row">
+          <span>Accepts images</span>
+          <input
+            className="toggle"
+            name="image"
+            type="checkbox"
+            defaultChecked={editing?.capabilities.inputModalities.includes("image") ?? false}
+          />
         </label>
-        <label>
-          <span>
-            <input
-              name="reasoning"
-              type="checkbox"
-              defaultChecked={editing?.capabilities.reasoning ?? false}
-            />{" "}
-            Reasoning
-          </span>
+        <label className="toggle-row">
+          <span>Reasoning</span>
+          <input
+            className="toggle"
+            name="reasoning"
+            type="checkbox"
+            defaultChecked={editing?.capabilities.reasoning ?? false}
+          />
         </label>
         <button type="submit" disabled={busy}>
           {editing ? "Save provider" : "Add provider"}
@@ -517,6 +513,9 @@ function ModelsTab() {
                     <input
                       key={String(s?.hidden === true)}
                       type="checkbox"
+                      className="toggle"
+                      // Takes effect at once: a switch, not a form checkbox.
+                      role="switch"
                       aria-label={`${m.id} (${group.provider.name}) visible to users`}
                       defaultChecked={s?.hidden !== true}
                       disabled={busy}
@@ -588,15 +587,14 @@ function ModelsTab() {
             System prompt (variables: {"{{username}}"}, {"{{date}}"}, {"{{timezone}}"})
             <textarea name="systemPrompt" rows={4} defaultValue={current?.systemPrompt ?? ""} />
           </label>
-          <label>
-            <span>
-              <input
-                name="timeContext"
-                type="checkbox"
-                defaultChecked={current?.timeContext ?? false}
-              />{" "}
-              Tell the model the current time
-            </span>
+          <label className="toggle-row">
+            <span>Tell the model the current time</span>
+            <input
+              className="toggle"
+              name="timeContext"
+              type="checkbox"
+              defaultChecked={current?.timeContext ?? false}
+            />
           </label>
           <button type="submit" disabled={busy}>
             Save settings
