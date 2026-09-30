@@ -6,6 +6,7 @@ import type { ProposalService } from "./chat/proposals.ts";
 import { Router, type Request, type Response } from "express";
 import type { ModelListDto } from "@shared/generations";
 import type { AccountAdmin } from "./admin/accounts.ts";
+import type { RateBucket, RequestLimits } from "./auth/rate-limit.ts";
 import type { AuditLog } from "./admin/audit.ts";
 import type { ProviderAdmin } from "./admin/providers.ts";
 import type { SettingsStore } from "./admin/settings.ts";
@@ -48,6 +49,8 @@ export interface RouteServices {
   /** Loads a conversation DTO owned by `userId` (SSR loaders and API). */
   conversationDto: (userId: string, id: string) => Promise<ConversationDto>;
   auth: AuthService;
+  /** Per-user request budgets (Phase 16). */
+  limits: RequestLimits;
   users: UserStore;
   preferences: PreferencesStore;
   /** Edit, delete exchange, clear history, pins (Phase 13a). */
@@ -113,6 +116,12 @@ interface RouteBase<S extends RequestSchemas> {
    * (contracts §5); `origin`: same-origin check for login/registration.
    */
   csrf: "none" | "token" | "origin";
+  /**
+   * Per-user request budget (Phase 16): `generation` for routes that start a
+   * generation, `upload` for uploads. Admin mutations default to `admin`.
+   * Over budget → RATE_LIMITED with Retry-After, before validation.
+   */
+  rateLimit?: RateBucket;
   request: S;
   /**
    * Request used by the registry coverage tests, and the status it must
@@ -179,6 +188,12 @@ export function erase<S extends RequestSchemas, R extends z.ZodType>(
   return route;
 }
 
+/** The request budget a route draws from (admin mutations by default). */
+export function rateBucketOf(route: AnyApiRoute): RateBucket | undefined {
+  if (route.rateLimit) return route.rateLimit;
+  return route.auth === "admin" && route.method !== "get" ? "admin" : undefined;
+}
+
 export function buildApiRouter(routes: readonly AnyApiRoute[], services: RouteServices): Router {
   const router = Router();
   const seen = new Set<string>();
@@ -197,6 +212,19 @@ export function buildApiRouter(routes: readonly AnyApiRoute[], services: RouteSe
         throw new AppError(ErrorCode.FORBIDDEN, "Administrators only");
       if (route.csrf === "token") services.auth.checkMutation(req, auth);
       if (route.csrf === "origin") services.auth.checkOrigin(req);
+      const bucket = rateBucketOf(route);
+      if (bucket && auth) {
+        const wait = services.limits.hit(bucket, auth.userId);
+        if (wait > 0)
+          throw new AppError(
+            ErrorCode.RATE_LIMITED,
+            "Too many requests; try again later",
+            undefined,
+            {
+              "Retry-After": String(wait),
+            },
+          );
+      }
       return { req, res, services, auth };
     };
     if (route.kind === "sse") {

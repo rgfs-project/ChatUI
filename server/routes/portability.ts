@@ -54,7 +54,7 @@ export const exportConversationRoute = defineRawRoute({
         "Content-Type": "text/markdown; charset=utf-8",
         "Content-Disposition": contentDisposition("attachment", exportName(title)),
         "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": "sandbox; default-src 'none'",
+        "Content-Security-Policy": "sandbox; default-src 'none'; frame-ancestors 'none'",
         "Cache-Control": "private, no-store",
         "Content-Length": String(bytes.length),
       })
@@ -106,6 +106,7 @@ export const uploadImportRoute = defineRawRoute({
   path: "/api/imports",
   auth: "user",
   csrf: "token",
+  rateLimit: "upload",
   request: { query: importUploadQuerySchema },
   handler: async ({ query }, ctx) => {
     const declared = ctx.req.get("content-length");

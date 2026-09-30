@@ -344,6 +344,10 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       DATA_DIR: dataDir,
       LLAMA_BASE_URL: llama.url,
       LOG_LEVEL: "warn",
+      // The suite sends far more than a person would in a minute.
+      RATE_LIMIT_GENERATIONS_PER_MINUTE: "100000",
+      RATE_LIMIT_UPLOADS_PER_MINUTE: "100000",
+      RATE_LIMIT_ADMIN_PER_MINUTE: "100000",
     },
     stdio: ["ignore", "pipe", "inherit"],
   });

@@ -1,0 +1,48 @@
+## Phase 16 report
+
+- **Scope completed:** a security review of Phases 1–15, with every requirement mapped to code and tests in `SECURITY.md`, plus the hardening and operator tooling the review found missing:
+  - **Request budgets:** a new registry policy `rateLimit`. Generation starts (send, regenerate), uploads (attachments, imports) and every admin mutation draw from per-user, per-minute budgets (`RATE_LIMIT_*_PER_MINUTE`, defaults 30/60/120). Over budget returns `RATE_LIMITED` with `Retry-After` before validation. Budgets are per process, as documented.
+  - **Headers:** a `Permissions-Policy` denying camera, microphone, geolocation, payment, USB, serial, HID, topics and more. Sandboxed file responses (attachments, artifacts, export downloads) gain `frame-ancestors 'none'`.
+  - **Connection limits** (`server/http-limits.ts`): 16 KiB headers, 30 s header timeout, 30 min request timeout, 5 s keep-alive.
+  - **Instance lock** (`_system/server.lock`): the server owns `DATA_DIR`. `backup`, `restore` and `index:rebuild` refuse while a live server holds it; a stale lock is replaced.
+  - **Backup/restore (INV-50, `server/backup.ts`, CLI):**
+    - `backup <dir>` first runs startup recovery through the production bundle, then copies everything except derived indexes, import staging and (by default) sessions. It writes a SHA-256 manifest and re-verifies the copy.
+    - `restore <dir>` works only into an empty `DATA_DIR`. It verifies checksums; refuses unlisted, missing, altered, linked or unsafe paths; copies with private permissions; runs recovery; and leaves nothing on failure.
+  - Docs: `SECURITY.md` (review, operator procedure, exceptions), README, `.env.example`, `ARCHITECTURE.md`.
+- **Acceptance criteria with test evidence:**
+  - `tests/server/security.test.ts` (8, new):
+    - Budget enumeration over the registry, and budgets enforced per user.
+    - Hardening headers on HTML, API and attachment responses; server limit values.
+    - Direct service calls with another user's id: conversations, generations, attachments, memories, skills, artifacts.
+    - An error fuzz over every route: wrong types, invalid JSON, prototype keys, 5,000-deep nesting, a 2 MB body, traversal-shaped params, unknown query. Each gives a JSON 4xx with no stack, path or secret.
+    - Log sentinels: password, message, file content, filename, provider key, CSRF token, cookie.
+    - A PNG+HTML polyglot is served inert.
+  - `tests/server/backup.test.ts` (4, new):
+    - Full round trip: conversation bytes identical, memories, skills, attachments, provider config; indexes rebuilt; sessions left out.
+    - A snapshot taken mid-generation restores, and recovery persists the reply exactly once as `interrupted`, with nothing recreated on a second start.
+    - Refusals: non-empty target, checksum, unlisted file, five unsafe manifest paths, nothing left behind.
+    - Lock: a live holder is refused, a stale lock replaced, and the lock is never backed up.
+  - A CLI smoke test against the production build: backup, refusal while the server runs (also `index:rebuild`), refusal into non-empty state, restore with recovery.
+  - Already covered and re-run: session fixation and rotation, cookie flags, CSRF and unknown-field enumerations, DTO parsing, SSRF (rebinding, redirects), traversal, upload sniffing and pixel limits, CSP nonces, SSR account isolation, telemetry privacy, first-party assets and no service worker (see `SECURITY.md`).
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (51 files, 695 tests)
+  - `build`: PASS
+  - `verify`: PASS (93/93)
+  - `test:e2e`: PASS (87/87)
+  - `perf:check`: PASS
+  - `npm audit --omit=dev`: 0 vulnerabilities (full tree also 0)
+  - `verify:compose`: not run here (no Docker/Podman); CI runs it.
+- **Invariants:**
+  - INV-50 → `server/backup.ts` and the CLI commands → `backup.test.ts`.
+  - INV-15, INV-01, INV-02, INV-27 and INV-62 gained the security tests above.
+- **Security, SSR, data and performance:**
+  - The production CSP is unchanged and not weakened; the file-response CSP is stricter.
+  - Budgets sit after authentication and CSRF, so unauthenticated floods get 401/403 without touching budgets or validation.
+  - Test and E2E servers raise the budgets; production defaults apply everywhere else.
+- **Dependencies:** none added.
+- **Deviations / limitations:**
+  - Documented in the `SECURITY.md` exceptions: per-process limits and lock, pid-based stale-lock detection, Chromium-only automation, and the `\cancelto` mask.
+  - `backup`/`restore` need the production server bundle for recovery (present in the container image; `npm run build` elsewhere).
+  - `DATA_DIR` must exist for the CLI, so restore targets an existing empty directory, as the container's `/data` volume is.
+- **Commit/tag:** `chore(phase-16): security hardening, rate limits, csp, dependency audit` on `main`, tag `phase-16`, pushed to `origin`.

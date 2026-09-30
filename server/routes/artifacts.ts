@@ -86,7 +86,7 @@ export const artifactSourceRoute = defineRawRoute({
         query.download === "1" ? "attachment" : "inline",
         meta.name,
       ),
-      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "Content-Security-Policy": "sandbox; default-src 'none'; frame-ancestors 'none'",
       "Cross-Origin-Resource-Policy": "same-origin",
       "Cache-Control": "private, no-cache",
       Vary: "Cookie",

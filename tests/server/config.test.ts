@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { DEFAULT_RATE_LIMITS } from "../../server/auth/rate-limit.ts";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -52,6 +53,7 @@ describe("configuration", () => {
       memories: DEFAULT_MEMORY_CONFIG,
       artifacts: DEFAULT_ARTIFACT_CONFIG_STORE,
       imports: DEFAULT_IMPORT_LIMITS,
+      rateLimits: DEFAULT_RATE_LIMITS,
       provider: {
         baseUrl: undefined,
         apiKey: undefined,

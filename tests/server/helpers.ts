@@ -185,6 +185,12 @@ export function testApp(overrides: TestAppOptions = {}) {
       provider: providerConfig(),
       storage: storageConfig(),
       auth: authConfig(),
+      // Budgets high enough never to interfere; the security tests set their own.
+      rateLimits: {
+        generationsPerMinute: 100_000,
+        uploadsPerMinute: 100_000,
+        adminPerMinute: 100_000,
+      },
       dataDir,
       ...config,
     },

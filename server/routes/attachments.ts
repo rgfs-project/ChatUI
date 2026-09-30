@@ -51,6 +51,7 @@ export const uploadAttachmentRoute = defineRoute({
   path: "/api/attachments",
   auth: "user",
   csrf: "token",
+  rateLimit: "upload",
   // multipart/form-data with one `file` part, streamed by the store (not JSON).
   request: {},
   response: attachmentDtoSchema,
@@ -131,7 +132,7 @@ export const attachmentContentRoute = defineRawRoute({
       "Content-Type": meta.kind === "text" ? `${meta.mediaType}; charset=utf-8` : meta.mediaType,
       "X-Content-Type-Options": "nosniff",
       "Content-Disposition": contentDisposition(inline ? "inline" : "attachment", meta.filename),
-      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "Content-Security-Policy": "sandbox; default-src 'none'; frame-ancestors 'none'",
       "Cross-Origin-Resource-Policy": "same-origin",
       "Cache-Control": "private, no-cache",
       Vary: "Cookie",

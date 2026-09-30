@@ -65,7 +65,9 @@ test.describe("source files (INV-40, INV-41)", () => {
     const url = `${base()}${(href ?? "").replace("?download=1", "")}`;
     const response = await page.goto(url);
     expect(response?.headers()["content-type"]).toBe("text/plain; charset=utf-8");
-    expect(response?.headers()["content-security-policy"]).toBe("sandbox; default-src 'none'");
+    expect(response?.headers()["content-security-policy"]).toBe(
+      "sandbox; default-src 'none'; frame-ancestors 'none'",
+    );
     expect(await page.locator("script, img").count()).toBe(0);
     await expect(page.locator("body")).toContainText('<script>alert("xss")</script>');
   });

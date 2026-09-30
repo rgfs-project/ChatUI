@@ -7,6 +7,8 @@
  * - development: embeds Vite in middleware mode and reloads server/app.ts on change.
  */
 import { createServer, type Server } from "node:http";
+import { HTTP_SERVER_LIMITS } from "./http-limits.ts";
+import { acquireInstanceLock, BackupError } from "./backup.ts";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -106,13 +108,27 @@ async function main(): Promise<void> {
     throw error;
   }
   const logger = createLogger(config.logLevel);
+  // One process owns DATA_DIR (contracts §2); backup/restore refuse meanwhile.
+  let releaseLock: () => Promise<void>;
+  try {
+    releaseLock = await acquireInstanceLock(config.dataDir);
+  } catch (error) {
+    if (error instanceof BackupError) {
+      process.stderr.write(`${error.message}\n`);
+      process.exit(1);
+    }
+    throw error;
+  }
 
   const running =
     config.nodeEnv === "development"
       ? await developmentHandler(config, logger)
       : await productionHandler(config, logger);
 
-  const server = createServer(running.handler);
+  const server = createServer(HTTP_SERVER_LIMITS, running.handler);
+  server.headersTimeout = HTTP_SERVER_LIMITS.headersTimeout;
+  server.requestTimeout = HTTP_SERVER_LIMITS.requestTimeout;
+  server.keepAliveTimeout = HTTP_SERVER_LIMITS.keepAliveTimeout;
   const address = await listen(server, config.port, config.listenHost);
   logger.info({ host: address.address, port: address.port, mode: config.nodeEnv }, "listening");
 
@@ -132,6 +148,7 @@ async function main(): Promise<void> {
     server.close(() => {
       void (async () => {
         await closing;
+        await releaseLock();
         clearTimeout(force);
         logger.info("shutdown complete");
         logger.flush();

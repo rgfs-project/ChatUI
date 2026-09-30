@@ -51,13 +51,42 @@ export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
   return directives;
 }
 
+/**
+ * Powerful browser features ChatUI never uses are disabled for the page and
+ * anything it could embed (Phase 16). Clipboard writes (copy buttons) keep
+ * their default same-origin permission.
+ */
+export const PERMISSIONS_POLICY = [
+  "accelerometer=()",
+  "autoplay=()",
+  "browsing-topics=()",
+  "camera=()",
+  "display-capture=()",
+  "geolocation=()",
+  "gyroscope=()",
+  "hid=()",
+  "magnetometer=()",
+  "microphone=()",
+  "midi=()",
+  "payment=()",
+  "publickey-credentials-get=()",
+  "serial=()",
+  "usb=()",
+  "xr-spatial-tracking=()",
+].join(", ");
+
 export function securityHeaders(mode: CspMode): RequestHandler[] {
   const assignNonce: RequestHandler = (_req, res, next) => {
     res.locals.cspNonce = createNonce();
     next();
   };
+  const permissions: RequestHandler = (_req, res, next) => {
+    res.setHeader("Permissions-Policy", PERMISSIONS_POLICY);
+    next();
+  };
   return [
     assignNonce,
+    permissions,
     helmet({
       contentSecurityPolicy: { useDefaults: false, directives: cspDirectives(mode) },
       // HSTS belongs to the TLS-terminating proxy deployment introduced with auth (Phase 4).

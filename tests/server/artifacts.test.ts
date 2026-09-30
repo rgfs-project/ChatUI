@@ -320,7 +320,9 @@ describe("inert source (INV-41)", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
-      expect(res.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
+      expect(res.headers.get("content-security-policy")).toBe(
+        "sandbox; default-src 'none'; frame-ancestors 'none'",
+      );
       expect(res.headers.get("content-disposition")).toMatch(
         /^inline; filename="[^"]*"; filename\*=UTF-8''/,
       );

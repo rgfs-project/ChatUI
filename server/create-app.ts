@@ -1,4 +1,5 @@
 import { AccountAdmin } from "./admin/accounts.ts";
+import { DEFAULT_RATE_LIMITS, RequestLimits, type RateLimitConfig } from "./auth/rate-limit.ts";
 import { AuditLog } from "./admin/audit.ts";
 import { ProviderAdmin } from "./admin/providers.ts";
 import { SettingsStore } from "./admin/settings.ts";
@@ -79,6 +80,8 @@ export interface AppOptions {
     artifacts?: Partial<ArtifactConfig>;
     /** Import bounds (Phase 13d); defaults when omitted (tests). */
     imports?: Partial<ImportLimits>;
+    /** Per-user request budgets (Phase 16); defaults when omitted (tests). */
+    rateLimits?: Partial<RateLimitConfig>;
   };
   logger: Logger;
   version: string;
@@ -506,6 +509,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     conversationDto: async (userId, id) =>
       toConversationDto(await conversations.get(userId, id), services, userId),
     auth,
+    limits: new RequestLimits({ ...DEFAULT_RATE_LIMITS, ...options.config.rateLimits }),
     users,
     preferences,
     attachments,

@@ -13,11 +13,20 @@ import { KeyedLocks } from "./storage/locks.ts";
 import { accountIds } from "./storage/recovery.ts";
 import { UserError, UserStore } from "./storage/users.ts";
 import { SessionStore } from "./auth/sessions.ts";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import {
+  acquireInstanceLock,
+  BackupError,
+  createBackup,
+  lockHolder,
+  restoreBackup,
+} from "./backup.ts";
+import { createLogger } from "./logger.ts";
+import type * as AppModule from "./app.ts";
 
-const PLANNED: Readonly<Record<string, string>> = {
-  backup: "Phase 16",
-  restore: "Phase 16",
-};
+const PLANNED: Readonly<Record<string, string>> = {};
 
 const USAGE = `Usage: node server/cli.ts <command>
 
@@ -34,11 +43,13 @@ Commands:
                   Markdown in DATA_DIR (stop the server first: single process)
   provider:check  Check that LLAMA_BASE_URL is reachable from here (DNS, routing,
                   credentials) and list how many models it reports
-
-Planned (not available yet):
-${Object.entries(PLANNED)
-  .map(([name, phase]) => `  ${name.padEnd(13)} ${phase}`)
-  .join("\n")}
+  backup <dir> [--include-sessions]
+                  With the server stopped: finish startup recovery, then copy
+                  DATA_DIR (without derived indexes, import staging and, by
+                  default, sessions) into the new directory <dir> with a
+                  SHA-256 manifest, and verify the copy. Contains secrets
+  restore <dir>   With the server stopped: verify a backup and copy it into an
+                  EMPTY DATA_DIR, then run startup recovery (rebuilds indexes)
 `;
 
 async function healthcheck(): Promise<number> {
@@ -261,6 +272,86 @@ async function userResetPassword(args: string[]): Promise<number> {
   return 0;
 }
 
+const ROOT = path.resolve(import.meta.dirname, "..");
+
+/**
+ * Runs the server's startup recovery (contracts §2) on DATA_DIR without
+ * serving: operations, generation checkpoints, memory intents, pending
+ * removals and import journals are finished or rolled back, and indexes are
+ * rebuilt. Uses the production server bundle (in the container image; `npm
+ * run build` elsewhere), because the application code uses path aliases.
+ */
+async function runRecovery(config: ReturnType<typeof loadConfig>): Promise<void> {
+  const bundle = path.join(ROOT, "build/server/index.js");
+  if (!existsSync(bundle))
+    throw new BackupError("the production build is missing: run `npm run build` first");
+  const mod = (await import(pathToFileURL(bundle).href)) as typeof AppModule;
+  const app = mod.createApp({
+    config,
+    logger: createLogger("warn"),
+    version: "cli",
+    createDocumentHandler: () => (_req, res) => {
+      res.status(503).end();
+    },
+  });
+  await app.ready;
+  await app.shutdown();
+}
+
+/** `backup <dir>` and `restore <dir>` (Phase 16, INV-50). */
+async function backupCommand(kind: "backup" | "restore", args: string[]): Promise<number> {
+  const target = args.find((a) => !a.startsWith("--"));
+  if (!target) {
+    process.stderr.write(`Usage: node server/cli.ts ${kind} <dir>\n`);
+    return 2;
+  }
+  let config: ReturnType<typeof loadConfig>;
+  try {
+    config = loadConfig(process.env);
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof ConfigError ? error.message : "Invalid configuration"}\n`,
+    );
+    return 1;
+  }
+  try {
+    if (kind === "restore") {
+      // The target must be empty before anything, the lock included, is written.
+      const manifest = await restoreBackup(path.resolve(target), config.dataDir);
+      const release = await acquireInstanceLock(config.dataDir);
+      try {
+        await runRecovery(config);
+      } finally {
+        await release();
+      }
+      process.stdout.write(
+        `Restored ${String(manifest.files.length)} file(s) from the backup of ${manifest.createdAt}; recovery finished.\n`,
+      );
+      return 0;
+    }
+    const release = await acquireInstanceLock(config.dataDir);
+    try {
+      await runRecovery(config);
+      const manifest = await createBackup(config.dataDir, path.resolve(target), {
+        includeSessions: args.includes("--include-sessions"),
+      });
+      const bytes = manifest.files.reduce((n, f) => n + f.size, 0);
+      process.stdout.write(
+        `Backed up ${String(manifest.files.length)} file(s), ${String(bytes)} bytes, verified. It contains secrets: store it privately.\n`,
+      );
+      return 0;
+    } finally {
+      await release();
+    }
+  } catch (error) {
+    if (error instanceof BackupError) {
+      process.stderr.write(`${kind} failed: ${error.message}\n`);
+      return 1;
+    }
+    throw error;
+  }
+}
+
 /** Rebuilds derived indexes from canonical Markdown (contracts §1, INV-11). */
 async function indexRebuild(): Promise<number> {
   let dataDir: string;
@@ -269,6 +360,13 @@ async function indexRebuild(): Promise<number> {
   } catch (error) {
     process.stderr.write(
       `${error instanceof ConfigError ? error.message : "Invalid configuration"}\n`,
+    );
+    return 1;
+  }
+  const holder = lockHolder(dataDir);
+  if (holder !== null) {
+    process.stderr.write(
+      `DATA_DIR is in use by process ${String(holder)}: stop the server first.\n`,
     );
     return 1;
   }
@@ -306,6 +404,10 @@ switch (command) {
     break;
   case "provider:check":
     process.exitCode = await providerCheck();
+    break;
+  case "backup":
+  case "restore":
+    process.exitCode = await backupCommand(command, process.argv.slice(3));
     break;
   case "help":
   case "--help":

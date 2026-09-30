@@ -585,7 +585,8 @@ async function artifactChecks(base: string, dataDir: string, session: ApiSession
     "INV-41: HTML source is served as nosniff text/plain with a sandbox CSP",
     source.headers.get("content-type") === "text/plain; charset=utf-8" &&
       source.headers.get("x-content-type-options") === "nosniff" &&
-      source.headers.get("content-security-policy") === "sandbox; default-src 'none'" &&
+      source.headers.get("content-security-policy") ===
+        "sandbox; default-src 'none'; frame-ancestors 'none'" &&
       body === '<script>alert("x")</script>\n',
     [...source.headers].map(([k, v]) => `${k}: ${v}`).join("; "),
   );
@@ -692,7 +693,8 @@ async function attachmentChecks(base: string, dataDir: string, session: ApiSessi
     bytes.status === 200 &&
       bytes.headers.get("content-type") === "image/png" &&
       bytes.headers.get("x-content-type-options") === "nosniff" &&
-      bytes.headers.get("content-security-policy") === "sandbox; default-src 'none'" &&
+      bytes.headers.get("content-security-policy") ===
+        "sandbox; default-src 'none'; frame-ancestors 'none'" &&
       (bytes.headers.get("cache-control") ?? "").startsWith("private"),
     [...bytes.headers].map(([k, v]) => `${k}: ${v}`).join("; "),
   );

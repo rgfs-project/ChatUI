@@ -468,7 +468,9 @@ describe("attachment bytes (INV-27)", () => {
     expect(img.status).toBe(200);
     expect(img.headers.get("content-type")).toBe("image/png");
     expect(img.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(img.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
+    expect(img.headers.get("content-security-policy")).toBe(
+      "sandbox; default-src 'none'; frame-ancestors 'none'",
+    );
     expect(img.headers.get("cache-control")).toBe("private, no-cache");
     expect(img.headers.get("content-disposition")).toMatch(/^inline; filename="photo.png"/);
     expect(Buffer.from(await img.arrayBuffer()).equals(png())).toBe(true);

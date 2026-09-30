@@ -1,6 +1,7 @@
 // Loaded natively by Node (type stripping) from server/main.ts, so relative
 // imports carry explicit .ts extensions and no path aliases are used.
 import { statSync } from "node:fs";
+import type { RateLimitConfig } from "./auth/rate-limit.ts";
 import type { ArtifactConfig } from "./storage/artifacts.ts";
 import type { ImportLimits } from "./portability/archive.ts";
 import { isIP } from "node:net";
@@ -107,6 +108,11 @@ const envSchema = z.object({
   IMPORT_MAX_MS: intFrom(1_000, 24 * 3_600_000).default(600_000),
   IMPORT_MAX_RECORDS: intFrom(1, 100_000_000).default(1_000_000),
   IMPORT_MAX_JSON_BYTES: intFrom(1_024, 2_147_483_647).default(256 * 1024 * 1024),
+
+  // Per-user request budgets per minute (Phase 16; per process).
+  RATE_LIMIT_GENERATIONS_PER_MINUTE: intFrom(1, 100_000).default(30),
+  RATE_LIMIT_UPLOADS_PER_MINUTE: intFrom(1, 100_000).default(60),
+  RATE_LIMIT_ADMIN_PER_MINUTE: intFrom(1, 100_000).default(120),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -131,6 +137,7 @@ export interface Config {
   memories: MemoryConfig;
   artifacts: ArtifactConfig;
   imports: ImportLimits;
+  rateLimits: RateLimitConfig;
 }
 
 /** Generated source artifact limits (contracts §12); the store holds the defaults. */
@@ -419,6 +426,11 @@ export function loadConfig(
       maxMs: parsed.data.IMPORT_MAX_MS,
       maxRecords: parsed.data.IMPORT_MAX_RECORDS,
       maxJsonBytes: parsed.data.IMPORT_MAX_JSON_BYTES,
+    },
+    rateLimits: {
+      generationsPerMinute: parsed.data.RATE_LIMIT_GENERATIONS_PER_MINUTE,
+      uploadsPerMinute: parsed.data.RATE_LIMIT_UPLOADS_PER_MINUTE,
+      adminPerMinute: parsed.data.RATE_LIMIT_ADMIN_PER_MINUTE,
     },
     artifacts: {
       maxBytes: parsed.data.ARTIFACT_MAX_BYTES,

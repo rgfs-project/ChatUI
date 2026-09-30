@@ -47,7 +47,7 @@ Operator commands are introduced as their services exist. Until then they exit w
 | `index:rebuild` (rebuild derived indexes; server stopped)                | Phase 3        |
 | `user:create --username <name> [--admin]` (password via prompt or stdin) | Phase 4        |
 | `user:reset-password --username <name>` (prompt or stdin; signs out)     | Phase 10       |
-| `backup`, `restore`                                                      | Phase 16       |
+| `backup <dir>`, `restore <dir>` (server stopped; see SECURITY.md)        | Phase 16       |
 
 Updating: `git pull && docker compose up -d --build`. The `/data` volume is reused.
 
@@ -202,13 +202,15 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
   - Imported memory suggestions are never actionable.
   - Restoring chats you deleted works from your own archive.
 - Limits: `IMPORT_MAX_ARCHIVE_BYTES`, `IMPORT_MAX_EXPANDED_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_RATIO` (ZIP-bomb guard), `IMPORT_MAX_MS`, `IMPORT_MAX_RECORDS` and `IMPORT_MAX_JSON_BYTES` (one foreign JSON document). An import interrupted by a crash is rolled back on the next start.
-- This is the user-level export; it is not an administrative backup of the whole server (Phase 16).
+- This is the user-level export; for an operator backup of the whole server see [Backup and restore](SECURITY.md#backup-and-restore-operators).
 
 ## Data, backups and limits
 
+- **Security review, rate limits and exceptions:** [SECURITY.md](SECURITY.md). Per-user budgets: `RATE_LIMIT_GENERATIONS_PER_MINUTE` (30), `RATE_LIMIT_UPLOADS_PER_MINUTE` (60), `RATE_LIMIT_ADMIN_PER_MINUTE` (120); over budget answers 429 with `Retry-After`.
+
 - Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).
 - Each account has its own directory `DATA_DIR/<user-id>/` (`user.json`, `chats/`, `preferences.json`, `operations/`, `attachments/`). `_system/` holds `providers.json` (secrets), sessions (deleting them signs everyone out) and the derived username index.
-- **Back up all of `DATA_DIR`.** `index/` is derived and optional in a backup: it is rebuilt from the Markdown when missing. Keep `operations/` (short-lived send records used for safe retries and crash recovery). Stop the server, or copy from a filesystem snapshot, for a consistent backup; online backup/restore arrives in Phase 16.
+- **Back up all of `DATA_DIR`.** `index/` is derived and optional in a backup: it is rebuilt from the Markdown when missing. Keep `operations/` (short-lived send records used for safe retries and crash recovery). Use `node server/cli.ts backup <dir>` with the server stopped (verified, with checksums) and `restore <dir>` into an empty `DATA_DIR`; see [SECURITY.md](SECURITY.md#backup-and-restore-operators).
 - **Attachments are part of `DATA_DIR`** (`<user-id>/attachments/<attachment-id>/blob` + `meta.json`) and must be in every backup; messages reference them by id. A message whose attachment is gone shows an "Attachment unavailable" placeholder and still works.
 - **Attachment limits** (environment defaults; an admin can override the first four under Administration → Settings):
 
