@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
@@ -546,6 +546,12 @@ describe("INV-21 / INV-60: checkpoints and restart recovery", () => {
     expect(existsSync(crafted.file)).toBe(false);
     const report = await again.chatui.ready;
     expect(report.generations?.discarded).toBe(1);
+    // No conversation of any id stands in for it.
+    const chats = path.join(dataDir, run.session.userId, "chats");
+    expect((existsSync(chats) ? readdirSync(chats) : []).filter((f) => f.endsWith(".md"))).toEqual(
+      [],
+    );
+    expect(again.chatui.services.conversations.list(run.session.userId)).toEqual([]);
   });
 
   it("a committed operation whose reply the user later deleted is not re-added", async () => {

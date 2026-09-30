@@ -142,7 +142,47 @@ describe("locking", () => {
   });
 });
 
+describe("INV-12/INV-28: every id-derived path is checked", () => {
+  it("INV-28/INV-39: attachment, artifact and memory ids must be canonical UUIDs", () => {
+    const paths = new DataPaths(tempDataDir());
+    for (const bad of ["../x", "a/b", "..", "", "00000000-0000-4000-8000-00000000000A"]) {
+      expect(() => paths.attachmentDir(U, bad), bad).toThrow(PathError);
+      expect(() => paths.attachmentBlob(U, bad), bad).toThrow(PathError);
+      expect(() => paths.attachmentDir(bad, "00000000-0000-4000-8000-000000000001"), bad).toThrow(
+        PathError,
+      );
+      expect(() => paths.memoryFile(U, bad), bad).toThrow(PathError);
+      expect(() => paths.artifactDir(U, bad), bad).toThrow(PathError);
+    }
+  });
+});
+
 describe("INV-11: derived index", () => {
+  it("INV-11: a dirty marker forces a rebuild even when size and mtime are unchanged", async () => {
+    const { paths, index, store } = setup();
+    const a = await store.create(U, "Alpha");
+    expect(index.list(U).map((e) => e.title)).toEqual(["Alpha"]);
+    // An edit reconcile cannot see (same size, same mtime), as after a crash
+    // between the canonical write and the index update.
+    const file = paths.chatFile(U, a.id);
+    // A whole-second mtime, so it can be restored exactly after the edit.
+    utimesSync(file, 1_700_000_000, 1_700_000_000);
+    await new ChatIndex(paths, captureLogger().logger).rebuild(U);
+    const before = statSync(file);
+    writeFileSync(file, readFileSync(file, "utf8").replace("Alpha", "Omega"));
+    utimesSync(file, 1_700_000_000, 1_700_000_000);
+    expect(statSync(file).size).toBe(before.size);
+    expect(statSync(file).mtimeMs).toBe(before.mtimeMs);
+    const unaware = new ChatIndex(paths, captureLogger().logger);
+    await unaware.load(U);
+    // Without the marker the change is invisible: that is what the marker is for.
+    expect(unaware.list(U).map((e) => e.title)).toEqual(["Alpha"]);
+    writeFileSync(paths.indexDirtyFile(U), "");
+    const fresh = new ChatIndex(paths, captureLogger().logger);
+    await fresh.load(U);
+    expect(fresh.list(U).map((e) => e.title)).toEqual(["Omega"]);
+  });
+
   it("rebuilds from canonical files when the index is missing, unparseable or dirty", async () => {
     const { paths, index, store } = setup();
     const a = await store.create(U, "Alpha");

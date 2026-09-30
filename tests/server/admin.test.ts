@@ -212,6 +212,16 @@ describe("INV-17: reductions take effect immediately", () => {
     expect(reopen.status).toBe(404);
   });
 
+  it("INV-17: disabling revokes sessions: re-enabling does not bring the old session back", async () => {
+    const run = await start();
+    expect((await api(run, run.user, "GET", "/api/conversations")).status).toBe(200);
+    await api(run, run.admin, "PATCH", `/api/admin/users/${run.user.userId}`, {
+      status: "disabled",
+    });
+    await api(run, run.admin, "PATCH", `/api/admin/users/${run.user.userId}`, { status: "active" });
+    expect((await api(run, run.user, "GET", "/api/conversations")).status).toBe(401);
+  });
+
   it("an admin-set password revokes every session of the account", async () => {
     const run = await start();
     const res = await api(run, run.admin, "POST", `/api/admin/users/${run.user.userId}/password`, {

@@ -93,6 +93,8 @@
     "user:create": "node server/cli.ts user:create",
     "test:e2e": "npm run build && playwright test",
     "perf:check": "node scripts/perf-check.ts",
-    "perf:trace": "npm run build && node scripts/perf-trace.ts"
+    "perf:trace": "npm run build && node scripts/perf-trace.ts",
+    "clean-checkout": "node scripts/clean-checkout.ts",
+    "audit:invariants": "node scripts/invariant-audit.ts"
   }
 }

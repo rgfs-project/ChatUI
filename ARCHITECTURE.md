@@ -1223,6 +1223,14 @@ An imported artifact uses the same `blob` + `meta.json` with `source: "imported"
 
 The review, with each requirement mapped to code and tests, the operator backup/restore procedure and the documented exceptions, is in [SECURITY.md](SECURITY.md). New in this phase: per-user request budgets as a registry policy (`rateLimit`, admin mutations by default; `server/auth/rate-limit.ts`), `Permissions-Policy`, HTTP connection limits (`server/http-limits.ts`), `frame-ancestors 'none'` on sandboxed file responses, the `_system/server.lock` instance lock, and `backup`/`restore` (`server/backup.ts`).
 
+## Testing and reliability (Phase 17)
+
+- **Invariant audit.** `npm run audit:invariants` (`scripts/invariant-audit.ts` with `scripts/invariant-mutations.ts`) breaks each invariant's enforcement with one targeted source mutation, runs the tests the register names (Vitest, a Playwright spec or `verify`), requires them to fail, and restores the source. Invariants enforced in several layers are mutated in every layer at once. Result: **60/60 caught** (INV-01…INV-62 except INV-49, which is container behavior verified by `verify:compose` in CI, and INV-51, pending optional Phase 19). Record: `docs/phase-reports/phase-17/invariant-audit.json`. Gaps it found were closed with new tests (INV-11 dirty marker with unchanged size/mtime, INV-17 re-enable after disable, INV-28/39 id-derived paths, INV-60 no stand-in conversation after recovery).
+- **Clean checkout.** `npm run clean-checkout` (and a CI job): fresh clone → `npm ci` → `.env` from `.env.example` → build → CLI admin (password on stdin) → `npm start` → a browser conversation against the mock provider, reload persisted → clearing `data/` (keeping `.gitkeep`) returns to the initial state. `--worktree` runs it on uncommitted changes.
+- **SSR reliability.** `tests/e2e/ssr.spec.ts`: parallel A/B document requests with sentinels never cross accounts; foreign 404 and anonymous redirect carry no private markup; unknown route 404 vs missing conversation (shell + data error); every script carries the response's CSP nonce; hydration makes no duplicate conversation/model fetch; no service worker. Without JS, overlays (`/settings`, `/admin`) fall back to the shell with a usable textarea (the overlay itself is a client portal).
+- **Feature parity.** `docs/feature-parity.md` maps every row of the specification's matrix to code and tests.
+- **CI** runs format, lint, typecheck, unit/integration, build, `perf:check`, `verify`, E2E, audit, the clean-checkout job and `verify:compose` (Docker and Podman).
+
 ## Later sections
 
 - Component audit, security hardening, reliability, polish: N/A until those phases.
