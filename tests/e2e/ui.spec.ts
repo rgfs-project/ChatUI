@@ -353,7 +353,7 @@ test.describe("composer", () => {
     const settings = page.getByRole("dialog", { name: "Settings" });
     await settings.getByRole("button", { name: "Skills" }).click();
     await settings
-      .getByRole("button", { name: /^(Add|Create a skill)$/ })
+      .getByRole("button", { name: /^(Add a skill|Create a skill)$/ })
       .first()
       .click();
     await settings.getByLabel("Name").fill("pirate");

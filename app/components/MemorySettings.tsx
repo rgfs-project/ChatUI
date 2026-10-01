@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import { MEMORY_LIMITS, memoryNameProblem, type MemoryDto } from "@shared/memories";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
@@ -34,16 +34,6 @@ export default function MemorySettings({ userId }: { userId: string }) {
     <section className="settings-body" aria-labelledby="settings-memories">
       <div className="skills-head">
         <h2 id="settings-memories">Memories</h2>
-        {list.data?.memories.length === 0 ? null : (
-          <button
-            type="button"
-            onClick={() => {
-              setEditing({ id: null });
-            }}
-          >
-            <Plus size={16} aria-hidden /> Add
-          </button>
-        )}
       </div>
       <p className="settings-hint">
         Notes you approved for the assistant to remember in every chat. The assistant can suggest
@@ -102,6 +92,15 @@ export default function MemorySettings({ userId }: { userId: string }) {
               </li>
             ))}
           </ul>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setEditing({ id: null });
+            }}
+          >
+            Add a memory
+          </button>
         </>
       )}
       {list.data?.unreadable ? (
