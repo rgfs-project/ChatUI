@@ -68,13 +68,39 @@ export class AuthService {
     this.onAccountRejected = options.onAccountRejected ?? (() => undefined);
     // __Host- cookies must be Secure, host-only and Path=/ (https origins).
     this.cookieName = this.config.secureCookies ? "__Host-chatui_session" : "chatui_session";
+    void this.refreshFirstRun().catch(() => undefined);
   }
 
   private readonly registrationMode: () => "open" | "closed" | undefined;
 
-  get registrationOpen(): boolean {
+  /** True once no account exists yet; cleared for good by the first account. */
+  private firstRun = false;
+  private firstAccount: Promise<unknown> = Promise.resolve();
+
+  /** The configured or saved mode alone, without the first-run exception. */
+  get registrationConfiguredOpen(): boolean {
     return (this.registrationMode() ?? this.config.registrationMode) === "open";
   }
+
+  /** Open by mode, or open for the first account on an empty instance. */
+  get registrationOpen(): boolean {
+    return this.registrationConfiguredOpen || this.firstRun;
+  }
+
+  /**
+   * Re-reads whether any account exists. Cheap once an account exists (no
+   * disk access); while the instance is empty it also notices accounts the
+   * CLI created behind the server's back.
+   */
+  async refreshFirstRun(): Promise<boolean> {
+    if (this.firstRun || !this.checkedOnce) {
+      this.firstRun = (await this.users.all()).length === 0;
+      this.checkedOnce = true;
+    }
+    return this.firstRun;
+  }
+
+  private checkedOnce = false;
 
   private tokenFrom(req: Request): string | undefined {
     const header = req.headers.cookie;
@@ -243,6 +269,7 @@ export class AuthService {
     username: string,
     password: string,
   ): Promise<SessionDto> {
+    await this.refreshFirstRun();
     if (!this.registrationOpen)
       throw new AppError(ErrorCode.REGISTRATION_CLOSED, "Registration is closed");
     this.limit(req, username);
@@ -253,7 +280,7 @@ export class AuthService {
     this.validatePassword(password);
     const passwordHash = await this.withHasher(() => this.hasher.hash(password));
     try {
-      const user = await this.users.create({ username: name, passwordHash, role: "user" });
+      const user = await this.createRegistered(name, passwordHash);
       return await this.startSession(req, res, user.id, user.username, user.role);
     } catch (error) {
       if (error instanceof UserError && error.kind === "taken") {
@@ -261,6 +288,33 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Creates the account. On an empty instance with registration otherwise
+   * closed, registrations are serialized so exactly one succeeds, and it
+   * becomes the admin; everyone else is told registration is closed.
+   */
+  private async createRegistered(name: string, passwordHash: string) {
+    if (this.registrationConfiguredOpen) {
+      const first = this.firstRun ? await this.claimFirstAccount(name, passwordHash) : null;
+      return first ?? (await this.users.create({ username: name, passwordHash, role: "user" }));
+    }
+    const created = await this.claimFirstAccount(name, passwordHash);
+    if (!created) throw new AppError(ErrorCode.REGISTRATION_CLOSED, "Registration is closed");
+    return created;
+  }
+
+  /** Creates an admin if (and only if) no account exists; null otherwise. */
+  private claimFirstAccount(name: string, passwordHash: string) {
+    const run = this.firstAccount.then(async () => {
+      if (!(await this.refreshFirstRun())) return null;
+      const user = await this.users.create({ username: name, passwordHash, role: "admin" });
+      this.firstRun = false;
+      return user;
+    });
+    this.firstAccount = run.catch(() => undefined);
+    return run;
   }
 
   async logout(res: Response, auth: AuthContext | null): Promise<void> {

@@ -347,7 +347,7 @@ function settingsDto(ctx: RouteContext) {
   const { settings, auth } = { settings: ctx.services.admin.settings, auth: ctx.services.auth };
   const s = settings.get();
   return {
-    registrationMode: auth.registrationOpen ? ("open" as const) : ("closed" as const),
+    registrationMode: auth.registrationConfiguredOpen ? ("open" as const) : ("closed" as const),
     registrationModeSource: s.registrationMode ? ("settings" as const) : ("environment" as const),
     defaultModel: s.defaultModel ?? null,
     timezone: s.timezone ?? "UTC",
