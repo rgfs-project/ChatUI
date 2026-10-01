@@ -12,6 +12,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ConfirmDialog } from "../components/Dialogs";
+import { Spinner } from "../components/Spinner";
 import { apiJson, queryKeys } from "../lib/query";
 import { AttachmentSettings } from "../components/AttachmentSettings";
 import { FeatureSettings } from "../components/FeatureSettings";
@@ -20,6 +21,8 @@ import { SkillsSettings } from "../components/SkillsSettings";
 import { useAuth } from "../lib/auth-store";
 import { paths } from "../lib/paths";
 import { useSignOut } from "../lib/use-sign-out";
+import { applyTheme, currentTheme } from "../lib/theme";
+import { isTheme, type Theme } from "@shared/theme";
 import type { Route } from "./+types/settings";
 
 /** Settings → Memories (Phase 13b): loaded when its tab opens. */
@@ -94,7 +97,7 @@ export default function SettingsOverlay() {
           <Suspense
             fallback={
               <section className="settings-body" tabIndex={0}>
-                <p className="settings-hint">Loading…</p>
+                <Spinner label="Loading…" />
               </section>
             }
           >
@@ -108,7 +111,7 @@ export default function SettingsOverlay() {
           <Suspense
             fallback={
               <section className="settings-body" tabIndex={0}>
-                <p className="settings-hint">Loading memories…</p>
+                <Spinner label="Loading memories…" />
               </section>
             }
           >
@@ -118,7 +121,7 @@ export default function SettingsOverlay() {
           <Suspense
             fallback={
               <section className="settings-body" tabIndex={0}>
-                <p className="settings-hint">Loading files…</p>
+                <Spinner label="Loading files…" />
               </section>
             }
           >
@@ -143,6 +146,7 @@ export default function SettingsOverlay() {
                 </p>
               </div>
             </div>
+            <ThemeSetting />
             <div className="settings-row">
               <div>
                 <p className="settings-label">Password</p>
@@ -166,6 +170,43 @@ export default function SettingsOverlay() {
         )}
       </div>
     </Overlay>
+  );
+}
+
+/**
+ * Settings → Account → Theme (Phase 18): applies at once and is remembered
+ * for this browser (a presentation hint, not an account preference).
+ */
+function ThemeSetting() {
+  // Settings is a client-only overlay, so the document is always there.
+  const [theme, setTheme] = useState<Theme>(currentTheme);
+  return (
+    <div className="settings-row">
+      <div>
+        <label className="settings-label" htmlFor="theme-select">
+          Theme
+        </label>
+        <p className="settings-hint" id="theme-hint">
+          System follows your device’s light or dark setting.
+        </p>
+      </div>
+      <select
+        id="theme-select"
+        className="text-input settings-select"
+        aria-describedby="theme-hint"
+        value={theme}
+        onChange={(event) => {
+          const next = event.target.value;
+          if (!isTheme(next)) return;
+          applyTheme(next);
+          setTheme(next);
+        }}
+      >
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
   );
 }
 

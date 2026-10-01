@@ -2,7 +2,7 @@
 
 .data-heading {
   margin: 0 0 var(--space-1);
-  font-size: 15px;
+  font-size: var(--text-base);
 }
 
 /* Export and Import are sections: a divider and a full step between them. */
@@ -40,18 +40,18 @@
   margin-top: 16px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
 }
 
 .data-preview h4 {
   margin: 0 0 8px;
-  font-size: 15px;
+  font-size: var(--text-base);
 }
 
 .data-summary {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .data-summary th,
@@ -68,7 +68,7 @@
 
 .data-items {
   margin-top: 8px;
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .data-items ul {
@@ -90,7 +90,7 @@
   margin: 12px 0 0;
   padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .data-choice label,

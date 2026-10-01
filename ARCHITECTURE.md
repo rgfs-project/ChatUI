@@ -29,7 +29,7 @@ All versions are pinned exactly in `package.json` and locked in `package-lock.js
 - `app/entry.client.tsx` hydrates the whole document with `<HydratedRouter>` in Strict Mode.
 - The public status page (`app/routes/home.tsx`) renders the server health result into the HTML. Its loader calls the internal health service through the per-request router context and never makes an HTTP call back to its own server.
 - Hydration safety: `useHydrated()` (`useSyncExternalStore`) returns `false` on the server and during hydration and `true` afterwards, so the first client render matches the server HTML. `<Links nonce="">` prevents a nonce hydration mismatch, because browsers hide nonce values from the DOM and stylesheets don't need a nonce under `style-src 'self'`.
-- The theme follows `prefers-color-scheme` in CSS only, with no theme bootstrap script, so hydration cannot change it.
+- The theme is decided by the server: "system" (the default) follows `prefers-color-scheme` in CSS; a saved choice comes from the `chatui_theme` cookie and is rendered as `data-theme` on `<html>` (Phase 18). There is no theme bootstrap script, so the CSP is untouched and hydration cannot change the theme.
 
 ## Process and module layout
 
@@ -576,7 +576,7 @@ Every control was checked against its Phase 7 decision in the production build (
 
 ### Visual design
 
-Monochrome and flat (user direction): a rectangular sidebar with a hairline divider beside a full-bleed main area, the platform's system font stack (no webfonts), grey surfaces only (red just for errors and destructive actions), a single-row pill composer with the model inline and a round send button, neutral right-aligned user bubbles, plain assistant prose with a copy action, and "Thought process ›" for reasoning. Colours are semantic CSS variables on `:root`, switched for dark mode with `prefers-color-scheme`; icons are `lucide-react`.
+Monochrome and flat (user direction): a rectangular sidebar with a hairline divider beside a full-bleed main area, the platform's system font stack (no webfonts), grey surfaces only (red just for errors and destructive actions), a single-row pill composer with the model inline and a round send button, neutral right-aligned user bubbles, plain assistant prose with a copy action, and "Thought process ›" for reasoning. Colours are semantic CSS variables on `:root`, each `light-dark(light, dark)` resolved by `color-scheme` (Phase 18); icons are `lucide-react`.
 
 ## State and loading (Phase 8)
 
@@ -1231,9 +1231,41 @@ The review, with each requirement mapped to code and tests, the operator backup/
 - **Feature parity.** `docs/feature-parity.md` maps every row of the specification's matrix to code and tests.
 - **CI** runs format, lint, typecheck, unit/integration, build, `perf:check`, `verify`, E2E, audit, the clean-checkout job and `verify:compose` (Docker and Podman).
 
+## Visual polish (Phase 18)
+
+### Design tokens (`app/app.css` `:root`)
+
+- **Colour:** every colour token is `light-dark(light, dark)`. `:root` has `color-scheme: light dark` (follows the OS); `:root[data-theme="light"|"dark"]` pins it. A theme swaps token values only — no component has its own colour-scheme media query, and the syntax palette (`code/highlight.css`) uses the same mechanism.
+- **Scales:** type (`--text-xs` 12 … `--text-4xl` 28, `--leading*`, `--weight-*`), spacing (`--space-1…8`), radius (`--radius-xs…3xl`, `--radius-composer`, `--radius-pill`), shadow (`--shadow-sm`, `--menu-shadow`), motion (`--duration-fast`, `--duration`, `--ease`). The transcript and composer share `--column`, derived from the prose measure `--measure: 72ch`.
+- **Contrast:** text tokens are ≥ 4.5:1 on every surface and on hover/selected fills; form-field boundaries (`--field-line`), focus indicators (`--focus`, `--field-focus`), primary buttons and both switch states are ≥ 3:1, in both themes. `--line` is decorative only (dividers, card outlines).
+- `tests/client/design-system.test.ts` enforces all of this: WCAG ratios computed from the tokens for both themes, sizes/radii/weights only from the scales, no `prefers-color-scheme` outside the token block, the reduced-motion rule, and the icon scale.
+
+### Theme before first paint
+
+The saved theme (Settings → Account → Theme: System, Light, Dark) is a presentation hint (contracts §9), not account data. `app/lib/theme.ts` sets `data-theme` at once and writes the `chatui_theme` cookie (`Path=/`, one year, `SameSite=Lax`, `Secure` on https). The root loader reads it (`shared/theme.ts`: only `system|light|dark`, anything else is `system`) and `Layout` renders `<html data-theme>` and the matching `<meta name="color-scheme">`. The first HTML is therefore already in the right theme, with JavaScript disabled too; no inline script, no CSP change, no hydration mismatch.
+
+### Accessibility
+
+- **Live region:** `app/lib/announcer.tsx` renders one polite `role="status"` region in the app shell (outside the inert area and the transcript). `ConversationView` announces "Assistant is responding" when a reply starts and "Response complete / cancelled / failed" when it ends — never tokens. It lives in the shell because the new chat becomes `/chat/:id` mid-reply, and a region replaced while it speaks is often not read.
+- **Focus:** a 2 px `--focus` outline on every interactive element; fields show focus as a 2 px `--field-focus` frame. The keyboard walkthrough test checks for a visible indicator at every stop.
+- **Motion:** one global `prefers-reduced-motion: reduce` rule sets every animation and transition to 0.01 ms (and `scroll-behavior: auto`); motion is limited to the switch, disclosure-style state changes, the typing cursor and skeleton pulses.
+- **States:** the conversation list shows skeleton rows sized like real ones while it loads (CSS-only widths; no inline styles under the CSP); a loading conversation and lazily loaded Settings sections show a small centered spinner (`app/components/Spinner.tsx`). Both keep visually hidden "Loading…" text. `light-dark()` is lowered by the CSS minifier for Vite's default targets (var toggles), so older Safari is themed too.
+
+### Icons and typography
+
+Lucide icons use one size scale (14 dense toolbars, 16 menus and inline, 18 buttons and navigation, 20 prominent) with the default stroke. The platform UI font and a local monospace stack only; the math font loads with math, never on the chat surface's cold path (checked by `tests/e2e/visual.spec.ts`).
+
+### Layout fixes
+
+- The sidebar has one scrolling region (`.sidebar-scroll`: Pinned and All chats) between the fixed header (brand, New chat, Search) and the account button. Previously each list stretched (`flex: 1`), leaving a gap between Pinned and All chats.
+- Settings opened over `/chat/new` no longer requests `/api/conversations/new` (400): `new` is the draft, not an id.
+
+### Tests
+
+`tests/e2e/visual.spec.ts`: saved theme correct without JavaScript for every theme/system combination under the production CSP; switching applies at once, survives reload, no console errors; the live region's exact announcement sequence, focus unchanged; cancellation announced; CLS < 0.1 on a cold 200-message load and during streaming; no font requests on the chat surface; computed animation/transition durations under reduced motion; no horizontal overflow at 320/390/768/1024/1440 px; the sidebar's fixed header and footer; the keyboard-only walkthrough login → chat → attachments → admin. `tests/e2e/a11y.spec.ts` now scans the admin panel in both schemes too.
+
 ## Later sections
 
-- Component audit, security hardening, reliability, polish: N/A until those phases.
 - Interactive artifacts: optional Phase 19, separately approved.
 
 ## Deviations from the written specification

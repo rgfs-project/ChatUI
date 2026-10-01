@@ -187,36 +187,46 @@ function SidebarImpl({
       >
         <Search size={18} aria-hidden /> Search chats
       </button>
-      {pinned.length > 0 ? (
-        <>
-          <p className="section-label" id={`${navId}-pinned`}>
-            Pinned
+      {/* The one scrolling region: the header above and the account below stay put. */}
+      <div className="sidebar-scroll" data-testid="sidebar-scroll">
+        {pinned.length > 0 ? (
+          <>
+            <p className="section-label" id={`${navId}-pinned`}>
+              Pinned
+            </p>
+            <ul className="chat-list" aria-labelledby={`${navId}-pinned`} data-testid="pinned-list">
+              {pinned.map(row)}
+            </ul>
+          </>
+        ) : null}
+        <p className="section-label">All chats</p>
+        {list.isPending ? (
+          // Rows the size of real ones, so the list doesn't shift when it arrives.
+          <div className="skeleton-list" aria-busy="true" data-testid="conversations-loading">
+            <span className="visually-hidden">Loading conversations…</span>
+            {/* No inline styles (CSP): the uneven widths come from app.css. */}
+            {[0, 1, 2, 3].map((i) => (
+              <span key={i} className="skeleton-row" aria-hidden>
+                <span className="skeleton" />
+              </span>
+            ))}
+          </div>
+        ) : list.isError && !list.data ? (
+          <div className="sidebar-note" role="alert" data-testid="conversations-error">
+            <p>Conversations couldn’t be loaded.</p>
+            <button type="button" className="link-button" onClick={() => void list.refetch()}>
+              Try again
+            </button>
+          </div>
+        ) : conversations.length === 0 ? (
+          <p className="sidebar-note" data-testid="conversations-empty">
+            No conversations yet. Your chats will appear here.
           </p>
-          <ul className="chat-list" aria-labelledby={`${navId}-pinned`} data-testid="pinned-list">
-            {pinned.map(row)}
-          </ul>
-        </>
-      ) : null}
-      <p className="section-label">All chats</p>
-      {list.isPending ? (
-        <p className="sidebar-note" aria-busy="true" data-testid="conversations-loading">
-          Loading conversations…
-        </p>
-      ) : list.isError && !list.data ? (
-        <div className="sidebar-note" role="alert" data-testid="conversations-error">
-          <p>Conversations couldn’t be loaded.</p>
-          <button type="button" className="link-button" onClick={() => void list.refetch()}>
-            Try again
-          </button>
-        </div>
-      ) : conversations.length === 0 ? (
-        <p className="sidebar-note" data-testid="conversations-empty">
-          No conversations yet. Your chats will appear here.
-        </p>
-      ) : null}
-      <ul className="chat-list" data-testid="conversation-list">
-        {others.map(row)}
-      </ul>
+        ) : null}
+        <ul className="chat-list" data-testid="conversation-list">
+          {others.map(row)}
+        </ul>
+      </div>
       {searching ? (
         <Suspense fallback={null}>
           <SearchDialog

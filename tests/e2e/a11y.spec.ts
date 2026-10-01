@@ -149,12 +149,14 @@ test.describe("administration", () => {
       await use(await signedInState(browser, E2E_ADMIN));
     },
   });
-  test("admin panel", async ({ page }) => {
-    const found = [];
-    await page.goto(`${base()}/admin`);
-    await hydrated(page);
-    await expect(page.getByTestId("admin-users")).toBeVisible();
-    found.push(...(await scan(page, "admin")));
-    expect(found).toEqual([]);
-  });
+  for (const scheme of ["light", "dark"] as const)
+    test(`admin panel (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      const found = [];
+      await page.goto(`${base()}/admin`);
+      await hydrated(page);
+      await expect(page.getByTestId("admin-users")).toBeVisible();
+      found.push(...(await scan(page, `admin ${scheme}`)));
+      expect(found).toEqual([]);
+    });
 });

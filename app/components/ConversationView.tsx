@@ -33,6 +33,8 @@ import { MessageAttachments } from "./MessageAttachments";
 import { Link, useLocation, useNavigate } from "react-router";
 import type { ConversationDto } from "@shared/conversations";
 import { isTerminalState, type GenerationState } from "@shared/generation-state";
+import { announce } from "../lib/announcer";
+import { Spinner } from "./Spinner";
 import type { StartGenerationResponse } from "@shared/generations";
 import { AccountChangedError } from "../lib/api";
 import { authStore, useAuth } from "../lib/auth-store";
@@ -100,6 +102,20 @@ function useHydrated(): boolean {
     () => false,
   );
 }
+
+/**
+ * What the reply's live region says (Phase 18): its start and its end, never
+ * the tokens in between. Pending and streaming read the same, so the region's
+ * text changes (and is announced) once when a reply starts and once when it ends.
+ */
+const ANNOUNCEMENT: Record<GenerationState, string> = {
+  pending: "Assistant is responding",
+  streaming: "Assistant is responding",
+  completed: "Response complete",
+  cancelled: "Response cancelled",
+  failed: "Response failed",
+  timed_out: "Response failed: timed out",
+};
 
 const STATE_LABEL: Record<GenerationState, string> = {
   pending: "Waiting for the model…",
@@ -315,6 +331,12 @@ export function ConversationView(props: {
       cancelAnimationFrame(frame);
     };
   }, [liveOutputId]);
+
+  // Reply start and end go to the shell's live region (never the tokens).
+  const announcement = live && props.inert !== true ? ANNOUNCEMENT[live.state] : null;
+  useEffect(() => {
+    if (announcement) announce(announcement);
+  }, [announcement]);
 
   // Keep the live reply on screen until the stored copy is in the transcript.
   const storedIds = new Set(conversation?.messages.map((m) => m.id));
@@ -935,9 +957,7 @@ export function ConversationView(props: {
           ))}
         </ol>
         {loading ? (
-          <p className="placeholder" data-testid="transcript-loading">
-            Loading conversation…
-          </p>
+          <Spinner label="Loading conversation…" testId="transcript-loading" />
         ) : fetchError ? (
           <div className="placeholder" role="alert" data-testid="transcript-error">
             <p>This conversation couldn’t be loaded.</p>

@@ -446,7 +446,7 @@ export function Composer({
               </optgroup>
             ))}
           </select>
-          <ChevronDown size={15} className="model-chevron" aria-hidden />
+          <ChevronDown size={16} className="model-chevron" aria-hidden />
         </span>
         {running && hasDraft ? (
           <button
@@ -456,7 +456,7 @@ export function Composer({
             title="Queue message (sent when the reply finishes)"
             disabled={!ready}
           >
-            <ArrowUp size={18} strokeWidth={2.25} aria-hidden />
+            <ArrowUp size={18} aria-hidden />
           </button>
         ) : null}
         {running ? (
@@ -468,7 +468,7 @@ export function Composer({
             onClick={onCancel}
             disabled={!hydrated}
           >
-            <Square size={13} fill="currentColor" aria-hidden />
+            <Square size={14} fill="currentColor" aria-hidden />
           </button>
         ) : (
           <button
@@ -478,7 +478,7 @@ export function Composer({
             title="Send (Enter) · New line (Shift+Enter)"
             disabled={!canSend}
           >
-            <ArrowUp size={18} strokeWidth={2.25} aria-hidden />
+            <ArrowUp size={18} aria-hidden />
           </button>
         )}
       </div>

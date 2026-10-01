@@ -13,8 +13,8 @@
   gap: 6px;
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .memory-cards {
@@ -33,7 +33,7 @@
   gap: 8px 12px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
 }
 
@@ -50,18 +50,18 @@
 }
 
 .memory-card-title {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .memory-card-content {
   color: var(--fg-2);
-  font-size: 14px;
+  font-size: var(--text-md);
   white-space: pre-wrap;
 }
 
 .memory-card-status {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .memory-card-actions {
@@ -107,7 +107,7 @@
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
 }
 
 .memory-row-text {
@@ -117,14 +117,14 @@
 
 .memory-row-name {
   margin: 0;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   overflow-wrap: anywhere;
 }
 
 .memory-row-content {
   margin: 2px 0 0;
   color: var(--fg-2);
-  font-size: 14px;
+  font-size: var(--text-md);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -133,7 +133,7 @@
   display: inline-block;
   margin-top: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .memory-form {
@@ -147,8 +147,8 @@
 .memory-form textarea {
   font: inherit;
   padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-lg);
   background: var(--field);
   color: var(--fg);
 }

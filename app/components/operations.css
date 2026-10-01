@@ -14,14 +14,15 @@
   align-items: center;
   gap: 10px;
   padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-xl);
   background: var(--field);
   color: var(--muted);
 }
 
 .search-field:focus-within {
-  border-color: var(--faint);
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
 }
 
 .search-input {
@@ -31,7 +32,7 @@
   border: 0;
   background: transparent;
   color: var(--fg);
-  font-size: 16px;
+  font-size: var(--text-lg);
 }
 
 .search-input:focus {
@@ -42,7 +43,7 @@
   margin: 0;
   padding: 0 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .search-results {
@@ -60,7 +61,7 @@
   align-items: flex-start;
   gap: 10px;
   padding: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--fg-2);
   cursor: pointer;
 }
@@ -84,7 +85,7 @@
 
 .search-title {
   overflow: hidden;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -92,14 +93,14 @@
 .search-snippet {
   overflow-wrap: anywhere;
   color: var(--fg-2);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .search-snippet mark {
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--active);
   color: var(--fg);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 @media (max-width: 767.98px) {
@@ -121,8 +122,8 @@
   min-height: 5rem;
   max-height: 20rem;
   padding: 10px 14px;
-  border: 1px solid var(--faint);
-  border-radius: 16px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-2xl);
   background: var(--bubble);
   color: var(--on-bubble);
   font: inherit;
@@ -145,7 +146,7 @@
 .message-editor-note {
   margin: 0;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   text-align: right;
 }
 

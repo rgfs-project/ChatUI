@@ -9,7 +9,12 @@
  */
 
 :root {
+  /* Theme (Phase 18): "system" follows the OS; a saved choice (Settings →
+     Account) is rendered by the server as data-theme on <html>, so the first
+     paint is already right. Every colour below is light-dark(light, dark),
+     resolved by color-scheme: a theme swaps token values, never components. */
   color-scheme: light dark;
+
   /* The platform's own UI font: SF Pro on Apple, Segoe UI on Windows, Roboto on
      Android, the desktop's UI font on Linux. No webfonts. */
   --font:
@@ -17,6 +22,26 @@
     "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
 
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Type scale: every font size is one of these steps. */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-base: 15px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
+  --text-3xl: 22px;
+  --text-4xl: 28px;
+  --leading-tight: 1.3;
+  --leading: 1.5;
+  --leading-prose: 1.65;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  /* Reading measure for the transcript and other prose (~65–75 characters at
+     the body size); the composer lines up with it. */
+  --measure: 72ch;
+  --column: calc(var(--measure) + 2 * var(--space-4));
 
   /* Spacing scale (Phase 18): every vertical rhythm uses these steps. */
   --space-1: 4px;
@@ -27,63 +52,80 @@
   --space-6: 24px;
   --space-8: 32px;
 
+  /* Radius scale. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
+  --radius-composer: 28px;
+  --radius-pill: 999px;
+
+  /* Motion: short, and only where it explains a change (a disclosure opening,
+     a switch moving). prefers-reduced-motion turns all of it off below. */
+  --duration-fast: 120ms;
+  --duration: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
   /* The top bar: the sidebar's header and the chat header share it, so the
      brand, toggles and title never move when the sidebar opens or closes. */
   --topbar-height: 56px;
 
-  --canvas: #ffffff;
-  --sidebar: #f9f9f9;
-  --code: #f7f7f7;
-  --surface: #ffffff;
-  --raised: #ffffff;
-  --field: #ffffff;
-  --line: #e3e3e3;
-  --hover: rgb(0 0 0 / 0.05);
-  --active: rgb(0 0 0 / 0.08);
-  --bubble: #f0f0f0;
-  --on-bubble: #1f1f1f;
-  --fg: #1f1f1f;
-  --fg-2: #454545;
-  --muted: #6b6b6b;
+  --canvas: light-dark(#ffffff, #212121);
+  --sidebar: light-dark(#f9f9f9, #171717);
+  --code: light-dark(#f7f7f7, #1a1a1a);
+  --surface: light-dark(#ffffff, #212121);
+  --raised: light-dark(#ffffff, #2a2a2a);
+  --field: light-dark(#ffffff, #2a2a2a);
+  /* Decorative only (dividers, card outlines): below the 3:1 UI contrast. */
+  --line: light-dark(#e3e3e3, #383838);
+  /* Form-field and switch boundaries: at least 3:1 (WCAG 1.4.11). */
+  --field-line: light-dark(#8a8a8a, #7c7c7c);
+  --field-focus: light-dark(#454545, #cfcfcf);
+  --hover: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.06));
+  --active: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
+  --bubble: light-dark(#f0f0f0, #303030);
+  --on-bubble: light-dark(#1f1f1f, #ececec);
+  --fg: light-dark(#1f1f1f, #ececec);
+  --fg-2: light-dark(#454545, #cfcfcf);
+  --muted: light-dark(#636363, #b0b0b0);
   /* Decorative only (borders, dividers): below text contrast. Text uses --muted. */
-  --faint: #9b9b9b;
-  --send: #1f1f1f;
-  --on-send: #ffffff;
-  --send-off: #d6d6d6;
-  --link: #1f1f1f;
-  --danger: #c42b1c;
-  --focus: #6b6b6b;
-  --avatar: #d4d4d4;
-  --on-avatar: #1f1f1f;
-  --menu-shadow: 0 10px 30px rgb(0 0 0 / 0.1), 0 1px 3px rgb(0 0 0 / 0.08);
+  --faint: light-dark(#9b9b9b, #7c7c7c);
+  --send: light-dark(#1f1f1f, #f2f2f2);
+  --on-send: light-dark(#ffffff, #171717);
+  --send-off: light-dark(#d6d6d6, #555555);
+  --link: light-dark(#1f1f1f, #ececec);
+  --danger: light-dark(#b8271a, #f49b93);
+  --focus: light-dark(#6b6b6b, #a3a3a3);
+  --avatar: light-dark(#d4d4d4, #3a3a3a);
+  --on-avatar: light-dark(#1f1f1f, #ececec);
+  --scrim: rgb(0 0 0 / 0.5);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.25);
+  /* light-dark() takes colours only, so the shadow's colours switch. */
+  --menu-shadow:
+    0 10px 30px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.45)),
+    0 1px 3px light-dark(rgb(0 0 0 / 0.08), transparent);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canvas: #212121;
-    --sidebar: #171717;
-    --code: #1a1a1a;
-    --surface: #212121;
-    --raised: #2a2a2a;
-    --field: #2a2a2a;
-    --line: #383838;
-    --hover: rgb(255 255 255 / 0.06);
-    --active: rgb(255 255 255 / 0.1);
-    --bubble: #303030;
-    --on-bubble: #ececec;
-    --fg: #ececec;
-    --fg-2: #cfcfcf;
-    --muted: #a3a3a3;
-    --faint: #7c7c7c;
-    --send: #f2f2f2;
-    --on-send: #171717;
-    --send-off: #555555;
-    --link: #ececec;
-    --danger: #f28b82;
-    --focus: #a3a3a3;
-    --avatar: #3a3a3a;
-    --on-avatar: #ececec;
-    --menu-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Reduced motion: no animation or transition anywhere, including smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -101,8 +143,8 @@ body {
 body {
   margin: 0;
   font-family: var(--font);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: var(--leading);
   color: var(--fg);
   background: var(--canvas);
   -webkit-font-smoothing: antialiased;
@@ -115,7 +157,7 @@ a {
 
 h1,
 h2 {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 :focus-visible {
@@ -138,11 +180,11 @@ button {
   font: inherit;
   cursor: pointer;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 0.55rem 1rem;
   background: var(--send);
   color: var(--on-send);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 button:disabled {
@@ -187,7 +229,7 @@ button.danger {
   width: 34px;
   height: 34px;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
 }
@@ -212,7 +254,7 @@ textarea {
 .hint,
 .gen-status {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--text-md);
 }
 
 /* Floating menus (account, conversation title). */
@@ -225,7 +267,7 @@ textarea {
   padding: 6px;
   background: var(--raised);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   box-shadow: var(--menu-shadow);
 }
 
@@ -241,10 +283,10 @@ textarea {
   gap: 10px;
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 400;
   text-align: left;
   text-decoration: none;
@@ -273,18 +315,18 @@ textarea {
   padding: 32px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
 }
 
 .page h1 {
   margin: 0 0 24px;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-semibold);
 }
 
 .page h2 {
   margin: 28px 0 12px;
-  font-size: 16px;
+  font-size: var(--text-lg);
 }
 
 .lede {
@@ -305,7 +347,7 @@ textarea {
 
 .status dd {
   margin: 0;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .auth-form {
@@ -316,19 +358,20 @@ textarea {
 .auth-form label {
   margin-top: 8px;
   color: var(--fg-2);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .auth-form input {
   height: 44px;
   padding: 0 14px;
   background: var(--field);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-lg);
 }
 
 .auth-form input:focus {
-  border-color: var(--faint);
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
   outline: none;
 }
 
@@ -381,8 +424,8 @@ textarea {
 
 .brand {
   color: var(--fg);
-  font-size: 20px;
-  font-weight: 600;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
   letter-spacing: -0.02em;
   text-decoration: none;
 }
@@ -393,9 +436,9 @@ textarea {
   gap: 10px;
   height: 36px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--fg);
-  font-size: 14.5px;
+  font-size: var(--text-base);
   text-decoration: none;
 }
 
@@ -414,7 +457,7 @@ button.nav-row {
   width: 100%;
   background: transparent;
   font: inherit;
-  font-size: 14.5px;
+  font-size: var(--text-base);
   text-align: left;
 }
 
@@ -426,18 +469,22 @@ button.nav-row.current {
 .section-label {
   margin: 22px 10px 6px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
+}
+
+/* Pinned and all chats scroll together between the fixed header and account. */
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .chat-list {
-  flex: 1;
-  min-height: 0;
   margin: 0;
   padding: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   list-style: none;
-  scrollbar-width: thin;
 }
 
 .chat-list li {
@@ -464,9 +511,9 @@ button.nav-row.current {
   gap: 6px;
   height: 36px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--fg);
-  font-size: 14.5px;
+  font-size: var(--text-base);
   text-decoration: none;
 }
 
@@ -518,10 +565,10 @@ button.nav-row.current {
   height: 44px;
   margin-top: 10px;
   padding: 0 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--fg);
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 400;
   text-align: left;
 }
@@ -540,8 +587,8 @@ button.nav-row.current {
   border-radius: 50%;
   background: var(--avatar);
   color: var(--on-avatar);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .account-popover {
@@ -552,7 +599,7 @@ button.nav-row.current {
   position: fixed;
   inset: 0;
   z-index: 25;
-  background: rgb(0 0 0 / 0.5);
+  background: var(--scrim);
 }
 
 /* ---- Conversation --------------------------------------------------------------- */
@@ -585,8 +632,8 @@ button.nav-row.current {
 .chat-title {
   min-width: 0;
   margin: 0;
-  font-size: 16px;
-  font-weight: 500;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
 }
 
 .title-trigger {
@@ -597,7 +644,7 @@ button.nav-row.current {
   max-width: min(60vw, 36rem);
   height: 36px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg);
   font: inherit;
@@ -637,9 +684,9 @@ button.nav-row.current {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   width: 100%;
-  max-width: 760px;
+  max-width: var(--column);
   margin: 0 auto;
-  padding: 0 14px;
+  padding: 0 var(--space-4);
   list-style: none;
 }
 
@@ -649,8 +696,8 @@ button.nav-row.current {
 
 .turn {
   min-width: 0;
-  font-size: 15.5px;
-  line-height: 1.65;
+  font-size: var(--text-lg);
+  line-height: var(--leading-prose);
 }
 
 .plain-text {
@@ -670,7 +717,7 @@ button.nav-row.current {
 .bubble {
   max-width: min(560px, 85%);
   padding: 9px 16px;
-  border-radius: 18px;
+  border-radius: var(--radius-3xl);
   background: var(--bubble);
   color: var(--on-bubble);
 }
@@ -736,7 +783,7 @@ button.nav-row.current {
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   background: var(--bubble);
   cursor: zoom-in;
 }
@@ -756,7 +803,7 @@ button.nav-row.current {
   max-width: 320px;
   padding: 10px 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   background: var(--surface);
   color: var(--fg);
   text-decoration: none;
@@ -785,19 +832,19 @@ a.attachment-file:hover {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  line-height: 1.3;
+  line-height: var(--leading-tight);
 }
 
 .attachment-name {
   overflow: hidden;
-  font-size: 14px;
+  font-size: var(--text-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .attachment-meta {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
 }
 
 .attachment-file audio {
@@ -810,8 +857,8 @@ a.attachment-file:hover {
 .turn.search-hit .bubble,
 .turn-assistant.search-hit {
   box-shadow: 0 0 0 2px var(--focus);
-  border-radius: 18px;
-  transition: box-shadow 0.4s ease;
+  border-radius: var(--radius-3xl);
+  transition: box-shadow var(--duration) var(--ease);
 }
 
 /* Queued: waits for the running reply, then sends. */
@@ -827,7 +874,7 @@ a.attachment-file:hover {
   gap: 2px;
   margin-top: 2px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
 }
 
 .queued-meta .icon-btn {
@@ -839,10 +886,10 @@ a.attachment-file:hover {
   display: inline-block;
   margin-bottom: 6px;
   padding: 1px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--hover);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
 }
 
 /* Reasoning: "Thought process ›", collapsed, expands in place. */
@@ -881,7 +928,7 @@ a.attachment-file:hover {
   padding-left: 16px;
   border-left: 2px solid var(--line);
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -907,12 +954,6 @@ a.attachment-file:hover {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .cursor {
-    animation: none;
-  }
-}
-
 .jump-to-latest {
   position: absolute;
   bottom: 96px;
@@ -923,10 +964,10 @@ a.attachment-file:hover {
   gap: 6px;
   padding: 6px 14px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--raised);
   color: var(--fg);
-  font-size: 13.5px;
+  font-size: var(--text-md);
   box-shadow: var(--menu-shadow);
   transform: translateX(-50%);
 }
@@ -943,7 +984,7 @@ a.attachment-file:hover {
 
 .empty-state h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--text-3xl);
 }
 
 .empty-state p {
@@ -995,8 +1036,8 @@ a.attachment-file:hover {
 .markdown h3,
 .markdown h4 {
   margin: 22px 0 10px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
 }
 
 .markdown h1 {
@@ -1031,7 +1072,7 @@ a.attachment-file:hover {
 
 .markdown :not(pre) > code {
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--hover);
   font-family: var(--mono);
   font-size: 0.9em;
@@ -1042,7 +1083,7 @@ a.attachment-file:hover {
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: 14.5px;
+  font-size: var(--text-base);
 }
 
 .markdown th,
@@ -1055,13 +1096,13 @@ a.attachment-file:hover {
 
 .markdown th {
   background: var(--hover);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .code-block {
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--code);
 }
 
@@ -1073,7 +1114,7 @@ a.attachment-file:hover {
   padding: 0 4px 0 14px;
   border-bottom: 1px solid var(--line);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
 }
 
 .code-toolbar .icon-btn {
@@ -1114,7 +1155,7 @@ a.attachment-file:hover {
   padding: 14px;
   overflow-x: auto;
   font-family: var(--mono);
-  font-size: 13.5px;
+  font-size: var(--text-md);
   line-height: 1.55;
 }
 
@@ -1129,7 +1170,7 @@ a.attachment-file:hover {
   position: relative;
   flex: none;
   width: 100%;
-  max-width: 792px;
+  max-width: calc(var(--column) + 2 * var(--space-4));
   margin: 0 auto;
   padding: 0 16px 20px;
 }
@@ -1155,12 +1196,13 @@ a.attachment-file:hover {
   min-height: 56px;
   padding: 10px 10px 10px 10px;
   background: var(--field);
-  border: 1px solid var(--line);
-  border-radius: 28px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-composer);
 }
 
 .composer-box:focus-within {
-  border-color: var(--faint);
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
 }
 
 /* "+": attach files (Phase 12). The picker opens only from this button. */
@@ -1185,7 +1227,7 @@ a.attachment-file:hover {
   padding: 4px 0;
   border: 0;
   background: transparent;
-  font-size: 16px;
+  font-size: var(--text-lg);
   line-height: 1.5;
   resize: none;
   field-sizing: content;
@@ -1220,10 +1262,10 @@ a.attachment-file:hover {
   height: 34px;
   padding: 0 28px 0 10px;
   border: 0;
-  border-radius: 17px;
+  border-radius: var(--radius-pill);
   background-color: transparent;
   color: var(--fg-2);
-  font-size: 14.5px;
+  font-size: var(--text-base);
   text-overflow: ellipsis;
   field-sizing: content;
   appearance: none;
@@ -1278,7 +1320,7 @@ a.attachment-file:hover {
   padding: 6px;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--raised);
   box-shadow: var(--menu-shadow);
 }
@@ -1289,7 +1331,7 @@ a.attachment-file:hover {
   justify-content: space-between;
   gap: 16px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
@@ -1300,18 +1342,18 @@ a.attachment-file:hover {
 .command-group {
   margin: 6px 10px 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .command-name {
   color: var(--fg);
-  font-size: 14.5px;
+  font-size: var(--text-base);
 }
 
 .command-description {
   overflow: hidden;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1332,8 +1374,8 @@ a.attachment-file:hover {
 
 .greeting {
   margin: 0;
-  font-size: 28px;
-  font-weight: 500;
+  font-size: var(--text-4xl);
+  font-weight: var(--weight-medium);
   letter-spacing: -0.01em;
   text-align: center;
 }
@@ -1344,7 +1386,7 @@ a.attachment-file:hover {
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgb(0 0 0 / 0.45);
+  background: var(--scrim);
   backdrop-filter: blur(6px);
 }
 
@@ -1358,7 +1400,7 @@ a.attachment-file:hover {
   padding: 24px;
   overflow-y: auto;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   background: var(--raised);
   color: var(--fg);
   box-shadow: var(--menu-shadow);
@@ -1371,8 +1413,8 @@ a.attachment-file:hover {
 
 .dialog-title {
   margin: 0 0 10px;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
 }
 
 .dialog-description {
@@ -1403,8 +1445,8 @@ button.danger-outline {
   width: 100%;
   height: 42px;
   padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-lg);
   background: var(--field);
 }
 
@@ -1415,7 +1457,8 @@ button.danger-outline {
 }
 
 .text-input:focus {
-  border-color: var(--faint);
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
   outline: none;
 }
 
@@ -1470,7 +1513,7 @@ button.danger-outline {
 
 .settings-body h2 {
   margin: 0 0 var(--space-5);
-  font-size: 18px;
+  font-size: var(--text-xl);
 }
 
 /* Rows (after Qwen): label over a muted description, control on the right,
@@ -1502,13 +1545,13 @@ button.danger-outline {
 
 .settings-label {
   margin: 0;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .settings-hint {
   margin: var(--space-1) 0 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-md);
   line-height: 1.55;
 }
 
@@ -1521,7 +1564,7 @@ button.danger-outline {
 .settings-body > [data-testid$="-empty"] {
   margin: 0;
   padding: var(--space-5) var(--space-6);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--hover);
   color: var(--fg-2);
 }
@@ -1531,9 +1574,9 @@ button.danger-outline {
   align-items: center;
   height: 36px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--fg);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   text-decoration: none;
 }
 
@@ -1548,8 +1591,8 @@ button.danger-outline {
 .page .feature-group-title,
 .feature-group-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
 }
 
 .feature-list {
@@ -1594,11 +1637,11 @@ input[type="checkbox"].toggle {
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 999px;
-  background: var(--send-off);
+  border-radius: var(--radius-pill);
+  background: var(--field-line);
   cursor: pointer;
   appearance: none;
-  transition: background-color 120ms ease;
+  transition: background-color var(--duration-fast) var(--ease);
 }
 
 input[type="checkbox"].toggle::before {
@@ -1610,8 +1653,8 @@ input[type="checkbox"].toggle::before {
   height: 18px;
   border-radius: 50%;
   background: var(--canvas);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
-  transition: transform 120ms ease;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--duration-fast) var(--ease);
 }
 
 input[type="checkbox"].toggle:checked {
@@ -1632,13 +1675,6 @@ input[type="checkbox"].toggle:disabled {
   opacity: 0.5;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  input[type="checkbox"].toggle,
-  input[type="checkbox"].toggle::before {
-    transition: none;
-  }
-}
-
 /* ---- Public home page: the sign-in action first, server status subdued ------- */
 
 .home-primary .button-link {
@@ -1649,13 +1685,13 @@ input[type="checkbox"].toggle:disabled {
 
 .page .home-status-heading {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .home-status {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .home-status dd {
@@ -1675,7 +1711,7 @@ input[type="checkbox"].toggle:disabled {
 .sidebar-note {
   margin: 4px 10px;
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: var(--text-md);
 }
 
 .sidebar-note p {
@@ -1683,7 +1719,7 @@ input[type="checkbox"].toggle:disabled {
 }
 
 .placeholder {
-  max-width: 760px;
+  max-width: var(--column);
   margin: 24px auto;
   padding: 0 14px;
   color: var(--muted);
@@ -1692,6 +1728,74 @@ input[type="checkbox"].toggle:disabled {
 
 .placeholder p {
   margin: 0 0 8px;
+}
+
+/* Skeletons (Phase 18): grey shapes the size of what they stand in for, so
+   nothing moves when the content arrives. A slow pulse, off under reduced motion. */
+.skeleton {
+  display: block;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--active);
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.skeleton-list {
+  display: grid;
+  gap: 2px;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 10px;
+}
+
+.skeleton-row:nth-child(2) .skeleton {
+  width: 72%;
+}
+
+.skeleton-row:nth-child(3) .skeleton {
+  width: 54%;
+}
+
+.skeleton-row:nth-child(4) .skeleton {
+  width: 64%;
+}
+
+.skeleton-row:nth-child(5) .skeleton {
+  width: 46%;
+}
+
+/* Spinner: a thin ring, centered in the area that is loading. */
+.spinner-wrap {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 100%;
+  padding: var(--space-8) 0;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--line);
+  border-top-color: var(--muted);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .section-error {
@@ -1725,7 +1829,7 @@ input[type="checkbox"].toggle:disabled {
   gap: 4px 10px;
   margin: 0 0 8px;
   color: var(--fg-2);
-  font-size: 13.5px;
+  font-size: var(--text-md);
 }
 
 /* Optimistic sends: shown at once, marked while in flight or unknown. */
@@ -1744,7 +1848,7 @@ input[type="checkbox"].toggle:disabled {
   gap: 6px;
   max-width: min(560px, 85%);
   margin-top: 8px;
-  font-size: 14px;
+  font-size: var(--text-md);
   text-align: right;
 }
 
@@ -1765,20 +1869,20 @@ input[type="checkbox"].toggle:disabled {
 
 .pending-buttons button {
   padding: 6px 12px;
-  font-size: 13.5px;
+  font-size: var(--text-md);
 }
 
 .form-error {
   margin: 4px 0 0;
   color: var(--danger);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .secondary-link {
   align-self: center;
   margin-right: auto;
   color: var(--fg-2);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 /* ---- Responsive layout and touch (Phase 11) ---------------------------------- */
@@ -1808,7 +1912,7 @@ input[type="checkbox"].toggle:disabled {
 
 /* Nested scrollers keep their scroll: no chaining into the page. */
 .sidebar,
-.chat-list,
+.sidebar-scroll,
 .drawer-content,
 .dialog-content {
   overscroll-behavior: contain;
@@ -1889,7 +1993,7 @@ input[type="checkbox"].toggle:disabled {
   }
 
   .greeting {
-    font-size: 23px;
+    font-size: var(--text-3xl);
   }
 
   .jump-to-latest {
@@ -1908,7 +2012,7 @@ input[type="checkbox"].toggle:disabled {
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
-    border-radius: 16px 16px 0 0;
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
     padding-bottom: max(20px, env(safe-area-inset-bottom));
     transform: none;
   }
@@ -1960,7 +2064,7 @@ input[type="checkbox"].toggle:disabled {
   gap: 8px;
   max-width: 100%;
   padding: 8px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: transparent;
   color: var(--fg);
   box-shadow: inset 0 0 0 1px var(--line);
@@ -1976,12 +2080,12 @@ input[type="checkbox"].toggle:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .artifact-card-meta {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   white-space: nowrap;
 }
 
@@ -1989,7 +2093,7 @@ input[type="checkbox"].toggle:disabled {
 .memory-previews {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 /* Touch targets: at least 44x44 CSS px on narrow screens and coarse pointers. */

@@ -1,0 +1,65 @@
+## Phase 18 report
+
+Part 1 (`ac5209c`) covered the spacing scale, top-bar alignment and switches at the owner's request. This report covers the whole phase.
+
+- **Scope completed:**
+  - **Design tokens** (`app/app.css` `:root`):
+    - Colour: every colour token is `light-dark(light, dark)`, resolved by `color-scheme`. A theme swaps token values only; no component has its own colour-scheme media query (the syntax palette was converted too).
+    - Scales: type, leading, weights, spacing, radius, shadow and motion. Every font size, radius and weight in the app stylesheets now comes from a scale (`tests/client/design-system.test.ts` enforces it).
+    - Reading measure: `--measure: 72ch`. The transcript column and the composer share `--column`, which is narrower than the previous fixed 760 px.
+  - **Saved theme before first paint:**
+    - Settings → Account → Theme offers System, Light and Dark. The choice is a presentation hint kept in the `chatui_theme` cookie.
+    - The root loader renders it as `<html data-theme>` with the matching `color-scheme` meta. The first HTML is correct with JavaScript off, with no inline script and no CSP change.
+  - **Contrast (WCAG 2.2 AA, both themes):**
+    - Text tokens are ≥ 4.5:1 on every surface and on hover/selected fills.
+    - Fields, focus indicators, primary buttons and both switch states are ≥ 3:1.
+    - Fixes the computed check found:
+      - `--muted` and `--danger` were 4.15–4.49:1 on selected rows. They are now `#636363`/`#b0b0b0` and `#b8271a`/`#f49b93`.
+      - Field borders used the decorative `--line` (1.3:1). They now use the new `--field-line` (≥ 3.2:1).
+      - The switch's off track was 1.4:1. It now uses `--field-line`.
+      - Field focus was a border colour change only. It is now a 2 px `--field-focus` frame.
+  - **Streaming announcements:**
+    - There is one polite `role="status"` region in the app shell (`app/lib/announcer.tsx`). It announces "Assistant is responding" once, then "Response complete / cancelled / failed", never tokens, focus moves or scroll changes.
+    - A first version lived in the conversation view. The browser test showed the region being replaced when `/chat/new` became `/chat/:id` mid-reply, which loses the final announcement, so it moved to the shell.
+  - **Motion:** one global `prefers-reduced-motion` rule zeroes every animation and transition (and smooth scrolling). Transitions use the motion tokens.
+  - **States:**
+    - The sidebar shows skeleton rows the size of real ones while conversations load (CSS-only widths; no inline styles under the CSP).
+    - A conversation that is loading, and Settings sections loading their code, show a small centered spinner (`Spinner.tsx`, after ChatGPT, at the owner's request).
+    - Each keeps its "Loading…" text visually hidden for screen readers. Under reduced motion the spinner stays still.
+  - **Icons:** one Lucide scale (14/16/18/20) with the default stroke. Stray sizes (13, 15, 22) and custom strokes were removed.
+- **Functional defects found by visual work:**
+  - **Sidebar layout:**
+    - Before: with pinned chats, each list stretched (`flex: 1`), leaving a large gap between Pinned and All chats.
+    - Now: one `.sidebar-scroll` region scrolls between the fixed header (brand, New chat, Search) and the account button.
+    - The owner reported it from a live instance; the fix keeps every role and name.
+  - **Settings opened over `/chat/new`:** the background view requested `/api/conversations/new` (HTTP 400, console errors). `new` is now treated as the draft.
+- **Budget raised** (`performance-budget.json`, as the Phase 9 rules require):
+  - `critical-css` goes from 5,724 B to 6,630 B gzip. Part 1 had already used most of the 10% tolerance (6,121 B).
+  - Phase 18 adds about 510 B: the token scales; `light-dark()` colours with field, focus and switch contrast tokens; the reduced-motion rule; skeleton and spinner styles; and the sidebar scroll region.
+  - Lowering `light-dark()` for Vite's default browser targets costs only 74 B of that, and keeps Safari 16.4–17.4 themed, so it stays.
+  - No JS budget changed.
+- **Selector-only test updates** (roles and names unchanged):
+  - `tests/e2e/a11y.spec.ts`: the admin scan is now one test per scheme.
+  - Nothing else changed. `conversations-loading` and `transcript-loading` keep their test ids.
+- **Checks:**
+  - **Axe (WCAG 2.2 A/AA):** every surface in both schemes (`a11y.spec.ts`), now including the admin panel in dark. A saved theme resolves to the same tokens as the matching system scheme.
+  - **Keyboard-only walkthrough:** login → chat (Enter sends) → attachment through the "+" button and file chooser → account menu → Administration. Every Tab stop on the chat surface and in Administration has a visible indicator (`visual.spec.ts`).
+  - **Theme bootstrap:** all four saved/system combinations render the right canvas with JavaScript disabled, under the production CSP (`script-src 'self' 'nonce-…'`, no `unsafe-inline`). A change applies at once and survives reload, with no console or hydration errors.
+  - **CLS:** < 0.1 on a cold 200-message load, and < 0.1 added while a reply streams.
+  - **Fonts:** no font request on cold loads of `/chat/new` and a 200-message chat.
+  - **Reduced motion:** every computed animation and transition duration ≤ 1 ms while a reply streams.
+  - **Responsive:** no horizontal page overflow at 320, 390, 768, 1024 and 1440 px on wide-content, math/code, long and Settings views. The Phase 11 mobile spec still passes.
+  - **Sidebar:** the header and the account button keep their position while the chat list scrolls, and no list is taller than its rows.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (53 files, 719 tests)
+  - `build`: PASS
+  - `verify`: PASS (94/94)
+  - `test:e2e`: PASS (107/107, 7.9 min, no retries)
+  - `perf:check`: PASS (critical CSS 6,630 B against the updated budget; JS budgets unchanged)
+  - The first unit run on this freshly provisioned machine (6 cores, 7 GB) had two timing failures under full-suite load. These were the INV-46 linear-parse timing test and the INV-62 slow-observer test; both pass alone and in the later full runs.
+- **Limitations / unverified:**
+  - **Screen reader:** none is available on this machine (no Orca/NVDA/VoiceOver, and no root to install one). The live region was verified structurally instead: one region, `aria-live="polite"`, `aria-atomic`, exact text sequence and no focus change. A real screen-reader pass is still owed.
+  - **Engines:** only Chromium was run.
+  - The narrower reading column (72ch) is a visible layout change the owner may want to tune; it is one token (`--measure`).
+- **Commit/tag:** `style(phase-18): visual language, typography, accessibility, focus states` on `main`, tag `phase-18`, pushed to `origin`.

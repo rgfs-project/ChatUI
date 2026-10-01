@@ -24,7 +24,7 @@
   border-radius: 0;
   background: none;
   color: var(--muted);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .admin-tabs [role="tab"]:hover {
@@ -46,7 +46,7 @@
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .admin-table th,
@@ -59,8 +59,8 @@
 
 .admin-table th {
   color: var(--muted);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .admin-form {
@@ -75,7 +75,7 @@
   display: grid;
   gap: 4px;
   color: var(--fg-2);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .admin-form input,
@@ -84,8 +84,8 @@
 .admin-table select {
   min-height: 36px;
   padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-md);
   background: var(--field);
   color: var(--fg);
   font: inherit;
@@ -94,7 +94,8 @@
 .admin-form input:focus,
 .admin-form select:focus,
 .admin-form textarea:focus {
-  border-color: var(--faint);
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
   outline: none;
 }
 
@@ -102,7 +103,7 @@
 .admin-actions button,
 .admin-table button {
   padding: 6px 12px;
-  font-size: 13.5px;
+  font-size: var(--text-md);
 }
 
 .admin-actions {
@@ -123,7 +124,7 @@ td.admin-actions > * + * {
 
 .admin-note {
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: var(--text-md);
 }
 
 .admin-tabs button.danger {
@@ -141,7 +142,7 @@ td.admin-actions > * + * {
   margin: 0;
   padding: 12px 14px 14px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
 }
 
 .admin-fieldset legend {
@@ -159,6 +160,6 @@ td.admin-actions > * + * {
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--line);
   color: var(--fg);
-  font-size: 14.5px;
+  font-size: var(--text-base);
   cursor: pointer;
 }

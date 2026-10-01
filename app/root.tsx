@@ -6,8 +6,10 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
   type LinksFunction,
 } from "react-router";
+import { themeFromCookieHeader, type Theme } from "@shared/theme";
 import type { Route } from "./+types/root";
 import { appContext } from "./context";
 import { setSession } from "./lib/api";
@@ -20,14 +22,22 @@ export const links: LinksFunction = () => [
 ];
 
 /** Browser-safe session bootstrap, rendered into private no-store HTML (§5). */
-export function loader({ context }: Route.LoaderArgs) {
+export function loader({ context, request }: Route.LoaderArgs) {
   const { services, auth } = context.get(appContext);
-  return { session: services.auth.sessionDto(auth) };
+  return {
+    session: services.auth.sessionDto(auth),
+    // Presentation hint (Phase 18): rendered into <html> so the first paint is
+    // already in the saved theme, with no bootstrap script.
+    theme: themeFromCookieHeader(request.headers.get("cookie")),
+  };
 }
 
 export function Layout({ children }: { children: ReactNode }) {
+  // Undefined when the root loader itself failed: the system theme then.
+  const theme: Theme = useRouteLoaderData<typeof loader>("root")?.theme ?? "system";
   return (
-    <html lang="en">
+    // "system" leaves the attribute off, so CSS follows prefers-color-scheme.
+    <html lang="en" data-theme={theme === "system" ? undefined : theme}>
       <head>
         <meta charSet="utf-8" />
         {/* resizes-content: the on-screen keyboard shrinks the layout viewport (and so
@@ -37,7 +47,7 @@ export function Layout({ children }: { children: ReactNode }) {
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
         />
-        <meta name="color-scheme" content="light dark" />
+        <meta name="color-scheme" content={theme === "system" ? "light dark" : theme} />
         <Meta />
         {/* Stylesheets need no nonce (style-src 'self'). An explicit empty nonce keeps
             server and client markup identical: browsers hide nonce values from the

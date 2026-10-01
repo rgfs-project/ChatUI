@@ -85,7 +85,7 @@ export function AttachmentTray({
               }}
             >
               <span className="tray-x" aria-hidden>
-                <X size={14} strokeWidth={2.5} />
+                <X size={14} />
               </span>
             </button>
           </li>

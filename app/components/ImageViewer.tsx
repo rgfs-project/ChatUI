@@ -129,7 +129,7 @@ export function ImageViewer({
                   go(-1);
                 }}
               >
-                <ChevronLeft size={22} aria-hidden />
+                <ChevronLeft size={20} aria-hidden />
               </button>
               <button
                 type="button"
@@ -139,7 +139,7 @@ export function ImageViewer({
                   go(1);
                 }}
               >
-                <ChevronRight size={22} aria-hidden />
+                <ChevronRight size={20} aria-hidden />
               </button>
             </>
           ) : null}

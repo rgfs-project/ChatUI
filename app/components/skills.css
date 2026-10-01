@@ -25,14 +25,15 @@
   gap: 8px;
   height: 38px;
   padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-lg);
   background: var(--field);
   color: var(--muted);
 }
 
 .skills-search:focus-within {
-  border-color: var(--faint);
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
 }
 
 .skills-search input {
@@ -48,13 +49,13 @@
 
 .skills-empty {
   padding: var(--space-5) var(--space-6);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--hover);
 }
 
 .skills-empty h3 {
   margin: 0 0 var(--space-2);
-  font-size: 16px;
+  font-size: var(--text-lg);
 }
 
 .skills-empty p {
@@ -100,7 +101,7 @@
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--hover);
   color: var(--fg-2);
 }
@@ -111,13 +112,13 @@
 }
 
 .skill-name {
-  font-weight: 500;
+  font-weight: var(--weight-medium);
 }
 
 .skill-description {
   overflow: hidden;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -129,7 +130,7 @@
   width: 40px;
   height: 22px;
   padding: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--send-off);
 }
 
@@ -145,7 +146,7 @@
   height: 16px;
   border-radius: 50%;
   background: var(--surface);
-  transition: transform 0.12s ease;
+  transition: transform var(--duration-fast) var(--ease);
 }
 
 .switch[aria-checked="true"] .switch-thumb {
@@ -176,41 +177,43 @@
 .skill-form label {
   margin-top: 10px;
   color: var(--fg-2);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .skill-form input:not([type="checkbox"]),
 .skill-form textarea {
   padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-lg);
   background: var(--field);
   color: var(--fg);
 }
 
 .skill-form textarea {
   font-family: var(--mono);
-  font-size: 13.5px;
+  font-size: var(--text-md);
   line-height: 1.55;
   resize: vertical;
 }
 
 .skill-form input:focus,
 .skill-form textarea:focus {
-  border-color: var(--faint);
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
   outline: none;
 }
 
 .skill-name-field {
   display: flex;
   align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-lg);
   background: var(--field);
 }
 
 .skill-name-field:focus-within {
-  border-color: var(--faint);
+  border-color: var(--field-focus);
+  box-shadow: 0 0 0 1px var(--field-focus);
 }
 
 .skill-name-field span {
@@ -237,7 +240,7 @@
 .settings-body kbd,
 .settings-body code {
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--hover);
   font-family: var(--mono);
   font-size: 0.9em;

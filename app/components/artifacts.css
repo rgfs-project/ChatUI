@@ -22,8 +22,8 @@
 
 .artifact-name {
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -32,7 +32,7 @@
 .artifact-meta {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .artifact-panel-actions {
@@ -54,7 +54,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--code);
 }
 
@@ -62,7 +62,7 @@
   margin: 0;
   padding: 12px;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   white-space: pre;
   tab-size: 4;
@@ -95,7 +95,7 @@
   gap: 8px 12px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
 }
 
 .artifact-row-text {
@@ -105,14 +105,14 @@
 
 .artifact-row-name {
   margin: 0;
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   overflow-wrap: anywhere;
 }
 
 .artifact-row-meta {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .artifact-row-actions {

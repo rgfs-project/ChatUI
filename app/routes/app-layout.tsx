@@ -16,6 +16,7 @@ import { useAuth } from "../lib/auth-store";
 import { documentPathOf, paths, type OverlayState } from "../lib/paths";
 import { getQueryClient, queryKeys } from "../lib/query";
 import { prefetchForRequest } from "../lib/server-query";
+import { LiveAnnouncer } from "../lib/announcer";
 import { ShellProvider } from "../lib/shell-context";
 import { SidebarProvider } from "../lib/sidebar-context";
 import { useAccountBoundary } from "../lib/use-account-boundary";
@@ -120,9 +121,11 @@ function Shell({ loaderData }: Route.ComponentProps) {
   const auth = useAuth();
   const overlay = matches.some((m) => /routes\/(settings|admin)$/.test(m.id));
   const background = (location.state as OverlayState | null)?.background;
-  const backgroundId = background?.startsWith("/chat/")
+  // `/chat/new` is the empty draft, not a conversation id (fetching it 400s).
+  const backgroundSegment = background?.startsWith("/chat/")
     ? decodeURIComponent(background.slice(6))
     : undefined;
+  const backgroundId = backgroundSegment === "new" ? undefined : backgroundSegment;
   // The account the tab belongs to (kept through an expiry). Shell state
   // (drafts, model choices, queue) is scoped to it: another account remounts it.
   const account = auth.expired?.userId ?? auth.session?.user?.id ?? loaderData.user.id;
@@ -216,6 +219,8 @@ function Shell({ loaderData }: Route.ComponentProps) {
                     )}
                   </SectionBoundary>
                 </div>
+                {/* Outside the inert area, so it keeps speaking under the drawer. */}
+                <LiveAnnouncer />
               </>
             ) : (
               <SignedOutShell
