@@ -86,7 +86,7 @@ test.describe("Settings → Memories", () => {
 
   test("create, edit and delete a memory", async ({ page }) => {
     await openMemories(page);
-    await page.getByRole("button", { name: "Add" }).click();
+    await page.getByRole("button", { name: /^Add a memory$/ }).click();
     await page.getByLabel("Name").fill("Editor");
     await page.getByLabel("Note").fill("Uses Vim");
     await page.getByRole("button", { name: "Save" }).click();

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, ScrollText, Search } from "lucide-react";
+import { ArrowLeft, ScrollText, Search } from "lucide-react";
 import "./skills.css";
 import { useState, type SyntheticEvent } from "react";
 import { SKILL_LIMITS, type SkillDto } from "@shared/skills";
@@ -120,16 +120,6 @@ function SkillList(props: {
             }}
           />
         </label>
-        {props.skills?.length === 0 ? null : (
-          <button
-            type="button"
-            onClick={() => {
-              props.onOpen(null);
-            }}
-          >
-            <Plus size={16} aria-hidden /> Add
-          </button>
-        )}
       </div>
       {props.loading ? (
         <p className="settings-hint">Loading skills…</p>
@@ -157,38 +147,49 @@ function SkillList(props: {
           </button>
         </div>
       ) : (
-        <ul className="skills-list" aria-label="Your skills">
-          {shown.map((skill) => (
-            <li key={skill.id}>
-              <button
-                type="button"
-                className="skill-row"
-                onClick={() => {
-                  props.onOpen(skill.id);
-                }}
-              >
-                <span className="skill-icon" aria-hidden>
-                  <ScrollText size={18} />
-                </span>
-                <span className="skill-text">
-                  <span className="skill-name">/{skill.name}</span>
-                  <span className="skill-description">
-                    {skill.description || skill.instructions}
+        <>
+          <ul className="skills-list" aria-label="Your skills">
+            {shown.map((skill) => (
+              <li key={skill.id}>
+                <button
+                  type="button"
+                  className="skill-row"
+                  onClick={() => {
+                    props.onOpen(skill.id);
+                  }}
+                >
+                  <span className="skill-icon" aria-hidden>
+                    <ScrollText size={18} />
                   </span>
-                </span>
-              </button>
-              <Switch
-                checked={skill.enabled}
-                label={`Enable ${skill.name}`}
-                disabled={save.isPending}
-                onChange={(enabled) => {
-                  save.mutate({ id: skill.id, body: { enabled } });
-                }}
-              />
-            </li>
-          ))}
-          {shown.length === 0 ? <li className="settings-hint">No skills match.</li> : null}
-        </ul>
+                  <span className="skill-text">
+                    <span className="skill-name">/{skill.name}</span>
+                    <span className="skill-description">
+                      {skill.description || skill.instructions}
+                    </span>
+                  </span>
+                </button>
+                <Switch
+                  checked={skill.enabled}
+                  label={`Enable ${skill.name}`}
+                  disabled={save.isPending}
+                  onChange={(enabled) => {
+                    save.mutate({ id: skill.id, body: { enabled } });
+                  }}
+                />
+              </li>
+            ))}
+            {shown.length === 0 ? <li className="settings-hint">No skills match.</li> : null}
+          </ul>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              props.onOpen(null);
+            }}
+          >
+            Add a skill
+          </button>
+        </>
       )}
     </section>
   );
