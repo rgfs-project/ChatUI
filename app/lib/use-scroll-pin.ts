@@ -11,6 +11,9 @@ import {
 /** Distance from the bottom (px) that still counts as "pinned". */
 export const PIN_THRESHOLD = 48;
 
+/** "Jump to latest" appears once the user is this far from the bottom. */
+export const JUMP_DISTANCE = 200;
+
 /** Keys that scroll a focused region towards older content. */
 const UP_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
 
@@ -26,13 +29,20 @@ export function useScrollPin<T extends HTMLElement>(contentVersion: unknown) {
   const ref = useRef<T>(null);
   const pinned = useRef(true);
   const lastTop = useRef(0);
-  const [unpinnedWithNew, setUnpinnedWithNew] = useState(false);
+  // Unpinned and well away from the bottom: offer "jump to latest", whether
+  // or not anything new has arrived (owner's request, after ChatGPT).
+  const [away, setAway] = useState(false);
+  const updateAway = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setAway(!pinned.current && el.scrollHeight - el.scrollTop - el.clientHeight > JUMP_DISTANCE);
+  }, []);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = ref.current;
     if (!el) return;
     pinned.current = true;
-    setUnpinnedWithNew(false);
+    setAway(false);
     el.scrollTo({ top: el.scrollHeight, behavior });
     lastTop.current = el.scrollTop;
   }, []);
@@ -50,12 +60,12 @@ export function useScrollPin<T extends HTMLElement>(contentVersion: unknown) {
     const distance = el.scrollHeight - top - el.clientHeight;
     if (distance <= PIN_THRESHOLD) {
       pinned.current = true;
-      setUnpinnedWithNew(false);
     } else if (top < lastTop.current) {
       pinned.current = false;
     }
     lastTop.current = top;
-  }, []);
+    updateAway();
+  }, [updateAway]);
 
   const onWheel = useCallback(
     (event: WheelEvent) => {
@@ -89,20 +99,23 @@ export function useScrollPin<T extends HTMLElement>(contentVersion: unknown) {
     };
   }, []);
 
-  // Content changed: follow it if pinned, otherwise offer "jump to latest".
+  // Content changed: follow it if pinned, otherwise re-check "jump to latest".
   // A layout effect, so the new content is never painted before we follow it.
   useLayoutEffect(() => {
     if (pinned.current) scrollToBottom();
-    else setUnpinnedWithNew(true);
-  }, [contentVersion, scrollToBottom]);
+    else updateAway();
+  }, [contentVersion, scrollToBottom, updateAway]);
 
   return {
     ref,
     /** Spread onto the scroll container. */
     handlers: { onScroll, onWheel, onKeyDown, onTouchMove: unpin },
-    showJump: unpinnedWithNew,
+    showJump: away,
+    /** Back to the newest message, pinned again (no animation under reduced motion). */
     jumpToLatest: () => {
-      scrollToBottom("smooth");
+      const reduced =
+        typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      scrollToBottom(reduced ? "auto" : "smooth");
     },
     isPinned: () => pinned.current,
     /** Leaves the bottom to show one element (search result navigation). */

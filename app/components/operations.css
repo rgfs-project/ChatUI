@@ -22,7 +22,6 @@
 
 .search-field:focus-within {
   border-color: var(--field-focus);
-  box-shadow: 0 0 0 1px var(--field-focus);
 }
 
 .search-input {

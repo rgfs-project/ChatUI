@@ -83,7 +83,8 @@
   --line: light-dark(#e3e3e3, #383838);
   /* Form-field and switch boundaries: at least 3:1 (WCAG 1.4.11). */
   --field-line: light-dark(#8a8a8a, #7c7c7c);
-  --field-focus: light-dark(#454545, #cfcfcf);
+  /* Focused fields only darken their border a step (the caret marks focus). */
+  --field-focus: light-dark(#737373, #949494);
   --hover: light-dark(rgb(0 0 0 / 0.05), rgb(255 255 255 / 0.06));
   --active: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
   --bubble: light-dark(#f0f0f0, #303030);
@@ -98,11 +99,16 @@
   --send-off: light-dark(#d6d6d6, #555555);
   --link: light-dark(#1f1f1f, #ececec);
   --danger: light-dark(#b8271a, #f49b93);
-  --focus: light-dark(#6b6b6b, #a3a3a3);
+  /* Keyboard focus rings: light, but still 3:1 against every surface. */
+  --focus: light-dark(#8a8a8a, #8f8f8f);
   --avatar: light-dark(#d4d4d4, #3a3a3a);
   --on-avatar: light-dark(#1f1f1f, #ececec);
   --scrim: rgb(0 0 0 / 0.5);
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.25);
+  /* The composer: a light edge and a soft lift instead of a dark border. */
+  --shadow-composer:
+    0 1px 2px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)),
+    0 6px 20px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.3));
   /* light-dark() takes colours only, so the shadow's colours switch. */
   --menu-shadow:
     0 10px 30px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.45)),
@@ -371,7 +377,6 @@ textarea {
 
 .auth-form input:focus {
   border-color: var(--field-focus);
-  box-shadow: 0 0 0 1px var(--field-focus);
   outline: none;
 }
 
@@ -614,6 +619,13 @@ button.nav-row.current {
   width: 30px;
   height: 30px;
   opacity: 0;
+}
+
+/* The row is already highlighted: the "…" has no box of its own. */
+.chat-list .row-menu:hover,
+.chat-list .row-menu[data-state="open"] {
+  background: transparent;
+  color: var(--fg);
 }
 
 .chat-list li:hover .row-menu,
@@ -1044,22 +1056,34 @@ a.attachment-file:hover {
   }
 }
 
-.jump-to-latest {
-  position: absolute;
-  bottom: 96px;
-  left: 50%;
+/* "Jump to latest": a zero-height anchor stuck to the bottom of the transcript
+   viewport, so the button is centered in the column and always the same
+   distance above the composer, wherever the conversation is scrolled. */
+.jump-anchor {
+  position: sticky;
+  bottom: var(--space-4);
   z-index: 5;
+  display: flex;
+  justify-content: center;
+  height: 0;
+  pointer-events: none;
+}
+
+.jump-to-latest {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
+  height: 36px;
+  padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: var(--raised);
   color: var(--fg);
   font-size: var(--text-md);
   box-shadow: var(--menu-shadow);
-  transform: translateX(-50%);
+  transform: translateY(-100%);
+  pointer-events: auto;
 }
 
 .empty-state {
@@ -1286,13 +1310,13 @@ a.attachment-file:hover {
   min-height: 48px;
   padding: var(--space-2);
   background: var(--field);
-  border: 1px solid var(--field-line);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-composer);
   border-radius: var(--radius-composer);
 }
 
 .composer-box:focus-within {
-  border-color: var(--field-focus);
-  box-shadow: 0 0 0 1px var(--field-focus);
+  border-color: var(--faint);
 }
 
 /* "+": attach files (Phase 12). The picker opens only from this button. */
@@ -1548,7 +1572,6 @@ button.danger-outline {
 
 .text-input:focus {
   border-color: var(--field-focus);
-  box-shadow: 0 0 0 1px var(--field-focus);
   outline: none;
 }
 
@@ -2094,10 +2117,6 @@ input[type="checkbox"].toggle:disabled {
 
   .greeting {
     font-size: var(--text-3xl);
-  }
-
-  .jump-to-latest {
-    bottom: 88px;
   }
 
   /* Dialogs and overlays become bottom sheets: full width, viewport-safe. */

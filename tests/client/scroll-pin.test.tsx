@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PIN_THRESHOLD, useScrollPin } from "../../app/lib/use-scroll-pin";
+import { JUMP_DISTANCE, PIN_THRESHOLD, useScrollPin } from "../../app/lib/use-scroll-pin";
 
 /** jsdom has no layout: drive a fake scroll box by hand. */
 interface Box {
@@ -202,6 +202,22 @@ describe("scroll intent", () => {
     rerender(<Harness version={1} />);
     expect(screen.getByRole("button", { name: "Jump to latest" })).toBeTruthy();
     userScrollTo(800);
+    expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull();
+  });
+
+  it("offers jump to latest once well away from the bottom, even with nothing new", async () => {
+    box.scrollHeight = 2000;
+    render(<Harness version={0} />);
+    await frame();
+    // A short look up (past the pin threshold, not past the jump distance): no button.
+    userScrollTo(1600 - JUMP_DISTANCE + 10);
+    expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull();
+    // Further up: the button appears without any new content.
+    userScrollTo(600);
+    expect(screen.getByRole("button", { name: "Jump to latest" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Jump to latest" }));
+    await frame();
+    expect(box.scrollTop).toBe(1600);
     expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull();
   });
 });

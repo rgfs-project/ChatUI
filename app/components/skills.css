@@ -32,7 +32,6 @@
 
 .skills-search:focus-within {
   border-color: var(--field-focus);
-  box-shadow: 0 0 0 1px var(--field-focus);
 }
 
 .skills-search input {
@@ -198,7 +197,6 @@
 .skill-form input:focus,
 .skill-form textarea:focus {
   border-color: var(--field-focus);
-  box-shadow: 0 0 0 1px var(--field-focus);
   outline: none;
 }
 
@@ -212,7 +210,6 @@
 
 .skill-name-field:focus-within {
   border-color: var(--field-focus);
-  box-shadow: 0 0 0 1px var(--field-focus);
 }
 
 .skill-name-field span {

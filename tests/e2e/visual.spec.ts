@@ -443,12 +443,16 @@ async function focusIsAlwaysVisible(page: Page, stops: number) {
       if (!el || el === document.body) return null;
       const s = getComputedStyle(el);
       const ring = s.outlineStyle !== "none" && parseFloat(s.outlineWidth) >= 1;
+      // Text fields show focus with their caret (owner's request: no frame).
+      const textField = el.matches(
+        'textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="file"])',
+      );
       const shadow = s.boxShadow !== "none";
       // Fields drawn with a parent frame show focus on the frame (composer, search).
       const frame = el.closest(".composer-box, .search-field, .skills-search, .skill-name-field");
       const framed = frame ? getComputedStyle(frame).boxShadow !== "none" : false;
       return {
-        ok: ring || shadow || framed,
+        ok: ring || shadow || framed || textField,
         what: `${el.tagName.toLowerCase()} ${el.getAttribute("aria-label") ?? el.textContent.trim().slice(0, 30)}`,
       };
     });

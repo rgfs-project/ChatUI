@@ -992,17 +992,21 @@ export function ConversationView(props: {
             </button>
           </div>
         ) : null}
+        {showJump ? (
+          // Sticky at the bottom of the transcript: centered in the column, a
+          // fixed distance above the composer however tall it grows.
+          <div className="jump-anchor">
+            <button
+              type="button"
+              className="jump-to-latest"
+              onClick={jumpToLatest}
+              data-testid="jump-to-latest"
+            >
+              <ArrowDown size={16} aria-hidden /> Jump to latest
+            </button>
+          </div>
+        ) : null}
       </div>
-      {showJump ? (
-        <button
-          type="button"
-          className="jump-to-latest"
-          onClick={jumpToLatest}
-          data-testid="jump-to-latest"
-        >
-          <ArrowDown size={16} aria-hidden /> Jump to latest
-        </button>
-      ) : null}
       <Composer
         userId={userId}
         textareaRef={textareaRef}

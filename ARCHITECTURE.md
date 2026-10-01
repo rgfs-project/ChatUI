@@ -1267,6 +1267,15 @@ Lucide icons use one size scale (14 dense toolbars, 16 menus and inline, 18 butt
 - **Top bar:** with the sidebar open or closed, the bar's first item (brand or toggle icon) starts at the sidebar's icon column, every control is centered on the 56 px bar, and the title text sits the same distance after what precedes it (asserted in `visual.spec.ts`).
 - **Timestamps:** `app/lib/time-separators.ts` puts a centered, muted "Tue, Sep 22 at 11:56 PM" before the first message with a stored `time` and wherever a new sitting starts (a pause of an hour or a new day). Only stored times are used (contracts §3: never synthesized). The label is formatted in the viewer's locale and time zone after hydration inside a row the server already renders, so there is no mismatch and no shift.
 
+### Interaction refinements (owner's requests)
+
+- **Composer and actions:** a 48 px pill with 32 px controls, a light edge and a soft shadow (`--shadow-composer`) instead of a dark border; reply/question actions are a gap-free row of 28 px buttons.
+- **Focus:** text fields show focus with the caret and a one-step darker border, never a frame. Other controls keep a light 2 px ring for keyboard focus only (`:focus-visible`; never after a mouse or touch press), still 3:1 against every surface. Containers (the transcript, Settings panes) are not Tab stops: their controls are, and the arrow keys scroll from them. Code blocks and wide equations stay focusable, since they have no controls and must scroll sideways from the keyboard.
+- **Selection:** select-all and drag selection take message text, code and reasoning; the interface around them is `user-select: none`.
+- **Touch targets:** 44 px only for coarse (touch) pointers; a narrow window with a mouse or trackpad keeps the compact controls.
+- **Thought process:** Settings → Account → Show thought process is a presentation cookie (`chatui_reasoning`) rendered as `<html data-reasoning="hidden">`; CSS hides reasoning from the first paint and stored replies are unchanged.
+- **Jump to latest:** shown whenever the user is unpinned and more than `JUMP_DISTANCE` (200 px) from the bottom, new content or not. It sits in a zero-height sticky anchor at the bottom of the transcript, so it is centered in the column and a fixed distance above the composer however tall the composer grows; clicking scrolls smoothly (instantly under reduced motion) and re-pins.
+
 ### Tests
 
 `tests/e2e/visual.spec.ts`: saved theme correct without JavaScript for every theme/system combination under the production CSP; switching applies at once, survives reload, no console errors; the live region's exact announcement sequence, focus unchanged; cancellation announced; CLS < 0.1 on a cold 200-message load and during streaming; no font requests on the chat surface; computed animation/transition durations under reduced motion; no horizontal overflow at 320/390/768/1024/1440 px; the sidebar's fixed header and footer; the keyboard-only walkthrough login → chat → attachments → admin. `tests/e2e/a11y.spec.ts` now scans the admin panel in both schemes too.
