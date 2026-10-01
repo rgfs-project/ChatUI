@@ -120,14 +120,16 @@ function SkillList(props: {
             }}
           />
         </label>
-        <button
-          type="button"
-          onClick={() => {
-            props.onOpen(null);
-          }}
-        >
-          <Plus size={16} aria-hidden /> Add
-        </button>
+        {props.skills?.length === 0 ? null : (
+          <button
+            type="button"
+            onClick={() => {
+              props.onOpen(null);
+            }}
+          >
+            <Plus size={16} aria-hidden /> Add
+          </button>
+        )}
       </div>
       {props.loading ? (
         <p className="settings-hint">Loading skills…</p>

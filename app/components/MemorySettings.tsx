@@ -5,6 +5,7 @@ import { MEMORY_LIMITS, memoryNameProblem, type MemoryDto } from "@shared/memori
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
 import { ConfirmDialog } from "./Dialogs";
 import "./memories.css";
+import "./skills.css";
 
 /**
  * Settings → Customize → Memories (Phase 13b, contracts §12): the notes the
@@ -33,14 +34,16 @@ export default function MemorySettings({ userId }: { userId: string }) {
     <section className="settings-body" aria-labelledby="settings-memories">
       <div className="skills-head">
         <h2 id="settings-memories">Memories</h2>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing({ id: null });
-          }}
-        >
-          <Plus size={16} aria-hidden /> Add
-        </button>
+        {list.data?.memories.length === 0 ? null : (
+          <button
+            type="button"
+            onClick={() => {
+              setEditing({ id: null });
+            }}
+          >
+            <Plus size={16} aria-hidden /> Add
+          </button>
+        )}
       </div>
       <p className="settings-hint">
         Notes you approved for the assistant to remember in every chat. The assistant can suggest
@@ -56,9 +59,18 @@ export default function MemorySettings({ userId }: { userId: string }) {
           </button>
         </p>
       ) : list.data.memories.length === 0 ? (
-        <p className="settings-hint" data-testid="memories-empty">
-          No memories yet.
-        </p>
+        <div className="skills-empty" data-testid="memories-empty">
+          <h3>Add your first memory</h3>
+          <p>No memories yet. Add a note and the assistant will remember it in every chat.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setEditing({ id: null });
+            }}
+          >
+            Add a memory
+          </button>
+        </div>
       ) : (
         <>
           {omitted.size > 0 ? (
