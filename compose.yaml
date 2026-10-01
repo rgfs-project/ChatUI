@@ -19,6 +19,10 @@ services:
       # Set this when HOST_PORT is not 3000 or when serving through a TLS proxy.
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
       TRUST_PROXY: ${TRUST_PROXY:-0}
+      # Reply cap per generation. Reasoning models spend it on thinking too, so
+      # raise it (e.g. 16384) when replies stop mid-thought. Must stay well below
+      # the model's context size.
+      MAX_OUTPUT_TOKENS: ${MAX_OUTPUT_TOKENS:-4096}
       REGISTRATION_MODE: ${REGISTRATION_MODE:-closed}
       # llama.cpp server as seen from INSIDE the container (not localhost):
       # a LAN address, host.containers.internal (Podman), or host.docker.internal
