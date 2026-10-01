@@ -336,8 +336,9 @@ describe("sessions (contracts §6)", () => {
 });
 
 describe("registration", () => {
-  it("is closed by default", async () => {
+  it("is closed by default once an account exists", async () => {
     const run = await start();
+    await signIn(run.base, run.chatui);
     const res = await call(run, "POST", "/api/auth/register", {
       body: { username: "zed", password: TEST_PASSWORD },
       headers: { Origin: TEST_ORIGIN },
@@ -359,8 +360,42 @@ describe("registration", () => {
     expect(results.filter((r) => r.status === 201)).toHaveLength(1);
     expect(results.filter((r) => r.status === 409)).toHaveLength(4);
     const created = results.find((r) => r.status === 201);
-    expect(created?.body.user).toMatchObject({ username: "zed", role: "user" });
+    // The first account on an empty instance is the admin.
+    expect(created?.body.user).toMatchObject({ username: "zed", role: "admin" });
     expect(created?.headers.get("set-cookie")).toMatch(/chatui_session=/);
+  });
+
+  it("first run: the first registration creates the admin, then registration is closed", async () => {
+    const run = await start();
+    const register = (username: string) =>
+      call(run, "POST", "/api/auth/register", {
+        body: { username, password: TEST_PASSWORD },
+        headers: { Origin: TEST_ORIGIN, "X-Forwarded-For": randomUUID() },
+      });
+    const session = await call(run, "GET", "/api/auth/session");
+    expect(session.body.registrationOpen).toBe(true);
+    const first = await register("boss");
+    expect(first.status).toBe(201);
+    expect(first.body.user).toMatchObject({ username: "boss", role: "admin" });
+    const second = await register("late");
+    expect(second.status).toBe(403);
+    expect(second.body.error?.code).toBe("REGISTRATION_CLOSED");
+    const after = await call(run, "GET", "/api/auth/session");
+    expect(after.body.registrationOpen).toBe(false);
+  });
+
+  it("first run: concurrent registrations create exactly one account", async () => {
+    const run = await start();
+    const results = await Promise.all(
+      ["one", "two", "three", "four"].map((username) =>
+        call(run, "POST", "/api/auth/register", {
+          body: { username, password: TEST_PASSWORD },
+          headers: { Origin: TEST_ORIGIN, "X-Forwarded-For": randomUUID() },
+        }),
+      ),
+    );
+    expect(results.filter((r) => r.status === 201)).toHaveLength(1);
+    expect(results.filter((r) => r.status === 403)).toHaveLength(3);
   });
 
   it("rejects invalid usernames and short passwords", async () => {

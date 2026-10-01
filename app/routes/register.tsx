@@ -9,9 +9,10 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Create account · ChatUI" }];
 }
 
-export function loader({ context }: Route.LoaderArgs) {
+export async function loader({ context }: Route.LoaderArgs) {
   const { auth, services } = context.get(appContext);
   if (auth) throw redirect("/chat");
+  await services.auth.refreshFirstRun();
   if (!services.auth.registrationOpen) throw data("Not found", { status: 404 });
   return null;
 }

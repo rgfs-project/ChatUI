@@ -9,10 +9,11 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Sign in · ChatUI" }];
 }
 
-export function loader({ context, request }: Route.LoaderArgs) {
+export async function loader({ context, request }: Route.LoaderArgs) {
   const { auth, services } = context.get(appContext);
   const returnTo = safeReturnTo(new URL(request.url).searchParams.get("returnTo"));
   if (auth) throw redirect(returnTo);
+  await services.auth.refreshFirstRun();
   return { registrationOpen: services.auth.registrationOpen };
 }
 

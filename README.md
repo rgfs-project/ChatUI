@@ -55,7 +55,7 @@ To reach a llama.cpp server from the container, set `LLAMA_BASE_URL` (and `LLAMA
 
 ## First admin and signing in
 
-Accounts are created by the operator (registration is closed by default). The password is read from a prompt, or from stdin when piped. It is never accepted as a command-line argument:
+On a fresh instance with no accounts, `/register` is open and the first account becomes the admin; registration then closes (unless `REGISTRATION_MODE=open`). Do not expose a new instance before you have created that account. Otherwise accounts are created by the operator (registration is closed by default). The password is read from a prompt, or from stdin when piped. It is never accepted as a command-line argument:
 
 ```bash
 npm run user:create -- --username admin --admin
