@@ -1,6 +1,7 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import type { MenuRequest } from "../lib/menu-request";
 import {
+  Check,
   ChevronDown,
   LogOut,
   MoreHorizontal,
@@ -16,6 +17,7 @@ import type { ReactNode, Ref } from "react";
 import { Link } from "react-router";
 import { paths, type OverlayState } from "../lib/paths";
 import { AccountLabel } from "./AccountLabel";
+import { ModelTrigger } from "./ModelTrigger";
 
 /**
  * The app's dropdown menus (Radix DropdownMenu, non-modal; INV-47). This
@@ -61,7 +63,13 @@ function focusFirstItem(request: MenuRequest) {
     if (!content || request !== "keyboard") return;
     requestAnimationFrame(() => {
       if (content.contains(document.activeElement) && document.activeElement !== content) return;
-      content.querySelector<HTMLElement>('[role="menuitem"]:not([data-disabled])')?.focus();
+      // The checked radio item if there is one (model menu), else the first item.
+      (
+        content.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]') ??
+        content.querySelector<HTMLElement>(
+          '[role="menuitem"]:not([data-disabled]), [role="menuitemradio"]:not([data-disabled])',
+        )
+      )?.focus();
     });
   };
 }
@@ -134,6 +142,83 @@ export function RowMenu(props: {
               },
             ]}
           />
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
+export interface ModelOption {
+  /** The JSON (providerId, modelId) pair, as the composer stores it. */
+  value: string;
+  label: string;
+  /** A muted second line, e.g. "Not loaded". */
+  detail?: string;
+}
+
+export interface ModelGroup {
+  id: string;
+  /** Shown as a heading only when there is more than one group. */
+  label: string;
+  options: ModelOption[];
+}
+
+/**
+ * The composer's model picker (owner's request, after ChatGPT): the current
+ * model's name with a chevron, opening a menu of models with a check on the
+ * selected one. Controlled by the composer, which also opens it for "/model".
+ */
+export function ModelMenu(props: {
+  label: string;
+  value: string;
+  groups: ModelGroup[];
+  disabled: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** How it was opened before this chunk arrived ("keyboard" focuses an item). */
+  request: MenuRequest;
+  onChange: (value: string) => void;
+}) {
+  const headed = props.groups.length > 1;
+  return (
+    <Menu.Root modal={false} open={props.open} onOpenChange={props.onOpenChange}>
+      <Menu.Trigger asChild disabled={props.disabled}>
+        <ModelTrigger label={props.label} disabled={props.disabled} />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content
+          ref={focusFirstItem(props.request)}
+          className="menu-popover model-menu"
+          side="top"
+          align="end"
+          sideOffset={8}
+          collisionPadding={8}
+        >
+          <Menu.RadioGroup value={props.value} onValueChange={props.onChange}>
+            {props.groups.map((group) => (
+              <Menu.Group key={group.id}>
+                {headed ? <Menu.Label className="menu-label">{group.label}</Menu.Label> : null}
+                {group.options.map((option) => (
+                  <Menu.RadioItem
+                    key={option.value}
+                    value={option.value}
+                    className="menu-item model-item"
+                    data-model={option.value}
+                  >
+                    <span className="model-item-text">
+                      <span>{option.label}</span>
+                      {option.detail ? (
+                        <span className="menu-item-detail">{option.detail}</span>
+                      ) : null}
+                    </span>
+                    <Menu.ItemIndicator className="menu-check">
+                      <Check size={16} aria-hidden />
+                    </Menu.ItemIndicator>
+                  </Menu.RadioItem>
+                ))}
+              </Menu.Group>
+            ))}
+          </Menu.RadioGroup>
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>

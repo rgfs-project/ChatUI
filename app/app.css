@@ -1355,47 +1355,85 @@ a.attachment-file:hover {
   color: var(--muted);
 }
 
-/* The model reads as "name ⌄" inside the pill. */
+/* The model reads as "name ⌄" inside the pill (a button opening a menu). */
 .model-picker {
-  position: relative;
   display: inline-flex;
   flex: none;
   align-items: center;
 }
 
-.model-chevron {
-  position: absolute;
-  right: 9px;
-  color: var(--muted);
-  pointer-events: none;
-}
-
 .model-select {
+  display: inline-flex;
   flex: none;
-  max-width: 11rem;
+  align-items: center;
+  gap: 2px;
+  max-width: 13rem;
   height: 32px;
-  padding: 0 28px 0 10px;
-  border: 0;
+  padding: 0 8px 0 10px;
   border-radius: var(--radius-pill);
-  background-color: transparent;
+  background: transparent;
   color: var(--fg-2);
   font-size: var(--text-base);
+  font-weight: 400;
+}
+
+.model-label {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
-  field-sizing: content;
-  appearance: none;
-  cursor: pointer;
+  white-space: nowrap;
 }
 
+.model-select svg {
+  flex: none;
+  color: var(--muted);
+}
+
+/* One look for hover, open and keyboard focus: a fill, never a ring. */
 .model-select:hover:not(:disabled),
+.model-select[data-state="open"],
 .model-select:focus-visible {
-  background-color: var(--hover);
+  outline: none;
+  background: var(--hover);
   color: var(--fg);
 }
 
-.model-select option,
-.model-select optgroup {
-  background: var(--raised);
+/* The model menu: name, a muted second line, a check on the current one. */
+.model-menu {
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: min(420px, var(--radix-dropdown-menu-content-available-height));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.model-item {
+  justify-content: space-between;
+  gap: var(--space-4);
+  white-space: normal;
+}
+
+.model-item-text {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.menu-item-detail {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.menu-check {
+  display: inline-flex;
+  flex: none;
   color: var(--fg);
+}
+
+.menu-label {
+  padding: var(--space-2) 10px var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
 .send-btn {
@@ -2112,7 +2150,7 @@ input[type="checkbox"].toggle:disabled {
   }
 
   .model-select {
-    max-width: 7.5rem;
+    max-width: 9rem;
   }
 
   .greeting {

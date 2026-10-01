@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { createMemoryRouter, RouterProvider, useParams } from "react-router";
@@ -26,6 +26,7 @@ import {
   signInStore,
   TEST_USER,
   USER,
+  chooseModel,
 } from "./support";
 
 const OTHER_CONV = "66666666-6666-4666-8666-666666666666";
@@ -288,9 +289,8 @@ describe("INV-23: stale responses never overwrite newer state", () => {
         ? json(202, ACCEPTED)
         : json(200, { conversations: [] });
     renderApp(`/chat/${CONV}`, client);
-    const select = screen.getByRole<HTMLSelectElement>("combobox", { name: "Model" });
     for (const id of ["m2", "m1", "m2", "m1", "m2"])
-      fireEvent.change(select, { target: { value: JSON.stringify(["local", id]) } });
+      await chooseModel(JSON.stringify(["local", id]));
     await type("which model{Enter}");
     await waitFor(() => {
       expect(posts()).toHaveLength(1);

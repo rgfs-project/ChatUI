@@ -270,7 +270,10 @@ export async function chatChecks(
     "INV-54: /chat server HTML contains the native textarea",
     res.status === 200 && /<textarea[^>]*id="message"/.test(html),
   );
-  check("/chat server HTML lists discovered models", html.includes(`&quot;${models.chat}&quot;`));
+  check(
+    "/chat server HTML shows the chosen model and carries the discovered list",
+    /<button[^>]*aria-label="Model: [^"]+"/.test(html) && html.includes(models.chat),
+  );
   check(
     "/chat Send is disabled until hydration (no fake no-JS send)",
     /<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>/.test(html),
@@ -376,7 +379,8 @@ export async function chatChecks(
     );
 
     // Reload mid-generation: it keeps running and is re-observed.
-    await page.locator("#model").selectOption(JSON.stringify(["local", models.slow]));
+    await page.getByRole("button", { name: /^Model: / }).click();
+    await page.locator(`[data-model='${JSON.stringify(["local", models.slow])}']`).click();
     await page.locator("#message").fill("slow one");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "part2" }).waitFor({ timeout: 15_000 });
@@ -389,7 +393,8 @@ export async function chatChecks(
     check("INV-06: reload does not stop the generation; the reply is stored", true);
 
     // Stop.
-    await page.locator("#model").selectOption(JSON.stringify(["local", models.slow]));
+    await page.getByRole("button", { name: /^Model: / }).click();
+    await page.locator(`[data-model='${JSON.stringify(["local", models.slow])}']`).click();
     await page.locator("#message").fill("cancel me");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "part1" }).waitFor({ timeout: 15_000 });

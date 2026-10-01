@@ -8,6 +8,7 @@ import {
   STREAM_CONVERSATION,
   WIDE_CONVERSATION,
 } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /**
  * Phase 14 in a real browser (production build): server-rendered MathML,
@@ -162,7 +163,7 @@ test("streaming into a 200-message chat keeps selection, scroll position and unr
     }).observe({ type: "longtask", buffered: false });
   });
 
-  await page.locator("#model").selectOption(RICH);
+  await chooseModel(page, RICH);
   await page.locator("#message").fill("math and code please");
   await page.getByRole("button", { name: "Send" }).click();
   const live = page.getByTestId("content");

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
+import { chooseModel } from "./model.ts";
 
 const base = () => process.env.E2E_BASE_URL ?? "";
 const SLOW = JSON.stringify(["local", "mock-slow"]);
@@ -19,7 +20,7 @@ async function signIn(page: Page) {
 }
 
 async function sendSlow(page: Page, text: string) {
-  await page.locator("#model").selectOption(SLOW);
+  await chooseModel(page, SLOW);
   await page.locator("#message").fill(text);
   await page.getByRole("button", { name: "Send" }).click();
   await page.getByTestId("content").filter({ hasText: "part2" }).waitFor();

@@ -1,4 +1,6 @@
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { expect } from "vitest";
 import type { ReactNode } from "react";
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router";
 import type { SessionDto } from "@shared/auth";
@@ -147,3 +149,27 @@ export function signInStore(session: SessionDto = SESSION): void {
 /** The signed-in user the Sidebar shows in tests. */
 export const TEST_USER = { id: USER, username: "tester", role: "user" };
 export const noop = () => undefined;
+
+/**
+ * Chooses a model in the composer's model menu: `value` is the JSON
+ * provider/model pair, or the first model when omitted. The first use opens
+ * the placeholder (which loads the menu); later ones open the Radix menu.
+ */
+export async function chooseModel(value?: string) {
+  const trigger = screen.getByRole("button", { name: /^Model: / });
+  if (trigger.getAttribute("aria-expanded") !== "true") {
+    if (trigger.dataset.state === undefined) fireEvent.click(trigger);
+    else fireEvent.keyDown(trigger, { key: "Enter" });
+  }
+  const item = await waitFor(() => {
+    const found = document.querySelector<HTMLElement>(
+      value === undefined ? "[data-model]" : `[data-model='${value}']`,
+    );
+    if (!found) throw new Error(`no model item ${value ?? ""}`);
+    return found;
+  });
+  fireEvent.click(item);
+  await waitFor(() => {
+    expect(document.querySelector("[data-model]")).toBeNull();
+  });
+}

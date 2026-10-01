@@ -107,7 +107,8 @@ async function oneRun(context: BrowserContext, base: string): Promise<Run> {
     downloadThroughput: -1,
     uploadThroughput: -1,
   });
-  await page.locator("#model").selectOption(JSON.stringify(["local", "mock-chat"]));
+  await page.getByRole("button", { name: /^Model: / }).click();
+  await page.locator(`[data-model='${JSON.stringify(["local", "mock-chat"])}']`).click();
   await page.locator("#message").fill("perf trace message");
   await page.getByRole("button", { name: "Send" }).click();
   await page.waitForFunction(

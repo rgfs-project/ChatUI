@@ -8,6 +8,7 @@ import {
   LONG_TITLE,
   OLDER_NEEDLE,
 } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 7 UI: layout, scroll intent, overlays and INV-53 routing. */
 
@@ -118,7 +119,7 @@ test("streaming a long answer while pinned follows it without viewport jumps", a
     };
     requestAnimationFrame(() => setTimeout(sample, 0));
   });
-  await page.locator("#model").selectOption(LONG);
+  await chooseModel(page, LONG);
   await page.locator("#message").fill("write something long");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("message-assistant").last()).toContainText("LONG-ANSWER-END", {
@@ -145,7 +146,7 @@ test("scrolled up during streaming: the viewport stays put; jump to latest re-pi
   page,
 }) => {
   await openLong(page);
-  await page.locator("#model").selectOption(LONG);
+  await chooseModel(page, LONG);
   await page.locator("#message").fill("another long one");
   await page.getByRole("button", { name: "Send" }).click();
   await page.getByTestId("content").filter({ hasText: "Section 1" }).waitFor();
@@ -245,7 +246,7 @@ test.describe("INV-53 routing", () => {
     await openLong(page);
     await page.getByRole("link", { name: "New chat" }).click();
     await expect(page).toHaveURL(/\/chat\/new$/);
-    await page.locator("#model").selectOption(CHAT);
+    await chooseModel(page, CHAT);
     await page.locator("#message").fill("hello routing");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
@@ -317,7 +318,7 @@ test.describe("composer", () => {
   test("a message sent while a reply streams is queued, then sent after it", async ({ page }) => {
     await page.goto(`${base()}/chat/new`);
     await hydrated(page);
-    await page.locator("#model").selectOption(SLOW);
+    await chooseModel(page, SLOW);
     await page.locator("#message").fill("first, slowly");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "part2" }).waitFor();
@@ -363,7 +364,7 @@ test.describe("composer", () => {
     await page.keyboard.press("Escape");
     await expect(settings).toBeHidden();
 
-    await page.locator("#model").selectOption(CHAT);
+    await chooseModel(page, CHAT);
     await page.locator("#message").pressSequentially("/pir");
     const group = page.getByRole("group", { name: "Skills" });
     await expect(group.getByRole("option")).toHaveCount(1);

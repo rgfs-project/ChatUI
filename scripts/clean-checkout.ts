@@ -141,7 +141,8 @@ try {
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/chat\/new$/);
   await page.waitForSelector('html[data-hydrated="true"]');
-  await page.locator("#model").selectOption(JSON.stringify(["local", "mock-chat"]));
+  await page.getByRole("button", { name: /^Model: / }).click();
+  await page.locator(`[data-model='${JSON.stringify(["local", "mock-chat"])}']`).click();
   await page.locator("#message").fill("hello from a clean checkout");
   await page.getByRole("button", { name: "Send" }).click();
   await page.waitForURL(/\/chat\/[0-9a-f-]{36}$/);

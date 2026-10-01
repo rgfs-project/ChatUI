@@ -17,6 +17,7 @@ import {
   seededClient,
   signInStore,
   USER,
+  chooseModel,
 } from "./support";
 
 /**
@@ -167,11 +168,10 @@ describe("INV-48: composer semantics", () => {
     expect(fireEvent.paste(box(), { clipboardData: both })).toBe(true);
   });
 
-  it("INV-48: switching the model keeps the draft", () => {
+  it("INV-48: switching the model keeps the draft", async () => {
     renderAt(`/chat/${CONV}`);
     type("keep me");
-    const select = screen.getByRole<HTMLSelectElement>("combobox", { name: "Model" });
-    fireEvent.change(select, { target: { value: select.options[0]?.value ?? "" } });
+    await chooseModel();
     expect(box().value).toBe("keep me");
   });
 

@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { ATTACHMENTS_CONVERSATION, SEEDED_IMAGES } from "./global-setup.ts";
 import { png, wav } from "../support/media.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 12: attachments in the real browser against the production build. */
 
@@ -33,7 +34,7 @@ test.describe("attachments (desktop)", () => {
 
   test("attach → send → reload: the thumbnail is served and visible", async ({ page }) => {
     await newChat(page);
-    await page.locator("#model").selectOption(VISION);
+    await chooseModel(page, VISION);
     await attach(page, [photo()]);
     const chip = page.getByTestId("attachment-chip");
     await expect(chip).toHaveAttribute("data-status", "ready");
@@ -65,7 +66,7 @@ test.describe("attachments (desktop)", () => {
     page,
   }) => {
     await newChat(page);
-    await page.locator("#model").selectOption(VISION);
+    await chooseModel(page, VISION);
     await attach(page, [
       { name: "big.png", mimeType: "image/png", buffer: png(1800, 1200) },
       photo(),
@@ -161,21 +162,21 @@ test.describe("attachments (desktop)", () => {
     await expect(chip).toContainText("Unsupported file");
     await page.getByRole("button", { name: "Remove vector.svg" }).click();
 
-    await page.locator("#model").selectOption(CHAT);
+    await chooseModel(page, CHAT);
     await attach(page, [photo()]);
     await expect(page.getByTestId("capability-warning")).toContainText(
       "mock-chat can't read images",
     );
     await page.locator("#message").fill("describe");
     await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
-    await page.locator("#model").selectOption(VISION);
+    await chooseModel(page, VISION);
     await expect(page.getByTestId("capability-warning")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   });
 
   test("audio attaches as an accessible chip that loads nothing until played", async ({ page }) => {
     await newChat(page);
-    await page.locator("#model").selectOption(VISION);
+    await chooseModel(page, VISION);
     await attach(page, [{ name: "clip.wav", mimeType: "audio/wav", buffer: wav(300) }]);
     await expect(page.getByTestId("attachment-chip")).toHaveAttribute("data-status", "ready");
     await page.getByRole("button", { name: "Send" }).click();

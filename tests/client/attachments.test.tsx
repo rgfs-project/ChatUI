@@ -16,7 +16,16 @@ import {
 } from "../../app/lib/attachments";
 import { authStore } from "../../app/lib/auth-store";
 import { queryKeys } from "../../app/lib/query";
-import { AppHarness, json, MODELS, seededClient, SESSION, signInStore, USER } from "./support";
+import {
+  AppHarness,
+  chooseModel,
+  json,
+  MODELS,
+  seededClient,
+  SESSION,
+  signInStore,
+  USER,
+} from "./support";
 
 /** A controllable XMLHttpRequest for upload tests. */
 class FakeXhr {
@@ -352,9 +361,7 @@ describe("composer with attachments", () => {
     expect(screen.getByTestId("capability-warning").textContent).toContain("m1 can't read images");
     const send = screen.getByRole<HTMLButtonElement>("button", { name: "Send" });
     expect(send.disabled).toBe(true);
-    fireEvent.change(screen.getByRole("combobox", { name: "Model" }), {
-      target: { value: JSON.stringify(["local", "v1"]) },
-    });
+    await chooseModel(JSON.stringify(["local", "v1"]));
     expect(screen.queryByTestId("capability-warning")).toBeNull();
     expect(send.disabled).toBe(true); // still uploading
     await waitFor(() => {

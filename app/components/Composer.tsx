@@ -1,9 +1,10 @@
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { ArrowUp, ChevronDown, Plus, Square } from "lucide-react";
+import { ArrowUp, Plus, Square } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from "react";
 import { acceptAttribute } from "@shared/attachment-media";
 import type { ModelListDto } from "@shared/generations";
 import type { DraftAttachment } from "../lib/attachments";
+import { menuRequest, type MenuRequest } from "../lib/menu-request";
 import { markOnce } from "../lib/perf";
 import { fetchers, queryKeys } from "../lib/query";
 import { useShell } from "../lib/shell-context";
@@ -15,6 +16,12 @@ import {
   filterCommands,
   type Command,
 } from "./CommandMenu";
+import { ModelTrigger } from "./ModelTrigger";
+
+// The model menu is Radix (Phase 9: menus load on demand); a same-looking
+// button stands in until it is first wanted.
+const loadMenus = () => import("./Menus");
+const ModelMenu = lazy(() => loadMenus().then((m) => ({ default: m.ModelMenu })));
 
 // The tray loads with the first attachment (Phase 12): not in the critical chunk.
 const AttachmentTray = lazy(() =>
@@ -123,7 +130,9 @@ export function Composer({
 }) {
   const shell = useShell();
   const client = useQueryClient();
-  const modelRef = useRef<HTMLSelectElement>(null);
+  // The model menu: mounted (its chunk loaded) once first wanted, then kept.
+  const [modelMenu, setModelMenu] = useState<MenuRequest | null>(null);
+  const [modelOpen, setModelOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [selected, setSelected] = useState<string | undefined>(undefined);
@@ -159,6 +168,29 @@ export function Composer({
   } catch {
     selectedModel = undefined;
   }
+  const modelDisabled = allModels.length === 0 || inert;
+  const modelLabel =
+    selectedModel?.id ??
+    (allModels.length === 0
+      ? state.kind === "loading"
+        ? "Loading models…"
+        : "No models available"
+      : "Choose a model");
+  const modelGroups = groups.map((group) => ({
+    id: group.provider.id,
+    label: `${group.provider.name}${
+      group.provider.status === "unavailable"
+        ? " (unavailable)"
+        : group.stale
+          ? " (list may be out of date)"
+          : ""
+    }`,
+    options: group.models.map((model) => ({
+      value: pairKey([model.providerId, model.id]),
+      label: model.id,
+      detail: model.status === "unloaded" ? "Not loaded" : undefined,
+    })),
+  }));
   const accepts = selectedModel?.capabilities.inputModalities ?? [];
   const missing = (["image", "audio"] as const).filter(
     (kind) => selectedModel && live.some((a) => a.kind === kind) && !accepts.includes(kind),
@@ -235,12 +267,17 @@ export function Composer({
       onCommand(command.name);
       return;
     }
-    const select = modelRef.current;
-    select?.focus();
+    // "/model" opens the model menu with its current model focused.
+    setModelMenu((request) => request ?? "keyboard");
+    setModelOpen(true);
+  }
+
+  function chooseModel(value: string) {
+    setSelected(value);
     try {
-      select?.showPicker();
+      shell.setModel(draftKey, JSON.parse(value) as ModelChoice);
     } catch {
-      // Not supported or not allowed here: focus is enough.
+      // not a model pair
     }
   }
 
@@ -401,52 +438,34 @@ export function Composer({
           }}
         />
         <span className="model-picker">
-          <label htmlFor="model" className="visually-hidden">
-            Model
-          </label>
-          <select
-            id="model"
-            name="model"
-            ref={modelRef}
-            className="model-select"
-            value={selectedValue}
-            disabled={allModels.length === 0 || inert}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setSelected(value);
-              try {
-                shell.setModel(draftKey, JSON.parse(value) as ModelChoice);
-              } catch {
-                // placeholder option
-              }
-            }}
-          >
-            {allModels.length === 0 ? (
-              <option value="">
-                {state.kind === "loading" ? "Loading models…" : "No models available"}
-              </option>
-            ) : null}
-            {groups.map((group) => (
-              <optgroup
-                key={group.provider.id}
-                label={`${group.provider.name}${
-                  group.provider.status === "unavailable"
-                    ? " (unavailable)"
-                    : group.stale
-                      ? " (list may be out of date)"
-                      : ""
-                }`}
-              >
-                {group.models.map((model) => (
-                  <option key={model.id} value={pairKey([model.providerId, model.id])}>
-                    {model.id}
-                    {model.status === "unloaded" ? " (not loaded)" : ""}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          <ChevronDown size={16} className="model-chevron" aria-hidden />
+          {modelMenu === null ? (
+            <ModelTrigger
+              label={modelLabel}
+              disabled={modelDisabled}
+              aria-haspopup="menu"
+              aria-expanded={false}
+              // Warm the menu chunk on intent; the click mounts and opens it.
+              onPointerEnter={() => void loadMenus()}
+              onFocus={() => void loadMenus()}
+              onClick={(event) => {
+                setModelMenu(menuRequest(event));
+                setModelOpen(true);
+              }}
+            />
+          ) : (
+            <Suspense fallback={<ModelTrigger label={modelLabel} disabled aria-haspopup="menu" />}>
+              <ModelMenu
+                label={modelLabel}
+                value={selectedValue}
+                groups={modelGroups}
+                disabled={modelDisabled}
+                open={modelOpen}
+                onOpenChange={setModelOpen}
+                request={modelMenu}
+                onChange={chooseModel}
+              />
+            </Suspense>
+          )}
         </span>
         {running && hasDraft ? (
           <button

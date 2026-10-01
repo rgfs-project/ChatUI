@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { E2E_MEMORY_USER, TOOLS_PROVIDER } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 13b: memory suggestions and Settings → Memories in the browser. */
 
@@ -17,7 +18,7 @@ async function hydrated(page: Page) {
 async function sendWithTools(page: Page, text: string) {
   await page.goto(`${base()}/chat/new`);
   await hydrated(page);
-  await page.locator("#model").selectOption(TOOLS);
+  await chooseModel(page, TOOLS);
   await page.locator("#message").fill(text);
   await page.getByRole("button", { name: "Send" }).click();
 }

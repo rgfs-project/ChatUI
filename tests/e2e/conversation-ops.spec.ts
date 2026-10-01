@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { E2E_OTHER_USER, LONG_CONVERSATION, OLDER_NEEDLE } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 13a: search, pins, edit/delete/regenerate and clear history in the browser. */
 
@@ -16,7 +17,7 @@ async function hydrated(page: Page) {
 
 /** Sends from the composer and waits for the stored reply. */
 async function sendMessage(page: Page, text: string, replies: number) {
-  await page.locator("#model").selectOption(CHAT);
+  await chooseModel(page, CHAT);
   await page.locator("#message").fill(text);
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("message-assistant")).toHaveCount(replies, { timeout: 20_000 });

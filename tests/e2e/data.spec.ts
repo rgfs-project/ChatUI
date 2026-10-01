@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { E2E_OTHER_USER } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 13d: exact chat export, export everything, and restoring from the archive. */
 
@@ -17,7 +18,7 @@ async function hydrated(page: Page) {
 async function sendMessage(page: Page, text: string) {
   await page.goto(`${base()}/chat/new`);
   await hydrated(page);
-  await page.locator("#model").selectOption(CHAT);
+  await chooseModel(page, CHAT);
   await page.locator("#message").fill(text);
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("message-assistant").last()).toContainText(`Echo: ${text}`, {

@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Browser } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { E2E_ADMIN, E2E_OTHER_USER, LONG_CONVERSATION, OLDER_NEEDLE } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /**
  * Phase 17: SSR and hydration reliability (INV-54–INV-57) against the
@@ -35,7 +36,7 @@ test("A/B isolation: parallel document requests never carry the other account's 
   const page = await bob.newPage();
   await page.goto(`${base()}/chat/new`);
   await page.waitForSelector('html[data-hydrated="true"]');
-  await page.locator("#model").selectOption(JSON.stringify(["local", "mock-chat"]));
+  await chooseModel(page, JSON.stringify(["local", "mock-chat"]));
   await page.locator("#message").fill(sentinel);
   await page.getByRole("button", { name: "Send" }).click();
   await page.waitForURL(/\/chat\/[0-9a-f-]{36}$/);

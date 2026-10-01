@@ -8,6 +8,7 @@ import {
   WIDE_CONVERSATION,
 } from "./global-setup.ts";
 import { png } from "../support/media.ts";
+import { chooseModel } from "./model.ts";
 
 /**
  * Phase 18: theme before first paint under the production CSP, the reply
@@ -149,7 +150,7 @@ test.describe("signed in", () => {
         }).observe(el, { childList: true, characterData: true, subtree: true });
     });
 
-    await page.locator("#model").selectOption(SLOW);
+    await chooseModel(page, SLOW);
     await page.locator("#message").fill("announce me");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(announcer).toHaveText("Assistant is responding");
@@ -170,7 +171,7 @@ test.describe("signed in", () => {
   test("cancelling is announced", async ({ page }) => {
     await page.goto(`${base()}/chat/new`);
     await hydrated(page);
-    await page.locator("#model").selectOption(SLOW);
+    await chooseModel(page, SLOW);
     await page.locator("#message").fill("stop and announce");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "part2" }).waitFor();
@@ -188,7 +189,7 @@ test.describe("signed in", () => {
 
     await page.goto(`${base()}/chat/new`);
     await hydrated(page);
-    await page.locator("#model").selectOption(SLOW);
+    await chooseModel(page, SLOW);
     await page.locator("#message").fill("measure the stream");
     await page.getByRole("button", { name: "Send" }).click();
     // Input-driven shifts (the send) are excluded; streaming must add none.
@@ -218,7 +219,7 @@ test.describe("signed in", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${base()}/chat/new`);
     await hydrated(page);
-    await page.locator("#model").selectOption(SLOW);
+    await chooseModel(page, SLOW);
     await page.locator("#message").fill("no motion");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "part1" }).waitFor();
@@ -487,7 +488,7 @@ test.describe("keyboard only", () => {
 
     // Attachments: the native model select is chosen by the browser's own
     // select keyboard handling; the picker opens from the "+" button.
-    await page.locator("#model").selectOption(VISION);
+    await chooseModel(page, VISION);
     await tabTo(page, 'button[aria-label="Attach files"]', true);
     const chooser = page.waitForEvent("filechooser");
     await page.keyboard.press("Enter");

@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { E2E_PASSWORD, E2E_USER, LONG_CONVERSATION, LONG_TITLE } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 8: loading, request lifecycle and session continuity in a real browser. */
 
@@ -55,7 +56,7 @@ test("slow network cold load: composer usable while the conversation list is hel
   await page.locator("#message").fill("typed on a slow network");
   await hydrated(page);
   const tHydrated = Date.now() - t0;
-  await page.locator("#model").selectOption(CHAT);
+  await chooseModel(page, CHAT);
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   const tUsable = Date.now() - t0;
   // Still waiting on the secondary list…
@@ -135,8 +136,7 @@ test("rapid conversation switching lands on the last one and never shows stale c
 test("rapid model switching: the send carries the last selection", async ({ page }) => {
   await page.goto(`${base()}/chat/new`);
   await hydrated(page);
-  const select = page.locator("#model");
-  for (const choice of [SLOW, CHAT, SLOW, CHAT, SLOW, CHAT]) await select.selectOption(choice);
+  for (const choice of [SLOW, CHAT, SLOW, CHAT, SLOW, CHAT]) await chooseModel(page, choice);
   const sent = page.waitForRequest(
     (r) => r.url().endsWith("/api/generations") && r.method() === "POST",
   );
@@ -164,7 +164,7 @@ test("session expiry mid-use: in-app re-authentication restores the draft; a rel
   await signIn();
   await page.waitForURL(/\/chat\/new$/);
   await hydrated(page);
-  await page.locator("#model").selectOption(CHAT);
+  await chooseModel(page, CHAT);
   await page.locator("#message").fill("draft kept across re-auth");
   // A marker that a document navigation would lose.
   await page.evaluate(() => {

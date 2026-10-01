@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { E2E_FILES_USER } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 13c: captured source files, the inert source panel and Settings → Files. */
 
@@ -19,7 +20,7 @@ async function hydrated(page: Page) {
 async function sendFile(page: Page, name: string, body: string) {
   await page.goto(`${base()}/chat/new`);
   await hydrated(page);
-  await page.locator("#model").selectOption(CHAT);
+  await chooseModel(page, CHAT);
   await page
     .locator("#message")
     .fill(`Here\n\`\`\`${name.split(".").pop() ?? ""} file=${name}\n${body}\n\`\`\``);

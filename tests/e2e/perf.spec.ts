@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { E2E_USER, LONG_CONVERSATION } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 9: instrumentation, bundle boundaries and asset delivery in the production build. */
 
@@ -43,7 +44,7 @@ test("marks: emitted once in lifecycle order; ComposerTTI and FirstAssistantEven
 }) => {
   await page.goto(`${base()}/chat/${LONG_CONVERSATION}`);
   await expect.poll(async () => count(await entries(page), "chatui:composer-interactive")).toBe(1);
-  await page.locator("#model").selectOption(CHAT);
+  await chooseModel(page, CHAT);
   await page.locator("#message").fill(`measure me ${SENTINEL}`);
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("message-assistant").last()).toContainText(SENTINEL);

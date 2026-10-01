@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import { LONG_CONVERSATION, WIDE_CONVERSATION } from "./global-setup.ts";
+import { chooseModel } from "./model.ts";
 
 /** Phase 11: the layout behaves intentionally at phone, tablet, breakpoint and desktop sizes. */
 
@@ -173,7 +174,7 @@ test.describe("phone 390x844", () => {
     page,
   }) => {
     await open(page, `/chat/${LONG_CONVERSATION}`);
-    await page.locator("#model").selectOption(LONG);
+    await chooseModel(page, LONG);
     await page.locator("#message").fill("long answer on a phone");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "Section 1" }).waitFor();
