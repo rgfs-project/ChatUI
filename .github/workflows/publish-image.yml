@@ -57,10 +57,9 @@ jobs:
           cache-to: type=gha,mode=max
       # Smoke test: start the published image through compose and wait for its healthcheck.
       - name: Compose smoke test
-        env:
-          CHATUI_IMAGE: ${{ env.IMAGE }}:sha-${{ github.sha }}
         run: |
-          docker pull "$CHATUI_IMAGE" || docker pull "${IMAGE}:$(echo "$GITHUB_SHA" | cut -c1-7)" || true
+          export CHATUI_IMAGE="${IMAGE}:sha-${GITHUB_SHA::7}"
+          docker pull "$CHATUI_IMAGE"
           docker compose up -d --wait --no-build --wait-timeout 90
           docker compose ps
           docker compose down -v
