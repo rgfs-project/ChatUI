@@ -60,7 +60,7 @@
   --radius-xl: 12px;
   --radius-2xl: 16px;
   --radius-3xl: 20px;
-  --radius-composer: 28px;
+  --radius-composer: 24px;
   --radius-pill: 999px;
 
   /* Motion: short, and only where it explains a change (a disclosure opening,
@@ -393,6 +393,27 @@ textarea {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* Select-all (Cmd/Ctrl+A) and drag selection take only what people write and
+   read: message text, code and reasoning, plus fields. The interface around
+   them (sidebar, bars, buttons, labels) is not selectable (owner's request,
+   as in ChatGPT). */
+.app-shell {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app-shell
+  :is(.bubble, .markdown, .reasoning-body, .plain-text, input, textarea, [contenteditable]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* A code block's label and buttons are interface, not code. */
+.app-shell .code-toolbar {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .app-main {
   display: flex;
   min-width: 0;
@@ -720,8 +741,9 @@ button.nav-row.current {
   scrollbar-width: thin;
 }
 
-.scroll:focus-visible {
-  outline-offset: -2px;
+/* Focused only by script (it is not a Tab stop): no ring around the page. */
+.scroll:focus {
+  outline: none;
 }
 
 .history {
@@ -778,9 +800,11 @@ button.nav-row.current {
   color: var(--on-bubble);
 }
 
+/* Reply and question actions (owner's request, after ChatGPT): a compact row
+   of 28 px buttons (above the 24 px target minimum) with no gaps. */
 .turn-actions {
   display: flex;
-  gap: 2px;
+  gap: 0;
   margin-top: var(--space-1);
 }
 
@@ -791,8 +815,9 @@ button.nav-row.current {
 }
 
 .turn-assistant .turn-actions {
-  margin-top: var(--space-3);
-  margin-left: -8px;
+  margin-top: var(--space-2);
+  /* The first icon lines up with the text (16 px glyph in a 28 px button). */
+  margin-left: -6px;
 }
 
 /* The question's actions keep their space (shown on hover or focus), so they
@@ -807,8 +832,9 @@ button.nav-row.current {
 }
 
 .turn-actions .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
 }
 
 /* Attachments of a sent message: square thumbnails above the bubble, chips for files. */
@@ -953,11 +979,19 @@ a.attachment-file:hover {
   margin-bottom: var(--space-4);
 }
 
+/* Settings → Account → Show thought process off: hidden from the first paint. */
+:root[data-reasoning="hidden"] .reasoning {
+  display: none;
+}
+
 .reasoning > summary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 0;
+  /* Room for a rounded focus ring; the text stays on the column's edge. */
+  margin-left: calc(-1 * var(--space-1));
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
   color: var(--fg-2);
   cursor: pointer;
   list-style: none;
@@ -1248,9 +1282,9 @@ a.attachment-file:hover {
 .composer-box {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
-  min-height: 56px;
-  padding: 10px 10px 10px 10px;
+  gap: var(--space-1);
+  min-height: 48px;
+  padding: var(--space-2);
   background: var(--field);
   border: 1px solid var(--field-line);
   border-radius: var(--radius-composer);
@@ -1264,8 +1298,8 @@ a.attachment-file:hover {
 /* "+": attach files (Phase 12). The picker opens only from this button. */
 .attach-btn {
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   color: var(--fg-2);
 }
 
@@ -1315,7 +1349,7 @@ a.attachment-file:hover {
 .model-select {
   flex: none;
   max-width: 11rem;
-  height: 34px;
+  height: 32px;
   padding: 0 28px 0 10px;
   border: 0;
   border-radius: var(--radius-pill);
@@ -1344,8 +1378,8 @@ a.attachment-file:hover {
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border-radius: 50%;
   background: var(--send);
@@ -1566,12 +1600,6 @@ button.danger-outline {
   min-height: 0;
   padding: var(--space-6) var(--space-8);
   overflow-y: auto;
-}
-
-/* The pane scrolls on its own: focusable so the keyboard can scroll it. */
-.settings-body:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
 }
 
 /* ---- Settings typography and spacing (one hierarchy for every pane) ----------
@@ -2176,8 +2204,9 @@ input[type="checkbox"].toggle:disabled {
   font-size: var(--text-sm);
 }
 
-/* Touch targets: at least 44x44 CSS px on narrow screens and coarse pointers. */
-@media (max-width: 767.98px), (pointer: coarse) {
+/* Touch targets: at least 44x44 CSS px for coarse (touch) pointers. A narrow
+   window with a mouse keeps the compact controls (owner's request). */
+@media (pointer: coarse) {
   button,
   select,
   .icon-btn,

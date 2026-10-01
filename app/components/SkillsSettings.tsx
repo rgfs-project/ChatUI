@@ -105,7 +105,7 @@ function SkillList(props: {
     (s) => q === "" || s.name.includes(q) || s.description.toLowerCase().includes(q),
   );
   return (
-    <section className="settings-body" tabIndex={0} aria-labelledby="settings-skills">
+    <section className="settings-body" aria-labelledby="settings-skills">
       <div className="skills-head">
         <h2 id="settings-skills">Skills</h2>
         <label className="skills-search">
@@ -226,7 +226,7 @@ function SkillEditor(props: { userId: string; skill: SkillDto | undefined; onDon
   }
 
   return (
-    <section className="settings-body" tabIndex={0} aria-labelledby="skill-editor-title">
+    <section className="settings-body" aria-labelledby="skill-editor-title">
       <button type="button" className="link-back" onClick={props.onDone}>
         <ArrowLeft size={16} aria-hidden /> Your skills
       </button>

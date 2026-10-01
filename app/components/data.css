@@ -106,7 +106,7 @@
   margin-top: 12px;
 }
 
-@media (max-width: 767.98px), (pointer: coarse) {
+@media (pointer: coarse) {
   .data-choice label,
   .data-again {
     min-height: 44px;

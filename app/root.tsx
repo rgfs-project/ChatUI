@@ -9,6 +9,7 @@ import {
   useRouteLoaderData,
   type LinksFunction,
 } from "react-router";
+import { reasoningShownFromCookieHeader } from "@shared/reasoning-display";
 import { collapsedFromCookieHeader } from "@shared/sidebar-sections";
 import { themeFromCookieHeader, type Theme } from "@shared/theme";
 import type { Route } from "./+types/root";
@@ -32,15 +33,23 @@ export function loader({ context, request }: Route.LoaderArgs) {
     theme: themeFromCookieHeader(request.headers.get("cookie")),
     // Which sidebar sections are collapsed: rendered as remembered, no shift.
     sidebarSections: collapsedFromCookieHeader(request.headers.get("cookie")),
+    // Whether replies show their thought process (CSS hides it otherwise).
+    reasoningShown: reasoningShownFromCookieHeader(request.headers.get("cookie")),
   };
 }
 
 export function Layout({ children }: { children: ReactNode }) {
   // Undefined when the root loader itself failed: the system theme then.
-  const theme: Theme = useRouteLoaderData<typeof loader>("root")?.theme ?? "system";
+  const root = useRouteLoaderData<typeof loader>("root");
+  const theme: Theme = root?.theme ?? "system";
+  const reasoningHidden = root?.reasoningShown === false;
   return (
     // "system" leaves the attribute off, so CSS follows prefers-color-scheme.
-    <html lang="en" data-theme={theme === "system" ? undefined : theme}>
+    <html
+      lang="en"
+      data-theme={theme === "system" ? undefined : theme}
+      data-reasoning={reasoningHidden ? "hidden" : undefined}
+    >
       <head>
         <meta charSet="utf-8" />
         {/* resizes-content: the on-screen keyboard shrinks the layout viewport (and so

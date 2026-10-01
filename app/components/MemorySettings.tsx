@@ -30,7 +30,7 @@ export default function MemorySettings({ userId }: { userId: string }) {
   }
   const omitted = new Set(list.data?.omittedIds ?? []);
   return (
-    <section className="settings-body" tabIndex={0} aria-labelledby="settings-memories">
+    <section className="settings-body" aria-labelledby="settings-memories">
       <div className="skills-head">
         <h2 id="settings-memories">Memories</h2>
         <button
@@ -165,7 +165,7 @@ function MemoryEditor(props: {
   }
 
   return (
-    <section className="settings-body" tabIndex={0} aria-labelledby="memory-editor-title">
+    <section className="settings-body" aria-labelledby="memory-editor-title">
       <button type="button" className="link-back" onClick={props.onDone}>
         <ArrowLeft size={16} aria-hidden /> Your memories
       </button>

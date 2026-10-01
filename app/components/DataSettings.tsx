@@ -267,7 +267,7 @@ export default function DataSettings({ userId }: { userId: string }) {
     preview?.items.filter((i) => i.action === "skipped" || i.action === "degraded") ?? [];
   const report = preview?.report;
   return (
-    <section className="settings-body" tabIndex={0} aria-labelledby={headingId}>
+    <section className="settings-body" aria-labelledby={headingId}>
       <h2 id={headingId}>Data</h2>
 
       <h3 className="data-heading">Export</h3>

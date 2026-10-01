@@ -41,7 +41,6 @@ export default function AdminSection({ section }: { section: AdminSectionId }) {
   return (
     <section
       className="settings-body admin-section"
-      tabIndex={0}
       aria-labelledby={headingId}
       data-testid={`admin-section-${section}`}
     >

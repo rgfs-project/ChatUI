@@ -32,7 +32,7 @@ export function AttachmentSettings({ userId }: { userId: string }) {
   const prefs = preferences.data;
   const disabled = !prefs || save.isPending;
   return (
-    <section className="settings-body" tabIndex={0} aria-labelledby="settings-attachments">
+    <section className="settings-body" aria-labelledby="settings-attachments">
       <h2 id="settings-attachments">Attachments</h2>
       <div className="settings-row">
         <div>

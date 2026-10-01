@@ -828,12 +828,14 @@ export function ConversationView(props: {
         ) : null}
       </header>
 
-      {/* Focusable so keyboard users can scroll it (it is its own scroll container). */}
+      {/* Not a Tab stop of its own (owner's request): keyboard users reach its
+          buttons, and the arrow keys scroll it from any of them. Focusable by
+          script only (tabIndex -1). */}
       <div
         className="scroll"
         ref={transcriptRef}
         {...scrollHandlers}
-        tabIndex={0}
+        tabIndex={-1}
         role="region"
         aria-label="Transcript"
         aria-busy={loading}

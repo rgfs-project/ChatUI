@@ -24,7 +24,7 @@ import { SkillsSettings } from "../components/SkillsSettings";
 import { useAuth } from "../lib/auth-store";
 import { paths } from "../lib/paths";
 import { useSignOut } from "../lib/use-sign-out";
-import { applyTheme, currentTheme } from "../lib/theme";
+import { applyReasoningShown, applyTheme, currentTheme, reasoningShown } from "../lib/theme";
 import { isTheme, type Theme } from "@shared/theme";
 import type { AdminSectionId } from "../admin/sections";
 import type { Route } from "./+types/settings";
@@ -102,7 +102,7 @@ export function SettingsPanel({ initial }: { initial?: Section }) {
   );
   const preloadAdmin = () => void loadAdmin();
   const loading = (label: string) => (
-    <section className="settings-body" tabIndex={0}>
+    <section className="settings-body">
       <Spinner label={label} />
     </section>
   );
@@ -156,12 +156,7 @@ export function SettingsPanel({ initial }: { initial?: Section }) {
         ) : section === "attachments" && user ? (
           <AttachmentSettings userId={user.id} />
         ) : (
-          <section
-            className="settings-body"
-            tabIndex={0}
-            id="account"
-            aria-labelledby="settings-account"
-          >
+          <section className="settings-body" id="account" aria-labelledby="settings-account">
             <h2 id="settings-account">Account</h2>
             <div className="settings-row">
               <div>
@@ -173,6 +168,7 @@ export function SettingsPanel({ initial }: { initial?: Section }) {
               </div>
             </div>
             <ThemeSetting />
+            <ReasoningSetting />
             <div className="settings-row">
               <div>
                 <p className="settings-label">Password</p>
@@ -232,6 +228,39 @@ function ThemeSetting() {
         <option value="light">Light</option>
         <option value="dark">Dark</option>
       </select>
+    </div>
+  );
+}
+
+/**
+ * Settings → Account → Show thought process: hides the model's reasoning
+ * above replies (display only, remembered by this browser).
+ */
+function ReasoningSetting() {
+  const [shown, setShown] = useState(reasoningShown);
+  return (
+    <div className="settings-row">
+      <div>
+        <label className="settings-label" htmlFor="reasoning-toggle">
+          Show thought process
+        </label>
+        <p className="settings-hint" id="reasoning-hint">
+          The model’s reasoning above its replies, when it shares one.
+        </p>
+      </div>
+      <input
+        id="reasoning-toggle"
+        type="checkbox"
+        className="toggle"
+        // Takes effect at once: a switch, not a form checkbox.
+        role="switch"
+        aria-describedby="reasoning-hint"
+        checked={shown}
+        onChange={(event) => {
+          applyReasoningShown(event.target.checked);
+          setShown(event.target.checked);
+        }}
+      />
     </div>
   );
 }

@@ -350,6 +350,60 @@ test.describe("signed in", () => {
     expect(html).toMatch(/data-testid="time-separator"><time dateTime="[^"]+"><\/time>/);
   });
 
+  test("select-all takes the messages, not the interface", async ({ page }) => {
+    await page.goto(`${base()}/chat/${RICH_CONVERSATION}`);
+    await hydrated(page);
+    await page.getByTestId("transcript").focus();
+    await page.keyboard.press("ControlOrMeta+a");
+    const selected = await page.evaluate(() => window.getSelection()?.toString() ?? "");
+    const reply =
+      (await page
+        .getByTestId("message-assistant")
+        .first()
+        .locator(".markdown p")
+        .first()
+        .textContent()) ?? "";
+    expect(selected).toContain(reply.trim().slice(0, 20));
+    for (const chrome of ["New chat", "Search chats", "Recents", "Thought process", "ChatUI"])
+      expect(selected, chrome).not.toContain(chrome);
+  });
+
+  test("Show thought process off hides reasoning, from the first paint after reload", async ({
+    page,
+  }) => {
+    await page.goto(`${base()}/chat/new`);
+    await hydrated(page);
+    await page.locator("#message").fill("think out loud");
+    await page.getByRole("button", { name: "Send" }).click();
+    const reply = page.getByTestId("message-assistant").last();
+    await expect(reply.getByText("Thought process")).toBeVisible({ timeout: 20_000 });
+    const url = page.url();
+
+    await page.getByTestId("signed-in-user").click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+    const toggle = page.getByRole("switch", { name: "Show thought process" });
+    await expect(toggle).toBeChecked();
+    await toggle.uncheck();
+    await page.keyboard.press("Escape");
+    await expect(reply.getByText("Thought process")).toBeHidden();
+
+    const html = await (await page.request.get(url)).text();
+    expect(html).toMatch(/<html[^>]*data-reasoning="hidden"/);
+    await page.reload();
+    await hydrated(page);
+    await expect(
+      page.getByTestId("message-assistant").last().getByText("Thought process"),
+    ).toBeHidden();
+
+    await page.getByTestId("signed-in-user").click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+    await page.getByRole("switch", { name: "Show thought process" }).check();
+    await page.keyboard.press("Escape");
+    await expect(
+      page.getByTestId("message-assistant").last().getByText("Thought process"),
+    ).toBeVisible();
+  });
+
   for (const width of [320, 390, 768, 1024, 1440])
     test(`no horizontal page overflow at ${String(width)} px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
@@ -419,6 +473,9 @@ test.describe("keyboard only", () => {
 
     // Chat: the composer is reachable and Enter sends.
     await focusIsAlwaysVisible(page, 12);
+    // Containers are not Tab stops of their own: the transcript is reached
+    // through its controls (and scrolled from them).
+    await expect(page.getByTestId("transcript")).toHaveAttribute("tabindex", "-1");
     await tabTo(page, "#message");
     await page.keyboard.type("hello from the keyboard");
     await page.keyboard.press("Enter");
