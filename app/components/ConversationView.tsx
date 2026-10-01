@@ -37,7 +37,7 @@ import { announce } from "../lib/announcer";
 import { Spinner } from "./Spinner";
 import type { StartGenerationResponse } from "@shared/generations";
 import { AccountChangedError } from "../lib/api";
-import { authStore, useAuth } from "../lib/auth-store";
+import { authStore } from "../lib/auth-store";
 import { paths, type OverlayState } from "../lib/paths";
 import { markAccepted, markGeneration, markOnce } from "../lib/perf";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
@@ -187,7 +187,6 @@ export function ConversationView(props: {
     setDrawerTrigger,
     warmDrawer,
   } = useSidebar();
-  const username = useAuth().session?.user?.username;
   const actions = useConversationActions(userId);
   const draftKey = conversationId ?? NEW_DRAFT;
   const queued = useQueue(draftKey);
@@ -818,12 +817,7 @@ export function ConversationView(props: {
         aria-busy={loading}
         data-testid="transcript"
       >
-        {empty ? (
-          <Greeting
-            level={conversation ? 2 : 1}
-            text={username ? `How can I help, ${username}?` : "How can I help?"}
-          />
-        ) : null}
+        {empty ? <Greeting level={conversation ? 2 : 1} text="How can I help?" /> : null}
         <ol className="history" aria-label="Messages">
           {conversation?.messages.map((message) => (
             <Message

@@ -220,7 +220,7 @@ function SidebarImpl({
           </div>
         ) : conversations.length === 0 ? (
           <p className="sidebar-note" data-testid="conversations-empty">
-            No conversations yet. Your chats will appear here.
+            No conversations yet.
           </p>
         ) : null}
         <ul className="chat-list" data-testid="conversation-list">

@@ -1,12 +1,16 @@
 import {
   Brain,
   CircleUserRound,
+  ClipboardList,
+  Cpu,
   Database,
   FileCode,
   Paperclip,
-  Sparkles,
   ScrollText,
-  Shield,
+  Server,
+  Settings2,
+  Users,
+  Wrench,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
@@ -15,7 +19,6 @@ import { ConfirmDialog } from "../components/Dialogs";
 import { Spinner } from "../components/Spinner";
 import { apiJson, queryKeys } from "../lib/query";
 import { AttachmentSettings } from "../components/AttachmentSettings";
-import { FeatureSettings } from "../components/FeatureSettings";
 import { Overlay } from "../components/Overlay";
 import { SkillsSettings } from "../components/SkillsSettings";
 import { useAuth } from "../lib/auth-store";
@@ -23,6 +26,7 @@ import { paths } from "../lib/paths";
 import { useSignOut } from "../lib/use-sign-out";
 import { applyTheme, currentTheme } from "../lib/theme";
 import { isTheme, type Theme } from "@shared/theme";
+import type { AdminSectionId } from "../admin/sections";
 import type { Route } from "./+types/settings";
 
 /** Settings → Memories (Phase 13b): loaded when its tab opens. */
@@ -31,41 +35,64 @@ const MemorySettings = lazy(() => import("../components/MemorySettings"));
 const ArtifactSettings = lazy(() => import("../components/ArtifactSettings"));
 /** Settings → Data (Phase 13d): export and import, loaded when its tab opens. */
 const DataSettings = lazy(() => import("../components/DataSettings"));
+/**
+ * Administration (Phase 10): its own chunk, loaded only when an administrator
+ * opens (or points at) one of its sections. The server authorizes every
+ * request regardless (INV-24); hiding the group is cosmetic.
+ */
+const loadAdmin = () => import("../admin/AdminPanel");
+const AdminSection = lazy(loadAdmin);
 
 export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings · ChatUI" }];
 }
 
-const SECTIONS = [
-  "account",
-  "data",
-  "features",
-  "skills",
-  "memories",
-  "files",
-  "attachments",
-] as const;
-type Section = (typeof SECTIONS)[number];
+const USER_SECTIONS = ["account", "data", "skills", "memories", "files", "attachments"] as const;
+type UserSection = (typeof USER_SECTIONS)[number];
+const ADMIN_SECTIONS: readonly AdminSectionId[] = [
+  "users",
+  "providers",
+  "models",
+  "instance",
+  "maintenance",
+  "audit",
+];
+type Section = UserSection | AdminSectionId;
+
+const isUserSection = (value: unknown): value is UserSection =>
+  (USER_SECTIONS as readonly unknown[]).includes(value);
+const isAdminSection = (value: unknown): value is AdminSectionId =>
+  (ADMIN_SECTIONS as readonly unknown[]).includes(value);
+
+const ICON = 18;
+
+export default function SettingsOverlay() {
+  return <SettingsPanel />;
+}
 
 /**
- * Settings: a large panel with its sections listed on the left (Account;
- * Skills and Attachments under "Customize"). Only implemented features appear.
+ * Settings, one panel for everything (owner's design, after ChatGPT): the
+ * sections listed in a rail that scrolls on its own, in three groups —
+ * Settings, Customize and, for administrators, Administration. `/admin`
+ * opens the same panel on Users. Only implemented features appear.
  */
-export default function SettingsOverlay() {
+export function SettingsPanel({ initial }: { initial?: Section }) {
   const user = useAuth().session?.user;
   const signOut = useSignOut();
   const isAdmin = user?.role === "admin";
-  // `?section=` opens a tab directly (the account menu's "Import & export").
+  // `?section=` opens a section directly (the account menu's "Import & export").
   const [params] = useSearchParams();
-  const requested = params.get("section");
+  const requested = params.get("section") ?? initial;
   const [section, setSection] = useState<Section>(
-    SECTIONS.includes(requested as Section) ? (requested as Section) : "account",
+    isUserSection(requested) || (isAdmin && isAdminSection(requested)) ? requested : "account",
   );
-  const tab = (id: Section, label: string, icon: ReactNode) => (
+  const item = (id: Section, label: string, icon: ReactNode, intent?: () => void) => (
     <button
       type="button"
       className={`nav-row${section === id ? " current" : ""}`}
       aria-current={section === id ? "true" : undefined}
+      onPointerEnter={intent}
+      onFocus={intent}
       onClick={() => {
         setSection(id);
       }}
@@ -73,58 +100,57 @@ export default function SettingsOverlay() {
       {icon} {label}
     </button>
   );
+  const preloadAdmin = () => void loadAdmin();
+  const loading = (label: string) => (
+    <section className="settings-body" tabIndex={0}>
+      <Spinner label={label} />
+    </section>
+  );
   return (
     <Overlay title="Settings" wide>
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings sections">
           <p className="section-label">Settings</p>
-          {tab("account", "Account", <CircleUserRound size={18} aria-hidden />)}
-          {tab("data", "Data", <Database size={18} aria-hidden />)}
-          {tab("features", "Features", <Sparkles size={18} aria-hidden />)}
-          {isAdmin ? (
-            // Intent prefetch of the admin chunk, only for admins (Phase 9 rules).
-            <Link to={paths.admin()} className="nav-row" prefetch="intent">
-              <Shield size={18} aria-hidden /> Administration
-            </Link>
-          ) : null}
+          {item("account", "Account", <CircleUserRound size={ICON} aria-hidden />)}
+          {item("data", "Data", <Database size={ICON} aria-hidden />)}
           <p className="section-label">Customize</p>
-          {tab("skills", "Skills", <ScrollText size={18} aria-hidden />)}
-          {tab("memories", "Memories", <Brain size={18} aria-hidden />)}
-          {tab("files", "Files", <FileCode size={18} aria-hidden />)}
-          {tab("attachments", "Attachments", <Paperclip size={18} aria-hidden />)}
+          {item("skills", "Skills", <ScrollText size={ICON} aria-hidden />)}
+          {item("memories", "Memories", <Brain size={ICON} aria-hidden />)}
+          {item("files", "Files", <FileCode size={ICON} aria-hidden />)}
+          {item("attachments", "Attachments", <Paperclip size={ICON} aria-hidden />)}
+          {isAdmin ? (
+            <>
+              <p className="section-label">Administration</p>
+              {item("users", "Users", <Users size={ICON} aria-hidden />, preloadAdmin)}
+              {item("providers", "Providers", <Server size={ICON} aria-hidden />, preloadAdmin)}
+              {item("models", "Models", <Cpu size={ICON} aria-hidden />, preloadAdmin)}
+              {item(
+                "instance",
+                "Instance settings",
+                <Settings2 size={ICON} aria-hidden />,
+                preloadAdmin,
+              )}
+              {item("maintenance", "Maintenance", <Wrench size={ICON} aria-hidden />, preloadAdmin)}
+              {item("audit", "Audit log", <ClipboardList size={ICON} aria-hidden />, preloadAdmin)}
+            </>
+          ) : null}
         </nav>
-        {section === "data" && user ? (
-          <Suspense
-            fallback={
-              <section className="settings-body" tabIndex={0}>
-                <Spinner label="Loading…" />
-              </section>
-            }
-          >
+        {isAdminSection(section) && isAdmin ? (
+          <Suspense fallback={loading("Loading administration…")}>
+            <AdminSection section={section} />
+          </Suspense>
+        ) : section === "data" && user ? (
+          <Suspense fallback={loading("Loading…")}>
             <DataSettings userId={user.id} />
           </Suspense>
-        ) : section === "features" && user ? (
-          <FeatureSettings userId={user.id} />
         ) : section === "skills" && user ? (
           <SkillsSettings userId={user.id} />
         ) : section === "memories" && user ? (
-          <Suspense
-            fallback={
-              <section className="settings-body" tabIndex={0}>
-                <Spinner label="Loading memories…" />
-              </section>
-            }
-          >
+          <Suspense fallback={loading("Loading memories…")}>
             <MemorySettings userId={user.id} />
           </Suspense>
         ) : section === "files" && user ? (
-          <Suspense
-            fallback={
-              <section className="settings-body" tabIndex={0}>
-                <Spinner label="Loading files…" />
-              </section>
-            }
-          >
+          <Suspense fallback={loading("Loading files…")}>
             <ArtifactSettings userId={user.id} />
           </Suspense>
         ) : section === "attachments" && user ? (

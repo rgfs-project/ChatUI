@@ -1,81 +1,88 @@
-/* Administration (Phase 10): loaded only with the admin route chunk. */
+/* Administration (Phase 10): Settings sections, loaded with the admin chunk. */
 
-.admin-tabs {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
+.admin-pane {
+  margin-top: var(--space-4);
 }
 
-.admin-tabs [role="tablist"] {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin: 0 -20px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-.admin-tabs [role="tab"] {
-  margin-bottom: -1px;
-  padding: 10px 12px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: none;
-  color: var(--muted);
-  font-weight: var(--weight-medium);
-}
-
-.admin-tabs [role="tab"]:hover {
-  color: var(--fg);
-}
-
-.admin-tabs [role="tab"][data-state="active"] {
-  border-bottom-color: var(--fg);
-  color: var(--fg);
-}
-
-.admin-tabs [role="tabpanel"] {
-  flex: 1;
-  min-height: 0;
-  padding: 20px 0;
-  overflow-y: auto;
+/* Tables never clip: a narrow pane scrolls the table, not the page. */
+.admin-table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-md);
+  font-size: var(--text-base);
 }
 
 .admin-table th,
 .admin-table td {
-  padding: 8px 10px;
+  padding: var(--space-4) var(--space-3);
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: middle;
 }
 
+.admin-table th:first-child,
+.admin-table td:first-child {
+  padding-left: 0;
+}
+
+.admin-table th:last-child,
+.admin-table td:last-child {
+  padding-right: 0;
+}
+
 .admin-table th {
+  padding-top: 0;
+  padding-bottom: var(--space-2);
   color: var(--muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   font-weight: var(--weight-medium);
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Controls in the last columns line up on the right edge. */
+.admin-table .col-end {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cell-title {
+  display: block;
+}
+
+.cell-meta {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.admin-after-table {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--space-4);
 }
 
 .admin-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
   align-items: end;
-  gap: 10px;
-  margin: 12px 0 20px;
+  gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-4);
 }
 
 .admin-form label {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
   color: var(--fg-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
 }
 
 .admin-form input,
@@ -112,14 +119,22 @@
   gap: 6px;
 }
 
-/* In a table the actions stay a cell (flex would break the row lines). */
+/* In a table the actions stay a cell (flex would break the row lines) on one
+   line; a narrow pane scrolls the table (.admin-table-wrap), never clips it. */
 td.admin-actions {
   display: table-cell;
+  width: 1%;
+  text-align: right;
   white-space: nowrap;
 }
 
 td.admin-actions > * + * {
-  margin-left: 6px;
+  margin-left: var(--space-2);
+}
+
+/* Form actions keep their natural width instead of filling a grid cell. */
+.admin-form > button {
+  justify-self: start;
 }
 
 .admin-note {
@@ -127,7 +142,7 @@ td.admin-actions > * + * {
   font-size: var(--text-md);
 }
 
-.admin-tabs button.danger {
+.admin-section button.danger {
   background: transparent;
   color: var(--danger);
   box-shadow: inset 0 0 0 1px var(--danger);
@@ -136,9 +151,9 @@ td.admin-actions > * + * {
 .admin-fieldset {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
   align-items: end;
-  gap: 10px;
+  gap: var(--space-3);
   margin: 0;
   padding: 12px 14px 14px;
   border: 1px solid var(--line);
@@ -162,4 +177,41 @@ td.admin-actions > * + * {
   color: var(--fg);
   font-size: var(--text-base);
   cursor: pointer;
+}
+
+/* Phones: list tables become stacked rows (the controls keep their labels),
+   so nothing scrolls sideways. */
+@media (max-width: 767.98px) {
+  .admin-table.stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .admin-table.stack tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .admin-table.stack tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .admin-table.stack td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+
+  .admin-table.stack td:first-child {
+    flex: 1 1 100%;
+  }
 }

@@ -1,7 +1,6 @@
 import { data } from "react-router";
-import { AdminPanel } from "../admin/AdminPanel";
-import { Overlay } from "../components/Overlay";
 import { appContext } from "../context";
+import { SettingsPanel } from "./settings";
 import type { Route } from "./+types/admin";
 
 export function meta(): Route.MetaDescriptors {
@@ -15,11 +14,7 @@ export function loader({ context }: Route.LoaderArgs) {
   return null;
 }
 
-/** The admin overlay: its own lazy route chunk, never part of chat startup. */
+/** Administration is a group of Settings sections: `/admin` opens Settings on Users. */
 export default function AdminOverlay() {
-  return (
-    <Overlay title="Administration" wide>
-      <AdminPanel />
-    </Overlay>
-  );
+  return <SettingsPanel initial="users" />;
 }

@@ -1486,14 +1486,20 @@ button.danger-outline {
   display: grid;
   flex: 1;
   grid-template-columns: 220px minmax(0, 1fr);
+  /* One row the panel's height: the rail and the pane each scroll on their own. */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   margin: 0 -20px;
   border-top: 1px solid var(--line);
 }
 
 .settings-nav {
-  padding: 8px 10px;
+  min-height: 0;
+  padding: var(--space-2) 10px var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-right: 1px solid var(--line);
+  scrollbar-width: thin;
 }
 
 .settings-nav .section-label {
@@ -1501,7 +1507,8 @@ button.danger-outline {
 }
 
 .settings-body {
-  padding: 24px 32px;
+  min-height: 0;
+  padding: var(--space-6) var(--space-8);
   overflow-y: auto;
 }
 
@@ -1511,13 +1518,57 @@ button.danger-outline {
   outline-offset: -2px;
 }
 
+/* ---- Settings typography and spacing (one hierarchy for every pane) ----------
+   1. Panel title: the pane's h2, divided from what follows.
+   2. Labels and subsection headings: base size, medium weight.
+   3. Descriptions and secondary text: a step smaller, muted.
+   Rows are divided and roomy; sections are a clear step apart. */
+
 .settings-body h2 {
-  margin: 0 0 var(--space-5);
+  margin: 0;
   font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
 }
 
-/* Rows (after Qwen): label over a muted description, control on the right,
-   a divider between rows. */
+/* The title block: a bare h2, a header (title + description) or a title row
+   with actions (.skills-head). */
+.settings-body > h2,
+.settings-header,
+.skills-head {
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-header .settings-hint {
+  margin-top: var(--space-1);
+}
+
+.settings-body h3,
+.settings-body h4,
+.settings-body legend,
+.settings-label {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading);
+}
+
+.settings-label {
+  display: block;
+}
+
+.settings-hint {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: var(--leading);
+}
+
+/* Rows: label over a muted description, the control on the right, a divider
+   between rows. */
 .settings-row {
   display: flex;
   align-items: center;
@@ -1525,10 +1576,6 @@ button.danger-outline {
   gap: var(--space-4);
   padding: var(--space-5) 0;
   border-bottom: 1px solid var(--line);
-}
-
-.settings-row:first-of-type {
-  padding-top: 0;
 }
 
 .settings-row:last-child {
@@ -1543,30 +1590,33 @@ button.danger-outline {
   white-space: nowrap;
 }
 
-.settings-label {
-  margin: 0;
-  font-weight: var(--weight-medium);
-}
-
-.settings-hint {
-  margin: var(--space-1) 0 0;
-  color: var(--muted);
-  font-size: var(--text-md);
-  line-height: 1.55;
-}
-
-/* Paragraphs directly in a pane (intro text, empty and loading states). */
+/* Paragraphs directly in a pane (intro text, loading states). */
 .settings-body > .settings-hint {
-  margin: 0 0 var(--space-4);
+  margin: var(--space-4) 0;
 }
 
-/* Empty states: one soft panel, like "Add your first skill". */
+/* Subsections within a pane: a clear step from what came before (less right
+   under the title); the heading's description sits tight beneath it. */
+.settings-body > h3 {
+  margin-top: var(--space-8);
+}
+
+.settings-body > :is(h2, .settings-header, .skills-head) + h3 {
+  margin-top: var(--space-5);
+}
+
+.settings-body > h3 + .settings-hint {
+  margin-top: var(--space-1);
+}
+
+/* Empty states: one soft panel with generous room. */
 .settings-body > [data-testid$="-empty"] {
-  margin: 0;
-  padding: var(--space-5) var(--space-6);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-8) var(--space-6);
   border-radius: var(--radius-xl);
   background: var(--hover);
   color: var(--fg-2);
+  text-align: center;
 }
 
 .button-link {
@@ -1584,41 +1634,6 @@ button.danger-outline {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
-.feature-group + .feature-group {
-  margin-top: var(--space-8);
-}
-
-.page .feature-group-title,
-.feature-group-title {
-  margin: 0;
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-}
-
-.feature-list {
-  display: grid;
-  margin: var(--space-2) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.feature-item {
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.feature-item:last-child {
-  border-bottom: 0;
-}
-
-.feature-item .settings-label {
-  margin: 0;
-}
-
-.feature-models {
-  font-style: italic;
-}
-
 .button-link.primary {
   background: var(--send);
   color: var(--on-send);
@@ -1631,8 +1646,9 @@ button.danger-outline {
 input[type="checkbox"].toggle {
   flex: none;
   position: relative;
-  width: 40px;
-  height: 24px;
+  vertical-align: middle;
+  width: 36px;
+  height: 20px;
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -1647,10 +1663,10 @@ input[type="checkbox"].toggle {
 input[type="checkbox"].toggle::before {
   content: "";
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--canvas);
   box-shadow: var(--shadow-sm);
@@ -2038,8 +2054,16 @@ input[type="checkbox"].toggle:disabled {
     display: none;
   }
 
+  .settings-nav {
+    overflow-y: hidden;
+    padding: var(--space-2);
+  }
+
+  /* A horizontal strip: rows keep their size (it scrolls) and line up. */
   .settings-nav .nav-row {
+    flex: none;
     width: auto;
+    margin-top: 0;
     white-space: nowrap;
   }
 

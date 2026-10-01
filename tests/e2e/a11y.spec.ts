@@ -99,15 +99,7 @@ test.describe("signed in", () => {
       found.push(...(await scan(page, `account menu ${scheme}`)));
       await page.getByRole("menuitem", { name: "Settings" }).click();
       await expect(page.getByRole("dialog")).toBeVisible();
-      for (const tab of [
-        "Account",
-        "Data",
-        "Features",
-        "Skills",
-        "Memories",
-        "Files",
-        "Attachments",
-      ]) {
+      for (const tab of ["Account", "Data", "Skills", "Memories", "Files", "Attachments"]) {
         await page.getByRole("button", { name: tab, exact: true }).click();
         await page.waitForLoadState("networkidle");
         found.push(...(await scan(page, `settings ${tab} ${scheme}`)));

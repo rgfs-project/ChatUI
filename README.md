@@ -71,12 +71,12 @@ Then open the URL in `PUBLIC_ORIGIN` (default `http://localhost:3000`) and sign 
 
 ## Administration
 
-Admins find **Administration** in Settings (`/admin`):
+Admins find an **Administration** group in Settings (the account menu's Administration, or `/admin`, opens it on Users):
 
-- **Users:** create accounts, set passwords (signs the user out everywhere), change role or status, and delete accounts (type the username to confirm; all their data is removed). The last active admin can't be demoted, disabled or deleted.
-- **Providers:** add, edit, test and remove OpenAI-compatible providers. Every save re-checks the endpoint against the network policy. API keys are write-only: they're never shown again, and you can replace or remove them.
-- **Models:** hide models from users, set per-model temperature, top-p, top-k, min-p, repeat penalty and system prompts (with `{{username}}`, `{{date}}`, `{{timezone}}`), and optionally tell the model the current time. Refresh discovery.
-- **Settings:** registration (overrides `REGISTRATION_MODE`), default model, time zone and generation limits.
+- **Users** (username, role, status, actions): create accounts, set passwords (signs the user out everywhere), change role or status, and delete accounts (type the username to confirm; all their data is removed). The last active admin can't be demoted, disabled or deleted.
+- **Providers** (provider, status, actions): add, edit, test and remove OpenAI-compatible providers; the form opens with Add provider or Edit. Every save re-checks the endpoint against the network policy. API keys are write-only: they're never shown again, and you can replace or remove them.
+- **Models:** hide models from users, set per-model temperature, top-p, top-k, min-p, repeat penalty and system prompts (with `{{username}}`, `{{date}}`, `{{timezone}}`), and optionally tell the model the current time. Refresh discovery is below the list.
+- **Instance settings:** registration (overrides `REGISTRATION_MODE`), default model, time zone and generation limits.
 - **Maintenance and audit log:** rebuild conversation indexes, and see who changed what (never the values).
 
 Operators without the UI: `docker compose exec chatui node server/cli.ts user:reset-password --username <name>` (password on the prompt or stdin). `providers.json` is created from `LLAMA_*` only on a fresh volume; afterwards admin edits are authoritative across restarts.
@@ -172,7 +172,6 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 - **Math:** replies can use LaTeX: `$…$` or `\(…\)` inline, `$$…$$` or `\[…\]` for display, or a `$$` block. It is shown as MathML, which screen readers can read, and a display formula has **Copy LaTeX**. Copying a selection with math copies its LaTeX. Dollar amounts (`$5 and $10`) stay text. A formula that can't be rendered is shown as its source.
 - **Code:** fenced blocks show their language, colors for about 50 common languages, **Copy** and **Download** (as `snippet.<ext>`). Code is only ever shown, never run.
 - Math and highlighting load only for replies that use them. A math font (STIX Two Math) downloads only if your system has none.
-- **Settings → Features** lists what ChatUI does itself, what depends on the selected model (image and audio input, the thought process, memory suggestions), and what isn't available (web search, voice, image generation, running code).
 
 ## Memories
 

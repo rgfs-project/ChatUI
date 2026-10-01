@@ -29,7 +29,10 @@ test.describe("as a normal user", () => {
     await expect(page.getByRole("menuitem", { name: "Administration" })).toHaveCount(0);
     await page.getByRole("menuitem", { name: "Settings" }).click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
+    // Settings has no Administration group for users.
+    const dialog = page.getByRole("dialog", { name: "Settings" });
+    await expect(dialog.getByText("Administration", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Users", exact: true })).toHaveCount(0);
     await page.waitForLoadState("networkidle");
     expect(requests.filter((p) => p.startsWith("/api/admin"))).toEqual([]);
     expect(requests.filter((p) => /\/assets\/(admin|AdminPanel)-/.test(p))).toEqual([]);
@@ -57,8 +60,13 @@ test.describe("as an admin", () => {
     await admin.hover();
     await admin.click();
     await expect(page).toHaveURL(/\/admin$/);
-    const panel = page.getByRole("dialog", { name: "Administration" });
+    // Administration is a group of Settings sections; /admin opens it on Users.
+    const panel = page.getByRole("dialog", { name: "Settings" });
     await expect(panel).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Users", exact: true })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
 
     // Users: create, then change role; the table reflects the server.
     const users = panel.getByTestId("admin-users");
@@ -71,16 +79,20 @@ test.describe("as an admin", () => {
     await panel.getByLabel("Role of e2e-created").selectOption("admin");
     await expect(panel.getByTestId("admin-status").first()).toContainText("Change role: done.");
 
-    // Models: hide one, keyboard-operable tabs (arrow keys move and activate).
-    await panel.getByRole("tab", { name: "Users" }).click();
-    await page.keyboard.press("ArrowRight");
-    await expect(panel.getByRole("tab", { name: "Providers" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    await page.keyboard.press("ArrowRight");
-    await expect(panel.getByRole("tab", { name: "Models" })).toHaveAttribute(
-      "aria-selected",
+    // Providers: the form stays hidden until Add provider.
+    await panel.getByRole("button", { name: "Providers", exact: true }).click();
+    await expect(panel.getByTestId("admin-providers")).toBeVisible();
+    await expect(panel.getByRole("form", { name: "Add provider" })).toHaveCount(0);
+    await panel.getByRole("button", { name: "Add provider" }).click();
+    await expect(panel.getByRole("form", { name: "Add provider" })).toBeVisible();
+    await panel.getByRole("button", { name: "Cancel" }).click();
+    await expect(panel.getByRole("form", { name: "Add provider" })).toHaveCount(0);
+
+    // Models (keyboard): the rail's sections are buttons; Enter opens one.
+    await panel.getByRole("button", { name: "Models", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(panel.getByRole("button", { name: "Models", exact: true })).toHaveAttribute(
+      "aria-current",
       "true",
     );
     const models = panel.getByTestId("admin-models");
@@ -91,7 +103,7 @@ test.describe("as an admin", () => {
     ).not.toBeChecked();
 
     // Settings: a validated time zone.
-    await panel.getByRole("tab", { name: "Settings" }).click();
+    await panel.getByRole("button", { name: "Instance settings", exact: true }).click();
     const settings = panel.getByRole("form", { name: "Instance settings" });
     await settings.getByLabel("Time zone (IANA)").fill("Not/AZone");
     await settings.getByRole("button", { name: "Save settings" }).click();
@@ -101,7 +113,7 @@ test.describe("as an admin", () => {
     await expect(panel.getByTestId("admin-status").last()).toContainText("done");
 
     // Audit log: actions, never values.
-    await panel.getByRole("tab", { name: "Audit log" }).click();
+    await panel.getByRole("button", { name: "Audit log", exact: true }).click();
     const audit = panel.getByTestId("admin-audit");
     await expect(audit).toContainText("user.create");
     await expect(audit).toContainText("model.settings");

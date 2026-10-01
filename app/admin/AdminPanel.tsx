@@ -1,47 +1,68 @@
-import * as Tabs from "@radix-ui/react-tabs";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode, type SyntheticEvent } from "react";
 import type { AdminModelSettings, AdminProviderDto, AdminUserDto } from "@shared/admin";
 import { ConfirmDialog } from "../components/Dialogs";
+import { Spinner } from "../components/Spinner";
 import { useUserId } from "../lib/auth-store";
 import { ApiError, apiJson } from "../lib/query";
 import { adminKeys, adminQueries, adminWrite } from "./api";
+import type { AdminSectionId } from "./sections";
 import "./admin.css";
 
+const TITLES: Record<AdminSectionId, { title: string; hint: string }> = {
+  users: {
+    title: "Users",
+    hint: "Accounts on this server, their role and whether they can sign in.",
+  },
+  providers: {
+    title: "Providers",
+    hint: "Model servers ChatUI connects to. Keys stay on the server and are never shown again.",
+  },
+  models: {
+    title: "Models",
+    hint: "What users can choose in the composer, and each model's sampling and system prompt.",
+  },
+  instance: {
+    title: "Instance settings",
+    hint: "Registration, the default model, the time zone and generation limits.",
+  },
+  maintenance: { title: "Maintenance", hint: "Safe repairs of derived data." },
+  audit: { title: "Audit log", hint: "Every administrative change: who, what and the outcome." },
+};
+
 /**
- * Administration (Phase 10). Loaded only with the /admin route. Hiding
- * controls here is cosmetic: the server authorizes every request (INV-24).
+ * Administration (Phase 10), shown as Settings sections. Its own chunk, loaded
+ * only when an administrator opens one. Hiding controls is cosmetic: the
+ * server authorizes every request (INV-24).
  */
-export function AdminPanel() {
+export default function AdminSection({ section }: { section: AdminSectionId }) {
+  const { title, hint } = TITLES[section];
+  const headingId = `admin-${section}-title`;
   return (
-    <Tabs.Root defaultValue="users" className="admin-tabs">
-      <Tabs.List aria-label="Administration sections">
-        <Tabs.Trigger value="users">Users</Tabs.Trigger>
-        <Tabs.Trigger value="providers">Providers</Tabs.Trigger>
-        <Tabs.Trigger value="models">Models</Tabs.Trigger>
-        <Tabs.Trigger value="settings">Settings</Tabs.Trigger>
-        <Tabs.Trigger value="maintenance">Maintenance</Tabs.Trigger>
-        <Tabs.Trigger value="audit">Audit log</Tabs.Trigger>
-      </Tabs.List>
-      <Tabs.Content value="users">
+    <section
+      className="settings-body admin-section"
+      tabIndex={0}
+      aria-labelledby={headingId}
+      data-testid={`admin-section-${section}`}
+    >
+      <header className="settings-header">
+        <h2 id={headingId}>{title}</h2>
+        <p className="settings-hint">{hint}</p>
+      </header>
+      {section === "users" ? (
         <UsersTab />
-      </Tabs.Content>
-      <Tabs.Content value="providers">
+      ) : section === "providers" ? (
         <ProvidersTab />
-      </Tabs.Content>
-      <Tabs.Content value="models">
+      ) : section === "models" ? (
         <ModelsTab />
-      </Tabs.Content>
-      <Tabs.Content value="settings">
+      ) : section === "instance" ? (
         <SettingsTab />
-      </Tabs.Content>
-      <Tabs.Content value="maintenance">
+      ) : section === "maintenance" ? (
         <MaintenanceTab />
-      </Tabs.Content>
-      <Tabs.Content value="audit">
+      ) : (
         <AuditTab />
-      </Tabs.Content>
-    </Tabs.Root>
+      )}
+    </section>
   );
 }
 
@@ -107,80 +128,81 @@ function UsersTab() {
   }
 
   return (
-    <section aria-label="Users">
+    <div className="admin-pane">
       {status}
-      <table className="admin-table" data-testid="admin-users">
-        <thead>
-          <tr>
-            <th scope="col">Username</th>
-            <th scope="col">Role</th>
-            <th scope="col">Status</th>
-            <th scope="col">Chats</th>
-            <th scope="col">Created</th>
-            <th scope="col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(users.data ?? []).map((u) => (
-            <tr key={u.id}>
-              <td>{u.username}</td>
-              <td>
-                <select
-                  aria-label={`Role of ${u.username}`}
-                  value={u.role}
-                  disabled={busy}
-                  onChange={(event) =>
-                    void run("Change role", "PATCH", `/api/admin/users/${u.id}`, {
-                      role: event.currentTarget.value,
-                    })
-                  }
-                >
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                </select>
-              </td>
-              <td>
-                <select
-                  aria-label={`Status of ${u.username}`}
-                  value={u.status}
-                  disabled={busy}
-                  onChange={(event) =>
-                    void run("Change status", "PATCH", `/api/admin/users/${u.id}`, {
-                      status: event.currentTarget.value,
-                    })
-                  }
-                >
-                  <option value="active">active</option>
-                  <option value="disabled">disabled</option>
-                </select>
-              </td>
-              <td>{u.conversationCount}</td>
-              <td>{u.createdAt.slice(0, 10)}</td>
-              <td className="admin-actions">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setPassword(u);
-                  }}
-                >
-                  Set password
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => {
-                    setConfirmName("");
-                    setDeleting(u);
-                  }}
-                >
-                  Delete
-                </button>
-              </td>
+      {users.isPending ? <Spinner label="Loading users…" /> : null}
+      <div className="admin-table-wrap" hidden={users.isPending}>
+        <table className="admin-table stack" data-testid="admin-users">
+          <thead>
+            <tr>
+              <th scope="col">Username</th>
+              <th scope="col">Role</th>
+              <th scope="col">Status</th>
+              <th scope="col" className="col-end">
+                Actions
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {(users.data ?? []).map((u) => (
+              <tr key={u.id}>
+                <td>{u.username}</td>
+                <td>
+                  <select
+                    aria-label={`Role of ${u.username}`}
+                    value={u.role}
+                    disabled={busy}
+                    onChange={(event) =>
+                      void run("Change role", "PATCH", `/api/admin/users/${u.id}`, {
+                        role: event.currentTarget.value,
+                      })
+                    }
+                  >
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </td>
+                <td>
+                  <select
+                    aria-label={`Status of ${u.username}`}
+                    value={u.status}
+                    disabled={busy}
+                    onChange={(event) =>
+                      void run("Change status", "PATCH", `/api/admin/users/${u.id}`, {
+                        status: event.currentTarget.value,
+                      })
+                    }
+                  >
+                    <option value="active">Active</option>
+                    <option value="disabled">Disabled</option>
+                  </select>
+                </td>
+                <td className="admin-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setPassword(u);
+                    }}
+                  >
+                    Set password
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => {
+                      setConfirmName("");
+                      setDeleting(u);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <form className="admin-form" onSubmit={(e) => void create(e)} aria-label="Create user">
         <label>
           Username
@@ -193,8 +215,8 @@ function UsersTab() {
         <label>
           Role
           <select name="role" defaultValue="user">
-            <option value="user">user</option>
-            <option value="admin">admin</option>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
           </select>
         </label>
         <button type="submit" disabled={busy}>
@@ -260,7 +282,7 @@ function UsersTab() {
             });
         }}
       />
-    </section>
+    </div>
   );
 }
 
@@ -271,6 +293,8 @@ function ProvidersTab() {
   const providers = useQuery(adminQueries.providers(userId));
   const { run, busy, status } = useAction();
   const [editing, setEditing] = useState<AdminProviderDto | null>(null);
+  // The form stays hidden until "Add provider" or a row's "Edit".
+  const [formOpen, setFormOpen] = useState(false);
   const [removing, setRemoving] = useState<AdminProviderDto | null>(null);
 
   async function save(event: SyntheticEvent<HTMLFormElement>) {
@@ -301,141 +325,171 @@ function ProvidersTab() {
         });
     if (done) {
       setEditing(null);
+      setFormOpen(false);
       element.reset();
     }
   }
 
   return (
-    <section aria-label="Providers">
+    <div className="admin-pane">
       {status}
-      <table className="admin-table" data-testid="admin-providers">
-        <thead>
-          <tr>
-            <th scope="col">Provider</th>
-            <th scope="col">Endpoint</th>
-            <th scope="col">API key</th>
-            <th scope="col">Status</th>
-            <th scope="col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(providers.data ?? []).map((p) => (
-            <tr key={p.id}>
-              <td>
-                {p.name} <span className="admin-note">({p.id})</span>
-              </td>
-              <td>{p.baseUrl}</td>
-              <td>{p.hasApiKey ? "set" : "none"}</td>
-              <td>{p.status === "enabled" ? "enabled" : `invalid: ${p.problem ?? ""}`}</td>
-              <td className="admin-actions">
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={busy}
-                  onClick={() =>
-                    void run("Test connection", "POST", `/api/admin/providers/${p.id}/test`)
-                  }
-                >
-                  Test
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setEditing(p);
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => {
-                    setRemoving(p);
-                  }}
-                >
-                  Remove
-                </button>
-              </td>
+      {providers.isPending ? <Spinner label="Loading providers…" /> : null}
+      <div className="admin-table-wrap" hidden={providers.isPending}>
+        <table className="admin-table stack" data-testid="admin-providers">
+          <thead>
+            <tr>
+              <th scope="col">Provider</th>
+              <th scope="col">Status</th>
+              <th scope="col" className="col-end">
+                Actions
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <form
-        key={editing?.id ?? "new"}
-        className="admin-form"
-        aria-label={editing ? `Edit ${editing.name}` : "Add provider"}
-        onSubmit={(e) => void save(e)}
-      >
-        {editing ? null : (
-          <label>
-            Id
-            <input name="id" required pattern="[a-z0-9][a-z0-9_-]{0,63}" />
-          </label>
-        )}
-        <label>
-          Name
-          <input name="name" required defaultValue={editing?.name ?? ""} />
-        </label>
-        <label>
-          Base URL
-          <input name="baseUrl" required defaultValue={editing?.baseUrl ?? ""} />
-        </label>
-        <label>
-          API key {editing?.hasApiKey ? "(leave empty to keep)" : "(optional)"}
-          <input name="apiKey" type="password" autoComplete="off" />
-        </label>
-        {editing?.hasApiKey ? (
-          <label className="toggle-row">
-            <span>Remove the stored key</span>
-            <input className="toggle" name="clearApiKey" type="checkbox" />
-          </label>
-        ) : null}
-        <label className="toggle-row">
-          <span>llama.cpp sampling (top-k, min-p, repeat penalty)</span>
-          <input
-            className="toggle"
-            name="samplingExtensions"
-            type="checkbox"
-            defaultChecked={editing?.samplingExtensions ?? true}
-          />
-        </label>
-        <label className="toggle-row">
-          <span>Accepts images</span>
-          <input
-            className="toggle"
-            name="image"
-            type="checkbox"
-            defaultChecked={editing?.capabilities.inputModalities.includes("image") ?? false}
-          />
-        </label>
-        <label className="toggle-row">
-          <span>Reasoning</span>
-          <input
-            className="toggle"
-            name="reasoning"
-            type="checkbox"
-            defaultChecked={editing?.capabilities.reasoning ?? false}
-          />
-        </label>
-        <button type="submit" disabled={busy}>
-          {editing ? "Save provider" : "Add provider"}
-        </button>
-        {editing ? (
+          </thead>
+          <tbody>
+            {(providers.data ?? []).map((p) => (
+              <tr key={p.id}>
+                <td>
+                  <span className="cell-title">{p.name}</span>
+                  <span className="cell-meta">{p.id}</span>
+                </td>
+                <td>
+                  {p.status === "enabled" ? (
+                    "Enabled"
+                  ) : (
+                    <>
+                      <span className="cell-title">Invalid</span>
+                      {p.problem ? <span className="cell-meta">{p.problem}</span> : null}
+                    </>
+                  )}
+                </td>
+                <td className="admin-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      void run("Test connection", "POST", `/api/admin/providers/${p.id}/test`)
+                    }
+                  >
+                    Test
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setEditing(p);
+                      setFormOpen(true);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => {
+                      setRemoving(p);
+                    }}
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {formOpen ? null : (
+        <div className="admin-after-table">
           <button
             type="button"
             className="secondary"
             onClick={() => {
               setEditing(null);
+              setFormOpen(true);
+            }}
+          >
+            Add provider
+          </button>
+        </div>
+      )}
+      {formOpen ? (
+        <form
+          key={editing?.id ?? "new"}
+          className="admin-form"
+          aria-label={editing ? `Edit ${editing.name}` : "Add provider"}
+          onSubmit={(e) => void save(e)}
+        >
+          {editing ? null : (
+            <label>
+              Id
+              <input name="id" required pattern="[a-z0-9][a-z0-9_-]{0,63}" />
+            </label>
+          )}
+          <label>
+            Name
+            <input name="name" required defaultValue={editing?.name ?? ""} />
+          </label>
+          <label>
+            Base URL
+            <input name="baseUrl" required defaultValue={editing?.baseUrl ?? ""} />
+          </label>
+          <label>
+            API key {editing?.hasApiKey ? "(leave empty to keep)" : "(optional)"}
+            <input name="apiKey" type="password" autoComplete="off" />
+          </label>
+          {editing?.hasApiKey ? (
+            <label className="toggle-row">
+              <span>Remove the stored key</span>
+              <input className="toggle" name="clearApiKey" type="checkbox" />
+            </label>
+          ) : null}
+          <label className="toggle-row">
+            <span>llama.cpp sampling (top-k, min-p, repeat penalty)</span>
+            <input
+              className="toggle"
+              name="samplingExtensions"
+              type="checkbox"
+              defaultChecked={editing?.samplingExtensions ?? true}
+            />
+          </label>
+          <label className="toggle-row">
+            <span>Accepts images</span>
+            <input
+              className="toggle"
+              name="image"
+              type="checkbox"
+              defaultChecked={editing?.capabilities.inputModalities.includes("image") ?? false}
+            />
+          </label>
+          <label className="toggle-row">
+            <span>Reasoning</span>
+            <input
+              className="toggle"
+              name="reasoning"
+              type="checkbox"
+              defaultChecked={editing?.capabilities.reasoning ?? false}
+            />
+          </label>
+          <button type="submit" disabled={busy}>
+            {editing ? "Save provider" : "Add provider"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(false);
             }}
           >
             Cancel
           </button>
-        ) : null}
-      </form>
-      <p className="admin-note">
-        Every save re-checks the endpoint against the network policy; keys are never shown again.
-      </p>
+        </form>
+      ) : null}
+      {formOpen ? (
+        <p className="admin-note">
+          Every save re-checks the endpoint against the network policy; keys are never shown again.
+        </p>
+      ) : null}
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => {
@@ -449,7 +503,7 @@ function ProvidersTab() {
             void run("Remove provider", "DELETE", `/api/admin/providers/${removing.id}`);
         }}
       />
-    </section>
+    </div>
   );
 }
 
@@ -471,80 +525,88 @@ function ModelsTab() {
   }
 
   return (
-    <section aria-label="Models">
+    <div className="admin-pane">
       {status}
-      <button
-        type="button"
-        className="secondary"
-        disabled={busy}
-        onClick={() => {
-          // Forces discovery on every provider, then shows the fresh lists.
-          void apiJson<NonNullable<typeof models.data>>("/api/admin/models?refresh=1").then(
-            (data) => {
-              client.setQueryData(adminKeys.models(userId), data);
-            },
-            () => undefined,
-          );
-        }}
-      >
-        Refresh discovery
-      </button>
-      <table className="admin-table" data-testid="admin-models">
-        <thead>
-          <tr>
-            <th scope="col">Model</th>
-            <th scope="col">Provider</th>
-            <th scope="col">Status</th>
-            <th scope="col">Visible</th>
-            <th scope="col">Settings</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(models.data?.providers ?? []).flatMap((group) =>
-            group.models.map((m) => {
-              const s = settingsFor(m.providerId, m.id);
-              return (
-                <tr key={`${m.providerId}/${m.id}`}>
-                  <td>{m.id}</td>
-                  <td>{group.provider.name}</td>
-                  <td>{m.status}</td>
-                  <td>
-                    {/* Uncontrolled (toggles at once), re-synced by key when the server answers. */}
-                    <input
-                      key={String(s?.hidden === true)}
-                      type="checkbox"
-                      className="toggle"
-                      // Takes effect at once: a switch, not a form checkbox.
-                      role="switch"
-                      aria-label={`${m.id} (${group.provider.name}) visible to users`}
-                      defaultChecked={s?.hidden !== true}
-                      disabled={busy}
-                      onChange={(event) =>
-                        void run("Visibility", "PUT", "/api/admin/model-settings", {
-                          providerId: m.providerId,
-                          modelId: m.id,
-                          hidden: !event.currentTarget.checked,
-                        })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => {
-                        setEditing({ providerId: m.providerId, modelId: m.id });
-                      }}
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              );
-            }),
-          )}
-        </tbody>
-      </table>
+      {models.isPending ? <Spinner label="Loading models…" /> : null}
+      <div className="admin-table-wrap" hidden={models.isPending}>
+        <table className="admin-table" data-testid="admin-models">
+          <thead>
+            <tr>
+              <th scope="col">Model</th>
+              <th scope="col" className="col-end">
+                <span className="visually-hidden">Settings</span>
+              </th>
+              <th scope="col" className="col-end">
+                Visible
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {(models.data?.providers ?? []).flatMap((group) =>
+              group.models.map((m) => {
+                const s = settingsFor(m.providerId, m.id);
+                return (
+                  <tr key={`${m.providerId}/${m.id}`}>
+                    <td>
+                      <span className="cell-title">{m.id}</span>
+                      <span className="cell-meta">{group.provider.name}</span>
+                    </td>
+                    <td className="col-end">
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setEditing({ providerId: m.providerId, modelId: m.id });
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </td>
+                    <td className="col-end">
+                      {/* Uncontrolled (toggles at once), re-synced by key when the server answers. */}
+                      <input
+                        key={String(s?.hidden === true)}
+                        type="checkbox"
+                        className="toggle"
+                        // Takes effect at once: a switch, not a form checkbox.
+                        role="switch"
+                        aria-label={`${m.id} (${group.provider.name}) visible to users`}
+                        defaultChecked={s?.hidden !== true}
+                        disabled={busy}
+                        onChange={(event) =>
+                          void run("Visibility", "PUT", "/api/admin/model-settings", {
+                            providerId: m.providerId,
+                            modelId: m.id,
+                            hidden: !event.currentTarget.checked,
+                          })
+                        }
+                      />
+                    </td>
+                  </tr>
+                );
+              }),
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="admin-after-table">
+        <button
+          type="button"
+          className="secondary"
+          disabled={busy}
+          onClick={() => {
+            // Forces discovery on every provider, then shows the fresh lists.
+            void apiJson<NonNullable<typeof models.data>>("/api/admin/models?refresh=1").then(
+              (data) => {
+                client.setQueryData(adminKeys.models(userId), data);
+              },
+              () => undefined,
+            );
+          }}
+        >
+          Refresh discovery
+        </button>
+      </div>
       {editing ? (
         <form
           key={`${editing.providerId}/${editing.modelId}`}
@@ -610,7 +672,7 @@ function ModelsTab() {
           </button>
         </form>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -622,12 +684,12 @@ function SettingsTab() {
   const models = useQuery(adminQueries.models(userId));
   const { run, busy, status } = useAction();
   const s = settings.data;
-  if (!s) return <p className="admin-note">Loading…</p>;
+  if (!s) return <Spinner label="Loading settings…" />;
   const pairs = (models.data?.providers ?? []).flatMap((g) =>
     g.models.map((m) => JSON.stringify([m.providerId, m.id])),
   );
   return (
-    <section aria-label="Instance settings">
+    <div className="admin-pane">
       {status}
       {s.problem ? (
         <p role="alert">settings.json could not be read ({s.problem}); defaults are in effect.</p>
@@ -667,8 +729,8 @@ function SettingsTab() {
           Registration (
           {s.registrationModeSource === "settings" ? "saved setting" : "from environment"})
           <select name="registrationMode" defaultValue={s.registrationMode}>
-            <option value="closed">closed</option>
-            <option value="open">open</option>
+            <option value="closed">Closed</option>
+            <option value="open">Open</option>
           </select>
         </label>
         <label>
@@ -681,7 +743,7 @@ function SettingsTab() {
                 : ""
             }
           >
-            <option value="">(none)</option>
+            <option value="">None</option>
             {pairs.map((p) => (
               <option key={p} value={p}>
                 {(JSON.parse(p) as [string, string]).join(" / ")}
@@ -764,7 +826,7 @@ function SettingsTab() {
           Save settings
         </button>
       </form>
-    </section>
+    </div>
   );
 }
 
@@ -781,7 +843,7 @@ function MaintenanceTab() {
   const [confirm, setConfirm] = useState(false);
   const [target, setTarget] = useState("");
   return (
-    <section aria-label="Maintenance">
+    <div className="admin-pane">
       {status}
       <form
         className="admin-form"
@@ -795,7 +857,7 @@ function MaintenanceTab() {
         <label>
           Rebuild the conversation index for
           <select name="userId" defaultValue="">
-            <option value="">every user</option>
+            <option value="">Every user</option>
             {(users.data ?? []).map((u) => (
               <option key={u.id} value={u.id}>
                 {u.username}
@@ -825,7 +887,7 @@ function MaintenanceTab() {
           )
         }
       />
-    </section>
+    </div>
   );
 }
 
@@ -833,32 +895,35 @@ function AuditTab() {
   const userId = useUserId();
   const audit = useQuery(adminQueries.audit(userId));
   return (
-    <section aria-label="Audit log">
-      <table className="admin-table" data-testid="admin-audit">
-        <thead>
-          <tr>
-            <th scope="col">Time</th>
-            <th scope="col">Admin</th>
-            <th scope="col">Action</th>
-            <th scope="col">Target</th>
-            <th scope="col">Outcome</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(audit.data ?? []).map((e) => (
-            <tr key={`${e.time}-${e.action}-${e.target.id ?? ""}`}>
-              <td>{e.time.replace("T", " ").slice(0, 19)}</td>
-              <td>{e.actor.username}</td>
-              <td>
-                {e.action}
-                {e.fields ? <span className="admin-note"> ({e.fields.join(", ")})</span> : null}
-              </td>
-              <td>{e.target.label ?? e.target.id ?? e.target.type}</td>
-              <td>{e.outcome === "success" ? "ok" : `failed (${e.code ?? ""})`}</td>
+    <div className="admin-pane">
+      {audit.isPending ? <Spinner label="Loading the audit log…" /> : null}
+      <div className="admin-table-wrap" hidden={audit.isPending}>
+        <table className="admin-table stack" data-testid="admin-audit">
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              <th scope="col">Admin</th>
+              <th scope="col">Action</th>
+              <th scope="col">Target</th>
+              <th scope="col">Outcome</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+          </thead>
+          <tbody>
+            {(audit.data ?? []).map((e) => (
+              <tr key={`${e.time}-${e.action}-${e.target.id ?? ""}`}>
+                <td>{e.time.replace("T", " ").slice(0, 19)}</td>
+                <td>{e.actor.username}</td>
+                <td>
+                  {e.action}
+                  {e.fields ? <span className="admin-note"> ({e.fields.join(", ")})</span> : null}
+                </td>
+                <td>{e.target.label ?? e.target.id ?? e.target.type}</td>
+                <td>{e.outcome === "success" ? "Succeeded" : `Failed (${e.code ?? "error"})`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
