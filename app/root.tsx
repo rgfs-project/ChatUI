@@ -9,6 +9,7 @@ import {
   useRouteLoaderData,
   type LinksFunction,
 } from "react-router";
+import { collapsedFromCookieHeader } from "@shared/sidebar-sections";
 import { themeFromCookieHeader, type Theme } from "@shared/theme";
 import type { Route } from "./+types/root";
 import { appContext } from "./context";
@@ -29,6 +30,8 @@ export function loader({ context, request }: Route.LoaderArgs) {
     // Presentation hint (Phase 18): rendered into <html> so the first paint is
     // already in the saved theme, with no bootstrap script.
     theme: themeFromCookieHeader(request.headers.get("cookie")),
+    // Which sidebar sections are collapsed: rendered as remembered, no shift.
+    sidebarSections: collapsedFromCookieHeader(request.headers.get("cookie")),
   };
 }
 

@@ -8,12 +8,14 @@ import {
 } from "@tanstack/react-query";
 import { ArrowDown, ChevronDown, PanelLeft, SquarePen, X } from "lucide-react";
 import {
+  Fragment,
   lazy,
   Suspense,
   useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -34,6 +36,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import type { ConversationDto } from "@shared/conversations";
 import { isTerminalState, type GenerationState } from "@shared/generation-state";
 import { announce } from "../lib/announcer";
+import { formatSeparator, separatorsBefore } from "../lib/time-separators";
 import { Spinner } from "./Spinner";
 import type { StartGenerationResponse } from "@shared/generations";
 import { AccountChangedError } from "../lib/api";
@@ -92,6 +95,19 @@ function asMessageAttachment(dto: AttachmentDto): MessageAttachmentDto {
     width: dto.width,
     height: dto.height,
   };
+}
+
+/**
+ * "Tue, Sep 22 at 11:56 PM", centered above a new sitting. The label is in the
+ * viewer's locale and time zone, so it fills in after hydration; the row keeps
+ * its height meanwhile (no layout shift, no hydration mismatch).
+ */
+function TimeSeparator({ iso, hydrated }: { iso: string; hydrated: boolean }) {
+  return (
+    <li className="time-separator" data-testid="time-separator">
+      <time dateTime={iso}>{hydrated ? formatSeparator(iso) : ""}</time>
+    </li>
+  );
 }
 
 const noopSubscribe = () => () => undefined;
@@ -336,6 +352,12 @@ export function ConversationView(props: {
   useEffect(() => {
     if (announcement) announce(announcement);
   }, [announcement]);
+
+  // Time separators before the first timed message and each new sitting.
+  const separators = useMemo(
+    () => separatorsBefore(conversation?.messages ?? []),
+    [conversation?.messages],
+  );
 
   // Keep the live reply on screen until the stored copy is in the transcript.
   const storedIds = new Set(conversation?.messages.map((m) => m.id));
@@ -820,48 +842,52 @@ export function ConversationView(props: {
         {empty ? <Greeting level={conversation ? 2 : 1} text="How can I help?" /> : null}
         <ol className="history" aria-label="Messages">
           {conversation?.messages.map((message) => (
-            <Message
-              key={message.id}
-              messageId={message.id}
-              role={message.role}
-              content={message.content}
-              reasoning={message.reasoning}
-              status={message.status}
-              attachments={message.attachments}
-              onOpenImage={openImage}
-              suggestions={suggestionsByReply.get(message.id)}
-              artifacts={artifactsByReply.get(message.id)}
-              onOpenArtifact={onOpenArtifact}
-              userId={userId}
-              conversationId={conversationId}
-              actions={
-                message.role === "user"
-                  ? unanswered.has(message.id)
-                    ? USER_UNANSWERED_ACTIONS
-                    : USER_ACTIONS
-                  : answers.has(message.id)
-                    ? REPLY_ACTIONS
-                    : NO_ACTIONS
-              }
-              actionsDisabled={opsDisabled}
-              onAction={onMessageAction}
-              editor={
-                editingId === message.id ? (
-                  <Suspense fallback={null}>
-                    <MessageEditor
-                      initial={message.content}
-                      busy={mutating}
-                      onCancel={() => {
-                        setEditingId(null);
-                      }}
-                      onSave={(content, andRegenerate) =>
-                        void saveEdit(message.id, content, andRegenerate)
-                      }
-                    />
-                  </Suspense>
-                ) : undefined
-              }
-            />
+            <Fragment key={message.id}>
+              {separators.has(message.id) ? (
+                <TimeSeparator iso={separators.get(message.id) ?? ""} hydrated={hydrated} />
+              ) : null}
+              <Message
+                messageId={message.id}
+                role={message.role}
+                content={message.content}
+                reasoning={message.reasoning}
+                status={message.status}
+                attachments={message.attachments}
+                onOpenImage={openImage}
+                suggestions={suggestionsByReply.get(message.id)}
+                artifacts={artifactsByReply.get(message.id)}
+                onOpenArtifact={onOpenArtifact}
+                userId={userId}
+                conversationId={conversationId}
+                actions={
+                  message.role === "user"
+                    ? unanswered.has(message.id)
+                      ? USER_UNANSWERED_ACTIONS
+                      : USER_ACTIONS
+                    : answers.has(message.id)
+                      ? REPLY_ACTIONS
+                      : NO_ACTIONS
+                }
+                actionsDisabled={opsDisabled}
+                onAction={onMessageAction}
+                editor={
+                  editingId === message.id ? (
+                    <Suspense fallback={null}>
+                      <MessageEditor
+                        initial={message.content}
+                        busy={mutating}
+                        onCancel={() => {
+                          setEditingId(null);
+                        }}
+                        onSave={(content, andRegenerate) =>
+                          void saveEdit(message.id, content, andRegenerate)
+                        }
+                      />
+                    </Suspense>
+                  ) : undefined
+                }
+              />
+            </Fragment>
           ))}
           {optimistic.map(({ mutation, state }) =>
             state.variables ? (

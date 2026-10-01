@@ -1,3 +1,5 @@
+import { readCookie } from "./cookies";
+
 /**
  * Theme preference (Phase 18). A presentation hint only (contracts §9): it
  * lives in a non-HttpOnly cookie so the server renders the right theme into
@@ -19,14 +21,6 @@ export function isTheme(value: unknown): value is Theme {
 
 /** Reads the theme from a Cookie header; anything unexpected is "system". */
 export function themeFromCookieHeader(header: string | null | undefined): Theme {
-  if (!header) return "system";
-  for (const part of header.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq < 0) continue;
-    if (part.slice(0, eq).trim() === THEME_COOKIE) {
-      const value = part.slice(eq + 1).trim();
-      return isTheme(value) ? value : "system";
-    }
-  }
-  return "system";
+  const value = readCookie(header, THEME_COOKIE);
+  return isTheme(value) ? value : "system";
 }

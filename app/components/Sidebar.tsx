@@ -1,6 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { menuRequest, type MenuRequest } from "../lib/menu-request";
-import { AlertTriangle, MoreHorizontal, PanelLeft, Search, SquarePen } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronRight,
+  MoreHorizontal,
+  PanelLeft,
+  Search,
+  SquarePen,
+} from "lucide-react";
 import type { ConversationSummary } from "@shared/conversations";
 import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useMatches, useParams } from "react-router";
@@ -8,6 +15,7 @@ import { paths, type OverlayState } from "../lib/paths";
 import { endIntent, prefetchIntent } from "../lib/prefetch";
 import { queries } from "../lib/query";
 import { count } from "../lib/render-counters";
+import { useCollapsedSections } from "../lib/sidebar-sections";
 import { useSignOut } from "../lib/use-sign-out";
 import { AccountLabel } from "./AccountLabel";
 import { preloadDialogs, useConversationActions } from "./ConversationActions";
@@ -149,6 +157,7 @@ function SidebarImpl({
     </li>
   );
 
+  const [collapsed, setCollapsed] = useCollapsedSections();
   return (
     <nav
       id={navId}
@@ -191,41 +200,63 @@ function SidebarImpl({
       <div className="sidebar-scroll" data-testid="sidebar-scroll">
         {pinned.length > 0 ? (
           <>
-            <p className="section-label" id={`${navId}-pinned`}>
-              Pinned
-            </p>
-            <ul className="chat-list" aria-labelledby={`${navId}-pinned`} data-testid="pinned-list">
+            <SectionToggle
+              id={`${navId}-pinned`}
+              controls={`${navId}-pinned-list`}
+              label="Pinned"
+              open={!collapsed.pinned}
+              onToggle={(open) => {
+                setCollapsed("pinned", !open);
+              }}
+            />
+            <ul
+              id={`${navId}-pinned-list`}
+              className="chat-list"
+              aria-labelledby={`${navId}-pinned`}
+              data-testid="pinned-list"
+              hidden={collapsed.pinned}
+            >
               {pinned.map(row)}
             </ul>
           </>
         ) : null}
-        <p className="section-label">All chats</p>
-        {list.isPending ? (
-          // Rows the size of real ones, so the list doesn't shift when it arrives.
-          <div className="skeleton-list" aria-busy="true" data-testid="conversations-loading">
-            <span className="visually-hidden">Loading conversations…</span>
-            {/* No inline styles (CSP): the uneven widths come from app.css. */}
-            {[0, 1, 2, 3].map((i) => (
-              <span key={i} className="skeleton-row" aria-hidden>
-                <span className="skeleton" />
-              </span>
-            ))}
-          </div>
-        ) : list.isError && !list.data ? (
-          <div className="sidebar-note" role="alert" data-testid="conversations-error">
-            <p>Conversations couldn’t be loaded.</p>
-            <button type="button" className="link-button" onClick={() => void list.refetch()}>
-              Try again
-            </button>
-          </div>
-        ) : conversations.length === 0 ? (
-          <p className="sidebar-note" data-testid="conversations-empty">
-            No conversations yet.
-          </p>
-        ) : null}
-        <ul className="chat-list" data-testid="conversation-list">
-          {others.map(row)}
-        </ul>
+        <SectionToggle
+          id={`${navId}-recents`}
+          controls={`${navId}-recents-list`}
+          label="Recents"
+          open={!collapsed.recents}
+          onToggle={(open) => {
+            setCollapsed("recents", !open);
+          }}
+        />
+        <div id={`${navId}-recents-list`} hidden={collapsed.recents}>
+          {list.isPending ? (
+            // Rows the size of real ones, so the list doesn't shift when it arrives.
+            <div className="skeleton-list" aria-busy="true" data-testid="conversations-loading">
+              <span className="visually-hidden">Loading conversations…</span>
+              {/* No inline styles (CSP): the uneven widths come from app.css. */}
+              {[0, 1, 2, 3].map((i) => (
+                <span key={i} className="skeleton-row" aria-hidden>
+                  <span className="skeleton" />
+                </span>
+              ))}
+            </div>
+          ) : list.isError && !list.data ? (
+            <div className="sidebar-note" role="alert" data-testid="conversations-error">
+              <p>Conversations couldn’t be loaded.</p>
+              <button type="button" className="link-button" onClick={() => void list.refetch()}>
+                Try again
+              </button>
+            </div>
+          ) : conversations.length === 0 ? (
+            <p className="sidebar-note" data-testid="conversations-empty">
+              No conversations yet.
+            </p>
+          ) : null}
+          <ul className="chat-list" data-testid="conversation-list">
+            {others.map(row)}
+          </ul>
+        </div>
       </div>
       {searching ? (
         <Suspense fallback={null}>
@@ -242,6 +273,31 @@ function SidebarImpl({
       <Account user={user} onNavigate={onNavigate} />
       {actions.dialogs}
     </nav>
+  );
+}
+
+/** A section header that shows or hides its list ("Pinned ›", "Recents ›"). */
+function SectionToggle(props: {
+  id: string;
+  controls: string;
+  label: string;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      id={props.id}
+      className="section-toggle"
+      aria-expanded={props.open}
+      aria-controls={props.controls}
+      onClick={() => {
+        props.onToggle(!props.open);
+      }}
+    >
+      {props.label}
+      <ChevronRight size={14} aria-hidden className="section-chevron" />
+    </button>
   );
 }
 

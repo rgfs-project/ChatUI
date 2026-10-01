@@ -1260,6 +1260,13 @@ Lucide icons use one size scale (14 dense toolbars, 16 menus and inline, 18 butt
 - The sidebar has one scrolling region (`.sidebar-scroll`: Pinned and All chats) between the fixed header (brand, New chat, Search) and the account button. Previously each list stretched (`flex: 1`), leaving a gap between Pinned and All chats.
 - Settings opened over `/chat/new` no longer requests `/api/conversations/new` (400): `new` is the draft, not an id.
 
+### Sidebar, top bar and timestamps (owner's requests after Phase 18)
+
+- **Density:** sidebar rows are 34 px a hairline apart (36 px pitch) in `--text-md`; the account row is 40 px.
+- **Collapsible sections:** "Pinned" and "Recents" (formerly "All chats") are disclosure buttons (`aria-expanded`, `aria-controls`). The collapsed set is a presentation hint in the `chatui_sections` cookie (`shared/sidebar-sections.ts`, parsed with `shared/cookies.ts` like the theme), read by the root loader so the server renders the sidebar as remembered; `app/lib/sidebar-sections.ts` shares the state between the sidebar and the drawer.
+- **Top bar:** with the sidebar open or closed, the bar's first item (brand or toggle icon) starts at the sidebar's icon column, every control is centered on the 56 px bar, and the title text sits the same distance after what precedes it (asserted in `visual.spec.ts`).
+- **Timestamps:** `app/lib/time-separators.ts` puts a centered, muted "Tue, Sep 22 at 11:56 PM" before the first message with a stored `time` and wherever a new sitting starts (a pause of an hour or a new day). Only stored times are used (contracts §3: never synthesized). The label is formatted in the viewer's locale and time zone after hydration inside a row the server already renders, so there is no mismatch and no shift.
+
 ### Tests
 
 `tests/e2e/visual.spec.ts`: saved theme correct without JavaScript for every theme/system combination under the production CSP; switching applies at once, survives reload, no console errors; the live region's exact announcement sequence, focus unchanged; cancellation announced; CLS < 0.1 on a cold 200-message load and during streaming; no font requests on the chat surface; computed animation/transition durations under reduced motion; no horizontal overflow at 320/390/768/1024/1440 px; the sidebar's fixed header and footer; the keyboard-only walkthrough login → chat → attachments → admin. `tests/e2e/a11y.spec.ts` now scans the admin panel in both schemes too.

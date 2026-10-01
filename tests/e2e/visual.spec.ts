@@ -254,7 +254,7 @@ test.describe("signed in", () => {
       el.scrollTop = el.scrollHeight;
     });
     expect(await fixed()).toEqual(before);
-    // Lists are as tall as their rows: no stretched gap between Pinned and All chats.
+    // Lists are as tall as their rows: no stretched gap between Pinned and Recents.
     const stretched = await sidebar.locator(".chat-list").evaluateAll(
       (lists) =>
         lists.filter((list) => {
@@ -266,6 +266,88 @@ test.describe("signed in", () => {
         }).length,
     );
     expect(stretched).toBe(0);
+  });
+
+  test("the top bar keeps one geometry with the sidebar open and closed", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${base()}/chat/${LONG_CONVERSATION}`);
+    await hydrated(page);
+    const geometry = () =>
+      page.evaluate(() => {
+        const box = (el: Element | null) => el?.getBoundingClientRect() ?? null;
+        const textBox = (el: Element | null) => {
+          if (!el) return null;
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getBoundingClientRect();
+        };
+        const center = (r: DOMRect | null) => (r ? r.y + r.height / 2 : NaN);
+        const sidebarOpen = !!document.querySelector(".app-shell > .sidebar:not([hidden])");
+        const lead = sidebarOpen
+          ? textBox(document.querySelector(".brand"))
+          : box(document.querySelector(".header-nav .icon-btn svg"));
+        const before = sidebarOpen
+          ? box(document.querySelector(".app-shell > .sidebar"))
+          : box(document.querySelector(".header-nav a svg"));
+        const title = textBox(document.querySelector(".title-text"));
+        const controls = [
+          ...document.querySelectorAll(".sidebar-top .icon-btn, .header-nav .icon-btn"),
+        ]
+          .map((el) => box(el))
+          .filter((r) => r !== null && r.width > 0)
+          .map((r) => center(r));
+        return {
+          leadX: lead?.x ?? NaN,
+          titleGap: (title?.x ?? NaN) - ((before?.x ?? 0) + (before?.width ?? 0)),
+          centers: [center(lead), center(title), ...controls],
+        };
+      });
+    const open = await geometry();
+    await page.getByRole("button", { name: "Hide sidebar" }).click();
+    const closed = await geometry();
+    // The first thing in the bar starts at the same x, in line with the
+    // sidebar's row icons; everything shares one vertical center.
+    expect(Math.abs(open.leadX - closed.leadX)).toBeLessThanOrEqual(1);
+    for (const c of [...open.centers, ...closed.centers])
+      expect(Math.abs(c - 28)).toBeLessThanOrEqual(1);
+    // The title sits the same distance after whatever precedes it.
+    expect(Math.abs(open.titleGap - closed.titleGap)).toBeLessThanOrEqual(1);
+    await page.getByRole("button", { name: "Show sidebar" }).click();
+  });
+
+  test("Pinned and Recents collapse, and stay collapsed after a reload", async ({ page }) => {
+    await page.goto(`${base()}/chat/${LONG_CONVERSATION}`);
+    await hydrated(page);
+    const sidebar = page.getByRole("navigation", { name: "Conversations" });
+    const recents = sidebar.getByRole("button", { name: "Recents" });
+    await expect(recents).toHaveAttribute("aria-expanded", "true");
+    await expect(sidebar.getByTestId("conversation-list")).toBeVisible();
+    await recents.click();
+    await expect(recents).toHaveAttribute("aria-expanded", "false");
+    await expect(sidebar.getByTestId("conversation-list")).toBeHidden();
+    // The server renders it collapsed (no shift after hydration).
+    const html = await (await page.request.get(`${base()}/chat/${LONG_CONVERSATION}`)).text();
+    expect(html).toMatch(/aria-expanded="false"[^>]*>Recents/);
+    await page.reload();
+    await hydrated(page);
+    await expect(recents).toHaveAttribute("aria-expanded", "false");
+    await recents.click();
+    await expect(sidebar.getByTestId("conversation-list")).toBeVisible();
+  });
+
+  test("a new sitting starts with its time; the server reserves the row", async ({ page }) => {
+    await page.goto(`${base()}/chat/new`);
+    await hydrated(page);
+    await page.locator("#message").fill("what time is it?");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByTestId("message-assistant").last()).toBeVisible({ timeout: 20_000 });
+    const separator = page.getByTestId("time-separator");
+    await expect(separator).toHaveCount(1);
+    await expect(separator.locator("time")).toHaveAttribute("datetime", /^\d{4}-\d\d-\d\dT/);
+    await expect(separator).toHaveText(/^\w{3}, \w{3} \d{1,2} at \d{1,2}:\d\d/);
+    // Server HTML: the row is there (empty), so filling it in shifts nothing.
+    const html = await (await page.request.get(page.url())).text();
+    expect(html).toMatch(/data-testid="time-separator"><time dateTime="[^"]+"><\/time>/);
   });
 
   for (const width of [320, 390, 768, 1024, 1440])
