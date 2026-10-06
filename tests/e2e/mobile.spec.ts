@@ -222,6 +222,32 @@ test.describe("phone 390x844", () => {
     await expect(menu).toBeHidden();
   });
 
+  test("dialogs opened from the drawer sit above it", async ({ page }) => {
+    await open(page, `/chat/${LONG_CONVERSATION}`);
+    for (const [item, name] of [
+      ["Rename", "Rename conversation"],
+      ["Delete", "Delete conversation?"],
+    ] as const) {
+      await page.getByRole("button", { name: "Open conversations" }).click();
+      await page
+        .getByRole("dialog", { name: "Conversations" })
+        .getByRole("button", { name: /Actions for/ })
+        .first()
+        .click();
+      await page.getByRole("menuitem", { name: item }).click();
+      const dialog = page.getByRole("dialog", { name });
+      await expect(dialog).toBeVisible();
+      // Both are fixed layers portaled into <body>, so z-index decides which paints on top.
+      // (elementFromPoint can't tell: Radix turns off pointer events on the drawer meanwhile.)
+      const layer = (selector: string) =>
+        page.locator(selector).evaluate((el) => Number(getComputedStyle(el).zIndex));
+      expect(await layer(".dialog-content")).toBeGreaterThan(await layer(".drawer-content"));
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      await page.keyboard.press("Escape");
+    }
+  });
+
   test("every control is a 44x44 touch target (shell, drawer)", async ({ page }) => {
     await open(page, `/chat/${LONG_CONVERSATION}`);
     expect(await smallTargets(page)).toEqual([]);

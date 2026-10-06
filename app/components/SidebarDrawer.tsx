@@ -22,7 +22,7 @@ export default function SidebarDrawer(props: {
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" data-testid="drawer-backdrop" />
+        <Dialog.Overlay className="dialog-overlay drawer-overlay" data-testid="drawer-backdrop" />
         <Dialog.Content
           className="drawer-content"
           data-testid="sidebar-drawer"

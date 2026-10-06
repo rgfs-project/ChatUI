@@ -265,7 +265,7 @@ textarea {
 
 /* Floating menus (account, conversation title). */
 .menu-popover {
-  /* Above the drawer (50) and dialogs (40–41): an open menu is always on top. */
+  /* Above the drawer (49–50) and dialogs (55–56): an open menu is always on top. */
   z-index: 60;
   display: grid;
   min-width: 180px;
@@ -1537,7 +1537,9 @@ a.attachment-file:hover {
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  /* Above the drawer (50): a dialog opened from it, such as the delete
+     confirmation in a conversation's menu, must not open behind it. */
+  z-index: 55;
   background: var(--scrim);
   backdrop-filter: blur(6px);
 }
@@ -1546,7 +1548,7 @@ a.attachment-file:hover {
   position: fixed;
   top: 50%;
   left: 50%;
-  z-index: 41;
+  z-index: 56;
   width: min(100% - 32px, 440px);
   max-height: calc(100dvh - 32px);
   padding: 24px;
@@ -2084,7 +2086,12 @@ input[type="checkbox"].toggle:disabled {
   overscroll-behavior-x: contain;
 }
 
-/* The drawer (below the breakpoint): a modal panel from the leading edge. */
+/* The drawer (below the breakpoint): a modal panel from the leading edge. Its
+   backdrop sits just under it, below any dialog opened from inside it. */
+.dialog-overlay.drawer-overlay {
+  z-index: 49;
+}
+
 .drawer-content {
   position: fixed;
   inset: 0 auto 0 0;
