@@ -313,7 +313,6 @@ export function ChatView(props: {
       imageMaxEdge={prefs.data?.imageMaxEdge ?? DEFAULT_IMAGE_MAX_EDGE}
       skills={skills.data ?? []}
       inChat={conversationId !== undefined}
-      skillChips={conversationId === undefined}
       generating={generating}
       onSend={send}
       onStop={() => void stop()}
@@ -364,7 +363,7 @@ export function ChatView(props: {
     </header>
   );
 
-  // ---- A new chat: the greeting, the composer and skill shortcuts. ----
+  // ---- A new chat: the greeting, and the composer. ----
   if (!conversationId) {
     return (
       <main className="chat" inert={props.inert}>

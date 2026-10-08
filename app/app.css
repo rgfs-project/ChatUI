@@ -1049,29 +1049,6 @@ textarea.input {
   font-size: 13px;
 }
 
-.skill-chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 28px;
-}
-
-.skill-shortcut {
-  height: 36px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--radius);
-  background: var(--raised);
-  color: var(--text);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.skill-shortcut:hover {
-  background: var(--fill);
-}
-
 @media (hover: none) and (pointer: coarse) and (max-width: 932px) {
   .home {
     align-items: stretch;

@@ -112,8 +112,6 @@ export interface ComposerProps {
   onStop: () => void;
   onCommand: (command: BuiltIn) => void;
   placeholder?: string;
-  /** Show the enabled skills as one-tap chips under the box (the home screen). */
-  skillChips?: boolean;
 }
 
 /** The message bar: add files, text with a "/" menu, the model, Send or Stop. */
@@ -180,8 +178,6 @@ export function Composer(props: ComposerProps) {
     .map((u) => u.dto as AttachmentDto);
   const hasContent = text.trim() !== "" || ready.length > 0 || skill !== null;
   const canSend = hasContent && !uploading && !sending && !props.generating && props.model !== null;
-
-  const chips = props.skills.filter((s) => s.enabled);
 
   function choose(command: Command) {
     setText("");
@@ -433,24 +429,6 @@ export function Composer(props: ComposerProps) {
         <p className="composer-error" role="alert">
           {error}
         </p>
-      ) : null}
-      {props.skillChips && chips.length > 0 ? (
-        <div className="skill-chips">
-          {chips.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className="skill-shortcut"
-              title={s.description || undefined}
-              onClick={() => {
-                setSkill(s);
-                textarea.current?.focus();
-              }}
-            >
-              /{s.name}
-            </button>
-          ))}
-        </div>
       ) : null}
     </div>
   );
