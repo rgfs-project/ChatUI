@@ -3543,3 +3543,57 @@ a svg,
     font-weight: 500;
   }
 }
+
+/* Row hover, like the reference: the ··· is a bare icon (no fill of its
+   own), and the title fades out before it instead of ending in "…". */
+.sidebar-list .row-actions.row-actions,
+.sidebar-list .row-actions.row-actions:hover,
+.sidebar-list .row-actions.row-actions[data-state="open"] {
+  background: transparent;
+}
+.sidebar-list .row-actions.row-actions:hover,
+.sidebar-list .row-actions.row-actions[data-state="open"] {
+  color: var(--text);
+}
+.sidebar-list li a {
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+/* Sidebar icons draw 15 x 15 (an 18 px Lucide box), text still at 42 px.
+   Row and title menus: 36 px items, as in the reference. */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .sidebar svg,
+  .rail svg {
+    width: 18px;
+    height: 18px;
+  }
+  .sidebar-action,
+  .account {
+    gap: 8px;
+  }
+  [role="menu"] .menu-item {
+    min-height: 36px;
+    padding: 0 10px;
+    gap: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  [role="menu"] .menu-item svg {
+    width: 18px;
+    height: 18px;
+  }
+  .model-menu .menu-item {
+    padding: 6px 10px;
+  }
+}
+
+/* Rail: the avatar shares the icons' centre line (26 px from the edge). */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .rail .account.compact.compact {
+    justify-content: center;
+    padding: 0;
+  }
+}
