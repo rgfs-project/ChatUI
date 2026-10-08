@@ -2889,3 +2889,15 @@ a svg,
   justify-content: center;
   padding: 0;
 }
+
+/* The settings search box shares the pane title's row: same top (12 px)
+   and the same 40 px height, so neither pokes above the other. */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .settings-side {
+    padding-top: 12px;
+  }
+  .settings-search {
+    height: 40px;
+    min-height: 40px;
+  }
+}
