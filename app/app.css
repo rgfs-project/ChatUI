@@ -830,11 +830,10 @@ textarea.input {
 }
 
 /* In the rail the account button is an icon button: centred, no padding. */
-.account.compact {
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
+.rail .account.compact {
+  width: 48px;
+  height: 48px;
+  padding: 0 10px;
 }
 
 .account-name {
@@ -855,18 +854,29 @@ textarea.input {
   font-weight: 500;
 }
 
+/*
+ * The rail repeats the open sidebar's geometry (10 px padding, a 56 px top
+ * bar, 36 px rows, a 48 px account row), so collapsing never moves an icon.
+ */
 .rail {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
   height: 100%;
-  padding: 8px 0 12px;
+  padding: 0 10px 10px;
   background: var(--sidebar);
 }
 
-.rail > .icon-button:first-child {
-  margin-bottom: 12px;
+.rail-top {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  margin-bottom: 6px;
+}
+
+.rail .icon-button {
+  width: 38px;
+  height: 36px;
 }
 
 .drawer {

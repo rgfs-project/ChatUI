@@ -143,17 +143,22 @@ export function Sidebar(props: {
 /** The hidden sidebar on wide screens: a slim column of icons. */
 export function Rail() {
   const shell = useShell();
+  // Same rows as the open sidebar, so each icon stays where it was.
   return (
     <nav className="rail" aria-label="Conversations">
-      <IconButton label="Open sidebar" onClick={shell.openSidebar}>
-        <PanelLeft size={18} aria-hidden />
-      </IconButton>
-      <Link to={paths.newChat()} className="icon-button" aria-label="New chat" title="New chat">
-        <SquarePen size={18} aria-hidden />
-      </Link>
-      <IconButton label="Search chats" onClick={shell.openSearch}>
-        <Search size={18} aria-hidden />
-      </IconButton>
+      <div className="rail-top">
+        <IconButton label="Open sidebar" onClick={shell.openSidebar}>
+          <PanelLeft size={18} aria-hidden />
+        </IconButton>
+      </div>
+      <div className="sidebar-actions">
+        <Link to={paths.newChat()} className="icon-button" aria-label="New chat" title="New chat">
+          <SquarePen size={18} aria-hidden />
+        </Link>
+        <IconButton label="Search chats" onClick={shell.openSearch}>
+          <Search size={18} aria-hidden />
+        </IconButton>
+      </div>
       <span className="spacer" />
       <AccountMenu user={shell.user} compact />
     </nav>
