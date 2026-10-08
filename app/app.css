@@ -2070,7 +2070,9 @@ textarea.input {
   background: var(--raised);
 }
 
-.group > * + * {
+/* Hairlines between rows; .row resets the browser's own button border. */
+.group > * + *,
+.group > .row + .row {
   border-top: 1px solid var(--line);
 }
 
@@ -2096,9 +2098,7 @@ textarea.input {
   width: 100%;
   min-height: 52px;
   padding: 6px 16px;
-  border-left: 0;
-  border-right: 0;
-  border-bottom: 0;
+  border: 0;
   background: transparent;
   color: var(--text);
   font-size: 15px;
