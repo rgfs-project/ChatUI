@@ -914,6 +914,7 @@ textarea.input {
 /* ---- Chat ------------------------------------------------------------------ */
 
 .chat {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -926,19 +927,32 @@ textarea.input {
 }
 
 .chat-main {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
   height: 100%;
 }
 
+/* Floats over the transcript, like the composer: the chat scrolls behind
+   it and fades out under it. */
 .chat-header {
-  flex: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 4px;
   height: 56px;
   padding: 0 12px;
+  background: linear-gradient(to bottom, var(--surface) 16px, transparent);
+  pointer-events: none;
+}
+
+.chat-header > * {
+  pointer-events: auto;
 }
 
 .title-button {
@@ -1094,7 +1108,7 @@ textarea.input {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 24px 0;
+  padding: 72px 24px 0;
   overscroll-behavior: contain;
   overflow-x: hidden;
 }
@@ -1140,7 +1154,7 @@ textarea.input {
 
 @media (hover: none) and (pointer: coarse) and (max-width: 932px) {
   .transcript {
-    padding: 8px 16px 0;
+    padding: 64px 16px 0;
   }
   .bubble {
     max-width: 85%;
