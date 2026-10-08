@@ -2081,9 +2081,10 @@ textarea.input {
   font-weight: 400;
 }
 
+/* No inner padding: a row's hover fill reaches the card's rounded edge. */
 .group {
   overflow: hidden;
-  padding: 4px 0;
+  padding: 0;
   border-radius: var(--radius);
   background: var(--raised);
 }
