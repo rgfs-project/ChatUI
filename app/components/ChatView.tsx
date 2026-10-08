@@ -4,6 +4,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
@@ -44,6 +45,12 @@ import { ConfirmDialog, IconButton, Menu, MenuContent, MenuTrigger } from "./ui"
 interface Pending {
   content: string;
   attachments: MessageAttachmentDto[];
+}
+
+interface Queued {
+  key: string;
+  content: string;
+  attachments: AttachmentDto[];
 }
 
 function toMessageAttachment(a: AttachmentDto): MessageAttachmentDto {
@@ -119,6 +126,8 @@ export function ChatView(props: {
     (location.state as { generationId?: string } | null)?.generationId ?? null,
   );
   const [pending, setPending] = useState<Pending | null>(null);
+  // Messages sent while a reply runs; they go out one by one after it.
+  const [queue, setQueue] = useState<Queued[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<OpenArtifact | null>(null);
   const [deleting, setDeleting] = useState<MessageDto | null>(null);
@@ -201,6 +210,36 @@ export function ChatView(props: {
       throw error;
     }
   }
+
+  /** Send now, or queue behind the running reply. */
+  function submit(message: { content: string; attachments: AttachmentDto[] }): Promise<boolean> {
+    if (generating || pending) {
+      pinScroll();
+      setQueue((q) => [...q, { key: crypto.randomUUID(), ...message }]);
+      return Promise.resolve(true);
+    }
+    return send(message);
+  }
+
+  // The next queued message goes out once nothing is running. A failure
+  // stops the queue and puts that message back at its head.
+  const sendNextQueued = useEffectEvent(() => {
+    const [next, ...rest] = queue;
+    if (!next) return;
+    setQueue(rest);
+    send(next).catch((e: unknown) => {
+      setQueue((q) => [next, ...q]);
+      setNotice(`Queued message not sent: ${messageOf(e)}`);
+    });
+  });
+  const queueReady = conversationId !== undefined && !generating && !pending && notice === null;
+  useEffect(() => {
+    if (!queueReady || queue.length === 0) return;
+    const timer = setTimeout(sendNextQueued, 0);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [queueReady, queue.length]);
 
   async function stop() {
     if (!observed) return;
@@ -314,7 +353,8 @@ export function ChatView(props: {
       skills={skills.data ?? []}
       inChat={conversationId !== undefined}
       generating={generating}
-      onSend={send}
+      canQueue={conversationId !== undefined}
+      onSend={submit}
       onStop={() => void stop()}
       onCommand={command}
     />
@@ -379,7 +419,7 @@ export function ChatView(props: {
         ) : (
           <div className="home">
             <div className="home-inner">
-              <h1>How can I help?</h1>
+              <h1>Hello! How can I help?</h1>
               {composer}
               {noModelsNote}
             </div>
@@ -518,6 +558,17 @@ export function ChatView(props: {
             {(pending || (generating && live === null)) && !showLiveAtEnd ? (
               <AssistantMessage content="" reasoning={null} status={null} streaming />
             ) : null}
+            {queue.map((q) => (
+              <UserMessage
+                key={q.key}
+                content={q.content}
+                attachments={q.attachments.map(toMessageAttachment)}
+                pending
+                onUnqueue={() => {
+                  setQueue((all) => all.filter((x) => x.key !== q.key));
+                }}
+              />
+            ))}
             {notice ? (
               <p className="notice" role="alert">
                 {notice}

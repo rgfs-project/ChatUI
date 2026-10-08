@@ -1147,7 +1147,7 @@ textarea.input {
 
 .bubble {
   max-width: 75%;
-  padding: 10px 18px;
+  padding: 10px 10px;
   border-radius: var(--radius);
   background: var(--fill);
   overflow-wrap: anywhere;
@@ -1161,6 +1161,15 @@ textarea.input {
   .bubble {
     max-width: 85%;
   }
+}
+
+/* Queued: waits for the running reply, then sends. */
+.queued-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .message-actions {

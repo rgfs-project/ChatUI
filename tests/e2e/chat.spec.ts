@@ -24,7 +24,7 @@ test.beforeEach(async ({ browser, context }) => {
 
 test("a new chat: send, stream, title in the sidebar, then reply again", async ({ page }) => {
   await open(page, "/chat/new");
-  await expect(page.getByRole("heading", { name: "How can I help?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Hello! How can I help?" })).toBeVisible();
   await chooseModel(page, CHAT);
   await page.locator("#message").fill("first e2e message");
   await page.getByRole("button", { name: "Send" }).click();
@@ -47,6 +47,25 @@ test("Stop ends a reply and marks it stopped", async ({ page }) => {
   await page.getByTestId("content").filter({ hasText: "part1" }).waitFor();
   await page.getByRole("button", { name: "Stop generating" }).click();
   await expect(page.getByTestId("message-assistant").last()).toContainText("Stopped");
+  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
+});
+
+test("a message sent during a reply waits in the queue, then sends", async ({ page }) => {
+  await open(page, "/chat/new");
+  await chooseModel(page, SLOW);
+  await page.locator("#message").fill("first");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByTestId("content").filter({ hasText: "part1" }).waitFor();
+  await page.locator("#message").fill("queued one");
+  await page.getByRole("button", { name: "Queue message" }).click();
+  await expect(page.getByText("Queued", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop generating" })).toBeVisible();
+  await page.getByRole("button", { name: "Stop generating" }).click();
+  await expect(page.getByText("Queued", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("message-user")).toHaveCount(2);
+  await expect(page.getByTestId("message-user").last()).toContainText("queued one");
+  // Stop the queued one's slow reply too: it would hold this user's active slot.
+  await page.getByRole("button", { name: "Stop generating" }).click();
   await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
 });
 

@@ -140,6 +140,8 @@ export function UserMessage(props: {
   content: string;
   attachments: readonly MessageAttachmentDto[];
   pending?: boolean;
+  /** Waiting for the running reply; it sends when that one finishes. */
+  onUnqueue?: () => void;
   onEdit?: (content: string) => Promise<void>;
   onDelete?: () => void;
   disabled?: boolean;
@@ -201,6 +203,14 @@ export function UserMessage(props: {
     <div className={`user-turn${props.pending ? " pending" : ""}`} data-testid="message-user">
       <Attachments attachments={props.attachments} />
       {props.content ? <div className="bubble">{props.content}</div> : null}
+      {props.onUnqueue ? (
+        <div className="queued-meta">
+          <span>Queued</span>
+          <IconButton label="Remove from queue" className="muted-icon" onClick={props.onUnqueue}>
+            <X size={16} aria-hidden />
+          </IconButton>
+        </div>
+      ) : null}
       {props.pending ? null : (
         <div className="message-actions">
           <CopyButton text={props.content} />

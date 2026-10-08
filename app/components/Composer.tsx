@@ -108,6 +108,8 @@ export interface ComposerProps {
   skills: readonly SkillDto[];
   inChat: boolean;
   generating: boolean;
+  /** While a reply runs, Send queues the message instead of being Stop. */
+  canQueue?: boolean;
   onSend: (message: { content: string; attachments: AttachmentDto[] }) => Promise<boolean>;
   onStop: () => void;
   onCommand: (command: BuiltIn) => void;
@@ -185,7 +187,12 @@ export function Composer(props: ComposerProps) {
     .filter((u) => u.status === "done" && u.dto)
     .map((u) => u.dto as AttachmentDto);
   const hasContent = text.trim() !== "" || ready.length > 0 || skill !== null;
-  const canSend = hasContent && !uploading && !sending && !props.generating && props.model !== null;
+  const canSend =
+    hasContent &&
+    !uploading &&
+    !sending &&
+    (!props.generating || props.canQueue === true) &&
+    props.model !== null;
 
   function choose(command: Command) {
     setText("");
@@ -422,12 +429,17 @@ export function Composer(props: ComposerProps) {
             open={modelOpen}
             onOpenChange={setModelOpen}
           />
-          {props.generating ? (
+          {props.generating && !(props.canQueue && hasContent) ? (
             <IconButton label="Stop generating" className="send" onClick={props.onStop}>
               <Square size={14} fill="currentColor" aria-hidden />
             </IconButton>
           ) : (
-            <IconButton label="Send" type="submit" className="send" disabled={!canSend}>
+            <IconButton
+              label={props.generating ? "Queue message" : "Send"}
+              type="submit"
+              className="send"
+              disabled={!canSend}
+            >
               <ArrowUp size={20} strokeWidth={2.25} aria-hidden />
             </IconButton>
           )}
