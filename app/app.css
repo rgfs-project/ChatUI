@@ -25,6 +25,8 @@
   --hover: light-dark(#ececec, rgb(255 255 255 / 0.06));
   --selected: light-dark(#ececec, #2f2f2f);
   --raised: light-dark(#ffffff, #2a2a2a);
+  /* The composer is a grey fill in both themes, so it never blends into the page. */
+  --composer-bg: light-dark(#f4f4f4, #2a2a2a);
   --ink: light-dark(#0d0d0d, #ececec);
   --on-ink: light-dark(#ffffff, #171717);
   --text: light-dark(#0d0d0d, #ececec);
@@ -59,16 +61,6 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-}
-
-/* The dark composer is a fill, not a shadow. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --composer-bg: #2a2a2a;
-  }
-}
-:root[data-theme="dark"] {
-  --composer-bg: #2a2a2a;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1698,7 +1690,7 @@ textarea.input {
   display: flex;
   flex-direction: column;
   border-radius: var(--radius);
-  background: var(--composer-bg, var(--raised));
+  background: var(--composer-bg);
 }
 
 .composer-row {
