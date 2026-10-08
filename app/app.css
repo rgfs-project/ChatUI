@@ -829,6 +829,14 @@ textarea.input {
   background: var(--hover);
 }
 
+/* In the rail the account button is an icon button: centred, no padding. */
+.account.compact {
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
 .account-name {
   overflow: hidden;
   text-overflow: ellipsis;
