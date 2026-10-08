@@ -178,3 +178,16 @@ describe("formatBytes", () => {
     expect(formatBytes(20 * 1024 * 1024)).toBe("20 MB");
   });
 });
+
+describe("escapeCurrency", () => {
+  it("keeps prices literal and real math as math", async () => {
+    const { escapeCurrency } = await import("../../app/lib/format");
+    expect(escapeCurrency("your $350 card beats the $8,000 one")).toBe(
+      "your \\$350 card beats the \\$8,000 one",
+    );
+    expect(escapeCurrency("area $x^2$ here")).toBe("area $x^2$ here");
+    expect(escapeCurrency("costs $5")).toBe("costs \\$5");
+    expect(escapeCurrency("$$a+b$$ and `$1 $2`")).toBe("$$a+b$$ and `$1 $2`");
+    expect(escapeCurrency("an escaped \\$5 stays")).toBe("an escaped \\$5 stays");
+  });
+});

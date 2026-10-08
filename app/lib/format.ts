@@ -56,3 +56,62 @@ export function formatStamp(iso: string, now = new Date()): string {
   const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   return `${day} at ${time}`;
 }
+
+/**
+ * Escapes "$" signs that are prices, not math, before markdown parsing.
+ * Pandoc's rule: an opening $ is followed by non-space, and a closing $
+ * is preceded by non-space and not followed by a digit. "$350 card … $8,000"
+ * fails it, so the first $ is escaped and stays literal. Code (fenced or
+ * inline) and $$display$$ math are left alone; pairs never cross a blank line.
+ */
+export function escapeCurrency(text: string): string {
+  return text
+    .split(/(```[\s\S]*?(?:```|$)|`[^`\n]*`)/)
+    .map((part, i) =>
+      i % 2 === 1
+        ? part
+        : part
+            .split(/(\n\s*\n)/)
+            .map(fixBlock)
+            .join(""),
+    )
+    .join("");
+}
+
+function fixBlock(block: string): string {
+  const singles: number[] = [];
+  for (let i = 0; i < block.length; i++) {
+    if (block[i] === "\\") {
+      i++;
+      continue;
+    }
+    if (block[i] !== "$") continue;
+    if (block[i + 1] === "$") {
+      i++;
+      continue;
+    }
+    singles.push(i);
+  }
+  const escape = new Set<number>();
+  let k = 0;
+  while (k < singles.length) {
+    const open = singles[k] ?? 0;
+    const close = singles[k + 1];
+    const opensOk = !/\s/.test(block[open + 1] ?? " ");
+    if (
+      close !== undefined &&
+      opensOk &&
+      !/\s/.test(block[close - 1] ?? " ") &&
+      !/\d/.test(block[close + 1] ?? "")
+    ) {
+      k += 2;
+      continue;
+    }
+    escape.add(open);
+    k += 1;
+  }
+  if (escape.size === 0) return block;
+  let out = "";
+  for (let i = 0; i < block.length; i++) out += (escape.has(i) ? "\\" : "") + (block[i] ?? "");
+  return out;
+}

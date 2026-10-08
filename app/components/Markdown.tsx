@@ -4,6 +4,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import type { Element, ElementContent } from "hast";
 import type { Processor } from "unified";
 import { gfm } from "micromark-extension-gfm";
+import { escapeCurrency } from "../lib/format";
 import { math } from "micromark-extension-math";
 import { gfmFromMarkdown } from "mdast-util-gfm";
 import { mathFromMarkdown } from "mdast-util-math";
@@ -150,7 +151,7 @@ const components: Components = {
 export const Markdown = memo(function Markdown(props: { text: string }): ReactNode {
   return (
     <ReactMarkdown remarkPlugins={[remarkExtensions]} components={components} skipHtml>
-      {props.text}
+      {escapeCurrency(props.text)}
     </ReactMarkdown>
   );
 });
