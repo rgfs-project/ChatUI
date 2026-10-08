@@ -1678,6 +1678,22 @@ textarea.input {
   outline: none;
 }
 
+/* Grown: the text takes the full width; + on the left and the model and
+   Send on the right drop to their own row. */
+.composer-row[data-grown] {
+  flex-wrap: wrap;
+}
+
+.composer-row[data-grown] textarea {
+  order: -1;
+  flex-basis: 100%;
+  padding: 8px 12px 4px;
+}
+
+.composer-row[data-grown] .model-trigger {
+  margin-left: auto;
+}
+
 .icon-button.send {
   background: var(--ink);
   color: var(--on-ink);

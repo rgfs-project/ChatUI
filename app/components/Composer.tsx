@@ -140,8 +140,16 @@ export function Composer(props: ComposerProps) {
   useLayoutEffect(() => {
     const el = textarea.current;
     if (!el) return;
+    // More than one line moves the text to its own row above the controls.
+    // Measured in the one-row layout so the wider box can't flip it back.
+    const row = el.closest<HTMLElement>(".composer-row");
     const fit = () => {
+      row?.removeAttribute("data-grown");
       el.style.height = "auto";
+      if (el.value.includes("\n") || el.scrollHeight > 40) {
+        row?.setAttribute("data-grown", "");
+        el.style.height = "auto";
+      }
       if (el.value !== "") el.style.height = `${String(Math.min(el.scrollHeight, 240))}px`;
     };
     fit();
