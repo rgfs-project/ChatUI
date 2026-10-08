@@ -2472,8 +2472,8 @@ textarea.input {
 
 /*
  * Desktop: one 40 px height for every row, button and box: icon buttons,
- * sidebar and settings rows, menus, search, dropdowns, the model picker.
- * Controls inside a row (theme options, switch) sit within its 40 px.
+ * sidebar and settings navigation, menus, search, the model picker. The
+ * settings pane's cards stay 44 px.
  */
 @media (hover: hover), (pointer: fine), (min-width: 933px) {
   .icon-button.icon-button.icon-button {
@@ -2487,9 +2487,7 @@ textarea.input {
   .settings-nav-item,
   .search-row,
   .menu-item,
-  .model-trigger,
-  .group > .row,
-  .group > .row-button:only-child {
+  .model-trigger {
     min-height: 40px;
   }
   .sidebar-action,
@@ -2511,20 +2509,6 @@ textarea.input {
   .menu-item {
     padding-top: 4px;
     padding-bottom: 4px;
-  }
-  .group > .row,
-  .group > .row-button:only-child {
-    padding-top: 0;
-    padding-bottom: 0;
-  }
-  .choice {
-    height: 32px;
-  }
-  .segmented {
-    height: 32px;
-  }
-  .segmented button {
-    height: 28px;
   }
   .bubble {
     min-height: 40px;
