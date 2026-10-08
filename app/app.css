@@ -2824,3 +2824,42 @@ a svg,
     height: min(700px, calc((100dvh - 48px) / 0.95));
   }
 }
+
+/*
+ * Equal insets in the search dialog and the model menu: every icon sits the
+ * same distance from its edge on both sides, rows never run past the
+ * dialog, and menu rows keep the same 4 px gap across provider groups.
+ */
+.search-field {
+  padding-right: 4px;
+}
+.search-row {
+  overflow: hidden;
+}
+.search-text {
+  flex: 1;
+}
+.model-menu [role="group"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .model-menu .menu-item {
+    padding: 6px 14px;
+  }
+}
+
+/* Settings window: equal insets on both sides of each pane, and the close
+   × sits as far from the right edge as the title does from the left. */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .settings-side {
+    padding: 10px;
+  }
+  .settings-body {
+    padding: 12px 20px 20px;
+  }
+  .settings-head > .icon-button:last-child {
+    margin-right: -10px;
+  }
+}
