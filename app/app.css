@@ -1039,14 +1039,15 @@ textarea.input {
  * desktop sizes; touch screens get 44 px targets and 16 px text.
  */
 /*
- * Touch screens: one scale everywhere, the settings scale. 15 px text,
- * 13 px secondary labels, 40 px rows; only tap targets grow to 44 px.
+ * Touch screens follow Apple's iPhone text styles: Body 17 for messages,
+ * rows, menus and the composer; Headline 17 semibold for the chat title;
+ * Footnote 13 for section labels. Rows and tap targets are 44 px.
  */
 @media (pointer: coarse) {
   .chat-header .title-button {
     height: 44px;
-    font-size: 15px;
-    font-weight: 500;
+    font-size: 17px;
+    font-weight: 600;
   }
   .bubble,
   .prose,
@@ -1056,30 +1057,31 @@ textarea.input {
   .drawer .sidebar,
   .drawer .sidebar-action,
   .drawer .sidebar-list li a,
+  .drawer .account,
   .composer-row textarea {
-    font-size: 15px;
+    font-size: 17px;
   }
   .prose {
-    line-height: 1.6;
+    line-height: 1.5;
   }
   .model-trigger {
     height: 44px;
     padding: 0 8px 0 10px;
-    font-size: 15px;
+    font-size: 17px;
   }
-  .menu-item {
-    min-height: 40px;
-  }
+  .menu-item,
   .drawer .sidebar-action,
   .drawer .sidebar-list li a {
-    min-height: 40px;
+    min-height: 44px;
   }
   .drawer .sidebar-list li a {
     padding: 10px;
   }
   .drawer .sidebar-heading,
   .settings-nav-group,
-  .group-heading {
+  .group-heading,
+  .group-note,
+  .row-hint {
     font-size: 13px;
     font-weight: 400;
   }
