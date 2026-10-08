@@ -371,11 +371,18 @@ export async function chatChecks(
       .waitFor({ timeout: 15_000 });
     check("browser send streams and stores the reply", true);
     check("the URL identifies the new conversation", /\/chat\/[0-9a-f-]{36}$/.test(page.url()));
+    // The list refreshes just after the reply lands: wait for it, don't sample once.
     check(
       "the conversation is listed with its auto-title",
-      (await page.getByTestId("conversation-list").textContent())?.includes(
-        "typed before hydration",
-      ) === true,
+      await page
+        .getByTestId("conversation-list")
+        .getByText("typed before hydration")
+        .first()
+        .waitFor({ timeout: 5_000 })
+        .then(
+          () => true,
+          () => false,
+        ),
     );
 
     // Reload mid-generation: it keeps running and is re-observed.

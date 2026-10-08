@@ -2446,3 +2446,52 @@ textarea.input {
     padding: 8px 16px 24px;
   }
 }
+
+/*
+ * Phones: every row-shaped surface is the same rectangle: 48 px tall,
+ * 12 px corners, 12 px side padding, 12 px between icon and text, 4 px
+ * between rows. Drawer actions and chats, the account row, settings search,
+ * settings navigation and settings cards all follow it.
+ */
+@media (hover: none) and (pointer: coarse) and (max-width: 932px) {
+  .drawer .sidebar-action,
+  .drawer .sidebar-list li a,
+  .drawer .account,
+  .settings-search,
+  .settings-nav-item,
+  .group > .row,
+  .group > .row-button:only-child {
+    min-height: 48px;
+    height: auto;
+    padding: 0 12px;
+    gap: 12px;
+    border-radius: var(--radius);
+  }
+  .drawer .sidebar-list li a {
+    display: flex;
+    align-items: center;
+  }
+  .drawer .sidebar-list li {
+    border-radius: var(--radius);
+  }
+  .drawer .sidebar-actions,
+  .drawer .sidebar-list ul,
+  .settings-nav,
+  .group {
+    gap: 4px;
+  }
+  .settings-nav-item {
+    margin-bottom: 4px;
+  }
+  .drawer .account .avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+  /* Menu rows match too; two-line model rows keep a little vertical room. */
+  .menu-item {
+    min-height: 48px;
+    padding: 6px 12px;
+    gap: 12px;
+  }
+}
