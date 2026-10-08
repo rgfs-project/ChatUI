@@ -672,8 +672,9 @@ textarea.input {
   height: 100%;
 }
 
+/* 20 px either side of the 18 px icons (10 px padding + 10 px inset). */
 .rail-column {
-  flex: 0 0 60px;
+  flex: 0 0 58px;
   height: 100%;
 }
 
