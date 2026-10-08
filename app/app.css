@@ -3597,3 +3597,14 @@ a svg,
     padding: 0;
   }
 }
+
+/* One centre line across the composer: +, text, model and Send. */
+.composer-row {
+  align-items: center;
+}
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .composer-row:not([data-grown]) textarea {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
