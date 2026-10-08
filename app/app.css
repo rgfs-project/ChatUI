@@ -2211,7 +2211,7 @@ textarea.input {
   gap: 16px;
   width: 100%;
   min-height: 52px;
-  padding: 6px 16px;
+  padding: 8px 7px;
   border: 0;
   background: transparent;
   color: var(--text);
