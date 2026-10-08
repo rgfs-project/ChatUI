@@ -2212,7 +2212,7 @@ textarea.input {
   gap: 16px;
   width: 100%;
   min-height: 52px;
-  padding: 8px 7px;
+  padding: 6px 16px;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -2221,7 +2221,7 @@ textarea.input {
 }
 
 .row-button {
-  padding-right: 7px;
+  padding-right: 12px;
 }
 
 .row-button:hover:not(:disabled) {
@@ -2299,8 +2299,8 @@ textarea.input {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  /* Same inset as every other row. */
-  padding: 8px 7px;
+  /* Same 16 px inset as every other row. */
+  padding: 10px 16px;
 }
 
 .textarea-row textarea {
@@ -2321,7 +2321,7 @@ textarea.input {
   align-items: center;
   gap: 6px;
   height: 40px;
-  padding: 0 0 0 10px;
+  padding: 0 4px 0 10px;
   border: 0;
   border-radius: 10px;
   background: transparent;
