@@ -2863,3 +2863,18 @@ a svg,
     margin-right: -10px;
   }
 }
+
+/*
+ * Popovers under the 95 % zoom: Radix places them with on-screen (already
+ * zoomed) coordinates, which the zoom would shrink again and pull the menu
+ * up and left of its button. The wrapper undoes the zoom so the position
+ * lands exactly; the menu inside keeps the 95 % size.
+ */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  [data-radix-popper-content-wrapper] {
+    zoom: calc(1 / 0.95);
+  }
+  [data-radix-popper-content-wrapper] > * {
+    zoom: 0.95;
+  }
+}
