@@ -1177,8 +1177,8 @@ textarea.input {
 
 /* Message buttons are 38 x 38 everywhere, touch screens included. */
 .message-actions .icon-button {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
 }
 
 .message-actions.start {
