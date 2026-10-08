@@ -448,6 +448,9 @@ textarea.input {
   max-width: min(360px, calc(100vw - 16px));
   max-height: var(--radix-dropdown-menu-content-available-height, 70vh);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding: 6px;
   border-radius: var(--radius);
   background: var(--raised);
@@ -496,7 +499,7 @@ textarea.input {
 
 .menu-separator {
   height: 1px;
-  margin: 6px -6px;
+  margin: 0 -6px;
   background: var(--line);
 }
 
@@ -720,7 +723,7 @@ textarea.input {
 .sidebar-actions {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .sidebar-action {
@@ -896,7 +899,7 @@ textarea.input {
 }
 
 .rail .sidebar-actions {
-  gap: 0;
+  gap: 4px;
 }
 
 .drawer {
@@ -1540,7 +1543,7 @@ textarea.input {
 .proposals {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
@@ -1904,6 +1907,9 @@ textarea.input {
 }
 
 .search-results ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1988,9 +1994,9 @@ textarea.input {
 .settings-side {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   min-height: 0;
-  padding: 14px 12px;
+  padding: 4px 12px;
   border-right: 1px solid var(--line);
 }
 
@@ -2097,7 +2103,7 @@ textarea.input {
 
 .settings-side .settings-head {
   margin: 0;
-  padding: 0 0 0 8px;
+  padding: 0 0 0 12px;
 }
 
 .settings-group + .settings-group {
