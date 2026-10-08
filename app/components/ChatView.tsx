@@ -374,6 +374,7 @@ export function ChatView(props: {
               <UserMessage content={pending.content} attachments={pending.attachments} pending />
               <AssistantMessage content="" reasoning={null} status={null} streaming />
             </div>
+            <div className="composer-dock">{composer}</div>
           </div>
         ) : (
           <div className="home">
@@ -384,7 +385,6 @@ export function ChatView(props: {
             </div>
           </div>
         )}
-        {pending ? <div className="composer-dock">{composer}</div> : null}
         {actions.dialogs}
       </main>
     );
@@ -524,10 +524,11 @@ export function ChatView(props: {
               </p>
             ) : null}
           </div>
-        </div>
-        <div className="composer-dock">
-          {composer}
-          {noModelsNote}
+          {/* Inside the scroller and sticky: the chat scrolls behind it. */}
+          <div className="composer-dock">
+            {composer}
+            {noModelsNote}
+          </div>
         </div>
       </div>
       {artifact ? (

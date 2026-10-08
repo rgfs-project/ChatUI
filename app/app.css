@@ -1094,7 +1094,7 @@ textarea.input {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 24px 40px;
+  padding: 16px 24px 0;
   overscroll-behavior: contain;
   overflow-x: hidden;
 }
@@ -1140,7 +1140,7 @@ textarea.input {
 
 @media (hover: none) and (pointer: coarse) and (max-width: 932px) {
   .transcript {
-    padding: 8px 16px 24px;
+    padding: 8px 16px 0;
   }
   .bubble {
     max-width: 85%;
@@ -1606,8 +1606,17 @@ textarea.input {
 /* ---- Composer -------------------------------------------------------------- */
 
 .composer-dock {
-  flex: none;
-  padding: 0 24px 24px;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding: 40px 0 24px;
+  /* A light fade: text scrolling behind the composer dims out softly. */
+  background: linear-gradient(to bottom, transparent, var(--surface) 40px);
+  pointer-events: none;
+}
+
+.composer-dock > * {
+  pointer-events: auto;
 }
 
 .composer-dock > * {
@@ -1618,7 +1627,7 @@ textarea.input {
 
 @media (hover: none) and (pointer: coarse) and (max-width: 932px) {
   .composer-dock {
-    padding: 0 10px max(14px, env(safe-area-inset-bottom));
+    padding: 24px 0 max(14px, env(safe-area-inset-bottom));
   }
 }
 
