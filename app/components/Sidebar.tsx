@@ -146,13 +146,13 @@ export function Rail() {
   return (
     <nav className="rail" aria-label="Conversations">
       <IconButton label="Open sidebar" onClick={shell.openSidebar}>
-        <PanelLeft size={20} aria-hidden />
+        <PanelLeft size={18} aria-hidden />
       </IconButton>
       <Link to={paths.newChat()} className="icon-button" aria-label="New chat" title="New chat">
-        <SquarePen size={20} aria-hidden />
+        <SquarePen size={18} aria-hidden />
       </Link>
       <IconButton label="Search chats" onClick={shell.openSearch}>
-        <Search size={20} aria-hidden />
+        <Search size={18} aria-hidden />
       </IconButton>
       <span className="spacer" />
       <AccountMenu user={shell.user} compact />
