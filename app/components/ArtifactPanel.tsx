@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { apiFetch, ensureOk } from "../lib/api";
 import { formatBytes } from "../lib/format";
+import { CopyButton } from "./CopyButton";
 import { CodeBlock } from "./Markdown";
 import { CloseButton } from "./ui";
 
@@ -49,6 +50,9 @@ export function ArtifactPanel(props: {
         >
           <Download size={18} aria-hidden />
         </a>
+        {source.data !== undefined ? (
+          <CopyButton text={source.data} label="Copy file" className="muted-icon" />
+        ) : null}
         <CloseButton onClick={props.onClose} label="Close file" />
       </header>
       <div className="panel-body">
@@ -59,7 +63,7 @@ export function ArtifactPanel(props: {
         ) : source.data === undefined ? (
           <p className="muted">Loading…</p>
         ) : (
-          <CodeBlock code={source.data} language={props.artifact.language} />
+          <CodeBlock code={source.data} language={props.artifact.language} bare />
         )}
       </div>
     </aside>

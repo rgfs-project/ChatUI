@@ -63,24 +63,27 @@ function download(code: string, language: string | null) {
   URL.revokeObjectURL(url);
 }
 
-export function CodeBlock(props: { code: string; language: string | null }) {
+/** `bare`: no header row, for a host that already has its own (the file panel). */
+export function CodeBlock(props: { code: string; language: string | null; bare?: boolean }) {
   return (
     <div className="code-block">
-      <div className="code-header">
-        <span>{props.language ?? "text"}</span>
-        <span className="code-tools">
-          <IconButton
-            label="Download code"
-            className="muted-icon small"
-            onClick={() => {
-              download(props.code, props.language);
-            }}
-          >
-            <Download size={16} aria-hidden />
-          </IconButton>
-          <CopyButton text={props.code} label="Copy code" className="muted-icon small" />
-        </span>
-      </div>
+      {props.bare ? null : (
+        <div className="code-header">
+          <span>{props.language ?? "text"}</span>
+          <span className="code-tools">
+            <IconButton
+              label="Download code"
+              className="muted-icon small"
+              onClick={() => {
+                download(props.code, props.language);
+              }}
+            >
+              <Download size={16} aria-hidden />
+            </IconButton>
+            <CopyButton text={props.code} label="Copy code" className="muted-icon small" />
+          </span>
+        </div>
+      )}
       <pre>
         <code>
           <Suspense fallback={props.code}>
