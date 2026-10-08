@@ -518,7 +518,7 @@ export function ChatView(props: {
               <UserMessage content={pending.content} attachments={pending.attachments} pending />
             ) : null}
             {showLiveAtEnd ? renderLive(live) : null}
-            {pending && !showLiveAtEnd ? (
+            {(pending || (generating && live === null)) && !showLiveAtEnd ? (
               <AssistantMessage content="" reasoning={null} status={null} streaming />
             ) : null}
             {notice ? (

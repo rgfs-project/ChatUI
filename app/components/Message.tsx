@@ -184,7 +184,8 @@ export function AssistantMessage(props: {
   children?: ReactNode;
 }) {
   const note = props.status ? STATUS_NOTE[props.status] : undefined;
-  const thinking = props.streaming && !props.content && !props.reasoning;
+  // Dots until the answer starts, even while reasoning streams (it may be hidden).
+  const thinking = props.streaming && !props.content;
   return (
     <div className="assistant-turn" data-testid="message-assistant">
       {props.reasoning ? (

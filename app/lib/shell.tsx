@@ -25,8 +25,12 @@ export function useShell(): ShellControls {
   return shell;
 }
 
-/** Phone-sized screens use the drawer and the top bar. */
-export const NARROW_QUERY = "(max-width: 767px)";
+/**
+ * Phones (a touch-only screen no wider than a phone in landscape) use the
+ * drawer and the top bar. Desktops keep the desktop layout at any window
+ * size; app.css uses the same query.
+ */
+export const NARROW_QUERY = "(hover: none) and (pointer: coarse) and (max-width: 932px)";
 
 /** false on the server and during hydration; then the live answer. */
 export function useMediaQuery(query: string): boolean {

@@ -35,3 +35,18 @@ test("settings on a phone: the list, then a section", async ({ page }) => {
   await dialog.getByRole("button", { name: "All settings" }).click();
   await expect(dialog.getByRole("button", { name: "Account" })).toBeVisible();
 });
+
+test.describe("a narrow desktop window", () => {
+  test.use({ viewport: { width: 500, height: 800 }, hasTouch: false, isMobile: false });
+
+  test("keeps the desktop layout and sizes", async ({ page }) => {
+    await page.goto(`${base()}/chat/new`);
+    await page.waitForSelector('html[data-hydrated="true"]');
+    await expect(page.getByRole("navigation", { name: "Conversations" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open conversations" })).toHaveCount(0);
+    const height = await page
+      .getByRole("button", { name: /^Model: / })
+      .evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBe(40);
+  });
+});
