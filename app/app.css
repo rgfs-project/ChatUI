@@ -2147,7 +2147,21 @@ textarea.input {
 /* Hairlines between rows; .row resets the browser's own button border. */
 .group > * + *,
 .group > .row + .row {
-  border-top: 1px solid var(--line);
+  position: relative;
+  margin-top: 1px;
+}
+
+/* Drawn as its own straight line: a border-top would follow the row's
+   rounded corners and curl at both ends. */
+.group > * + *::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 
 .group-note {
