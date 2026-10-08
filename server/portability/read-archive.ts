@@ -93,7 +93,6 @@ export async function listEntries(
       try {
         const name = entry.fileName;
         const mode = (entry.externalFileAttributes >>> 16) & S_IFMT;
-        if (Date.now() > deadline) throw new ArchiveError("Reading the archive took too long");
         if (++records > limits.maxEntries)
           throw new ArchiveError(`The archive has more than ${String(limits.maxEntries)} entries`);
         if (mode === S_IFLNK) throw new ArchiveError(`${name} is a symbolic link`);
@@ -116,6 +115,10 @@ export async function listEntries(
             throw new ArchiveError(`${name} is compressed suspiciously well (a ZIP bomb?)`);
           entries.push(entry);
         }
+        // Checked every 1024 records: a flood of entries can't outrun the
+        // time limit, and a small archive meets its own checks first.
+        if (records % 1024 === 0 && Date.now() > deadline)
+          throw new ArchiveError("Reading the archive took too long");
         zip.readEntry();
       } catch (error) {
         reject(error instanceof ArchiveError ? error : new ArchiveError("The archive is damaged"));

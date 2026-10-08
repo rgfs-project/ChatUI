@@ -2580,6 +2580,74 @@ textarea.input {
     padding: 24px 12px max(12px, env(safe-area-inset-bottom));
   }
 
+  /* Every remaining control is 48 tall too. */
+  .model-trigger,
+  .choice,
+  .segmented,
+  .search-row,
+  .composer-row textarea,
+  .brand {
+    min-height: 48px;
+  }
+  .model-trigger,
+  .choice {
+    height: 48px;
+  }
+  .composer-row textarea {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  .search-row,
+  .brand {
+    display: flex;
+    align-items: center;
+  }
+  .settings-search input,
+  .search-field input {
+    align-self: stretch;
+  }
+  .segmented {
+    height: 48px;
+    padding: 4px;
+  }
+  .segmented button {
+    height: 40px;
+    min-width: 48px;
+  }
+  .switch {
+    width: 52px;
+    height: 32px;
+  }
+  .switch span {
+    width: 28px;
+    height: 28px;
+  }
+  .switch[aria-checked="true"] span {
+    transform: translateX(20px);
+  }
+  .bubble {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 11px 14px;
+  }
+  /* Two-line model rows fit 48 with a tight line height. */
+  .model-menu .menu-item {
+    padding: 4px 12px;
+    line-height: 1.2;
+  }
+  .model-menu .menu-hint {
+    font-size: 13px;
+  }
+  .row:has(> .row-control .choice, > .row-control .segmented) {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  /* A light fade under the header so text never collides with the title. */
+  .chat-header {
+    background: linear-gradient(to bottom, var(--surface) 70%, transparent);
+  }
+
   /* Settings text: 17 for rows, 15 for section labels and notes. */
   .settings-nav-item,
   .settings-search input,
