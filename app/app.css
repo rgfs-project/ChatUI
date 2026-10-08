@@ -1960,7 +1960,7 @@ textarea.input {
   flex-direction: column;
   gap: 4px;
   min-height: 0;
-  padding: 14px 20px 20px;
+  padding: 14px 28px 28px 20px;
   border-right: 1px solid var(--line);
 }
 
@@ -2031,7 +2031,7 @@ textarea.input {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 20px 20px;
+  padding: 14px 28px 28px 20px;
 }
 
 .settings-head {
