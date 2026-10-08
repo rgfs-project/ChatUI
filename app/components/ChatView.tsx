@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, PanelLeft, SquarePen } from "lucide-react";
+import { ArrowDown, ChevronDown, PanelLeft, SquarePen } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -85,18 +85,29 @@ function lastModel(dto: ConversationDto | undefined): ModelChoice | null {
 function useStickToBottom(dependency: unknown) {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  // Away from the bottom: shows the scroll-down button.
+  const [away, setAway] = useState(false);
   useLayoutEffect(() => {
     const el = ref.current;
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [dependency]);
   const onScroll = useCallback(() => {
     const el = ref.current;
-    if (el) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (!el) return;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    pinned.current = gap < 80;
+    setAway(gap > 200);
   }, []);
   const pin = useCallback(() => {
     pinned.current = true;
   }, []);
-  return [ref, onScroll, pin] as const;
+  const toBottom = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    pinned.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, []);
+  return [ref, onScroll, pin, away, toBottom] as const;
 }
 
 /** One chat: a new one (no id) or an existing conversation. */
@@ -162,7 +173,7 @@ export function ChatView(props: {
     if (dto?.title) document.title = `${dto.title} · ChatUI`;
   }, [dto?.title]);
 
-  const [scrollRef, onScroll, pinScroll] = useStickToBottom(
+  const [scrollRef, onScroll, pinScroll, scrolledAway, scrollToBottom] = useStickToBottom(
     `${String(dto?.messages.length)}:${live?.content.length ?? 0}:${pending ? 1 : 0}`,
   );
 
@@ -577,6 +588,11 @@ export function ChatView(props: {
           </div>
           {/* Inside the scroller and sticky: the chat scrolls behind it. */}
           <div className="composer-dock">
+            {scrolledAway ? (
+              <IconButton label="Scroll to bottom" className="scroll-down" onClick={scrollToBottom}>
+                <ArrowDown size={20} aria-hidden />
+              </IconButton>
+            ) : null}
             {composer}
             {noModelsNote}
           </div>

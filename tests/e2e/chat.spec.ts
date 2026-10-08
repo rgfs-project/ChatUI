@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
 import {
   ATTACHMENTS_CONVERSATION,
+  PLAIN_CONVERSATION,
   RICH_CONVERSATION,
   RICH_TITLE,
   WIDE_CONVERSATION,
@@ -175,4 +176,16 @@ test("a collapsed sidebar stays collapsed after a reload", async ({ page }) => {
   await page.reload();
   await page.waitForSelector('html[data-hydrated="true"]');
   await expect(page.getByRole("button", { name: "Close sidebar" })).toBeVisible();
+});
+
+test("scrolled up, a button brings the chat back to the bottom", async ({ page }) => {
+  await open(page, `/chat/${PLAIN_CONVERSATION}`);
+  const button = page.getByRole("button", { name: "Scroll to bottom" });
+  await expect(button).toHaveCount(0);
+  await page.locator(".transcript").evaluate((e) => {
+    e.scrollTop = 0;
+    e.dispatchEvent(new Event("scroll"));
+  });
+  await button.click();
+  await expect(button).toHaveCount(0);
 });
