@@ -32,6 +32,11 @@ export function useShell(): ShellControls {
  */
 export const NARROW_QUERY = "(hover: none) and (pointer: coarse) and (max-width: 932px)";
 
+/** The layout's breakpoint: phones, and any window under 768 px, hide the
+ *  sidebar behind a menu button. Typing keeps NARROW_QUERY (Return sends on
+ *  a narrow desktop window). */
+export const COMPACT_QUERY = `${NARROW_QUERY}, (max-width: 767px)`;
+
 /** false on the server and during hydration; then the live answer. */
 export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(

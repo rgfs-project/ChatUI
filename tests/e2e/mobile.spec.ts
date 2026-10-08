@@ -40,15 +40,16 @@ test("settings on a phone: section tabs above the open section", async ({ page }
 test.describe("a narrow desktop window", () => {
   test.use({ viewport: { width: 500, height: 800 }, hasTouch: false, isMobile: false });
 
-  test("keeps the desktop layout and sizes", async ({ page }) => {
+  test("hides the sidebar behind the menu button, keeps desktop sizes", async ({ page }) => {
     await page.goto(`${base()}/chat/new`);
     await page.waitForSelector('html[data-hydrated="true"]');
+    await page.getByRole("button", { name: "Open conversations" }).click();
     await expect(page.getByRole("navigation", { name: "Conversations" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Open conversations" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     const height = await page
       .getByRole("button", { name: /^Model: / })
       .evaluate((el) => el.getBoundingClientRect().height);
-    // 40 px controls, drawn at the desktop's 95 % scale.
+    // Desktop controls stay 40 px.
     expect(height).toBeCloseTo(40, 0);
   });
 });

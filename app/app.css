@@ -3372,3 +3372,159 @@ a svg,
     margin-right: -8px;
   }
 }
+
+/* Below 768 px the sidebar goes behind the menu button on any device. */
+@media (max-width: 767px) {
+  .sidebar-column,
+  .rail-column {
+    display: none;
+  }
+}
+
+/* Design tokens: the relationships the layout is built from. */
+:root {
+  --space: 4px;
+  --gutter-mobile: 16px;
+  --gutter-small: 24px;
+  --gutter-large: 64px;
+  --thread-width: 640px;
+  --thread-width-wide: 768px;
+  --sidebar-width: 260px;
+  --radius-control: 8px;
+  --radius-panel: 16px;
+  --radius-message: 22px;
+  --radius-composer: 28px;
+}
+
+/*
+ * Settings to the second snapshot: 680 x 600 (at most 85vh), a 180-210 px
+ * nav of 36 px tabs, a 36 px pill search, plain rows on a divider (60 px,
+ * 8 px padding) under 60 px section headings, 12/16 descriptions, a
+ * 32 x 20 switch and a light 50 % / 1 px-blur overlay.
+ */
+.scrim {
+  background: rgb(0 0 0 / 50%);
+  -webkit-backdrop-filter: blur(1px);
+  backdrop-filter: blur(1px);
+  transition: opacity 250ms;
+}
+@media (min-width: 768px) {
+  .settings.settings {
+    width: min(680px, calc(100vw - 20px));
+    height: min(600px, 85vh, calc(100% - 40px));
+    grid-template-columns: minmax(180px, 210px) minmax(0, 1fr);
+    border-radius: 16px;
+  }
+  .settings-side.settings-side {
+    padding: 10px 10px 8px;
+  }
+  .settings-nav-item.settings-nav-item {
+    height: auto;
+    min-height: 36px;
+    margin: 0 0 2px;
+    padding: 6px 10px;
+    gap: 6px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .settings-nav-group.settings-nav-group {
+    margin: 12px 10px 4px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+  .settings-body.settings-body {
+    padding: 0 16px 16px;
+  }
+  .settings-head > .icon-button:last-child {
+    width: 36px;
+    height: 36px;
+    margin-right: -6px;
+  }
+}
+.settings-search.settings-search {
+  position: relative;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px 0 36px;
+  border-radius: 9999px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.settings-search.settings-search input {
+  font-size: 14px;
+}
+.settings-search.settings-search svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+}
+.settings-body {
+  font-size: 14px;
+  line-height: 20px;
+}
+.settings-body > .settings-head {
+  min-height: 60px;
+  height: auto;
+  margin: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.settings-body > .settings-head h2 {
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 400;
+}
+.settings-group + .settings-group,
+.settings-group:has(> .group-heading) {
+  margin-top: 0;
+}
+.settings .group {
+  gap: 0;
+}
+.settings .group > *,
+.settings .group > .row {
+  border-radius: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+}
+.settings .settings-group:last-child .group > :last-child {
+  border-bottom: 0;
+}
+.settings .row {
+  min-height: 60px;
+  padding: 8px 0;
+}
+.settings .group-heading {
+  margin: 16px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+.settings .row-hint,
+.settings .group-note {
+  margin-block: 4px;
+  padding-inline-end: 48px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.settings .row-control {
+  height: 36px;
+  padding: 0 12px;
+  gap: 4px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.switch.switch {
+  width: 32px;
+  height: 20px;
+}
+.switch.switch span {
+  width: 16px;
+  height: 16px;
+}
+.switch[aria-checked="true"] span {
+  transform: translateX(12px);
+}

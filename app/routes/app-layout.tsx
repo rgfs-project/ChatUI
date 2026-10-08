@@ -17,7 +17,7 @@ import { rememberSidebarOpen } from "../lib/display";
 import { documentPathOf, paths } from "../lib/paths";
 import { createQueryClient, getQueryClient, isDehydratable, keys } from "../lib/query";
 import { useSessionState } from "../lib/session";
-import { NARROW_QUERY, ShellProvider, useMediaQuery, type ShellControls } from "../lib/shell";
+import { COMPACT_QUERY, ShellProvider, useMediaQuery, type ShellControls } from "../lib/shell";
 import type { loader as rootLoader } from "../root";
 import type { Route } from "./+types/app-layout";
 
@@ -84,7 +84,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
 }
 
 function Shell(props: { user: Route.ComponentProps["loaderData"]["user"]; expired: boolean }) {
-  const narrow = useMediaQuery(NARROW_QUERY);
+  const narrow = useMediaQuery(COMPACT_QUERY);
   const root = useRouteLoaderData<typeof rootLoader>("root");
   const [sidebarOpen, setSidebarOpen] = useState(root?.sidebarOpen ?? true);
   const [drawerOpen, setDrawerOpen] = useState(false);
