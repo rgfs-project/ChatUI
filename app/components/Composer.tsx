@@ -1,3 +1,4 @@
+import { NARROW_QUERY, useMediaQuery } from "../lib/shell";
 import {
   ArrowUp,
   BookOpen,
@@ -127,6 +128,7 @@ export function Composer(props: ComposerProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const phone = useMediaQuery(NARROW_QUERY);
   const fileInput = useRef<HTMLInputElement>(null);
   const listId = useId();
 
@@ -293,7 +295,8 @@ export function Composer(props: ComposerProps) {
       setSkill(null);
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey) {
+    // On phones Return is a new line; the Send button sends.
+    if (event.key === "Enter" && !event.shiftKey && !phone) {
       event.preventDefault();
       void send();
     }
@@ -410,6 +413,7 @@ export function Composer(props: ComposerProps) {
             id="message"
             ref={textarea}
             rows={1}
+            enterKeyHint={phone ? "enter" : "send"}
             value={text}
             placeholder={props.placeholder ?? "Ask anything"}
             role={menuOpen ? "combobox" : undefined}

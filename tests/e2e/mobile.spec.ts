@@ -50,3 +50,14 @@ test.describe("a narrow desktop window", () => {
     expect(height).toBe(40);
   });
 });
+
+test("on a phone Return adds a line; only the Send button sends", async ({ page }) => {
+  await page.goto(`${base()}/chat/new`);
+  await page.waitForSelector('html[data-hydrated="true"]');
+  const box = page.locator("#message");
+  await box.fill("first line");
+  await box.press("Enter");
+  await box.type("second line");
+  await expect(box).toHaveValue("first line\nsecond line");
+  expect(page.url()).toMatch(/\/chat\/new$/);
+});

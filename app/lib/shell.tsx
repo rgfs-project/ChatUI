@@ -36,13 +36,15 @@ export const NARROW_QUERY = "(hover: none) and (pointer: coarse) and (max-width:
 export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(
     (onChange) => {
+      // Environments without matchMedia (jsdom) answer false.
+      if (typeof window.matchMedia !== "function") return () => undefined;
       const list = window.matchMedia(query);
       list.addEventListener("change", onChange);
       return () => {
         list.removeEventListener("change", onChange);
       };
     },
-    () => window.matchMedia(query).matches,
+    () => typeof window.matchMedia === "function" && window.matchMedia(query).matches,
     () => false,
   );
 }
