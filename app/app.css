@@ -1732,13 +1732,14 @@ textarea.input {
 /* Scroll-down: a round button centred just above the composer. */
 .composer-dock > .scroll-down {
   position: absolute;
-  top: -8px;
+  /* The composer starts at the dock's top padding; sit 8 px above it. */
+  top: var(--dock-pad, 40px);
   left: 50%;
   margin: 0;
   border-radius: 50%;
   background: var(--raised);
   box-shadow: var(--shadow-pop);
-  transform: translateX(-50%);
+  transform: translate(-50%, calc(-100% - 8px));
 }
 
 .composer-dock > * {
@@ -2700,6 +2701,7 @@ a svg,
     padding-left: 4px;
   }
   .composer-dock {
+    --dock-pad: 24px;
     margin: 0 -24px;
     padding: 24px 12px max(12px, env(safe-area-inset-bottom));
   }
