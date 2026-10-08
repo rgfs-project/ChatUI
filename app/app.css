@@ -790,7 +790,7 @@ textarea.input {
 }
 
 .sidebar-heading {
-  margin: 20px 10px 4px 12px;
+  margin: 20px 10px 4px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 400;
@@ -860,7 +860,7 @@ textarea.input {
   align-items: center;
   gap: 12px;
   height: 38px;
-  padding: 0 5px;
+  padding: 0 10px;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
@@ -2494,4 +2494,19 @@ textarea.input {
     padding: 6px 12px;
     gap: 12px;
   }
+}
+
+/*
+ * Optical alignment: icons and chips sit on the same edge as the text
+ * around them. A 16 px icon in a 36 px button is inset 10 px, and the
+ * "Thought process" chip has 10 px of padding, so both are pulled out by
+ * that much; their hover fill hangs into the margin instead of the text.
+ */
+.assistant-turn .message-actions,
+.reasoning summary {
+  margin-left: -10px;
+}
+
+.user-turn .message-actions {
+  margin-right: -10px;
 }
