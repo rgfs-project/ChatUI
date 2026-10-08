@@ -897,7 +897,8 @@ textarea.input {
 }
 
 .rail .sidebar-actions {
-  gap: 4px;
+  /* 38 px buttons, 2 px apart: the same 40 px pitch as the sidebar's rows. */
+  gap: 2px;
 }
 
 .drawer {

@@ -147,7 +147,7 @@ export function Rail() {
   return (
     <nav className="rail" aria-label="Conversations">
       <div className="rail-top">
-        <IconButton label="Open sidebar" onClick={shell.openSidebar}>
+        <IconButton label="Open sidebar" className="muted-icon" onClick={shell.openSidebar}>
           <PanelLeft size={18} aria-hidden />
         </IconButton>
       </div>
