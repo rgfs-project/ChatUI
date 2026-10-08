@@ -96,6 +96,15 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/* No visible scrollbars anywhere; areas still scroll by wheel, touch and keys. */
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
 h1,
 h2,
 h3,
