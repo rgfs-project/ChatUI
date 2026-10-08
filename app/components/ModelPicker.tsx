@@ -39,13 +39,16 @@ export function ModelPicker(props: {
         </button>
       </MenuTrigger>
       <MenuContent align="end" side="top" className="model-menu" tabIndex={0}>
-        {props.models?.providers.map((group) =>
+        {props.models?.providers.map((group, _i, groups) =>
           group.models.length === 0 ? null : (
             <div key={group.provider.id} role="group" aria-label={group.provider.name}>
-              <MenuLabel>
-                {group.provider.name}
-                {group.stale ? " · may be out of date" : ""}
-              </MenuLabel>
+              {/* One provider needs no heading, unless it has a warning to carry. */}
+              {groups.filter((g) => g.models.length > 0).length > 1 || group.stale ? (
+                <MenuLabel>
+                  {group.provider.name}
+                  {group.stale ? " · may be out of date" : ""}
+                </MenuLabel>
+              ) : null}
               {group.models.map((m) => {
                 const selected =
                   props.value?.providerId === m.providerId && props.value.model === m.id;
