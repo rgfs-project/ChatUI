@@ -1,11 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Download, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ExportResult, ImportPreview } from "@shared/portability";
 import { ConfirmDialog, Switch } from "../components/ui";
 import { api, apiFetch, ensureOk, messageOf } from "../lib/api";
 import { formatBytes, formatDateTime } from "../lib/format";
 import { keys } from "../lib/query";
-import { Choice, Group, Row, Status } from "./parts";
+import { ActionRow, Choice, Group, Row, Status } from "./parts";
 
 const SOURCE = {
   chatui: "ChatUI archive",
@@ -147,69 +148,69 @@ export function Data(props: { userId: string }) {
   return (
     <>
       <Group
-        heading="Export"
-        note="Everything you have — chats, files, memories, skills and preferences — in one archive you can import here or elsewhere."
+        note={
+          exported
+            ? `${formatBytes(exported.size)} · ${countsLine(exported.counts)}`
+            : "Chats, files, memories, skills and settings, in one archive."
+        }
       >
-        <Row
-          label="Export all data"
-          hint={
-            exported ? `${formatBytes(exported.size)} · ${countsLine(exported.counts)}` : undefined
-          }
-        >
-          {exported ? (
-            <a
-              className="button small"
-              href={`/api/exports/${encodeURIComponent(exported.exportId)}/download`}
-            >
-              Download
-            </a>
-          ) : (
-            <button
-              type="button"
-              className="button small"
-              disabled={exporting}
-              onClick={() => void runExport()}
-            >
-              {exporting ? "Preparing…" : "Export"}
-            </button>
-          )}
-        </Row>
-      </Group>
-
-      <Group
-        heading="Import"
-        note="A ChatUI archive, a Claude data export or a duck.ai chat download. You’ll see what will change before anything is imported."
-      >
-        <Row label="Import from a file" hint={uploading ? "Reading the file…" : undefined}>
-          <button
-            type="button"
-            className="button small"
-            disabled={uploading || committing}
-            onClick={() => file.current?.click()}
+        {exported ? (
+          <a
+            className="row row-button action-row"
+            href={`/api/exports/${encodeURIComponent(exported.exportId)}/download`}
           >
-            Choose file
-          </button>
-          <input
-            ref={file}
-            type="file"
-            hidden
-            accept=".zip,.json,.txt,.md,.html,application/zip,application/json"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void chooseFile(f);
-            }}
+            <Download size={18} aria-hidden />
+            <span>Download archive</span>
+          </a>
+        ) : (
+          <ActionRow
+            icon={<Download size={18} aria-hidden />}
+            label={exporting ? "Preparing…" : "Export all data"}
+            disabled={exporting}
+            onClick={() => void runExport()}
           />
-        </Row>
+        )}
       </Group>
+      <Group
+        note={
+          uploading
+            ? "Reading the file…"
+            : "From a ChatUI, Claude or duck.ai export. Nothing is overwritten."
+        }
+      >
+        <ActionRow
+          icon={<Upload size={18} aria-hidden />}
+          label="Import chats"
+          disabled={uploading || committing}
+          onClick={() => file.current?.click()}
+        />
+      </Group>
+      <input
+        ref={file}
+        type="file"
+        hidden
+        accept=".zip,.json,.txt,.md,.html,application/zip,application/json"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) void chooseFile(f);
+        }}
+      />
 
       {preview ? (
-        <section className="settings-group" aria-label="Import preview">
-          <h3 className="group-heading">
-            {SOURCE[preview.source]}
-            {preview.exportCreatedAt ? ` · ${formatDateTime(preview.exportCreatedAt)}` : ""}
-          </h3>
-          <div className="group">
+        <>
+          <Group
+            heading={`${SOURCE[preview.source]}${preview.exportCreatedAt ? ` · ${formatDateTime(preview.exportCreatedAt)}` : ""}`}
+            note={
+              committing
+                ? `Importing… ${String(preview.progress.done)} of ${String(preview.progress.total)}`
+                : preview.state === "committed"
+                  ? "Import finished."
+                  : preview.warnings.length > 0
+                    ? preview.warnings.join(" ")
+                    : undefined
+            }
+          >
             {Object.entries(preview.counts).map(([kind, byAction]) => (
               <Row
                 key={kind}
@@ -245,92 +246,65 @@ export function Data(props: { userId: string }) {
                 <Switch label="Import again" checked={repeatOk} onChange={setRepeatOk} />
               </Row>
             ) : null}
-          </div>
+          </Group>
           {preview.state === "previewed" && preview.memories.length > 0 ? (
-            <>
-              <h3 className="group-heading">Memories (choose which to import)</h3>
-              <div className="group">
-                {preview.memories.map((m) => (
-                  <Row
-                    key={m.id}
-                    label={m.name}
-                    hint={
-                      m.action === "new"
-                        ? m.content
-                        : `${ACTION[m.action] ?? m.action} · ${m.content}`
-                    }
-                  >
-                    <Switch
-                      label={`Import memory ${m.name}`}
-                      checked={memoryIds.includes(m.id)}
-                      disabled={m.action === "identical"}
-                      onChange={(on) => {
-                        setMemoryIds((ids) =>
-                          on ? [...ids, m.id] : ids.filter((id) => id !== m.id),
-                        );
-                      }}
-                    />
-                  </Row>
-                ))}
-              </div>
-            </>
-          ) : null}
-          {preview.warnings.length > 0 ? (
-            <ul className="group-note warnings">
-              {preview.warnings.map((w) => (
-                <li key={w}>{w}</li>
+            <Group heading="Memories (choose which to import)">
+              {preview.memories.map((m) => (
+                <Row
+                  key={m.id}
+                  label={m.name}
+                  hint={
+                    m.action === "new"
+                      ? m.content
+                      : `${ACTION[m.action] ?? m.action} · ${m.content}`
+                  }
+                >
+                  <Switch
+                    label={`Import memory ${m.name}`}
+                    checked={memoryIds.includes(m.id)}
+                    disabled={m.action === "identical"}
+                    onChange={(on) => {
+                      setMemoryIds((ids) =>
+                        on ? [...ids, m.id] : ids.filter((id) => id !== m.id),
+                      );
+                    }}
+                  />
+                </Row>
               ))}
-            </ul>
+            </Group>
           ) : null}
-          {committing ? (
-            <p className="group-note" role="status">
-              Importing… {preview.progress.done} of {preview.progress.total}
-            </p>
-          ) : null}
-          {preview.state === "committed" ? (
-            <p className="ok" role="status">
-              Import finished.
-            </p>
-          ) : null}
-          {preview.report?.error ? (
-            <p className="error" role="alert">
-              {preview.report.error}
-            </p>
-          ) : null}
-          <div className="form-actions">
-            {preview.state === "previewed" ? (
-              <>
-                <button
-                  type="button"
-                  className="button"
+          <Status error={preview.report?.error ?? null} />
+          {preview.state !== "previewed" && !done ? null : (
+            <Group>
+              {preview.state === "previewed" ? (
+                <>
+                  <ActionRow
+                    icon={<Upload size={18} aria-hidden />}
+                    label="Import"
+                    disabled={preview.previousImport !== null && !repeatOk}
+                    onClick={() => void commit()}
+                  />
+                  <ActionRow
+                    danger
+                    icon={<span className="action-spacer" />}
+                    label="Cancel import"
+                    onClick={() => {
+                      setCancelOpen(true);
+                    }}
+                  />
+                </>
+              ) : done ? (
+                <ActionRow
+                  icon={<span className="action-spacer" />}
+                  label="Done"
                   onClick={() => {
-                    setCancelOpen(true);
+                    setPreview(null);
                   }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="button primary"
-                  disabled={preview.previousImport !== null && !repeatOk}
-                  onClick={() => void commit()}
-                >
-                  Import
-                </button>
-              </>
-            ) : done ? (
-              <button
-                type="button"
-                className="button"
-                onClick={() => {
-                  setPreview(null);
-                }}
-              >
-                Done
-              </button>
-            ) : null}
-          </div>
-        </section>
+                />
+              ) : null}
+            </Group>
+          )}
+        </>
       ) : null}
       <Status error={error} />
       <ConfirmDialog

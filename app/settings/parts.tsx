@@ -1,24 +1,32 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { useId, type ComponentProps, type ReactNode } from "react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "../components/ui";
 
-/** A heading over a group of rows. */
-export function GroupHeading(props: { children: ReactNode }) {
-  return <h3 className="group-heading">{props.children}</h3>;
-}
+/*
+ * Settings building blocks (design direction B): white cards of 52 px rows
+ * split by hairlines; headings and notes sit on the card's outer edge.
+ */
 
-/** White rounded card holding rows; an optional note below it. */
-export function Group(props: { children: ReactNode; note?: ReactNode; heading?: ReactNode }) {
+/** A card of rows, with an optional heading above and a note below. */
+export function Group(props: { children: ReactNode; heading?: ReactNode; note?: ReactNode }) {
   return (
     <section className="settings-group">
-      {props.heading ? <GroupHeading>{props.heading}</GroupHeading> : null}
+      {props.heading ? <h3 className="group-heading">{props.heading}</h3> : null}
       <div className="group">{props.children}</div>
       {props.note ? <p className="group-note">{props.note}</p> : null}
     </section>
   );
 }
 
-/** A row: label (and a second line) on the left, a control or value on the right. */
+/** A row: label (and an optional second line) on the left, a control or value on the right. */
 export function Row(props: {
   label: ReactNode;
   hint?: ReactNode;
@@ -36,7 +44,7 @@ export function Row(props: {
   );
 }
 
-/** A row that opens something (a detail page or a form). */
+/** A row that opens a page: label, an optional value, a chevron. */
 export function LinkRow(props: {
   label: ReactNode;
   hint?: ReactNode;
@@ -49,55 +57,74 @@ export function LinkRow(props: {
         <span>{props.label}</span>
         {props.hint ? <span className="row-hint">{props.hint}</span> : null}
       </span>
-      <span className="row-control muted">
-        {props.value}
-        <ChevronRight size={18} aria-hidden />
+      <span className="row-control">
+        {props.value !== undefined ? <span className="row-value">{props.value}</span> : null}
+        <ChevronRight size={18} aria-hidden className="chevron" />
       </span>
     </button>
   );
 }
 
-/** A labelled text field. */
-export function Field(props: ComponentProps<"input"> & { label: string; hint?: ReactNode }) {
-  const generated = useId();
-  const { label, hint, id, ...rest } = props;
-  const fieldId = id ?? generated;
+/** A row that does something: an icon and a verb. */
+export function ActionRow(props: {
+  icon: ReactNode;
+  label: ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
   return (
-    <div className="field">
-      <label htmlFor={fieldId}>{label}</label>
-      <input id={fieldId} className="input" {...rest} />
-      {hint ? <p className="field-hint">{hint}</p> : null}
-    </div>
+    <button
+      type="button"
+      className={`row row-button action-row${props.danger ? " danger" : ""}`}
+      disabled={props.disabled}
+      onClick={props.onClick}
+    >
+      {props.icon}
+      <span>{props.label}</span>
+    </button>
   );
 }
 
-export function TextArea(props: ComponentProps<"textarea"> & { label: string; hint?: ReactNode }) {
-  const generated = useId();
-  const { label, hint, id, ...rest } = props;
-  const fieldId = id ?? generated;
+/** A text field inside a card: label left, the value typed on the right. */
+export function FieldRow(props: ComponentProps<"input"> & { label: string }) {
+  const { label, ...rest } = props;
   return (
-    <div className="field">
-      <label htmlFor={fieldId}>{label}</label>
-      <textarea id={fieldId} className="input" {...rest} />
-      {hint ? <p className="field-hint">{hint}</p> : null}
-    </div>
+    <label className="row field-row">
+      <span className="field-row-label">{label}</span>
+      <input {...rest} />
+    </label>
   );
 }
 
-/** A compact menu choosing one of a few values. */
-export function Choice<T extends string | number>(props: {
+/** A longer text inside a card: label above, the text below. */
+export function TextAreaRow(props: ComponentProps<"textarea"> & { label: string }) {
+  const { label, ...rest } = props;
+  return (
+    <label className="row textarea-row">
+      <span>{label}</span>
+      <textarea {...rest} />
+    </label>
+  );
+}
+
+/** A compact menu choosing one value. */
+export function Choice<T extends string | number | null>(props: {
   labelledBy: string;
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  /** Shown when the value matches no option. */
+  label?: string;
+  extra?: ReactNode;
 }) {
   const current = props.options.find((o) => o.value === props.value);
   return (
     <Menu>
       <MenuTrigger asChild disabled={props.disabled}>
         <button type="button" className="choice" aria-labelledby={props.labelledBy}>
-          <span>{current?.label ?? String(props.value)}</span>
+          <span>{current?.label ?? props.label ?? String(props.value)}</span>
           <ChevronDown size={16} aria-hidden />
         </button>
       </MenuTrigger>
@@ -105,6 +132,9 @@ export function Choice<T extends string | number>(props: {
         {props.options.map((o) => (
           <MenuItem
             key={String(o.value)}
+            icon={
+              <Check size={16} aria-hidden className={o.value === props.value ? "" : "invisible"} />
+            }
             onSelect={() => {
               props.onChange(o.value);
             }}
@@ -112,56 +142,125 @@ export function Choice<T extends string | number>(props: {
             {o.label}
           </MenuItem>
         ))}
+        {props.extra}
       </MenuContent>
     </Menu>
   );
 }
 
-/** Feedback under a form. */
+/**
+ * A number chosen from presets, "Default" (null) or "Custom…", which turns
+ * the control into a small field. `scale` converts the shown unit to stored.
+ */
+export function NumberChoice(props: {
+  labelledBy: string;
+  value: number | null;
+  presets: readonly number[];
+  format: (stored: number) => string;
+  nullLabel: string;
+  onChange: (value: number | null) => void;
+  scale?: number;
+  unit?: string;
+  disabled?: boolean;
+}) {
+  const scale = props.scale ?? 1;
+  const [custom, setCustom] = useState(false);
+  const [text, setText] = useState("");
+  if (custom)
+    return (
+      <form
+        className="custom-number"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = Number(text);
+          if (text.trim() !== "" && Number.isFinite(n))
+            props.onChange(Math.round(n * scale * 1000) / 1000);
+          setCustom(false);
+        }}
+      >
+        <input
+          aria-labelledby={props.labelledBy}
+          inputMode="decimal"
+          autoFocus
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+          }}
+          onBlur={(e) => {
+            e.currentTarget.form?.requestSubmit();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setCustom(false);
+          }}
+        />
+        {props.unit ? <span className="muted">{props.unit}</span> : null}
+      </form>
+    );
+  const options = [
+    { value: null as number | null, label: props.nullLabel },
+    ...props.presets.map((p) => ({ value: p, label: props.format(p) })),
+  ];
+  return (
+    <Choice<number | null>
+      labelledBy={props.labelledBy}
+      value={props.value}
+      options={options}
+      label={props.value === null ? props.nullLabel : props.format(props.value)}
+      disabled={props.disabled}
+      onChange={props.onChange}
+      extra={
+        <MenuItem
+          icon={<Check size={16} aria-hidden className="invisible" />}
+          onSelect={() => {
+            setText(props.value === null ? "" : String(props.value / scale));
+            setCustom(true);
+          }}
+        >
+          Custom…
+        </MenuItem>
+      }
+    />
+  );
+}
+
+/** Feedback under a group. */
 export function Status(props: { error?: string | null; ok?: string | null }) {
   if (props.error)
     return (
-      <p className="error" role="alert">
+      <p className="group-note error" role="alert">
         {props.error}
       </p>
     );
   if (props.ok)
     return (
-      <p className="ok" role="status">
+      <p className="group-note ok" role="status">
         {props.ok}
       </p>
     );
   return null;
 }
 
-/** Empty state inside a section. */
-export function Empty(props: { title: string; children?: ReactNode }) {
-  return (
-    <div className="settings-empty">
-      <p className="settings-empty-title">{props.title}</p>
-      {props.children ? <p className="muted">{props.children}</p> : null}
-    </div>
-  );
+/** A page inside a section: the header shows its title and a back button. */
+interface SubPage {
+  title: string;
+  onBack: () => void;
 }
 
-/** A sub-page header inside a section (back to the list). */
-export function SubHeader(props: { onBack: () => void; title: string; backLabel: string }) {
-  return (
-    <div className="sub-header">
-      <button type="button" className="link-button" onClick={props.onBack}>
-        ‹ {props.backLabel}
-      </button>
-      <h3>{props.title}</h3>
-    </div>
-  );
-}
+export const SubPageContext = createContext<(page: SubPage | null) => void>(() => undefined);
 
-/** Numbers typed into a field: empty means "not set". */
-export function parseOptionalNumber(value: string): number | null {
-  const trimmed = value.trim();
-  if (trimmed === "") return null;
-  const n = Number(trimmed);
-  return Number.isFinite(n) ? n : Number.NaN;
+export function useSubPage(page: SubPage | null) {
+  const set = useContext(SubPageContext);
+  const back = useRef<(() => void) | undefined>(undefined);
+  useEffect(() => {
+    back.current = page?.onBack;
+  });
+  const title = page?.title;
+  useEffect(() => {
+    set(title === undefined ? null : { title, onBack: () => back.current?.() });
+    return () => {
+      set(null);
+    };
+  }, [set, title]);
 }
 
 /** A text field's value from a form. */

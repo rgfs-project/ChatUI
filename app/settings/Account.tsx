@@ -1,19 +1,31 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { LogOut, Trash2 } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import { ConfirmDialog } from "../components/ui";
 import { api, messageOf } from "../lib/api";
 import { keys } from "../lib/query";
 import type { ShellUser } from "../lib/shell";
 import { signOut } from "../lib/sign-out";
-import { Field, Group, LinkRow, Row, Status, SubHeader, formText } from "./parts";
+import { ActionRow, FieldRow, formText, Group, LinkRow, Row, Status, useSubPage } from "./parts";
 
 export function Account(props: { user: ShellUser }) {
   const client = useQueryClient();
   const [view, setView] = useState<"main" | "password">("main");
   const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const [cleared, setCleared] = useState<string | null>(null);
+  useSubPage(
+    view === "password"
+      ? {
+          title: "Password",
+          onBack: () => {
+            setView("main");
+            setError(null);
+          },
+        }
+      : null,
+  );
 
   async function changePassword(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,7 +55,7 @@ export function Account(props: { user: ShellUser }) {
     setError(null);
     try {
       const result = await api<{ deleted: number }>("/api/conversations", { method: "DELETE" });
-      setCleared(`${String(result.deleted)} chats deleted.`);
+      setOk(`${String(result.deleted)} chats deleted.`);
       setClearing(false);
       await client.invalidateQueries({ queryKey: keys.user(props.user.id) });
     } catch (e) {
@@ -55,56 +67,49 @@ export function Account(props: { user: ShellUser }) {
 
   if (view === "password")
     return (
-      <>
-        <SubHeader
-          title="Password"
-          backLabel="Account"
-          onBack={() => {
-            setView("main");
-            setError(null);
-          }}
-        />
-        <form className="settings-form" onSubmit={(e) => void changePassword(e)}>
-          <Field
+      <form onSubmit={(e) => void changePassword(e)}>
+        <Group note="You’ll be signed out everywhere and asked to sign in again.">
+          <FieldRow
             label="Current password"
             name="currentPassword"
             type="password"
             autoComplete="current-password"
             required
           />
-          <Field
+          <FieldRow
             label="New password"
             name="newPassword"
             type="password"
             autoComplete="new-password"
             required
           />
-          <Field
+          <FieldRow
             label="Repeat new password"
             name="confirmPassword"
             type="password"
             autoComplete="new-password"
             required
           />
-          <p className="field-hint">You’ll be signed out everywhere and asked to sign in again.</p>
-          <Status error={error} />
-          <div className="form-actions">
-            <button type="submit" className="button primary" disabled={busy}>
-              Change password
-            </button>
-          </div>
-        </form>
-      </>
+        </Group>
+        <Group>
+          <button type="submit" className="row row-button action-row" disabled={busy}>
+            Change password
+          </button>
+        </Group>
+        <Status error={error} />
+      </form>
     );
 
   return (
     <>
       <Group>
         <Row label="Username">
-          <span className="muted">{props.user.username}</span>
+          <span className="row-value">@{props.user.username}</span>
         </Row>
         <Row label="Role">
-          <span className="muted">{props.user.role === "admin" ? "Administrator" : "Member"}</span>
+          <span className="row-value">
+            {props.user.role === "admin" ? "Administrator" : "Member"}
+          </span>
         </Row>
       </Group>
       <Group heading="Security">
@@ -115,23 +120,24 @@ export function Account(props: { user: ShellUser }) {
           }}
         />
       </Group>
-      <div className="button-row">
-        <button type="button" className="button" onClick={() => void signOut()}>
-          Sign out
-        </button>
-      </div>
+      <Group>
+        <ActionRow
+          icon={<LogOut size={18} aria-hidden />}
+          label="Sign out"
+          onClick={() => void signOut()}
+        />
+      </Group>
       <Group heading="Danger zone">
-        <button
-          type="button"
-          className="row row-button danger-text"
+        <ActionRow
+          danger
+          icon={<Trash2 size={18} aria-hidden />}
+          label="Delete all chats"
           onClick={() => {
             setClearing(true);
           }}
-        >
-          Delete all chats
-        </button>
+        />
       </Group>
-      <Status error={clearing ? null : error} ok={cleared} />
+      <Status error={clearing ? null : error} ok={ok} />
       <ConfirmDialog
         open={clearing}
         onOpenChange={setClearing}

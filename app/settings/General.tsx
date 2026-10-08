@@ -29,8 +29,10 @@ export function General(props: { userId: string }) {
       p ? { ...p, ...change } : p,
     );
     try {
-      const next = await api<Preferences>("/api/preferences", { method: "PATCH", body: change });
-      client.setQueryData(keys.preferences(props.userId), next);
+      client.setQueryData(
+        keys.preferences(props.userId),
+        await api<Preferences>("/api/preferences", { method: "PATCH", body: change }),
+      );
     } catch (e) {
       setError(messageOf(e));
       void prefs.refetch();
@@ -39,7 +41,7 @@ export function General(props: { userId: string }) {
 
   return (
     <>
-      <Group heading="Appearance">
+      <Group heading="Appearance" note="The model’s reasoning, above its replies.">
         <Row label="Theme" id="g-theme">
           <div role="radiogroup" aria-labelledby="g-theme" className="segmented">
             {THEMES.map(({ value, label, icon: Icon }) => (
@@ -60,10 +62,7 @@ export function General(props: { userId: string }) {
             ))}
           </div>
         </Row>
-        <Row
-          label="Show thought process"
-          hint="The model’s reasoning above its replies, when it shares one."
-        >
+        <Row label="Show thought process">
           <Switch
             label="Show thought process"
             checked={reasoning}
@@ -74,12 +73,11 @@ export function General(props: { userId: string }) {
           />
         </Row>
       </Group>
-      <Group heading="Images and audio">
-        <Row
-          label="Earlier images and audio"
-          id="g-hist"
-          hint="Send them to the model again with each new message."
-        >
+      <Group
+        heading="Images and audio"
+        note="Earlier ones go to the model again with each message. Large images shrink in your browser."
+      >
+        <Row label="Earlier images and audio" id="g-hist">
           <Choice
             labelledBy="g-hist"
             value={prefs.data?.historyImages ?? "include"}
@@ -91,11 +89,7 @@ export function General(props: { userId: string }) {
             onChange={(v) => void save({ historyImages: v })}
           />
         </Row>
-        <Row
-          label="Shrink large images"
-          id="g-edge"
-          hint="Resized in your browser before uploading."
-        >
+        <Row label="Shrink large images" id="g-edge">
           <Choice
             labelledBy="g-edge"
             value={prefs.data?.imageMaxEdge ?? DEFAULT_IMAGE_MAX_EDGE}

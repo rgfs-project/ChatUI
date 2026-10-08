@@ -1,12 +1,87 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type SyntheticEvent } from "react";
+import { KeyRound, Plug, Plus, Trash2 } from "lucide-react";
+import { useState, type FocusEvent, type SyntheticEvent } from "react";
 import type { AdminProviderDto } from "@shared/admin";
 import { ConfirmDialog, Switch } from "../components/ui";
 import { api, messageOf } from "../lib/api";
 import { keys } from "../lib/query";
-import { Field, Group, LinkRow, Status, SubHeader, parseOptionalNumber, formText } from "./parts";
+import { ActionRow, FieldRow, formText, Group, LinkRow, Row, Status, useSubPage } from "./parts";
 
 type Modality = "text" | "image" | "audio";
+type Capabilities = AdminProviderDto["capabilities"];
+
+const NEW_CAPS: Capabilities = { inputModalities: ["text"], reasoning: false, tools: false };
+
+/** The capability switches, shared by a new and an existing provider. */
+function CapabilityRows(props: {
+  caps: Capabilities;
+  sampling: boolean;
+  onCaps: (caps: Capabilities) => void;
+  onSampling: (on: boolean) => void;
+  disabled?: boolean;
+}) {
+  const modality = (m: Modality, on: boolean) => {
+    const list = props.caps.inputModalities.filter((x) => x !== m);
+    props.onCaps({ ...props.caps, inputModalities: on ? [...list, m] : list });
+  };
+  return (
+    <Group
+      heading="Capabilities"
+      note="Used when the provider doesn’t report them. llama.cpp sampling adds top-k, min-p and repeat penalty."
+    >
+      <Row label="Images">
+        <Switch
+          label="Images"
+          disabled={props.disabled}
+          checked={props.caps.inputModalities.includes("image")}
+          onChange={(on) => {
+            modality("image", on);
+          }}
+        />
+      </Row>
+      <Row label="Audio">
+        <Switch
+          label="Audio"
+          disabled={props.disabled}
+          checked={props.caps.inputModalities.includes("audio")}
+          onChange={(on) => {
+            modality("audio", on);
+          }}
+        />
+      </Row>
+      <Row label="Reasoning">
+        <Switch
+          label="Reasoning"
+          disabled={props.disabled}
+          checked={props.caps.reasoning}
+          onChange={(on) => {
+            props.onCaps({ ...props.caps, reasoning: on });
+          }}
+        />
+      </Row>
+      <Row label="Tools (memory suggestions)">
+        <Switch
+          label="Tools"
+          disabled={props.disabled}
+          checked={props.caps.tools}
+          onChange={(on) => {
+            props.onCaps({ ...props.caps, tools: on });
+          }}
+        />
+      </Row>
+      <Row label="llama.cpp sampling">
+        <Switch
+          label="llama.cpp sampling"
+          disabled={props.disabled}
+          checked={props.sampling}
+          onChange={props.onSampling}
+        />
+      </Row>
+    </Group>
+  );
+}
+
+const numberOrNull = (text: string) => (text.trim() === "" ? null : Number(text));
 
 export function AdminProviders(props: { userId: string }) {
   const client = useQueryClient();
@@ -21,12 +96,22 @@ export function AdminProviders(props: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [modalities, setModalities] = useState<Modality[]>(["text"]);
-  const [reasoning, setReasoning] = useState(false);
-  const [tools, setTools] = useState(false);
-  const [sampling, setSampling] = useState(false);
-  const [clearKey, setClearKey] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [newCaps, setNewCaps] = useState<Capabilities>(NEW_CAPS);
+  const [newSampling, setNewSampling] = useState(false);
+  const provider = view && view !== "new" ? providers.data?.find((p) => p.id === view) : undefined;
+  const back = () => {
+    setView(null);
+    setError(null);
+    setOk(null);
+  };
+  useSubPage(
+    view === "new"
+      ? { title: "New provider", onBack: back }
+      : provider
+        ? { title: provider.name, onBack: back }
+        : null,
+  );
 
   const refresh = async () => {
     await client.invalidateQueries({ queryKey: key });
@@ -34,64 +119,57 @@ export function AdminProviders(props: { userId: string }) {
     await client.invalidateQueries({ queryKey: keys.admin(props.userId, "models") });
   };
 
-  const open = (p: AdminProviderDto | "new") => {
+  async function patch(body: Record<string, unknown>, success?: string) {
+    if (!provider) return;
+    setBusy(true);
     setError(null);
     setOk(null);
-    setClearKey(false);
-    if (p === "new") {
-      setModalities(["text"]);
-      setReasoning(false);
-      setTools(false);
-      setSampling(false);
-      setView("new");
-    } else {
-      setModalities(p.capabilities.inputModalities);
-      setReasoning(p.capabilities.reasoning);
-      setTools(p.capabilities.tools);
-      setSampling(p.samplingExtensions);
-      setView(p.id);
+    try {
+      await api(`/api/admin/providers/${encodeURIComponent(provider.id)}`, {
+        method: "PATCH",
+        body,
+      });
+      await refresh();
+      if (success) setOk(success);
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setBusy(false);
     }
-  };
+  }
 
-  const provider = view && view !== "new" ? providers.data?.find((p) => p.id === view) : undefined;
+  /** Saves one field when it loses focus, if it changed. */
+  const saveOnBlur =
+    (field: string, current: string, toValue: (text: string) => unknown = (t) => t.trim()) =>
+    (e: FocusEvent<HTMLInputElement>) => {
+      const text = e.currentTarget.value;
+      if (text === current) return;
+      const value = toValue(text);
+      if (typeof value === "number" && Number.isNaN(value)) {
+        setError("Numbers only, or leave it empty.");
+        return;
+      }
+      void patch({ [field]: value });
+    };
 
-  async function save(event: SyntheticEvent<HTMLFormElement>) {
+  async function create(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const text = (name: string) => formText(form, name).trim();
-    const numbers = {
-      timeoutMs: parseOptionalNumber(text("timeoutSec")),
-      maxActiveGenerations: parseOptionalNumber(text("maxActive")),
-      contextTokens: parseOptionalNumber(text("contextTokens")),
-    };
-    if (Object.values(numbers).some((n) => Number.isNaN(n))) {
-      setError("Numbers only, or leave empty.");
-      return;
-    }
-    const body: Record<string, unknown> = {
-      name: text("name"),
-      baseUrl: text("baseUrl"),
-      timeoutMs: numbers.timeoutMs === null ? null : numbers.timeoutMs * 1000,
-      maxActiveGenerations: numbers.maxActiveGenerations,
-      contextTokens: numbers.contextTokens,
-      samplingExtensions: sampling,
-      capabilities: { inputModalities: modalities, reasoning, tools },
-    };
     const apiKey = formText(form, "apiKey");
-    if (apiKey) body.apiKey = apiKey;
-    else if (clearKey) body.clearApiKey = true;
     setBusy(true);
     setError(null);
     try {
-      if (view === "new") {
-        const created = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== null));
-        await api("/api/admin/providers", { method: "POST", body: { id: text("id"), ...created } });
-      } else if (provider) {
-        await api(`/api/admin/providers/${encodeURIComponent(provider.id)}`, {
-          method: "PATCH",
-          body,
-        });
-      }
+      await api("/api/admin/providers", {
+        method: "POST",
+        body: {
+          id: formText(form, "id").trim(),
+          name: formText(form, "name").trim(),
+          baseUrl: formText(form, "baseUrl").trim(),
+          capabilities: newCaps,
+          samplingExtensions: newSampling,
+          ...(apiKey ? { apiKey } : {}),
+        },
+      });
       await refresh();
       setView(null);
     } catch (e) {
@@ -127,162 +205,168 @@ export function AdminProviders(props: { userId: string }) {
     try {
       await api(`/api/admin/providers/${encodeURIComponent(provider.id)}`, { method: "DELETE" });
       await refresh();
-      setDeleting(false);
+      setRemoving(false);
       setView(null);
     } catch (e) {
       setError(messageOf(e));
-      setDeleting(false);
+      setRemoving(false);
     } finally {
       setBusy(false);
     }
   }
 
-  const toggleModality = (m: Modality, on: boolean) => {
-    setModalities((list) => (on ? [...new Set([...list, m])] : list.filter((x) => x !== m)));
-  };
-
-  if (view === "new" || provider) {
-    const p = provider;
+  if (view === "new")
     return (
-      <>
-        <SubHeader
-          title={p?.name ?? "New provider"}
-          backLabel="Providers"
-          onBack={() => {
-            setView(null);
-          }}
-        />
-        <form className="settings-form" onSubmit={(e) => void save(e)}>
-          {p ? null : (
-            <Field
-              label="ID"
-              name="id"
-              required
-              maxLength={64}
-              pattern="[a-z0-9][a-z0-9\-_]*"
-              hint="A short, permanent identifier, like “local”."
-              autoCapitalize="none"
-              spellCheck={false}
-            />
-          )}
-          <Field label="Name" name="name" defaultValue={p?.name ?? ""} required maxLength={100} />
-          <Field
+      <form onSubmit={(e) => void create(e)}>
+        <Group note="The ID is short and permanent, like “local”. The URL is an OpenAI-compatible endpoint.">
+          <FieldRow
+            label="ID"
+            name="id"
+            required
+            maxLength={64}
+            pattern="[a-z0-9][a-z0-9\-_]*"
+            placeholder="local"
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+          <FieldRow label="Name" name="name" required maxLength={100} placeholder="llama.cpp" />
+          <FieldRow
             label="Base URL"
             name="baseUrl"
-            defaultValue={p?.baseUrl ?? ""}
             required
             placeholder="http://127.0.0.1:8080/v1"
-            hint="An OpenAI-compatible endpoint."
             inputMode="url"
             spellCheck={false}
           />
-          <Field
+          <FieldRow
             label="API key"
             name="apiKey"
             type="password"
             autoComplete="off"
-            placeholder={p?.hasApiKey ? "Saved — leave empty to keep" : "Optional"}
+            placeholder="None"
           />
-          {p?.hasApiKey ? (
-            <div className="field inline">
-              <span>Remove the saved key</span>
-              <Switch label="Remove the saved key" checked={clearKey} onChange={setClearKey} />
-            </div>
-          ) : null}
-          <Field
+        </Group>
+        <CapabilityRows
+          caps={newCaps}
+          sampling={newSampling}
+          onCaps={setNewCaps}
+          onSampling={setNewSampling}
+        />
+        <Group>
+          <button type="submit" className="row row-button action-row" disabled={busy}>
+            <Plus size={18} aria-hidden />
+            <span>Add provider</span>
+          </button>
+        </Group>
+        <Status error={error} />
+      </form>
+    );
+
+  if (provider) {
+    const p = provider;
+    return (
+      <>
+        <Group note={p.problem ?? "Leave the key empty to keep it."}>
+          <FieldRow
+            key={`name-${p.name}`}
+            label="Name"
+            defaultValue={p.name}
+            maxLength={100}
+            onBlur={saveOnBlur("name", p.name)}
+          />
+          <FieldRow
+            key={`url-${p.baseUrl}`}
+            label="Base URL"
+            defaultValue={p.baseUrl}
+            spellCheck={false}
+            onBlur={saveOnBlur("baseUrl", p.baseUrl)}
+          />
+          <FieldRow
+            label="API key"
+            type="password"
+            autoComplete="off"
+            placeholder={p.hasApiKey ? "Saved" : "None"}
+            onBlur={(e) => {
+              const value = e.currentTarget.value;
+              if (!value) return;
+              e.currentTarget.value = "";
+              void patch({ apiKey: value }, "Key saved.");
+            }}
+          />
+        </Group>
+        <CapabilityRows
+          caps={p.capabilities}
+          sampling={p.samplingExtensions}
+          disabled={busy}
+          onCaps={(caps) => void patch({ capabilities: caps })}
+          onSampling={(on) => void patch({ samplingExtensions: on })}
+        />
+        <Group heading="Limits" note="Empty: the default (or what the provider reports).">
+          <FieldRow
+            key={`t-${String(p.timeoutMs)}`}
             label="Timeout (seconds)"
-            name="timeoutSec"
             inputMode="numeric"
-            defaultValue={p?.timeoutMs ? String(p.timeoutMs / 1000) : ""}
             placeholder="Default"
+            defaultValue={p.timeoutMs ? String(p.timeoutMs / 1000) : ""}
+            onBlur={saveOnBlur("timeoutMs", p.timeoutMs ? String(p.timeoutMs / 1000) : "", (t) => {
+              const n = numberOrNull(t);
+              return n === null ? null : Math.round(n * 1000);
+            })}
           />
-          <Field
+          <FieldRow
+            key={`a-${String(p.maxActiveGenerations)}`}
             label="Replies at once"
-            name="maxActive"
             inputMode="numeric"
-            defaultValue={p?.maxActiveGenerations?.toString() ?? ""}
             placeholder="No limit"
+            defaultValue={p.maxActiveGenerations?.toString() ?? ""}
+            onBlur={saveOnBlur(
+              "maxActiveGenerations",
+              p.maxActiveGenerations?.toString() ?? "",
+              numberOrNull,
+            )}
           />
-          <Field
+          <FieldRow
+            key={`c-${String(p.contextTokens)}`}
             label="Context window (tokens)"
-            name="contextTokens"
             inputMode="numeric"
-            defaultValue={p?.contextTokens?.toString() ?? ""}
-            placeholder="Discovered or default"
+            placeholder="Discovered"
+            defaultValue={p.contextTokens?.toString() ?? ""}
+            onBlur={saveOnBlur("contextTokens", p.contextTokens?.toString() ?? "", numberOrNull)}
           />
-          <h3 className="group-heading">Capabilities</h3>
-          <div className="group">
-            {(["image", "audio"] as const).map((m) => (
-              <div className="row" key={m}>
-                <span>{m === "image" ? "Image input" : "Audio input"}</span>
-                <Switch
-                  label={m === "image" ? "Image input" : "Audio input"}
-                  checked={modalities.includes(m)}
-                  onChange={(on) => {
-                    toggleModality(m, on);
-                  }}
-                />
-              </div>
-            ))}
-            <div className="row">
-              <span>Reasoning</span>
-              <Switch label="Reasoning" checked={reasoning} onChange={setReasoning} />
-            </div>
-            <div className="row">
-              <span>Tools (memory suggestions)</span>
-              <Switch label="Tools" checked={tools} onChange={setTools} />
-            </div>
-            <div className="row">
-              <span>Extra sampling settings (top-k, min-p, repeat penalty)</span>
-              <Switch label="Extra sampling settings" checked={sampling} onChange={setSampling} />
-            </div>
-          </div>
-          <p className="field-hint">Used when the provider doesn’t report them itself.</p>
-          {p?.problem ? <p className="error">{p.problem}</p> : null}
-          <Status error={error} ok={ok} />
-          <div className="form-actions sticky">
-            {p ? (
-              <>
-                <button
-                  type="button"
-                  className="button danger-soft"
-                  onClick={() => {
-                    setDeleting(true);
-                  }}
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  className="button"
-                  disabled={busy}
-                  onClick={() => void test()}
-                >
-                  Test connection
-                </button>
-              </>
-            ) : null}
-            <span className="spacer" />
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                setView(null);
-              }}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="button primary" disabled={busy}>
-              Save
-            </button>
-          </div>
-        </form>
+        </Group>
+        <Group>
+          <ActionRow
+            icon={<Plug size={18} aria-hidden />}
+            label="Test connection"
+            disabled={busy}
+            onClick={() => void test()}
+          />
+          {p.hasApiKey ? (
+            <ActionRow
+              icon={<KeyRound size={18} aria-hidden />}
+              label="Forget the saved key"
+              disabled={busy}
+              onClick={() => void patch({ clearApiKey: true }, "Key removed.")}
+            />
+          ) : null}
+        </Group>
+        <Group>
+          <ActionRow
+            danger
+            icon={<Trash2 size={18} aria-hidden />}
+            label="Remove provider"
+            onClick={() => {
+              setRemoving(true);
+            }}
+          />
+        </Group>
+        <Status error={error} ok={ok} />
         <ConfirmDialog
-          open={deleting}
-          onOpenChange={setDeleting}
-          title="Delete provider?"
-          description={`${p?.name ?? ""} and its model settings will be removed. Existing chats are kept.`}
-          confirm="Delete"
+          open={removing}
+          onOpenChange={setRemoving}
+          title="Remove provider?"
+          description={`${p.name} and its model settings will be removed. Existing chats are kept.`}
+          confirm="Remove"
           danger
           busy={busy}
           onConfirm={() => void remove()}
@@ -293,33 +377,33 @@ export function AdminProviders(props: { userId: string }) {
 
   return (
     <>
-      <div className="section-toolbar">
-        <p className="muted">
-          Where models come from: OpenAI-compatible servers such as llama.cpp.
-        </p>
-        <button
-          type="button"
-          className="button primary small"
+      {providers.data && providers.data.length > 0 ? (
+        <Group>
+          {providers.data.map((p) => (
+            <LinkRow
+              key={p.id}
+              label={p.name}
+              value={p.status === "invalid" ? "Problem" : "Enabled"}
+              onClick={() => {
+                setError(null);
+                setOk(null);
+                setView(p.id);
+              }}
+            />
+          ))}
+        </Group>
+      ) : null}
+      <Group note="Keys stay on the server and are never shown again.">
+        <ActionRow
+          icon={<Plus size={18} aria-hidden />}
+          label="Add provider"
           onClick={() => {
-            open("new");
+            setNewCaps(NEW_CAPS);
+            setNewSampling(false);
+            setError(null);
+            setView("new");
           }}
-        >
-          Add provider
-        </button>
-      </div>
-      <Group>
-        {providers.data?.length === 0 ? <p className="row muted">No providers yet.</p> : null}
-        {providers.data?.map((p) => (
-          <LinkRow
-            key={p.id}
-            label={p.name}
-            hint={p.baseUrl}
-            value={p.status === "invalid" ? "Problem" : undefined}
-            onClick={() => {
-              open(p);
-            }}
-          />
-        ))}
+        />
       </Group>
       <Status error={providers.isError ? "Couldn’t load providers." : null} />
     </>

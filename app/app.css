@@ -383,7 +383,7 @@ textarea.input {
 }
 
 .switch[aria-checked="true"] {
-  background: var(--accent);
+  background: light-dark(#0d0d0d, #8f8f8f);
 }
 
 .switch[aria-checked="true"] span {
@@ -504,6 +504,8 @@ textarea.input {
   inset: 0;
   z-index: 40;
   background: var(--scrim);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .dialog {
@@ -1908,6 +1910,10 @@ textarea.input {
 
 /* ---- Settings -------------------------------------------------------------- */
 
+/*
+ * One grey panel; white cards of 52 px rows split by hairlines. The title,
+ * group headings and notes sit on the cards' outer edge; row text is inset 16.
+ */
 .settings {
   position: fixed;
   top: 50%;
@@ -1930,6 +1936,7 @@ textarea.input {
   gap: 10px;
   min-height: 0;
   padding: 14px 12px;
+  border-right: 1px solid var(--line);
 }
 
 .settings-search {
@@ -1992,69 +1999,93 @@ textarea.input {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--surface);
-}
-
-.settings-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 64px;
-  padding: 12px 24px 4px;
-}
-
-/* One edge for everything: the title, the cards and the close icon line up. */
-.settings-head > .icon-button:last-child {
-  margin-right: -11px;
-}
-
-.settings-head h2 {
-  flex: 1;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.settings-side .settings-head {
-  padding: 0 0 0 8px;
 }
 
 .settings-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 24px 24px;
+  padding: 14px 28px 28px 20px;
 }
 
-.settings-group {
-  margin-bottom: 28px;
+.settings-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  margin: 0 0 12px;
+}
+
+.settings-head h2 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-head .back {
+  width: 32px;
+  height: 32px;
+  margin-left: -8px;
+}
+
+.settings-head > .icon-button:last-child {
+  width: 36px;
+  height: 36px;
+  margin-right: -8px;
+  color: var(--muted);
+}
+
+.settings-side .settings-head {
+  margin: 0;
+  padding: 0 0 0 8px;
+}
+
+.settings-group + .settings-group {
+  margin-top: 16px;
+}
+
+.settings-group:has(> .group-heading) {
+  margin-top: 24px;
+}
+
+.settings-group:first-of-type {
+  margin-top: 0;
 }
 
 .group-heading {
-  margin: 8px 0 4px;
+  margin: 0 16px 6px 0;
   color: var(--muted);
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 400;
 }
 
-/* Flat rows on one left edge: description left, action right (no cards). */
 .group {
-  padding: 0;
+  overflow: hidden;
+  padding: 4px 0;
+  border-radius: var(--radius);
+  background: var(--raised);
 }
 
-.group-note,
-.section-intro {
-  margin: 8px 0 0;
+.group > * + * {
+  border-top: 1px solid var(--line);
+}
+
+.group-note {
+  margin: 8px 16px 0 0;
   color: var(--muted);
   font-size: 14px;
 }
 
-.section-intro {
-  margin: 0 0 14px;
+.group-note.error {
+  color: var(--danger);
 }
 
-.warnings {
-  padding-left: 20px;
+.group-note.ok {
+  color: var(--ok);
 }
 
 .row {
@@ -2063,23 +2094,27 @@ textarea.input {
   justify-content: space-between;
   gap: 16px;
   width: 100%;
-  min-height: 56px;
-  padding: 10px 0;
-  border: 0;
+  min-height: 52px;
+  padding: 6px 16px;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
   background: transparent;
   color: var(--text);
+  font-size: 15px;
   text-align: left;
 }
 
-/* A row that opens something stays flat on the same edge; hover only
-   strengthens its chevron. */
-.row-button .row-control svg {
-  transition: color 120ms;
+.row-button {
+  padding-right: 12px;
 }
 
-.row-button:hover .row-control svg,
-.row-button:focus-visible .row-control svg {
-  color: var(--text);
+.row-button:hover:not(:disabled) {
+  background: var(--fill);
+}
+
+.row-button:disabled {
+  opacity: 0.5;
 }
 
 .row-label {
@@ -2088,96 +2123,124 @@ textarea.input {
   min-width: 0;
 }
 
-.row-hint {
+.row-label > span:first-child {
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-hint {
   color: var(--muted);
-  font-size: 13px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .row-control {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
-.button-row {
-  margin: 0 0 20px;
+.row-value {
+  color: var(--muted);
 }
 
-.section-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 0 0 16px;
+.row .chevron {
+  color: var(--placeholder);
 }
 
-.settings-empty {
-  display: flex;
+.action-row {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.action-spacer {
+  width: 18px;
+}
+
+.action-row.danger {
+  color: var(--danger);
+}
+
+.field-row input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
+
+.field-row-label {
+  flex: none;
+}
+
+.textarea-row {
   flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 12px 16px;
+}
+
+.textarea-row textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.choice {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 48px 24px;
-  border-radius: var(--radius);
-  background: var(--fill);
-  text-align: center;
-}
-
-.settings-empty-title {
-  font-weight: 600;
-}
-
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.settings-form .settings-group,
-.settings-form .group-heading {
-  margin-bottom: 0;
-}
-
-.settings-form .field input,
-.settings-form .field textarea,
-.inline-form .input {
-  background: var(--fill);
-}
-
-.form-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.form-actions.sticky {
-  position: sticky;
-  bottom: -24px;
-  margin: 0 -24px -24px;
-  padding: 12px 24px 20px;
-  background: var(--surface);
-}
-
-.sub-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0 0 16px;
-}
-
-.sub-header .link-button {
-  align-self: flex-start;
+  height: 40px;
+  padding: 0 4px 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
   color: var(--muted);
-  text-decoration: none;
+  white-space: nowrap;
 }
 
-.sub-header h3 {
-  font-size: 18px;
-  font-weight: 600;
+.choice:hover:not(:disabled),
+.choice[data-state="open"] {
+  background: var(--fill);
+}
+
+.choice svg {
+  color: var(--placeholder);
+}
+
+.custom-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.custom-number input {
+  width: 110px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--text);
+  text-align: right;
+}
+
+.settings-empty-text {
+  color: var(--muted);
 }
 
 .inline-form {
@@ -2201,20 +2264,7 @@ textarea.input {
   .settings-side {
     border-right: 0;
   }
-  .settings-head {
-    padding: 0 6px;
-  }
   .settings-body {
-    padding: 8px 12px 24px;
-  }
-  .form-actions.sticky {
-    bottom: -24px;
-    margin: 0 -12px -24px;
-    padding: 12px;
-  }
-  .section-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    margin-left: 0;
+    padding: 8px 16px 24px;
   }
 }

@@ -1,11 +1,32 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type SyntheticEvent } from "react";
+import { DatabaseZap } from "lucide-react";
+import { useState } from "react";
 import type { AdminSettingsDto, AuditEntryDto } from "@shared/admin";
 import { api, messageOf } from "../lib/api";
 import { formatBytes, formatDateTime } from "../lib/format";
 import { allModels, modelLabel } from "../lib/models";
 import { keys, useModels } from "../lib/query";
-import { Choice, Field, Group, Row, Status, parseOptionalNumber, formText } from "./parts";
+import { ActionRow, Choice, Group, NumberChoice, Row, Status } from "./parts";
+
+const MIB = 1024 * 1024;
+const ZONES = [
+  "UTC",
+  "America/Los_Angeles",
+  "America/New_York",
+  "America/Toronto",
+  "Europe/London",
+  "Europe/Berlin",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+];
+
+function browserZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "UTC";
+  }
+}
 
 export function AdminInstance(props: { userId: string }) {
   const client = useQueryClient();
@@ -16,13 +37,26 @@ export function AdminInstance(props: { userId: string }) {
   });
   const models = useModels(props.userId);
   const [error, setError] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [registration, setRegistration] = useState<"open" | "closed" | null>(null);
-  const [defaultModel, setDefaultModel] = useState<string | null>(null);
 
   const s = settings.data;
   if (!s) return <Status error={settings.isError ? "Couldn’t load settings." : null} />;
+
+  async function save(change: Record<string, unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      client.setQueryData(
+        key,
+        await api<AdminSettingsDto>("/api/admin/settings", { method: "PATCH", body: change }),
+      );
+      await client.invalidateQueries({ queryKey: keys.models(props.userId) });
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const modelOptions = [
     { value: "", label: "None" },
@@ -31,160 +65,140 @@ export function AdminInstance(props: { userId: string }) {
       label: modelLabel(m.id),
     })),
   ];
-  const currentModel =
-    defaultModel ??
-    (s.defaultModel ? JSON.stringify([s.defaultModel.providerId, s.defaultModel.modelId]) : "");
-
-  async function save(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const num = (name: string, scale = 1) => {
-      const v = parseOptionalNumber(formText(form, name));
-      return v === null || Number.isNaN(v) ? v : Math.round(v * scale);
-    };
-    const fields = {
-      maxActivePerUser: num("maxActivePerUser"),
-      maxOutputTokens: num("maxOutputTokens"),
-      maxFileBytes: num("maxFileMb", 1024 * 1024),
-      maxPerMessage: num("maxPerMessage"),
-      quotaBytes: num("quotaMb", 1024 * 1024),
-      textInlineBytes: num("textInlineKb", 1024),
-    };
-    if (Object.values(fields).some((v) => Number.isNaN(v))) {
-      setError("Numbers only, or leave empty for the default.");
-      return;
-    }
-    const [providerId, modelId] = currentModel
-      ? (JSON.parse(currentModel) as [string, string])
-      : [];
-    setBusy(true);
-    setError(null);
-    setOk(null);
-    try {
-      const next = await api<AdminSettingsDto>("/api/admin/settings", {
-        method: "PATCH",
-        body: {
-          ...(registration ? { registrationMode: registration } : {}),
-          defaultModel: providerId && modelId ? { providerId, modelId } : null,
-          timezone: formText(form, "timezone").trim(),
-          generation: {
-            maxActivePerUser: fields.maxActivePerUser,
-            maxOutputTokens: fields.maxOutputTokens,
-          },
-          attachments: {
-            maxFileBytes: fields.maxFileBytes,
-            maxPerMessage: fields.maxPerMessage,
-            quotaBytes: fields.quotaBytes,
-            textInlineBytes: fields.textInlineBytes,
-          },
-        },
-      });
-      client.setQueryData(key, next);
-      await client.invalidateQueries({ queryKey: keys.models(props.userId) });
-      setOk("Saved.");
-    } catch (e) {
-      setError(messageOf(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const currentModel = s.defaultModel
+    ? JSON.stringify([s.defaultModel.providerId, s.defaultModel.modelId])
+    : "";
+  const zones = [...new Set([s.timezone, browserZone(), ...ZONES])].map((z) => ({
+    value: z,
+    label: z,
+  }));
   const d = s.attachmentDefaults;
-  const mb = (bytes: number | null) =>
-    bytes === null ? "" : String(Math.round((bytes / 1024 / 1024) * 100) / 100);
+  const a = s.attachments;
+  const attach = (field: string) => (v: number | null) =>
+    void save({ attachments: { [field]: v } });
+
   return (
-    <form className="settings-form" onSubmit={(e) => void save(e)}>
-      {s.problem ? <p className="error">{s.problem}</p> : null}
-      <Group heading="Access">
-        <Row
-          label="New accounts"
-          id="i-reg"
-          hint={
-            s.registrationModeSource === "environment"
-              ? "Set by the server environment until changed here."
-              : undefined
-          }
-        >
+    <>
+      <Group
+        heading="Sign-up and defaults"
+        note={
+          s.registrationModeSource === "environment"
+            ? "Registration is set by the environment until you change it here."
+            : undefined
+        }
+      >
+        <Row label="Registration" id="i-reg">
           <Choice
             labelledBy="i-reg"
-            value={registration ?? s.registrationMode}
+            value={s.registrationMode}
+            disabled={busy}
             options={[
-              { value: "closed", label: "Administrators create them" },
-              { value: "open", label: "Anyone can sign up" },
+              { value: "closed", label: "Closed" },
+              { value: "open", label: "Open" },
             ]}
-            onChange={setRegistration}
+            onChange={(v) => void save({ registrationMode: v })}
           />
         </Row>
         <Row label="Default model" id="i-model">
           <Choice
             labelledBy="i-model"
             value={currentModel}
+            disabled={busy}
             options={modelOptions}
-            onChange={setDefaultModel}
+            onChange={(v) => {
+              const [providerId, modelId] = v ? (JSON.parse(v) as [string, string]) : [];
+              void save({ defaultModel: providerId && modelId ? { providerId, modelId } : null });
+            }}
+          />
+        </Row>
+        <Row label="Time zone" id="i-tz">
+          <Choice
+            labelledBy="i-tz"
+            value={s.timezone}
+            disabled={busy}
+            options={zones}
+            onChange={(v) => void save({ timezone: v })}
           />
         </Row>
       </Group>
-      <h3 className="group-heading">Replies</h3>
-      <div className="field-grid">
-        <Field label="Time zone" name="timezone" defaultValue={s.timezone} placeholder="UTC" />
-        <Field
-          label="Replies at once per user"
-          name="maxActivePerUser"
-          inputMode="numeric"
-          defaultValue={s.generation.maxActivePerUser?.toString() ?? ""}
-          placeholder="Default"
-        />
-        <Field
-          label="Longest reply (tokens)"
-          name="maxOutputTokens"
-          inputMode="numeric"
-          defaultValue={s.generation.maxOutputTokens?.toString() ?? ""}
-          placeholder="Default"
-        />
-      </div>
-      <h3 className="group-heading">Attachments (empty: the default)</h3>
-      <div className="field-grid">
-        <Field
-          label="Largest file (MB)"
-          name="maxFileMb"
-          inputMode="decimal"
-          defaultValue={mb(s.attachments.maxFileBytes)}
-          placeholder={formatBytes(d.maxFileBytes)}
-        />
-        <Field
-          label="Files per message"
-          name="maxPerMessage"
-          inputMode="numeric"
-          defaultValue={s.attachments.maxPerMessage?.toString() ?? ""}
-          placeholder={String(d.maxPerMessage)}
-        />
-        <Field
-          label="Storage per user (MB)"
-          name="quotaMb"
-          inputMode="decimal"
-          defaultValue={mb(s.attachments.quotaBytes)}
-          placeholder={formatBytes(d.quotaBytes)}
-        />
-        <Field
-          label="Text sent inline (KB)"
-          name="textInlineKb"
-          inputMode="decimal"
-          defaultValue={
-            s.attachments.textInlineBytes === null
-              ? ""
-              : String(s.attachments.textInlineBytes / 1024)
-          }
-          placeholder={formatBytes(d.textInlineBytes)}
-        />
-      </div>
-      <Status error={error} ok={ok} />
-      <div className="form-actions sticky">
-        <span className="spacer" />
-        <button type="submit" className="button primary" disabled={busy}>
-          Save
-        </button>
-      </div>
-    </form>
+      <Group heading="Generation">
+        <Row label="Active per user" id="i-active">
+          <NumberChoice
+            labelledBy="i-active"
+            value={s.generation.maxActivePerUser}
+            presets={[1, 2, 4, 8]}
+            format={String}
+            nullLabel="Default"
+            disabled={busy}
+            onChange={(v) => void save({ generation: { maxActivePerUser: v } })}
+          />
+        </Row>
+        <Row label="Max output tokens" id="i-tokens">
+          <NumberChoice
+            labelledBy="i-tokens"
+            value={s.generation.maxOutputTokens}
+            presets={[1024, 4096, 8192, 16384, 32768]}
+            format={(n) => n.toLocaleString()}
+            nullLabel="Default"
+            disabled={busy}
+            onChange={(v) => void save({ generation: { maxOutputTokens: v } })}
+          />
+        </Row>
+      </Group>
+      <Group heading="Attachments" note="Shown at the server’s defaults until you change them.">
+        <Row label="Max file size" id="i-size">
+          <NumberChoice
+            labelledBy="i-size"
+            value={a.maxFileBytes}
+            presets={[5, 10, 20, 50, 100].map((n) => n * MIB)}
+            format={formatBytes}
+            nullLabel={formatBytes(d.maxFileBytes)}
+            scale={MIB}
+            unit="MB"
+            disabled={busy}
+            onChange={attach("maxFileBytes")}
+          />
+        </Row>
+        <Row label="Files per message" id="i-files">
+          <NumberChoice
+            labelledBy="i-files"
+            value={a.maxPerMessage}
+            presets={[1, 2, 3, 5, 10]}
+            format={String}
+            nullLabel={String(d.maxPerMessage)}
+            disabled={busy}
+            onChange={attach("maxPerMessage")}
+          />
+        </Row>
+        <Row label="Storage per user" id="i-quota">
+          <NumberChoice
+            labelledBy="i-quota"
+            value={a.quotaBytes}
+            presets={[100, 500, 1024, 5120, 10240].map((n) => n * MIB)}
+            format={formatBytes}
+            nullLabel={formatBytes(d.quotaBytes)}
+            scale={MIB}
+            unit="MB"
+            disabled={busy}
+            onChange={attach("quotaBytes")}
+          />
+        </Row>
+        <Row label="Text inlined" id="i-inline">
+          <NumberChoice
+            labelledBy="i-inline"
+            value={a.textInlineBytes}
+            presets={[16, 64, 100, 256, 1024].map((n) => n * 1024)}
+            format={formatBytes}
+            nullLabel={formatBytes(d.textInlineBytes)}
+            scale={1024}
+            unit="KB"
+            disabled={busy}
+            onChange={attach("textInlineBytes")}
+          />
+        </Row>
+      </Group>
+      <Status error={error ?? s.problem} />
+    </>
   );
 }
 
@@ -210,22 +224,32 @@ export function AdminMaintenance() {
   }
   return (
     <>
-      <Group note="Rereads every conversation file to rebuild the chat lists and search. Safe to run at any time; it can take a while on large instances.">
-        <Row label="Rebuild the conversation index">
-          <button
-            type="button"
-            className="button small"
-            disabled={busy}
-            onClick={() => void rebuild()}
-          >
-            {busy ? "Rebuilding…" : "Rebuild"}
-          </button>
-        </Row>
+      <Group note="Always safe: the index comes from the chat files.">
+        <ActionRow
+          icon={<DatabaseZap size={18} aria-hidden />}
+          label={busy ? "Rebuilding…" : "Rebuild the conversation index"}
+          disabled={busy}
+          onClick={() => void rebuild()}
+        />
       </Group>
       <Status error={error} ok={result} />
     </>
   );
 }
+
+const ACTIONS: Record<string, string> = {
+  "user.create": "Create user",
+  "user.update": "Change user",
+  "user.password": "Set password",
+  "user.delete": "Delete user",
+  "provider.create": "Add provider",
+  "provider.update": "Change provider",
+  "provider.delete": "Remove provider",
+  "provider.test": "Test connection",
+  "model.settings": "Change model",
+  "settings.update": "Change instance",
+  "maintenance.rebuild-index": "Rebuild index",
+};
 
 export function AdminAudit(props: { userId: string }) {
   const audit = useQuery({
@@ -234,31 +258,33 @@ export function AdminAudit(props: { userId: string }) {
       api<{ entries: AuditEntryDto[] }>("/api/admin/audit?limit=200", { signal }),
     select: (d) => d.entries,
   });
+  if (audit.data?.length === 0) return <p className="settings-empty-text">Nothing yet.</p>;
   return (
     <>
-      <p className="muted section-intro">
-        Administrative changes, newest first. Values are never recorded.
-      </p>
-      <Group>
-        {audit.data?.length === 0 ? <p className="row muted">Nothing yet.</p> : null}
-        {audit.data?.map((e, i) => (
-          <Row
-            key={`${e.time}-${String(i)}`}
-            label={
-              <>
-                {e.action}
-                {e.target.label || e.target.id ? ` · ${e.target.label ?? e.target.id ?? ""}` : ""}
-              </>
-            }
-            hint={`${formatDateTime(e.time)} · ${e.actor.username}${e.fields?.length ? ` · ${e.fields.join(", ")}` : ""}`}
-          >
-            <span className={e.outcome === "success" ? "muted" : "danger-text"}>
-              {e.outcome === "success" ? "Done" : `Failed${e.code ? ` (${e.code})` : ""}`}
-            </span>
-          </Row>
-        ))}
-      </Group>
-      {audit.isError ? <Status error="Couldn’t load the audit log." /> : null}
+      {audit.data ? (
+        <Group>
+          {audit.data.map((e, i) => {
+            const target = e.target.label ?? e.target.id;
+            return (
+              <Row
+                key={`${e.time}-${String(i)}`}
+                label={
+                  <>
+                    {ACTIONS[e.action] ?? e.action}
+                    {target ? <span className="row-value"> · {target}</span> : null}
+                  </>
+                }
+                hint={`${formatDateTime(e.time)} · ${e.actor.username}`}
+              >
+                <span className={e.outcome === "success" ? "row-value" : "danger-text"}>
+                  {e.outcome === "success" ? "Succeeded" : "Failed"}
+                </span>
+              </Row>
+            );
+          })}
+        </Group>
+      ) : null}
+      <Status error={audit.isError ? "Couldn’t load the audit log." : null} />
     </>
   );
 }

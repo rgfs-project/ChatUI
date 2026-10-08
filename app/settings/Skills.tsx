@@ -1,10 +1,21 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { Check, Plus, Trash2 } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import { SKILL_LIMITS, type SkillDto } from "@shared/skills";
 import { ConfirmDialog, Switch } from "../components/ui";
 import { api, messageOf } from "../lib/api";
 import { keys, useSkills } from "../lib/query";
-import { Empty, Field, Group, LinkRow, Status, SubHeader, TextArea, formText } from "./parts";
+import {
+  ActionRow,
+  FieldRow,
+  formText,
+  Group,
+  LinkRow,
+  Row,
+  Status,
+  TextAreaRow,
+  useSubPage,
+} from "./parts";
 
 export function Skills(props: { userId: string }) {
   const client = useQueryClient();
@@ -14,6 +25,16 @@ export function Skills(props: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  useSubPage(
+    editing
+      ? {
+          title: editing === "new" ? "New skill" : `/${editing.name}`,
+          onBack: () => {
+            setEditing(null);
+          },
+        }
+      : null,
+  );
 
   const refresh = () => client.invalidateQueries({ queryKey: keys.skills(props.userId) });
   const open = (skill: SkillDto | "new") => {
@@ -65,73 +86,57 @@ export function Skills(props: { userId: string }) {
   if (editing) {
     const skill = editing === "new" ? null : editing;
     return (
-      <>
-        <SubHeader
-          title={skill ? `/${skill.name}` : "New skill"}
-          backLabel="Skills"
-          onBack={() => {
-            setEditing(null);
-          }}
-        />
-        <form className="settings-form" onSubmit={(e) => void save(e)}>
-          <Field
+      <form onSubmit={(e) => void save(e)}>
+        <Group note="Lowercase letters, digits and hyphens. Instructions go to the model with the message that uses the skill.">
+          <FieldRow
             label="Name"
             name="name"
             defaultValue={skill?.name ?? ""}
             required
             maxLength={SKILL_LIMITS.nameLength}
             pattern="[a-z0-9][a-z0-9\-]*"
-            hint="Type /name at the start of a message to use it. Lowercase letters, digits and hyphens."
+            placeholder="summarize"
             autoCapitalize="none"
             spellCheck={false}
           />
-          <Field
+          <FieldRow
             label="Description"
             name="description"
             defaultValue={skill?.description ?? ""}
             maxLength={SKILL_LIMITS.descriptionLength}
+            placeholder="Optional"
           />
-          <TextArea
+          <TextAreaRow
             label="Instructions"
             name="instructions"
             defaultValue={skill?.instructions ?? ""}
             required
-            rows={10}
+            rows={8}
             maxLength={SKILL_LIMITS.instructionsLength}
-            hint="Sent to the model with the message that uses this skill."
           />
-          <div className="field inline">
-            <span>Enabled</span>
+          <Row label="Enabled">
             <Switch label="Enabled" checked={enabled} onChange={setEnabled} />
-          </div>
-          <Status error={error} />
-          <div className="form-actions">
-            {skill ? (
-              <button
-                type="button"
-                className="button danger-soft"
-                onClick={() => {
-                  setDeleting(true);
-                }}
-              >
-                Delete
-              </button>
-            ) : null}
-            <span className="spacer" />
-            <button
-              type="button"
-              className="button"
+          </Row>
+        </Group>
+        <Group>
+          <button type="submit" className="row row-button action-row" disabled={busy}>
+            <Check size={18} aria-hidden />
+            <span>{skill ? "Save" : "Create skill"}</span>
+          </button>
+        </Group>
+        {skill ? (
+          <Group>
+            <ActionRow
+              danger
+              icon={<Trash2 size={18} aria-hidden />}
+              label="Delete skill"
               onClick={() => {
-                setEditing(null);
+                setDeleting(true);
               }}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="button primary" disabled={busy}>
-              Save
-            </button>
-          </div>
-        </form>
+            />
+          </Group>
+        ) : null}
+        <Status error={error} />
         <ConfirmDialog
           open={deleting}
           onOpenChange={setDeleting}
@@ -142,28 +147,14 @@ export function Skills(props: { userId: string }) {
           busy={busy}
           onConfirm={() => void remove()}
         />
-      </>
+      </form>
     );
   }
 
   const list = skills.data ?? [];
   return (
     <>
-      <div className="section-toolbar">
-        <p className="muted">Saved instructions you apply with a slash command, like /summarize.</p>
-        <button
-          type="button"
-          className="button primary small"
-          onClick={() => {
-            open("new");
-          }}
-        >
-          New skill
-        </button>
-      </div>
-      {skills.isSuccess && list.length === 0 ? (
-        <Empty title="No skills yet">Create one, then type “/” in a message to use it.</Empty>
-      ) : (
+      {list.length > 0 ? (
         <Group>
           {list.map((s) => (
             <LinkRow
@@ -177,7 +168,16 @@ export function Skills(props: { userId: string }) {
             />
           ))}
         </Group>
-      )}
+      ) : null}
+      <Group note="Apply one to a message by typing /name.">
+        <ActionRow
+          icon={<Plus size={18} aria-hidden />}
+          label="Create a skill"
+          onClick={() => {
+            open("new");
+          }}
+        />
+      </Group>
       <Status error={skills.isError ? "Couldn’t load your skills." : null} />
     </>
   );

@@ -1,11 +1,22 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { KeyRound, Trash2, UserPlus } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import type { AdminUserDto } from "@shared/admin";
 import { Dialog, DialogClose, Switch } from "../components/ui";
 import { api, messageOf } from "../lib/api";
 import { formatDateTime } from "../lib/format";
 import { keys } from "../lib/query";
-import { Choice, Field, Group, LinkRow, Row, Status, SubHeader, formText } from "./parts";
+import {
+  ActionRow,
+  Choice,
+  FieldRow,
+  formText,
+  Group,
+  LinkRow,
+  Row,
+  Status,
+  useSubPage,
+} from "./parts";
 
 const ROLES = [
   { value: "user" as const, label: "Member" },
@@ -25,8 +36,20 @@ export function AdminUsers(props: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const refresh = () => client.invalidateQueries({ queryKey: key });
+  const [dialog, setDialog] = useState<"password" | "delete" | null>(null);
+  const user = view && view !== "new" ? users.data?.find((u) => u.id === view) : undefined;
+  const back = () => {
+    setView(null);
+    setError(null);
+    setOk(null);
+  };
+  useSubPage(
+    view === "new"
+      ? { title: "New user", onBack: back }
+      : user
+        ? { title: user.username, onBack: back }
+        : null,
+  );
 
   async function run(fn: () => Promise<unknown>, success?: string) {
     setBusy(true);
@@ -34,7 +57,7 @@ export function AdminUsers(props: { userId: string }) {
     setOk(null);
     try {
       await fn();
-      await refresh();
+      await client.invalidateQueries({ queryKey: key });
       if (success) setOk(success);
       return true;
     } catch (e) {
@@ -47,34 +70,26 @@ export function AdminUsers(props: { userId: string }) {
 
   if (view === "new")
     return (
-      <>
-        <SubHeader
-          title="New user"
-          backLabel="Users"
-          onBack={() => {
-            setView(null);
-          }}
-        />
-        <form
-          className="settings-form"
-          onSubmit={(e: SyntheticEvent<HTMLFormElement>) => {
-            e.preventDefault();
-            const form = new FormData(e.currentTarget);
-            void run(() =>
-              api("/api/admin/users", {
-                method: "POST",
-                body: {
-                  username: formText(form, "username").trim(),
-                  password: formText(form, "password"),
-                  role,
-                },
-              }),
-            ).then((done) => {
-              if (done) setView(null);
-            });
-          }}
-        >
-          <Field
+      <form
+        onSubmit={(e: SyntheticEvent<HTMLFormElement>) => {
+          e.preventDefault();
+          const form = new FormData(e.currentTarget);
+          void run(() =>
+            api("/api/admin/users", {
+              method: "POST",
+              body: {
+                username: formText(form, "username").trim(),
+                password: formText(form, "password"),
+                role,
+              },
+            }),
+          ).then((done) => {
+            if (done) setView(null);
+          });
+        }}
+      >
+        <Group>
+          <FieldRow
             label="Username"
             name="username"
             required
@@ -82,51 +97,36 @@ export function AdminUsers(props: { userId: string }) {
             autoCapitalize="none"
             spellCheck={false}
           />
-          <Field
+          <FieldRow
             label="Password"
             name="password"
             type="password"
             required
             autoComplete="new-password"
           />
-          <div className="field inline">
-            <span id="nu-role">Role</span>
+          <Row label="Role" id="nu-role">
             <Choice labelledBy="nu-role" value={role} options={ROLES} onChange={setRole} />
-          </div>
-          <Status error={error} />
-          <div className="form-actions">
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                setView(null);
-              }}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="button primary" disabled={busy}>
-              Create user
-            </button>
-          </div>
-        </form>
-      </>
+          </Row>
+        </Group>
+        <Group>
+          <button type="submit" className="row row-button action-row" disabled={busy}>
+            <UserPlus size={18} aria-hidden />
+            <span>Create user</span>
+          </button>
+        </Group>
+        <Status error={error} />
+      </form>
     );
 
-  const user = view ? users.data?.find((u) => u.id === view) : undefined;
-  if (view && user) {
+  if (user) {
     const self = user.id === props.userId;
     return (
       <>
-        <SubHeader
-          title={user.username}
-          backLabel="Users"
-          onBack={() => {
-            setView(null);
-            setError(null);
-            setOk(null);
-          }}
-        />
-        <Group>
+        <Group
+          note={`${String(user.conversationCount)} chats · created ${formatDateTime(user.createdAt)}${
+            self ? " · You can’t disable or delete yourself." : ""
+          }`}
+        >
           <Row label="Role" id="u-role">
             <Choice
               labelledBy="u-role"
@@ -140,7 +140,7 @@ export function AdminUsers(props: { userId: string }) {
               }
             />
           </Row>
-          <Row label="Can sign in" hint={self ? "You can’t disable yourself." : undefined}>
+          <Row label="Can sign in">
             <Switch
               label="Can sign in"
               checked={user.status === "active"}
@@ -155,30 +155,56 @@ export function AdminUsers(props: { userId: string }) {
               }
             />
           </Row>
-          <Row label="Chats">
-            <span className="muted">{user.conversationCount}</span>
-          </Row>
-          <Row label="Created">
-            <span className="muted">{formatDateTime(user.createdAt)}</span>
-          </Row>
         </Group>
-        <form
-          className="settings-group"
-          onSubmit={(e: SyntheticEvent<HTMLFormElement>) => {
-            e.preventDefault();
-            const formEl = e.currentTarget;
-            const password = formText(new FormData(formEl), "password");
-            void run(
-              () =>
-                api(`/api/admin/users/${user.id}/password`, { method: "POST", body: { password } }),
-              "Password set. Their sessions have ended.",
-            ).then((done) => {
-              if (done) formEl.reset();
-            });
+        <Group>
+          <ActionRow
+            icon={<KeyRound size={18} aria-hidden />}
+            label="Set a new password"
+            onClick={() => {
+              setError(null);
+              setDialog("password");
+            }}
+          />
+        </Group>
+        {self ? null : (
+          <Group>
+            <ActionRow
+              danger
+              icon={<Trash2 size={18} aria-hidden />}
+              label="Delete account"
+              onClick={() => {
+                setError(null);
+                setDialog("delete");
+              }}
+            />
+          </Group>
+        )}
+        <Status error={dialog ? null : error} ok={ok} />
+        <Dialog
+          open={dialog === "password"}
+          onOpenChange={(o) => {
+            if (!o) setDialog(null);
           }}
+          title={`New password for ${user.username}`}
+          description="Their sessions end; they sign in with the new password."
         >
-          <h3 className="group-heading">Set a new password</h3>
-          <div className="inline-form">
+          <form
+            className="dialog-form"
+            onSubmit={(e: SyntheticEvent<HTMLFormElement>) => {
+              e.preventDefault();
+              const password = formText(new FormData(e.currentTarget), "password");
+              void run(
+                () =>
+                  api(`/api/admin/users/${user.id}/password`, {
+                    method: "POST",
+                    body: { password },
+                  }),
+                "Password set. Their sessions have ended.",
+              ).then((done) => {
+                if (done) setDialog(null);
+              });
+            }}
+          >
             <label className="sr-only" htmlFor="u-password">
               New password
             </label>
@@ -189,30 +215,25 @@ export function AdminUsers(props: { userId: string }) {
               className="input"
               required
               autoComplete="new-password"
-              placeholder="New password"
             />
-            <button type="submit" className="button" disabled={busy}>
-              Set password
-            </button>
-          </div>
-        </form>
-        <Status error={error} ok={ok} />
-        {self ? null : (
-          <Group heading="Danger zone">
-            <button
-              type="button"
-              className="row row-button danger-text"
-              onClick={() => {
-                setDeleteOpen(true);
-              }}
-            >
-              Delete user
-            </button>
-          </Group>
-        )}
+            <Status error={error} />
+            <div className="dialog-actions">
+              <DialogClose asChild>
+                <button type="button" className="button">
+                  Cancel
+                </button>
+              </DialogClose>
+              <button type="submit" className="button primary" disabled={busy}>
+                Set password
+              </button>
+            </div>
+          </form>
+        </Dialog>
         <Dialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
+          open={dialog === "delete"}
+          onOpenChange={(o) => {
+            if (!o) setDialog(null);
+          }}
           title={`Delete ${user.username}?`}
           description="Their account and all their chats, files and memories are deleted. Type the username to confirm."
         >
@@ -225,7 +246,7 @@ export function AdminUsers(props: { userId: string }) {
                 api(`/api/admin/users/${user.id}`, { method: "DELETE", body: { confirmUsername } }),
               ).then((done) => {
                 if (done) {
-                  setDeleteOpen(false);
+                  setDialog(null);
                   setView(null);
                 }
               });
@@ -260,34 +281,38 @@ export function AdminUsers(props: { userId: string }) {
 
   return (
     <>
-      <div className="section-toolbar">
-        <p className="muted">Everyone who can sign in to this ChatUI.</p>
-        <button
-          type="button"
-          className="button primary small"
+      {users.data && users.data.length > 0 ? (
+        <Group>
+          {users.data.map((u) => (
+            <LinkRow
+              key={u.id}
+              label={u.username}
+              value={
+                u.status === "disabled"
+                  ? "Disabled"
+                  : u.role === "admin"
+                    ? "Administrator"
+                    : "Member"
+              }
+              onClick={() => {
+                setError(null);
+                setOk(null);
+                setView(u.id);
+              }}
+            />
+          ))}
+        </Group>
+      ) : null}
+      <Group>
+        <ActionRow
+          icon={<UserPlus size={18} aria-hidden />}
+          label="Add user"
           onClick={() => {
             setRole("user");
             setError(null);
             setView("new");
           }}
-        >
-          New user
-        </button>
-      </div>
-      <Group>
-        {users.data?.map((u) => (
-          <LinkRow
-            key={u.id}
-            label={u.username}
-            hint={`${u.role === "admin" ? "Administrator" : "Member"} · ${String(u.conversationCount)} chats`}
-            value={u.status === "disabled" ? "Disabled" : undefined}
-            onClick={() => {
-              setError(null);
-              setOk(null);
-              setView(u.id);
-            }}
-          />
-        ))}
+        />
       </Group>
       <Status error={users.isError ? "Couldn’t load users." : error} />
     </>

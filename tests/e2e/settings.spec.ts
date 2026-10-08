@@ -45,12 +45,14 @@ test.describe("member", () => {
   test("a skill can be created and used from the / menu", async ({ page }) => {
     await open(page, "/settings?section=skills");
     const dialog = page.getByRole("dialog", { name: "Settings" });
-    await dialog.getByRole("button", { name: "New skill" }).click();
+    await dialog.getByRole("button", { name: "Create a skill" }).click();
     await dialog.getByLabel("Name").fill("e2e-skill");
     await dialog.getByLabel("Instructions").fill("Answer briefly.");
-    await dialog.getByRole("button", { name: "Save" }).click();
+    await dialog.getByRole("button", { name: "Create skill" }).click();
     await expect(dialog.getByRole("button", { name: /\/e2e-skill/ })).toBeVisible();
     await dialog.getByRole("button", { name: "Close" }).click();
+    await page.waitForURL(/\/chat\/new$/);
+    await expect(dialog).toBeHidden();
     await page.locator("#message").fill("/e2e");
     await expect(page.getByRole("option", { name: /\/e2e-skill/ })).toBeVisible();
   });
@@ -58,12 +60,12 @@ test.describe("member", () => {
   test("a memory can be added and deleted", async ({ page }) => {
     await open(page, "/settings?section=memories");
     const dialog = page.getByRole("dialog", { name: "Settings" });
-    await dialog.getByRole("button", { name: "New memory" }).click();
+    await dialog.getByRole("button", { name: "Add a memory" }).click();
     await dialog.getByLabel("Name").fill("Favourite colour");
     await dialog.getByLabel("Note").fill("Blue");
-    await dialog.getByRole("button", { name: "Save" }).click();
+    await dialog.getByRole("button", { name: "Add memory" }).click();
     await dialog.getByRole("button", { name: /Favourite colour/ }).click();
-    await dialog.getByRole("button", { name: "Delete" }).click();
+    await dialog.getByRole("button", { name: "Delete memory" }).click();
     await page
       .getByRole("alertdialog")
       .or(page.getByRole("dialog", { name: "Delete memory?" }))
@@ -75,8 +77,8 @@ test.describe("member", () => {
   test("everything can be exported", async ({ page }) => {
     await open(page, "/settings?section=data");
     const dialog = page.getByRole("dialog", { name: "Settings" });
-    await dialog.getByRole("button", { name: "Export" }).click();
-    await expect(dialog.getByRole("link", { name: "Download" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Export all data" }).click();
+    await expect(dialog.getByRole("link", { name: "Download archive" })).toBeVisible();
   });
 });
 

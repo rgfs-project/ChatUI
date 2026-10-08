@@ -1,22 +1,23 @@
 import * as RadixDialog from "@radix-ui/react-dialog";
 import {
-  BookOpen,
+  Brain,
   ChevronLeft,
+  CircleUserRound,
+  ClipboardList,
   Cpu,
   Database,
   FileCode,
-  Lightbulb,
   ScrollText,
   Search,
   Server,
+  Settings,
   Settings2,
-  SlidersHorizontal,
-  User,
   Users,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { SubPageContext } from "./parts";
 import { CloseButton, IconButton } from "../components/ui";
 import type { ShellUser } from "../lib/shell";
 import { Account } from "./Account";
@@ -45,7 +46,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: "general",
     title: "General",
     group: "Settings",
-    icon: Settings2,
+    icon: Settings,
     keywords: "theme dark light appearance thought reasoning images audio shrink",
     render: (u) => <General userId={u.id} />,
   },
@@ -53,7 +54,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: "account",
     title: "Account",
     group: "Settings",
-    icon: User,
+    icon: CircleUserRound,
     keywords: "password sign out username delete all chats",
     render: (u) => <Account user={u} />,
   },
@@ -69,7 +70,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: "skills",
     title: "Skills",
     group: "Customize",
-    icon: BookOpen,
+    icon: ScrollText,
     keywords: "slash commands instructions",
     render: (u) => <Skills userId={u.id} />,
   },
@@ -77,7 +78,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: "memories",
     title: "Memories",
     group: "Customize",
-    icon: Lightbulb,
+    icon: Brain,
     keywords: "notes remember",
     render: (u) => <Memories userId={u.id} />,
   },
@@ -120,7 +121,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: "instance",
     title: "Instance",
     group: "Administration",
-    icon: SlidersHorizontal,
+    icon: Settings2,
     keywords: "registration default model limits attachments time zone",
     admin: true,
     render: (u) => <AdminInstance userId={u.id} />,
@@ -138,7 +139,7 @@ export const SECTIONS: readonly SectionDef[] = [
     id: "audit",
     title: "Audit log",
     group: "Administration",
-    icon: ScrollText,
+    icon: ClipboardList,
     keywords: "history changes",
     admin: true,
     render: (u) => <AdminAudit userId={u.id} />,
@@ -161,6 +162,7 @@ export function SettingsDialog(props: {
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [sub, setSub] = useState<{ title: string; onBack: () => void } | null>(null);
   const available = sectionsFor(props.user);
   const fallback = props.narrow ? null : (available[0] ?? null);
   const current = available.find((s) => s.id === props.section) ?? fallback;
@@ -233,22 +235,29 @@ export function SettingsDialog(props: {
           ) : null}
           {showContent && (!props.narrow || !showNav) ? (
             <div className="settings-main">
-              <div className="settings-head">
-                {props.narrow ? (
-                  <IconButton
-                    label="All settings"
-                    onClick={() => {
-                      props.onSection(null);
-                    }}
-                  >
-                    <ChevronLeft size={20} aria-hidden />
-                  </IconButton>
-                ) : null}
-                <h2>{current.title}</h2>
-                <CloseButton onClick={props.onClose} />
-              </div>
               <div className="settings-body" key={current.id}>
-                {current.render(props.user)}
+                <div className="settings-head">
+                  {sub ? (
+                    <IconButton label="Back" className="back" onClick={sub.onBack}>
+                      <ChevronLeft size={20} aria-hidden />
+                    </IconButton>
+                  ) : props.narrow ? (
+                    <IconButton
+                      label="All settings"
+                      className="back"
+                      onClick={() => {
+                        props.onSection(null);
+                      }}
+                    >
+                      <ChevronLeft size={20} aria-hidden />
+                    </IconButton>
+                  ) : null}
+                  <h2>{sub?.title ?? current.title}</h2>
+                  <CloseButton onClick={props.onClose} />
+                </div>
+                <SubPageContext.Provider value={setSub}>
+                  {current.render(props.user)}
+                </SubPageContext.Provider>
               </div>
             </div>
           ) : null}

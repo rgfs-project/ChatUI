@@ -1,11 +1,21 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, Plus, Trash2 } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import { MEMORY_LIMITS, type MemoryDto, type MemoryList } from "@shared/memories";
 import { ConfirmDialog } from "../components/ui";
 import { api, messageOf } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { keys } from "../lib/query";
-import { Empty, Field, Group, LinkRow, Status, SubHeader, TextArea, formText } from "./parts";
+import {
+  ActionRow,
+  FieldRow,
+  formText,
+  Group,
+  LinkRow,
+  Status,
+  TextAreaRow,
+  useSubPage,
+} from "./parts";
 
 export function Memories(props: { userId: string }) {
   const client = useQueryClient();
@@ -18,6 +28,16 @@ export function Memories(props: { userId: string }) {
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const refresh = () => client.invalidateQueries({ queryKey: keys.memories(props.userId) });
+  useSubPage(
+    editing
+      ? {
+          title: editing === "new" ? "New memory" : editing.name,
+          onBack: () => {
+            setEditing(null);
+          },
+        }
+      : null,
+  );
 
   async function save(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,7 +70,9 @@ export function Memories(props: { userId: string }) {
     try {
       await api(
         `/api/memories/${encodeURIComponent(editing.id)}?expectedRevision=${editing.revision}`,
-        { method: "DELETE" },
+        {
+          method: "DELETE",
+        },
       );
       await refresh();
       setDeleting(false);
@@ -66,59 +88,43 @@ export function Memories(props: { userId: string }) {
   if (editing) {
     const memory = editing === "new" ? null : editing;
     return (
-      <>
-        <SubHeader
-          title={memory?.name ?? "New memory"}
-          backLabel="Memories"
-          onBack={() => {
-            setEditing(null);
-          }}
-        />
-        <form className="settings-form" onSubmit={(e) => void save(e)}>
-          <Field
+      <form onSubmit={(e) => void save(e)}>
+        <Group note="Included with every chat. Keep it short and factual.">
+          <FieldRow
             label="Name"
             name="name"
             defaultValue={memory?.name ?? ""}
             required
             maxLength={MEMORY_LIMITS.nameMax}
           />
-          <TextArea
+          <TextAreaRow
             label="Note"
             name="content"
             defaultValue={memory?.content ?? ""}
             required
-            rows={8}
+            rows={6}
             maxLength={MEMORY_LIMITS.contentMaxBytes}
-            hint="Included with every chat. Keep it short and factual."
           />
-          <Status error={error} />
-          <div className="form-actions">
-            {memory ? (
-              <button
-                type="button"
-                className="button danger-soft"
-                onClick={() => {
-                  setDeleting(true);
-                }}
-              >
-                Delete
-              </button>
-            ) : null}
-            <span className="spacer" />
-            <button
-              type="button"
-              className="button"
+        </Group>
+        <Group>
+          <button type="submit" className="row row-button action-row" disabled={busy}>
+            <Check size={18} aria-hidden />
+            <span>{memory ? "Save" : "Add memory"}</span>
+          </button>
+        </Group>
+        {memory ? (
+          <Group>
+            <ActionRow
+              danger
+              icon={<Trash2 size={18} aria-hidden />}
+              label="Delete memory"
               onClick={() => {
-                setEditing(null);
+                setDeleting(true);
               }}
-            >
-              Cancel
-            </button>
-            <button type="submit" className="button primary" disabled={busy}>
-              Save
-            </button>
-          </div>
-        </form>
+            />
+          </Group>
+        ) : null}
+        <Status error={error} />
         <ConfirmDialog
           open={deleting}
           onOpenChange={setDeleting}
@@ -129,7 +135,7 @@ export function Memories(props: { userId: string }) {
           busy={busy}
           onConfirm={() => void remove()}
         />
-      </>
+      </form>
     );
   }
 
@@ -137,35 +143,13 @@ export function Memories(props: { userId: string }) {
   const omitted = new Set(data?.omittedIds ?? []);
   return (
     <>
-      <div className="section-toolbar">
-        <p className="muted">
-          Notes you approve, included with every chat. Models can suggest them; nothing is saved
-          without you.
-        </p>
-        <button
-          type="button"
-          className="button primary small"
-          onClick={() => {
-            setEditing("new");
-            setError(null);
-          }}
-        >
-          New memory
-        </button>
-      </div>
-      {data?.memories.length === 0 ? (
-        <Empty title="No memories yet">Add one, or save a suggestion from a reply.</Empty>
-      ) : (
+      {data && data.memories.length > 0 ? (
         <Group
-          note={
-            data
-              ? `${String(data.memories.length)} of ${String(data.limits.maxCount)} · prompt budget ${formatBytes(data.promptBudgetBytes)}${
-                  omitted.size ? ` · ${String(omitted.size)} left out of prompts (over budget)` : ""
-                }${data.unreadable ? ` · ${String(data.unreadable)} unreadable` : ""}`
-              : undefined
-          }
+          note={`${String(data.memories.length)} of ${String(data.limits.maxCount)} · prompt budget ${formatBytes(data.promptBudgetBytes)}${
+            omitted.size ? ` · ${String(omitted.size)} left out of prompts (over budget)` : ""
+          }${data.unreadable ? ` · ${String(data.unreadable)} unreadable` : ""}`}
         >
-          {data?.memories.map((m) => (
+          {data.memories.map((m) => (
             <LinkRow
               key={m.id}
               label={m.name}
@@ -178,7 +162,17 @@ export function Memories(props: { userId: string }) {
             />
           ))}
         </Group>
-      )}
+      ) : null}
+      <Group note="Notes the assistant keeps in every chat.">
+        <ActionRow
+          icon={<Plus size={18} aria-hidden />}
+          label="Add a memory"
+          onClick={() => {
+            setEditing("new");
+            setError(null);
+          }}
+        />
+      </Group>
       <Status error={memories.isError ? "Couldn’t load your memories." : null} />
     </>
   );

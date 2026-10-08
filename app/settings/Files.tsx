@@ -8,7 +8,7 @@ import { api, messageOf } from "../lib/api";
 import { formatBytes, formatDateTime } from "../lib/format";
 import { paths } from "../lib/paths";
 import { keys } from "../lib/query";
-import { Empty, Group, Row, Status } from "./parts";
+import { Group, Row, Status } from "./parts";
 
 export function Files(props: { userId: string }) {
   const client = useQueryClient();
@@ -33,11 +33,10 @@ export function Files(props: { userId: string }) {
   const data = artifacts.data;
   return (
     <>
-      <p className="muted section-intro">
-        Files that replies created, kept as source. They’re never run.
-      </p>
       {data?.artifacts.length === 0 ? (
-        <Empty title="No files yet">When a reply writes a file, it appears here.</Empty>
+        <p className="settings-empty-text">
+          No files yet. Code blocks the model names in a reply appear here.
+        </p>
       ) : (
         <Group
           note={
