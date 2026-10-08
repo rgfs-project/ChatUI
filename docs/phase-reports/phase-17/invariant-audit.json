@@ -3,9 +3,7 @@
     "id": "INV-01",
     "file": "server/errors.ts",
     "what": "unhandled errors expose their message",
-    "tests": [
-      "tests/server/errors.test.ts"
-    ],
+    "tests": ["tests/server/errors.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -13,9 +11,7 @@
     "id": "INV-02",
     "file": "server/validation.ts",
     "what": "validation issues are ignored",
-    "tests": [
-      "tests/server/errors.test.ts"
-    ],
+    "tests": ["tests/server/errors.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -23,10 +19,7 @@
     "id": "INV-03",
     "file": "server/registry.ts",
     "what": "handler output skips its DTO schema",
-    "tests": [
-      "tests/server/errors.test.ts",
-      "tests/server/registry.test.ts"
-    ],
+    "tests": ["tests/server/errors.test.ts", "tests/server/registry.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -34,10 +27,7 @@
     "id": "INV-04",
     "file": "server/providers/llamacpp.ts",
     "what": "an upstream error message is passed to the client",
-    "tests": [
-      "tests/server/generations.test.ts",
-      "tests/server/providers.test.ts"
-    ],
+    "tests": ["tests/server/generations.test.ts", "tests/server/providers.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -45,10 +35,7 @@
     "id": "INV-05",
     "file": "server/generations/manager.ts",
     "what": "a generation can be decided twice",
-    "tests": [
-      "tests/server/manager.test.ts",
-      "tests/server/generations.test.ts"
-    ],
+    "tests": ["tests/server/manager.test.ts", "tests/server/generations.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -56,10 +43,7 @@
     "id": "INV-06",
     "file": "server/routes/generations.ts",
     "what": "an SSE disconnect cancels the generation",
-    "tests": [
-      "tests/server/generations.test.ts",
-      "tests/server/streaming.test.ts"
-    ],
+    "tests": ["tests/server/generations.test.ts", "tests/server/streaming.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -80,9 +64,7 @@
     "id": "INV-08",
     "file": "server/chat/send-service.ts",
     "what": "the operation record is never marked committed",
-    "tests": [
-      "tests/server/conversations.test.ts"
-    ],
+    "tests": ["tests/server/conversations.test.ts"],
     "outcome": "caught",
     "seconds": 4
   },
@@ -90,9 +72,7 @@
     "id": "INV-09",
     "file": "server/storage/markdown.ts",
     "what": "bodies are not escaped",
-    "tests": [
-      "tests/storage/markdown.test.ts"
-    ],
+    "tests": ["tests/storage/markdown.test.ts"],
     "outcome": "caught",
     "seconds": 1
   },
@@ -100,10 +80,7 @@
     "id": "INV-10",
     "file": "server/storage/conversations.ts",
     "what": "a malformed file is treated as missing",
-    "tests": [
-      "tests/storage/storage.test.ts",
-      "tests/server/conversations.test.ts"
-    ],
+    "tests": ["tests/storage/storage.test.ts", "tests/server/conversations.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -111,10 +88,7 @@
     "id": "INV-11",
     "file": "server/storage/chat-index.ts",
     "what": "a dirty index is trusted instead of rebuilt",
-    "tests": [
-      "tests/storage/storage.test.ts",
-      "tests/server/conversations.test.ts"
-    ],
+    "tests": ["tests/storage/storage.test.ts", "tests/server/conversations.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -122,10 +96,7 @@
     "id": "INV-12",
     "file": "server/storage/paths.ts",
     "what": "any string becomes a path component",
-    "tests": [
-      "tests/storage/storage.test.ts",
-      "tests/server/conversations.test.ts"
-    ],
+    "tests": ["tests/storage/storage.test.ts", "tests/server/conversations.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -133,10 +104,7 @@
     "id": "INV-13",
     "file": "server/generations/manager.ts",
     "what": "a second generation may start in a busy conversation",
-    "tests": [
-      "tests/server/manager.test.ts",
-      "tests/server/conversations.test.ts"
-    ],
+    "tests": ["tests/server/manager.test.ts", "tests/server/conversations.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -144,9 +112,7 @@
     "id": "INV-14",
     "file": "server/routes/skills.ts",
     "what": "a route reads the acting user from a request header",
-    "tests": [
-      "tests/server/registry.test.ts"
-    ],
+    "tests": ["tests/server/registry.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -154,10 +120,7 @@
     "id": "INV-15",
     "file": "server/generations/manager.ts",
     "what": "another user's generation is found by id",
-    "tests": [
-      "tests/server/auth.test.ts",
-      "tests/server/security.test.ts"
-    ],
+    "tests": ["tests/server/auth.test.ts", "tests/server/security.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -165,9 +128,7 @@
     "id": "INV-16",
     "file": "server/auth/service.ts",
     "what": "a missing CSRF token is accepted",
-    "tests": [
-      "tests/server/registry.test.ts"
-    ],
+    "tests": ["tests/server/registry.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -175,9 +136,7 @@
     "id": "INV-17",
     "file": "server/admin/accounts.ts",
     "what": "reducing privileges keeps sessions",
-    "tests": [
-      "tests/server/admin.test.ts"
-    ],
+    "tests": ["tests/server/admin.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -185,9 +144,7 @@
     "id": "INV-18",
     "file": "server/generations/catalog.ts",
     "what": "an unknown model is accepted",
-    "tests": [
-      "tests/server/providers.test.ts"
-    ],
+    "tests": ["tests/server/providers.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -195,10 +152,7 @@
     "id": "INV-19",
     "file": "server/admin/providers.ts",
     "what": "admin endpoints skip DNS resolution checks",
-    "tests": [
-      "tests/server/admin.test.ts",
-      "tests/server/providers.test.ts"
-    ],
+    "tests": ["tests/server/admin.test.ts", "tests/server/providers.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -206,9 +160,7 @@
     "id": "INV-20",
     "file": "server/generations/manager.ts",
     "what": "a too-old cursor replays from the buffer instead of resyncing",
-    "tests": [
-      "tests/server/streaming.test.ts"
-    ],
+    "tests": ["tests/server/streaming.test.ts"],
     "outcome": "caught",
     "seconds": 4
   },
@@ -216,9 +168,7 @@
     "id": "INV-21",
     "file": "server/storage/recovery.ts",
     "what": "a recovered running generation is labelled complete",
-    "tests": [
-      "tests/server/streaming.test.ts"
-    ],
+    "tests": ["tests/server/streaming.test.ts"],
     "outcome": "caught",
     "seconds": 7
   },
@@ -226,10 +176,7 @@
     "id": "INV-22",
     "file": "app/components/Markdown.tsx",
     "what": "javascript: and data: links survive",
-    "tests": [
-      "tests/client/markdown.test.tsx",
-      "tests/client/rendering.test.tsx"
-    ],
+    "tests": ["tests/client/markdown.test.tsx", "tests/client/rendering.test.tsx"],
     "outcome": "caught",
     "seconds": 4
   },
@@ -249,10 +196,7 @@
     "id": "INV-24",
     "file": "server/registry.ts",
     "what": "admin routes accept non-admins",
-    "tests": [
-      "tests/server/admin.test.ts",
-      "tests/server/registry.test.ts"
-    ],
+    "tests": ["tests/server/admin.test.ts", "tests/server/registry.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -260,9 +204,7 @@
     "id": "INV-25",
     "file": "server/admin/providers.ts",
     "what": "the provider DTO reports a key as absent (hides state) — inverse leak check",
-    "tests": [
-      "tests/server/admin.test.ts"
-    ],
+    "tests": ["tests/server/admin.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -270,9 +212,7 @@
     "id": "INV-26",
     "file": "server/admin/accounts.ts",
     "what": "the last active admin can be demoted or disabled",
-    "tests": [
-      "tests/server/admin.test.ts"
-    ],
+    "tests": ["tests/server/admin.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -280,10 +220,7 @@
     "id": "INV-27",
     "file": "server/attachments/sniff.ts",
     "what": "SVG is no longer recognized as active markup",
-    "tests": [
-      "tests/server/sniff.test.ts",
-      "tests/server/attachments.test.ts"
-    ],
+    "tests": ["tests/server/sniff.test.ts", "tests/server/attachments.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -303,9 +240,7 @@
     "id": "INV-29",
     "file": "app/routes/app-layout.tsx",
     "what": "a slow model endpoint holds the document without a budget",
-    "tests": [
-      "tests/client/startup.test.tsx"
-    ],
+    "tests": ["tests/client/startup.test.tsx"],
     "outcome": "caught",
     "seconds": 9
   },
@@ -325,9 +260,7 @@
     "id": "INV-31",
     "file": "app/lib/prefetch.ts",
     "what": "intent prefetch uses its own cache key",
-    "tests": [
-      "tests/client/prefetch.test.tsx"
-    ],
+    "tests": ["tests/client/prefetch.test.tsx"],
     "outcome": "caught",
     "seconds": 6
   },
@@ -335,10 +268,7 @@
     "id": "INV-32",
     "file": "app/components/Message.tsx",
     "what": "stored messages re-render on every token",
-    "tests": [
-      "tests/client/conversation-view.test.tsx",
-      "tests/client/rendering.test.tsx"
-    ],
+    "tests": ["tests/client/conversation-view.test.tsx", "tests/client/rendering.test.tsx"],
     "outcome": "caught",
     "seconds": 4
   },
@@ -346,9 +276,7 @@
     "id": "INV-33",
     "file": "app/root.tsx",
     "what": "a CDN stylesheet is loaded at runtime",
-    "tests": [
-      "tests/e2e/perf.spec.ts"
-    ],
+    "tests": ["tests/e2e/perf.spec.ts"],
     "outcome": "caught",
     "seconds": 26
   },
@@ -368,9 +296,7 @@
     "id": "INV-35",
     "file": "server/chat/turns.ts",
     "what": "an irregular exchange is treated as a regular one",
-    "tests": [
-      "tests/server/mutations.test.ts"
-    ],
+    "tests": ["tests/server/mutations.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -378,9 +304,7 @@
     "id": "INV-36",
     "file": "server/chat/search.ts",
     "what": "search results are unbounded",
-    "tests": [
-      "tests/server/mutations.test.ts"
-    ],
+    "tests": ["tests/server/mutations.test.ts"],
     "outcome": "caught",
     "seconds": 5
   },
@@ -388,10 +312,7 @@
     "id": "INV-37",
     "file": "server/routes/memories.ts",
     "what": "suggestions can be accepted without the user's CSRF-bound session",
-    "tests": [
-      "tests/server/registry.test.ts",
-      "tests/server/memories.test.ts"
-    ],
+    "tests": ["tests/server/registry.test.ts", "tests/server/memories.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -399,9 +320,7 @@
     "id": "INV-38",
     "file": "server/chat/proposals.ts",
     "what": "a stale suggestion overwrites a changed memory",
-    "tests": [
-      "tests/server/memories.test.ts"
-    ],
+    "tests": ["tests/server/memories.test.ts"],
     "outcome": "caught",
     "seconds": 5
   },
@@ -409,10 +328,7 @@
     "id": "INV-39",
     "file": "server/storage/paths.ts",
     "what": "memory ids become path components unchecked",
-    "tests": [
-      "tests/storage/storage.test.ts",
-      "tests/server/memories.test.ts"
-    ],
+    "tests": ["tests/storage/storage.test.ts", "tests/server/memories.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -420,9 +336,7 @@
     "id": "INV-40",
     "file": "server/generations/manager.ts",
     "what": "files are captured from incomplete replies",
-    "tests": [
-      "tests/server/artifacts.test.ts"
-    ],
+    "tests": ["tests/server/artifacts.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -430,9 +344,7 @@
     "id": "INV-41",
     "file": "server/routes/artifacts.ts",
     "what": "artifact source is served as HTML",
-    "tests": [
-      "tests/server/artifacts.test.ts"
-    ],
+    "tests": ["tests/server/artifacts.test.ts"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -452,9 +364,7 @@
     "id": "INV-43",
     "file": "server/routes/portability.ts",
     "what": "single-chat export re-encodes the canonical bytes",
-    "tests": [
-      "tests/server/portability.test.ts"
-    ],
+    "tests": ["tests/server/portability.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -462,9 +372,7 @@
     "id": "INV-44",
     "file": "server/chat/send-service.ts",
     "what": "media go to a model without that modality",
-    "tests": [
-      "tests/server/attachments.test.ts"
-    ],
+    "tests": ["tests/server/attachments.test.ts"],
     "outcome": "caught",
     "seconds": 4
   },
@@ -472,9 +380,7 @@
     "id": "INV-45",
     "file": "app/components/math/MathView.tsx",
     "what": "math is emitted as Temml's HTML string with untrusted commands allowed",
-    "tests": [
-      "tests/client/rendering.test.tsx"
-    ],
+    "tests": ["tests/client/rendering.test.tsx"],
     "outcome": "caught",
     "seconds": 4
   },
@@ -482,9 +388,7 @@
     "id": "INV-46",
     "file": "app/components/Markdown.tsx",
     "what": "streaming blocks remount on every token",
-    "tests": [
-      "tests/client/rendering.test.tsx"
-    ],
+    "tests": ["tests/client/rendering.test.tsx"],
     "outcome": "caught",
     "seconds": 7
   },
@@ -492,9 +396,7 @@
     "id": "INV-47",
     "file": "app/lib/focus-return.ts",
     "what": "dialogs no longer restore focus to their opener",
-    "tests": [
-      "tests/client/primitives.test.tsx"
-    ],
+    "tests": ["tests/client/primitives.test.tsx"],
     "outcome": "caught",
     "seconds": 6
   },
@@ -502,9 +404,7 @@
     "id": "INV-48",
     "file": "app/components/Composer.tsx",
     "what": "Enter during an IME composition sends",
-    "tests": [
-      "tests/client/composer.test.tsx"
-    ],
+    "tests": ["tests/client/composer.test.tsx"],
     "outcome": "caught",
     "seconds": 4
   },
@@ -512,9 +412,7 @@
     "id": "INV-50",
     "file": "server/backup.ts",
     "what": "restore merges into existing data",
-    "tests": [
-      "tests/server/backup.test.ts"
-    ],
+    "tests": ["tests/server/backup.test.ts"],
     "outcome": "caught",
     "seconds": 4
   },
@@ -522,9 +420,7 @@
     "id": "INV-52",
     "file": "shared/features.ts",
     "what": "every model claims image and audio input",
-    "tests": [
-      "tests/client/features.test.tsx"
-    ],
+    "tests": ["tests/client/features.test.tsx"],
     "outcome": "caught",
     "seconds": 3
   },
@@ -532,10 +428,7 @@
     "id": "INV-53",
     "file": "app/components/ConversationView.tsx",
     "what": "the first send pushes instead of replacing the draft URL",
-    "tests": [
-      "tests/client/conversation-view.test.tsx",
-      "tests/e2e/ui.spec.ts"
-    ],
+    "tests": ["tests/client/conversation-view.test.tsx", "tests/e2e/ui.spec.ts"],
     "outcome": "caught",
     "seconds": 58
   },
@@ -543,9 +436,7 @@
     "id": "INV-54",
     "file": "app/routes/chat-conversation.tsx",
     "what": "server HTML omits the authorized transcript",
-    "tests": [
-      "verify"
-    ],
+    "tests": ["verify"],
     "outcome": "caught",
     "seconds": 43
   },
@@ -553,9 +444,7 @@
     "id": "INV-55",
     "file": "app/entry.server.tsx",
     "what": "private documents become cacheable",
-    "tests": [
-      "verify"
-    ],
+    "tests": ["verify"],
     "outcome": "caught",
     "seconds": 33
   },
@@ -563,9 +452,7 @@
     "id": "INV-56",
     "file": "app/root.tsx",
     "what": "a server-only nonce on links breaks hydration",
-    "tests": [
-      "verify"
-    ],
+    "tests": ["verify"],
     "outcome": "caught",
     "seconds": 32
   },
@@ -573,10 +460,7 @@
     "id": "INV-57",
     "file": "server/create-app.ts",
     "what": "unknown API paths fall through to the document handler",
-    "tests": [
-      "tests/server/boundary.test.ts",
-      "tests/server/errors.test.ts"
-    ],
+    "tests": ["tests/server/boundary.test.ts", "tests/server/errors.test.ts"],
     "outcome": "caught",
     "seconds": 2
   },
@@ -584,9 +468,7 @@
     "id": "INV-58",
     "file": "server/chat/send-service.ts",
     "what": "a reused operation key with a different payload is accepted",
-    "tests": [
-      "tests/server/conversations.test.ts"
-    ],
+    "tests": ["tests/server/conversations.test.ts"],
     "outcome": "caught",
     "seconds": 6
   },
@@ -594,9 +476,7 @@
     "id": "INV-59",
     "file": "server/auth/service.ts",
     "what": "a stale X-Expected-User is accepted",
-    "tests": [
-      "tests/server/auth.test.ts"
-    ],
+    "tests": ["tests/server/auth.test.ts"],
     "outcome": "caught",
     "seconds": 8
   },
@@ -604,10 +484,7 @@
     "id": "INV-60",
     "file": "server/storage/recovery.ts",
     "what": "recovery recreates a deleted conversation",
-    "tests": [
-      "tests/server/streaming.test.ts",
-      "tests/server/conversations.test.ts"
-    ],
+    "tests": ["tests/server/streaming.test.ts", "tests/server/conversations.test.ts"],
     "outcome": "caught",
     "seconds": 7
   },
@@ -615,9 +492,7 @@
     "id": "INV-61",
     "file": "server/storage/account.ts",
     "what": "a closed or closing account still accepts writes",
-    "tests": [
-      "tests/server/admin.test.ts"
-    ],
+    "tests": ["tests/server/admin.test.ts"],
     "outcome": "caught",
     "seconds": 5
   },

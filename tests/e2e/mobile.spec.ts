@@ -57,7 +57,7 @@ test("on a phone Return adds a line; only the Send button sends", async ({ page 
   const box = page.locator("#message");
   await box.fill("first line");
   await box.press("Enter");
-  await box.type("second line");
+  await box.pressSequentially("second line");
   await expect(box).toHaveValue("first line\nsecond line");
   expect(page.url()).toMatch(/\/chat\/new$/);
 });
