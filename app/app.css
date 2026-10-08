@@ -2000,8 +2000,8 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 64px;
-  padding: 12px 24px 4px;
+  min-height: 72px;
+  padding: 24px 24px 8px;
 }
 
 /* One edge for everything: the title, the cards and the close icon line up. */
@@ -2011,8 +2011,9 @@ textarea.input {
 
 .settings-head h2 {
   flex: 1;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .settings-side .settings-head {
@@ -2037,9 +2038,24 @@ textarea.input {
   font-weight: 500;
 }
 
-/* Flat rows on one left edge: description left, action right (no cards). */
+/* Grouped inset cards (iOS Settings): rows inside a rounded card, hairline dividers. */
 .group {
-  padding: 0;
+  overflow: hidden;
+  padding: 0 16px;
+  border-radius: var(--radius);
+  background: var(--fill);
+}
+
+.group > * + * {
+  border-top: 1px solid var(--line);
+}
+
+.group-heading {
+  padding: 0 16px;
+}
+
+.group-note {
+  padding: 0 16px;
 }
 
 .group-note,
@@ -2073,14 +2089,14 @@ textarea.input {
 
 /* A row that opens something: its hover fill reaches past the text edge. */
 .row-button {
-  width: calc(100% + 24px);
-  margin: 0 -12px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
+  width: calc(100% + 32px);
+  margin: 0 -16px;
+  padding: 10px 16px;
+  border-radius: 0;
 }
 
 .row-button:hover {
-  background: var(--fill);
+  background: var(--hover);
 }
 
 .group > .row-button:first-child {
