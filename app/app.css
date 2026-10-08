@@ -2636,6 +2636,16 @@ a svg,
   .menu-item {
     padding: 6px 12px;
   }
+  /* Multi-line rows (files, memories, audit) keep breathing room. */
+  .group > .row,
+  .group > .row-button:only-child {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .row:has(> .row-control .choice, > .row-control .segmented, > .switch, > .row-control .switch) {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
   .drawer .sidebar-list li a {
     display: flex;
     align-items: center;
