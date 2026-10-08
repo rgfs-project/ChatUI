@@ -7,7 +7,7 @@ import { api } from "../lib/api";
 import { paths } from "../lib/paths";
 import { useConversations } from "../lib/query";
 import { splitConversations } from "./Sidebar";
-import { Dialog } from "./ui";
+import { CloseButton, Dialog } from "./ui";
 
 function useDebounced(value: string, ms: number) {
   const [debounced, setDebounced] = useState(value);
@@ -69,6 +69,7 @@ export function SearchDialog(props: {
             setText(e.target.value);
           }}
         />
+        <CloseButton onClick={close} label="Close search" />
       </label>
       <div className="search-results" aria-live="polite">
         {q === "" ? (
