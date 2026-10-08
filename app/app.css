@@ -789,6 +789,7 @@ textarea.input {
   min-width: 0;
   display: block;
   padding: 8px 10px;
+  line-height: 20px;
   overflow: hidden;
   text-decoration: none;
   text-overflow: ellipsis;
