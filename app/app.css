@@ -2220,7 +2220,7 @@ textarea.input {
 }
 
 .row-button {
-  padding-right: 12px;
+  padding-right: 7px;
 }
 
 .row-button:hover:not(:disabled) {
@@ -2298,8 +2298,8 @@ textarea.input {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  /* Same 16 px inset as every other row. */
-  padding: 10px 16px;
+  /* Same inset as every other row. */
+  padding: 8px 7px;
 }
 
 .textarea-row textarea {
