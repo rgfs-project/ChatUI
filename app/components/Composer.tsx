@@ -134,12 +134,28 @@ export function Composer(props: ComposerProps) {
     if (value) setText(value);
   }, []);
 
-  // The box grows with its text, up to a limit.
+  // The box grows with its text, up to a limit. An empty box is one line:
+  // measuring the placeholder while the box is still narrow (first layout)
+  // once left it hundreds of pixels tall. Width changes measure again.
   useLayoutEffect(() => {
     const el = textarea.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${String(Math.min(el.scrollHeight, 240))}px`;
+    const fit = () => {
+      el.style.height = "auto";
+      if (el.value !== "") el.style.height = `${String(Math.min(el.scrollHeight, 240))}px`;
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      fit();
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
   }, [text]);
 
   const slash = /^\/([a-z0-9-]*)$/.exec(text);

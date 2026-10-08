@@ -1,6 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, PanelLeft, SquarePen } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import type { AttachmentDto, AttachmentKind, MessageAttachmentDto } from "@shared/attachments";
 import type { MessageArtifactDto } from "@shared/artifacts";
@@ -8,6 +16,7 @@ import type { ConversationDto, MessageDto } from "@shared/conversations";
 import { isTerminalState } from "@shared/generation-state";
 import type { ProposalDto } from "@shared/memories";
 import { api, ApiError, messageOf } from "../lib/api";
+import { formatStamp, timestampedIds } from "../lib/format";
 import { DEFAULT_IMAGE_MAX_EDGE } from "../lib/attachments";
 import { useGeneration, type LiveReply } from "../lib/generation";
 import { findModel, resolveModel, type ModelChoice } from "../lib/models";
@@ -444,6 +453,7 @@ export function ChatView(props: {
   const artifactsBy = groupBy<MessageArtifactDto>(dto.artifacts, (a) => a.assistantMessageId);
   const proposalsBy = groupBy<ProposalDto>(dto.proposals, (p) => p.assistantMessageId);
   const visible = dto.messages.filter((m) => m.role !== "system");
+  const stamped = timestampedIds(visible);
   const liveStored = live ? visible.some((m) => m.id === live.assistantMessageId) : false;
   const showLiveAtEnd = live !== null && !liveStored;
   const userBefore = (index: number) => visible.slice(0, index).findLast((m) => m.role === "user");
@@ -476,16 +486,18 @@ export function ChatView(props: {
             {visible.map((m, index) => {
               if (m.role === "user")
                 return (
-                  <UserMessage
-                    key={m.id}
-                    content={m.content}
-                    attachments={m.attachments}
-                    disabled={generating}
-                    onEdit={(content) => edit(m, content)}
-                    onDelete={() => {
-                      setDeleting(m);
-                    }}
-                  />
+                  <Fragment key={m.id}>
+                    {m.time && stamped.has(m.id) ? <TimeStamp iso={m.time} /> : null}
+                    <UserMessage
+                      content={m.content}
+                      attachments={m.attachments}
+                      disabled={generating}
+                      onEdit={(content) => edit(m, content)}
+                      onDelete={() => {
+                        setDeleting(m);
+                      }}
+                    />
+                  </Fragment>
                 );
               if (live?.assistantMessageId === m.id && !isTerminalState(live.state))
                 return renderLive(live);
@@ -565,4 +577,23 @@ function conflictMessage(error: unknown): string {
   if (error instanceof ApiError && error.code === "GENERATION_IN_PROGRESS")
     return "A reply is still being written. Wait for it or stop it first.";
   return messageOf(error);
+}
+
+const noSubscribe = () => () => undefined;
+
+/**
+ * A small centred time above a message. Shown in the reader's own time zone,
+ * so it is drawn only in the browser (the server's zone may differ).
+ */
+function TimeStamp(props: { iso: string }) {
+  const browser = useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
+  return (
+    <time className="time-stamp" dateTime={props.iso}>
+      {browser ? formatStamp(props.iso) : null}
+    </time>
+  );
 }
