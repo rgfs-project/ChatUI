@@ -2,8 +2,9 @@
  * ChatUI, design direction B: function over form.
  * White space, one near-black, soft grey fills. One corner radius, 12, on
  * every outer shape; a shape inside one takes 12 minus its padding (6 for
- * menu rows, 9 for segmented options). No outlines: a faint shadow only where
- * something floats. Blue only for a tool that is on; red only for delete.
+ * menu rows, 9 for segmented options). No outlines and no shadows: a floating
+ * surface stands apart by its fill alone.
+ * Blue only for a tool that is on; red only for delete.
  * Every colour is light-dark(light, dark): a theme swaps tokens, never rules.
  */
 
@@ -48,10 +49,6 @@
   --code-number: light-dark(#8a4600, #f0b37e);
   --code-title: light-dark(#5a32a3, #c4a7ff);
   --code-attr: light-dark(#0b5aa2, #79c0ff);
-
-  --shadow-float: 0 4px 16px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.35));
-  --shadow-menu: 0 8px 24px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.45));
-  --shadow-soft: 0 2px 8px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.3));
 }
 
 :root[data-theme="light"] {
@@ -378,7 +375,6 @@ textarea.input {
   height: 20px;
   border-radius: 50%;
   background: #ffffff;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
   transition: transform 120ms;
 }
 
@@ -417,7 +413,6 @@ textarea.input {
 .segmented button[aria-checked="true"] {
   background: var(--raised);
   color: var(--text);
-  box-shadow: var(--shadow-soft);
 }
 
 .choice {
@@ -455,7 +450,6 @@ textarea.input {
   border-radius: var(--radius);
   background: var(--raised);
   color: var(--text);
-  box-shadow: var(--shadow-menu);
 }
 
 .menu-item {
@@ -523,7 +517,6 @@ textarea.input {
   padding: 24px;
   border-radius: var(--radius);
   background: var(--raised);
-  box-shadow: var(--shadow-menu);
   transform: translate(-50%, -50%);
 }
 
@@ -907,7 +900,6 @@ textarea.input {
   inset: 0 auto 0 0;
   z-index: 50;
   width: min(332px, 85vw);
-  box-shadow: var(--shadow-menu);
 }
 
 .drawer .sidebar {
@@ -1511,7 +1503,6 @@ textarea.input {
   border: 0;
   border-radius: var(--radius);
   background: var(--raised);
-  box-shadow: var(--shadow-soft);
   color: var(--text);
   text-align: left;
   text-decoration: none;
@@ -1660,7 +1651,6 @@ textarea.input {
   flex-direction: column;
   border-radius: var(--radius);
   background: var(--composer-bg, var(--raised));
-  box-shadow: var(--shadow-float);
 }
 
 .composer-row {
@@ -1773,7 +1763,6 @@ textarea.input {
   padding: 6px;
   border-radius: var(--radius);
   background: var(--raised);
-  box-shadow: var(--shadow-menu);
 }
 
 .home .command-menu {
@@ -1987,7 +1976,6 @@ textarea.input {
   overflow: hidden;
   border-radius: var(--radius);
   background: var(--sidebar);
-  box-shadow: var(--shadow-menu);
   transform: translate(-50%, -50%);
 }
 
