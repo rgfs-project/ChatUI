@@ -863,7 +863,7 @@ textarea.input {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius);
+  border-radius: 8px;
   background: var(--avatar);
   font-size: 13px;
   font-weight: 500;
@@ -1282,8 +1282,9 @@ textarea.input {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px 4px 8px;
-  border-radius: var(--radius);
+  padding: 4px 8px 4px 10px;
+  /* Box-like, the same proportion as a message bubble; not a pill. */
+  border-radius: 8px;
   color: var(--muted);
   font-size: 14px;
   list-style: none;

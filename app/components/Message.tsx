@@ -1,5 +1,4 @@
 import {
-  Brain,
   ChevronRight,
   Download,
   FileCode,
@@ -272,7 +271,6 @@ export function AssistantMessage(props: {
       {props.reasoning ? (
         <details className="reasoning" open={props.streaming && !props.content}>
           <summary>
-            <Brain size={16} aria-hidden />
             {props.streaming && !props.content ? "Thinking…" : "Thought process"}
             <ChevronRight size={16} aria-hidden className="chevron" />
           </summary>
