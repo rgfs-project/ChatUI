@@ -2046,7 +2046,7 @@ textarea.input {
   background: var(--fill);
 }
 
-.group > * + * {
+.group > :not(:first-child) {
   border-top: 1px solid var(--line);
 }
 
