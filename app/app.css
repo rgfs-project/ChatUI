@@ -919,7 +919,7 @@ textarea.input {
   display: flex;
   align-items: center;
   height: 56px;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
 }
 
 /* Square 38 px buttons; one pixel less above and no gap keeps their icons
@@ -2539,6 +2539,42 @@ textarea.input {
     padding-top: 8px;
     padding-bottom: 8px;
   }
+}
+
+/*
+ * Icons: every icon in a button, row or menu is 20 x 20. In a 40 px button
+ * that is a 10 px inset, which the open sidebar's rows (10 px padding)
+ * share, so the collapsed rail puts each icon and the avatar on exactly the
+ * same spot as the open sidebar.
+ */
+button svg,
+a svg,
+.menu-item svg,
+.settings-search svg,
+.search-field svg,
+.file-chip svg,
+.tray-item svg {
+  width: 20px;
+  height: 20px;
+}
+
+.rail .account.compact {
+  justify-content: flex-start;
+  width: 40px;
+  height: 40px;
+  padding: 0 0 0 10px;
+}
+
+.rail .account.compact .avatar {
+  margin-left: 0;
+}
+
+.assistant-turn .message-actions.message-actions {
+  margin-left: -10px;
+}
+
+.user-turn .message-actions.message-actions {
+  margin-right: -10px;
 }
 
 /*
