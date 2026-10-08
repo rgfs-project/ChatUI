@@ -1180,6 +1180,12 @@ textarea.input {
   transition: opacity 120ms;
 }
 
+/* Message buttons are 38 x 38 everywhere, touch screens included. */
+.message-actions .icon-button {
+  width: 38px;
+  height: 38px;
+}
+
 .message-actions.start {
   margin: 6px 0 0 -10px;
 }
