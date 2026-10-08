@@ -2112,43 +2112,19 @@ textarea.input {
   font-weight: 400;
 }
 
-/* No inner padding: a row's hover fill reaches the card's rounded edge. */
+/* No multi-row cards: every row is its own card, 4 px apart. */
 .group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* .row's own transparent background would otherwise win. */
+.group > *,
+.group > .row {
   overflow: hidden;
-  padding: 4px;
   border-radius: var(--radius);
   background: var(--raised);
-}
-
-/* A card holding a single button is the button: no inset, so its hover
-   fill is the whole card rather than a box inside a box. */
-.group:has(> .row-button:only-child) {
-  padding: 0;
-}
-
-.group > .row-button:only-child {
-  padding: 10px 12px 10px 16px;
-  border-radius: var(--radius);
-}
-
-/* Hairlines between rows; .row resets the browser's own button border. */
-.group > * + *,
-.group > .row + .row {
-  position: relative;
-  margin-top: 1px;
-}
-
-/* Drawn as its own straight line: a border-top would follow the row's
-   rounded corners and curl at both ends. */
-.group > * + *::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  right: 0;
-  left: 0;
-  height: 1px;
-  background: var(--line);
-  pointer-events: none;
 }
 
 .group-note {
@@ -2173,7 +2149,7 @@ textarea.input {
   gap: 16px;
   width: 100%;
   min-height: 52px;
-  padding: 6px 12px;
+  padding: 6px 16px;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -2182,8 +2158,7 @@ textarea.input {
 }
 
 .row-button {
-  padding-right: 8px;
-  border-radius: 8px;
+  padding-right: 12px;
 }
 
 .row-button:hover:not(:disabled) {
@@ -2261,8 +2236,8 @@ textarea.input {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  /* Same 12 px inset as every other row (the card adds 4 px). */
-  padding: 10px 12px;
+  /* Same 16 px inset as every other row. */
+  padding: 10px 16px;
 }
 
 .textarea-row textarea {
