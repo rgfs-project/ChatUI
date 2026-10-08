@@ -2457,13 +2457,104 @@ textarea.input {
  * "Thought process" chip has 10 px of padding, so both are pulled out by
  * that much; their hover fill hangs into the margin instead of the text.
  */
-.assistant-turn .message-actions,
 .reasoning summary {
   margin-left: -10px;
 }
 
+/* A 16 px icon centred in a 40 px button is inset 12 px. */
+.assistant-turn .message-actions {
+  margin-left: -12px;
+}
+
 .user-turn .message-actions {
-  margin-right: -10px;
+  margin-right: -12px;
+}
+
+/*
+ * Desktop: one 40 px height for every row, button and box: icon buttons,
+ * sidebar and settings rows, menus, search, dropdowns, the model picker.
+ * Controls inside a row (theme options, switch) sit within its 40 px.
+ */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .icon-button.icon-button.icon-button {
+    width: 40px;
+    height: 40px;
+  }
+  .sidebar-action,
+  .sidebar-list li a,
+  .account,
+  .settings-search,
+  .settings-nav-item,
+  .search-row,
+  .menu-item,
+  .model-trigger,
+  .group > .row,
+  .group > .row-button:only-child {
+    min-height: 40px;
+  }
+  .sidebar-action,
+  .account,
+  .settings-search,
+  .settings-nav-item,
+  .model-trigger {
+    height: 40px;
+  }
+  .sidebar-list li a {
+    display: flex;
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .search-row {
+    align-items: center;
+  }
+  .menu-item {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .group > .row,
+  .group > .row-button:only-child {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .choice {
+    height: 32px;
+  }
+  .segmented {
+    height: 32px;
+  }
+  .segmented button {
+    height: 28px;
+  }
+  .bubble {
+    min-height: 40px;
+  }
+  .rail .sidebar-actions {
+    gap: 4px;
+  }
+  .chat-header .title-button,
+  .search-field,
+  .brand {
+    height: 40px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+  }
+  .search-row {
+    height: 40px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .model-menu .menu-item {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    line-height: 1.15;
+  }
+  .bubble {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
 }
 
 /*
