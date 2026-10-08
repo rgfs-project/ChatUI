@@ -3528,3 +3528,18 @@ a svg,
 .switch[aria-checked="true"] span {
   transform: translateX(12px);
 }
+
+/* Sidebar, from the reference DevTools: icon-to-text gap 6 px (text at
+   42 px), section labels 14/20 medium at 16 px, 12 px above a section. */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .sidebar-action,
+  .account {
+    gap: 6px;
+  }
+  .sidebar-heading.sidebar-heading {
+    margin-top: 12px;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+  }
+}
