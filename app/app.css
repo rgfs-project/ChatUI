@@ -2071,26 +2071,15 @@ textarea.input {
   text-align: left;
 }
 
-/* A row that opens something: its hover fill reaches past the text edge. */
-.row-button {
-  width: calc(100% + 24px);
-  margin: 0 -12px;
-  padding: 10px 12px;
-  border-radius: var(--radius);
+/* A row that opens something stays flat on the same edge; hover only
+   strengthens its chevron. */
+.row-button .row-control svg {
+  transition: color 120ms;
 }
 
-.row-button:hover {
-  background: var(--fill);
-}
-
-.group > .row-button:first-child {
-  border-top-left-radius: var(--radius);
-  border-top-right-radius: var(--radius);
-}
-
-.group > .row-button:last-child {
-  border-bottom-left-radius: var(--radius);
-  border-bottom-right-radius: var(--radius);
+.row-button:hover .row-control svg,
+.row-button:focus-visible .row-control svg {
+  color: var(--text);
 }
 
 .row-label {
