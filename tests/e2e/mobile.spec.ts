@@ -26,14 +26,15 @@ test("phones use a drawer for conversations", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("settings on a phone: the list, then a section", async ({ page }) => {
+test("settings on a phone: section tabs above the open section", async ({ page }) => {
   await page.goto(`${base()}/settings`);
   await page.waitForSelector('html[data-hydrated="true"]');
   const dialog = page.getByRole("dialog", { name: "Settings" });
-  await dialog.getByRole("button", { name: "General" }).click();
   await expect(dialog.getByRole("heading", { name: "General" })).toBeVisible();
-  await dialog.getByRole("button", { name: "All settings" }).click();
-  await expect(dialog.getByRole("button", { name: "Account" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Account" }).click();
+  await expect(dialog.getByRole("heading", { name: "Account" })).toBeVisible();
+  const box = await dialog.boundingBox();
+  expect(box?.x).toBeCloseTo(10, 0);
 });
 
 test.describe("a narrow desktop window", () => {

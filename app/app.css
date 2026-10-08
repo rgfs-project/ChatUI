@@ -3056,3 +3056,211 @@ a svg,
     min-height: 64px;
   }
 }
+
+/*
+ * Conversation: the message column and the composer share one width (640 px,
+ * 16 px from the screen edge on phones). Assistant text is bare 16/24; the
+ * user's bubble is 22 px round with 10 x 16 padding; turns sit 40 px apart.
+ */
+.turns {
+  gap: 40px;
+  padding: 0;
+}
+.user-turn {
+  margin-top: 0;
+}
+.assistant-turn {
+  font-size: 16px;
+  line-height: 24px;
+}
+.bubble.bubble {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 22px;
+  font-size: 16px;
+  line-height: 24px;
+}
+.composer {
+  border-radius: 28px;
+}
+.composer-row textarea.composer-row textarea,
+.composer-row textarea {
+  font-size: 16px;
+  line-height: 26px;
+}
+.composer-dock {
+  padding-bottom: 24px;
+}
+
+@media (hover: none) and (pointer: coarse) and (max-width: 932px) {
+  .transcript {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .composer-dock {
+    margin: 0 -16px;
+    padding: 24px 16px 24px;
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+  .composer {
+    min-height: 87px;
+    border-radius: 26px;
+  }
+  .composer-row textarea {
+    min-height: 42px;
+  }
+  .message-actions .icon-button.icon-button.icon-button {
+    width: 40px;
+    height: 32px;
+    border-radius: 8px;
+  }
+  .message-actions .icon-button svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/*
+ * Settings below 768 px (phones and split screen): one column, the sections
+ * as a row of tabs under the search, 10 px from the screen sides, 85vh tall.
+ */
+@media (max-width: 767px) {
+  .settings.settings {
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    width: calc(100% - 20px);
+    height: 85vh;
+    border-radius: 16px;
+    transform: translate(-50%, -50%);
+  }
+  .settings-side.settings-side {
+    flex: none;
+    height: auto;
+    gap: 0;
+    padding: 16px 16px 0;
+    border-right: 0;
+  }
+  .settings-search.settings-search {
+    position: relative;
+    height: 36px;
+    min-height: 36px;
+    padding: 8px 12px 8px 36px;
+    border-radius: 999px;
+  }
+  .settings-search svg {
+    position: absolute;
+    left: 12px;
+    width: 16px;
+    height: 16px;
+  }
+  .settings-nav.settings-nav {
+    display: flex;
+    gap: 6px;
+    height: 53px;
+    padding: 6px 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .settings-nav > div {
+    display: flex;
+    gap: 6px;
+  }
+  .settings-nav-group.settings-nav-group {
+    display: none;
+  }
+  .settings-nav-item.settings-nav-item {
+    flex: none;
+    width: auto;
+    height: 40px;
+    min-height: 40px;
+    margin: 0;
+    padding: 6px 10px;
+    gap: 6px;
+    border-radius: 10px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .settings-nav-item svg {
+    width: 16px;
+    height: 16px;
+  }
+  .settings-main.settings-main {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+  .settings-body.settings-body {
+    padding: 0 16px 16px;
+  }
+  .settings-head h2 {
+    font-size: 18px;
+    line-height: 28px;
+  }
+  .settings select,
+  .settings .select-trigger {
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 8px;
+  }
+  .settings input:not([type="checkbox"], [type="radio"], [type="search"]),
+  .settings textarea {
+    min-height: 38px;
+    padding: 8px 12px;
+    border-radius: 8px;
+  }
+}
+
+/* The compact settings window's own header: "Settings" and ×, over a line. */
+.settings-top {
+  display: none;
+}
+@media (max-width: 767px) {
+  .settings-top {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    padding: 0 8px 0 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .settings-top h2 {
+    font-size: 18px;
+    line-height: 28px;
+    font-weight: 500;
+  }
+  .settings-side.settings-side {
+    border-bottom: 1px solid var(--line);
+  }
+  .settings-body .settings-head > .icon-button:last-child {
+    display: none;
+  }
+  .settings-body .settings-head {
+    margin: 16px 0;
+  }
+}
+
+/* Phone composer: text on top, controls below, 87 px in all. */
+@media (hover: none) and (pointer: coarse) and (max-width: 932px) {
+  .composer-row.composer-row {
+    row-gap: 0;
+    min-height: 87px;
+    padding: 6px 6px 7px;
+  }
+  .composer-row.composer-row textarea {
+    min-height: 34px;
+    padding: 4px 10px;
+  }
+  .composer-row .icon-button.icon-button.icon-button,
+  .composer-row .model-trigger.model-trigger {
+    height: 40px;
+    min-height: 40px;
+  }
+  .composer-row .icon-button.icon-button.icon-button {
+    width: 40px;
+    border-radius: 50%;
+  }
+}

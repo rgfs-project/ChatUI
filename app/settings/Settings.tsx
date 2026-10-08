@@ -152,7 +152,7 @@ export function sectionsFor(user: ShellUser) {
 
 /**
  * Settings as one dialog: sections on the left (searchable), the open one on
- * the right. On phones the list and a section are separate screens.
+ * the right. On small screens the sections become a row of tabs above it.
  */
 export function SettingsDialog(props: {
   user: ShellUser;
@@ -164,7 +164,7 @@ export function SettingsDialog(props: {
   const [query, setQuery] = useState("");
   const [sub, setSub] = useState<{ title: string; onBack: () => void } | null>(null);
   const available = sectionsFor(props.user);
-  const fallback = props.narrow ? null : (available[0] ?? null);
+  const fallback = available[0] ?? null;
   const current = available.find((s) => s.id === props.section) ?? fallback;
   const q = query.trim().toLowerCase();
   const shown = q
@@ -173,7 +173,6 @@ export function SettingsDialog(props: {
   const groups = (["Settings", "Customize", "Administration"] as const).filter((g) =>
     shown.some((s) => s.group === g),
   );
-  const showNav = !props.narrow || current === null;
   const showContent = current !== null;
 
   return (
@@ -187,68 +186,54 @@ export function SettingsDialog(props: {
         <RadixDialog.Overlay className="scrim" />
         <RadixDialog.Content className="settings" aria-describedby={undefined}>
           <RadixDialog.Title className="sr-only">Settings</RadixDialog.Title>
-          {showNav ? (
-            <div className="settings-side">
-              {props.narrow ? (
-                <div className="settings-head">
-                  <h2>Settings</h2>
-                  <CloseButton onClick={props.onClose} />
+          <div className="settings-top">
+            <h2>Settings</h2>
+            <CloseButton onClick={props.onClose} />
+          </div>
+          <div className="settings-side">
+            <label className="settings-search">
+              <Search size={18} aria-hidden />
+              <span className="sr-only">Search settings</span>
+              <input
+                type="search"
+                placeholder="Search settings"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                }}
+              />
+            </label>
+            <nav aria-label="Settings sections" className="settings-nav">
+              {groups.map((g) => (
+                <div key={g}>
+                  <p className="settings-nav-group">{g}</p>
+                  {shown
+                    .filter((s) => s.group === g)
+                    .map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="settings-nav-item"
+                        aria-current={current?.id === s.id ? "page" : undefined}
+                        onClick={() => {
+                          props.onSection(s.id);
+                        }}
+                      >
+                        <s.icon size={18} aria-hidden />
+                        <span>{s.title}</span>
+                      </button>
+                    ))}
                 </div>
-              ) : null}
-              <label className="settings-search">
-                <Search size={18} aria-hidden />
-                <span className="sr-only">Search settings</span>
-                <input
-                  type="search"
-                  placeholder="Search settings"
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                  }}
-                />
-              </label>
-              <nav aria-label="Settings sections" className="settings-nav">
-                {groups.map((g) => (
-                  <div key={g}>
-                    <p className="settings-nav-group">{g}</p>
-                    {shown
-                      .filter((s) => s.group === g)
-                      .map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          className="settings-nav-item"
-                          aria-current={current?.id === s.id && !props.narrow ? "page" : undefined}
-                          onClick={() => {
-                            props.onSection(s.id);
-                          }}
-                        >
-                          <s.icon size={18} aria-hidden />
-                          <span>{s.title}</span>
-                        </button>
-                      ))}
-                  </div>
-                ))}
-                {shown.length === 0 ? <p className="muted pad">No settings match.</p> : null}
-              </nav>
-            </div>
-          ) : null}
-          {showContent && (!props.narrow || !showNav) ? (
+              ))}
+              {shown.length === 0 ? <p className="muted pad">No settings match.</p> : null}
+            </nav>
+          </div>
+          {showContent ? (
             <div className="settings-main">
               <div className="settings-body" key={current.id}>
                 <div className="settings-head">
                   {sub ? (
                     <IconButton label="Back" className="back" onClick={sub.onBack}>
-                      <ChevronLeft size={20} aria-hidden />
-                    </IconButton>
-                  ) : props.narrow ? (
-                    <IconButton
-                      label="All settings"
-                      className="back"
-                      onClick={() => {
-                        props.onSection(null);
-                      }}
-                    >
                       <ChevronLeft size={20} aria-hidden />
                     </IconButton>
                   ) : null}
