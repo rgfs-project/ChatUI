@@ -2109,6 +2109,29 @@ textarea.input {
   border-bottom-right-radius: var(--radius);
 }
 
+/* A short value typed straight into the row, right-aligned like a menu value. */
+.row-input {
+  width: 160px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-inner);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: right;
+}
+
+.row-input::placeholder {
+  color: var(--placeholder);
+}
+
+.row-input:hover,
+.row-input:focus {
+  background: var(--hover);
+  outline: none;
+}
+
 .row-label {
   display: flex;
   flex-direction: column;

@@ -5,7 +5,7 @@ import { api, messageOf } from "../lib/api";
 import { formatBytes, formatDateTime } from "../lib/format";
 import { allModels, modelLabel } from "../lib/models";
 import { keys, useModels } from "../lib/query";
-import { Choice, Field, Group, Row, Status, parseOptionalNumber, formText } from "./parts";
+import { Choice, Group, InputRow, Row, Status, parseOptionalNumber, formText } from "./parts";
 
 export function AdminInstance(props: { userId: string }) {
   const client = useQueryClient();
@@ -124,48 +124,46 @@ export function AdminInstance(props: { userId: string }) {
           />
         </Row>
       </Group>
-      <h3 className="group-heading">Replies</h3>
-      <div className="field-grid">
-        <Field label="Time zone" name="timezone" defaultValue={s.timezone} placeholder="UTC" />
-        <Field
+      <Group heading="Replies">
+        <InputRow label="Time zone" name="timezone" defaultValue={s.timezone} placeholder="UTC" />
+        <InputRow
           label="Replies at once per user"
           name="maxActivePerUser"
           inputMode="numeric"
           defaultValue={s.generation.maxActivePerUser?.toString() ?? ""}
           placeholder="Default"
         />
-        <Field
+        <InputRow
           label="Longest reply (tokens)"
           name="maxOutputTokens"
           inputMode="numeric"
           defaultValue={s.generation.maxOutputTokens?.toString() ?? ""}
           placeholder="Default"
         />
-      </div>
-      <h3 className="group-heading">Attachments (empty: the default)</h3>
-      <div className="field-grid">
-        <Field
+      </Group>
+      <Group heading="Attachments" note="Leave a field empty to use the default.">
+        <InputRow
           label="Largest file (MB)"
           name="maxFileMb"
           inputMode="decimal"
           defaultValue={mb(s.attachments.maxFileBytes)}
           placeholder={formatBytes(d.maxFileBytes)}
         />
-        <Field
+        <InputRow
           label="Files per message"
           name="maxPerMessage"
           inputMode="numeric"
           defaultValue={s.attachments.maxPerMessage?.toString() ?? ""}
           placeholder={String(d.maxPerMessage)}
         />
-        <Field
+        <InputRow
           label="Storage per user (MB)"
           name="quotaMb"
           inputMode="decimal"
           defaultValue={mb(s.attachments.quotaBytes)}
           placeholder={formatBytes(d.quotaBytes)}
         />
-        <Field
+        <InputRow
           label="Text sent inline (KB)"
           name="textInlineKb"
           inputMode="decimal"
@@ -176,7 +174,7 @@ export function AdminInstance(props: { userId: string }) {
           }
           placeholder={formatBytes(d.textInlineBytes)}
         />
-      </div>
+      </Group>
       <Status error={error} ok={ok} />
       <div className="form-actions sticky">
         <span className="spacer" />

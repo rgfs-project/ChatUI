@@ -36,6 +36,24 @@ export function Row(props: {
   );
 }
 
+/** A row with a short text input on the right, labelled by the row's label. */
+export function InputRow(props: ComponentProps<"input"> & { label: string; hint?: ReactNode }) {
+  const generated = useId();
+  const { label, hint, id, ...rest } = props;
+  const fieldId = id ?? generated;
+  return (
+    <div className="row">
+      <span className="row-label">
+        <label htmlFor={fieldId}>{label}</label>
+        {hint ? <span className="row-hint">{hint}</span> : null}
+      </span>
+      <span className="row-control">
+        <input id={fieldId} className="row-input" {...rest} />
+      </span>
+    </div>
+  );
+}
+
 /** A row that opens something (a detail page or a form). */
 export function LinkRow(props: {
   label: ReactNode;
