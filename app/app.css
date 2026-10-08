@@ -1038,34 +1038,50 @@ textarea.input {
  * Sizes follow the input, not the window: a narrow desktop window keeps
  * desktop sizes; touch screens get 44 px targets and 16 px text.
  */
+/*
+ * Touch screens: one scale everywhere, the settings scale. 15 px text,
+ * 13 px secondary labels, 40 px rows; only tap targets grow to 44 px.
+ */
 @media (pointer: coarse) {
   .chat-header .title-button {
     height: 44px;
-    font-size: 18px;
+    font-size: 15px;
+    font-weight: 500;
   }
-  .bubble {
-    font-size: 16px;
+  .bubble,
+  .prose,
+  .menu-item,
+  .settings-nav-item,
+  .row,
+  .drawer .sidebar,
+  .drawer .sidebar-action,
+  .drawer .sidebar-list li a,
+  .composer-row textarea {
+    font-size: 15px;
+  }
+  .prose {
+    line-height: 1.6;
   }
   .model-trigger {
     height: 44px;
     padding: 0 8px 0 10px;
-    font-size: 16px;
+    font-size: 15px;
   }
-  .drawer .sidebar,
-  .drawer .sidebar-action,
-  .drawer .sidebar-list li a {
-    font-size: 16px;
+  .menu-item {
+    min-height: 40px;
   }
   .drawer .sidebar-action,
   .drawer .sidebar-list li a {
-    min-height: 44px;
+    min-height: 40px;
   }
   .drawer .sidebar-list li a {
     padding: 10px;
   }
-  .drawer .sidebar-heading {
-    font-size: 15px;
-    font-weight: 500;
+  .drawer .sidebar-heading,
+  .settings-nav-group,
+  .group-heading {
+    font-size: 13px;
+    font-weight: 400;
   }
 }
 
