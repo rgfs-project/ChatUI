@@ -2119,7 +2119,7 @@ textarea.input {
 }
 
 .group-heading {
-  margin: 0 16px 6px 0;
+  margin: 0 16px 4px 0;
   color: var(--muted);
   font-size: 13px;
   font-weight: 400;
@@ -2133,6 +2133,17 @@ textarea.input {
   background: var(--raised);
 }
 
+/* A card holding a single button is the button: no inset, so its hover
+   fill is the whole card rather than a box inside a box. */
+.group:has(> .row-button:only-child) {
+  padding: 0;
+}
+
+.group > .row-button:only-child {
+  padding: 10px 12px 10px 16px;
+  border-radius: var(--radius);
+}
+
 /* Hairlines between rows; .row resets the browser's own button border. */
 .group > * + *,
 .group > .row + .row {
@@ -2140,7 +2151,7 @@ textarea.input {
 }
 
 .group-note {
-  margin: 8px 16px 0 0;
+  margin: 4px 16px 0 0;
   color: var(--muted);
   font-size: 13px;
 }
