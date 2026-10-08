@@ -96,6 +96,38 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/* Select All (Cmd/Ctrl+A) takes only the conversation: the app chrome
+   isn't selectable, message text and fields are. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.turns,
+input,
+textarea,
+[contenteditable="true"],
+.artifact-panel .panel-body,
+.settings-body .row-hint,
+.settings-body .group-note {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.turns .message-actions,
+.turns .time-stamp,
+.turns .queued-meta,
+.turns .reasoning summary,
+.turns .code-header {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* No zoom: pinch and double-tap don't scale the app (it's a web app). */
+html {
+  touch-action: pan-x pan-y;
+}
+
 /* No visible scrollbars anywhere; areas still scroll by wheel, touch and keys. */
 * {
   scrollbar-width: none;

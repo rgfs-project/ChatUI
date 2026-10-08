@@ -47,8 +47,15 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta charSet="utf-8" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
         />
+        {/* Installable web app: full screen from the home screen (iOS and others). */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="ChatUI" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="color-scheme" content={theme === "system" ? "light dark" : theme} />
         <Meta />
         {/* An explicit empty nonce keeps server and client markup identical. */}

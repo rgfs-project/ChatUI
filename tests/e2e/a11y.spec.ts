@@ -8,7 +8,12 @@ const base = () => process.env.E2E_BASE_URL ?? "";
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 async function violations(page: Page) {
-  const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+  // Zoom is disabled on purpose (owner's choice: an installable web app), so
+  // axe's meta-viewport rule is the one rule switched off.
+  const results = await new AxeBuilder({ page })
+    .withTags(TAGS)
+    .disableRules(["meta-viewport"])
+    .analyze();
   return results.violations.map(
     (v) =>
       `${v.id}: ${v.nodes
