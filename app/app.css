@@ -1742,6 +1742,11 @@ textarea.input {
   transform: translate(-50%, calc(-100% - 8px));
 }
 
+/* Hover stays opaque: the shared hover fill is translucent in dark mode. */
+.composer-dock > .scroll-down:hover {
+  background: var(--fill);
+}
+
 .composer-dock > * {
   pointer-events: auto;
 }
