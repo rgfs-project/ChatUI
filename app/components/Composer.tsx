@@ -150,7 +150,8 @@ export function Composer(props: ComposerProps) {
     const fit = () => {
       row?.removeAttribute("data-grown");
       el.style.height = "auto";
-      if (el.value.includes("\n") || el.scrollHeight > 40) {
+      // Phones always use the grown layout: text on top, controls below.
+      if (phone || el.value.includes("\n") || el.scrollHeight > 40) {
         row?.setAttribute("data-grown", "");
         el.style.height = "auto";
       }
@@ -168,7 +169,7 @@ export function Composer(props: ComposerProps) {
     return () => {
       observer.disconnect();
     };
-  }, [text]);
+  }, [text, phone]);
 
   const slash = /^\/([a-z0-9-]*)$/.exec(text);
   const commands =
