@@ -2114,12 +2114,16 @@ textarea.input {
 .settings-search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 40px;
-  padding: 0 14px;
+  gap: 12px;
+  height: 44px;
+  padding: 0 12px;
   border-radius: var(--radius);
   background: var(--hover);
   color: var(--muted);
+}
+
+.settings-search input {
+  font-size: 14px;
 }
 
 .settings-search input {
@@ -2149,7 +2153,7 @@ textarea.input {
   align-items: center;
   gap: 12px;
   width: 100%;
-  height: 38px;
+  height: 44px;
   padding: 0 12px;
   border: 0;
   border-radius: var(--radius);
@@ -2272,8 +2276,8 @@ textarea.input {
   justify-content: space-between;
   gap: 16px;
   width: 100%;
-  min-height: 52px;
-  padding: 6px 16px;
+  min-height: 44px;
+  padding: 3px 12px;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -2360,8 +2364,8 @@ textarea.input {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  /* Same 16 px inset as every other row. */
-  padding: 10px 16px;
+  /* Same 12 px inset as every other row. */
+  padding: 10px 12px;
 }
 
 .textarea-row textarea {
@@ -2381,7 +2385,7 @@ textarea.input {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 40px;
+  height: 38px;
   padding: 0 4px 0 10px;
   border: 0;
   border-radius: 10px;
