@@ -1,13 +1,16 @@
 import {
   Brain,
   ChevronRight,
+  Download,
   FileCode,
   FileText,
   Music,
   Pencil,
   RefreshCw,
   Trash2,
+  X,
 } from "lucide-react";
+import * as RadixDialog from "@radix-ui/react-dialog";
 import { useState, type ReactNode } from "react";
 import { attachmentContentUrl, type MessageAttachmentDto } from "@shared/attachments";
 import type { MessageArtifactDto } from "@shared/artifacts";
@@ -18,50 +21,118 @@ import { Markdown } from "./Markdown";
 import { IconButton } from "./ui";
 
 export function Attachments(props: { attachments: readonly MessageAttachmentDto[] }) {
+  const [viewing, setViewing] = useState<MessageAttachmentDto | null>(null);
   if (props.attachments.length === 0) return null;
   return (
-    <ul className="message-attachments" aria-label="Attachments">
-      {props.attachments.map((a) => {
-        if (a.missing)
+    <>
+      <ImageViewer
+        image={viewing}
+        onClose={() => {
+          setViewing(null);
+        }}
+      />
+      <ul className="message-attachments" aria-label="Attachments">
+        {props.attachments.map((a) => {
+          if (a.missing)
+            return (
+              <li key={a.id} className="file-chip missing">
+                <FileText size={18} aria-hidden />
+                <span>File no longer available</span>
+              </li>
+            );
+          if (a.kind === "image")
+            return (
+              <li key={a.id} className="image-attachment">
+                <a
+                  href={attachmentContentUrl(a.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    // A plain click opens the viewer; modified clicks keep the new tab.
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                    e.preventDefault();
+                    setViewing(a);
+                  }}
+                >
+                  <img
+                    src={attachmentContentUrl(a.id)}
+                    alt={a.filename ?? "Image"}
+                    width={a.width ?? undefined}
+                    height={a.height ?? undefined}
+                    loading="lazy"
+                  />
+                </a>
+              </li>
+            );
           return (
-            <li key={a.id} className="file-chip missing">
-              <FileText size={18} aria-hidden />
-              <span>File no longer available</span>
-            </li>
-          );
-        if (a.kind === "image")
-          return (
-            <li key={a.id} className="image-attachment">
-              <a href={attachmentContentUrl(a.id)} target="_blank" rel="noopener noreferrer">
-                <img
-                  src={attachmentContentUrl(a.id)}
-                  alt={a.filename ?? "Image"}
-                  width={a.width ?? undefined}
-                  height={a.height ?? undefined}
-                  loading="lazy"
-                />
+            <li key={a.id}>
+              <a className="file-chip" href={attachmentContentUrl(a.id, true)} download>
+                {a.kind === "audio" ? (
+                  <Music size={18} aria-hidden />
+                ) : (
+                  <FileText size={18} aria-hidden />
+                )}
+                <span className="file-chip-text">
+                  <span className="file-chip-name">{a.filename}</span>
+                  {a.size !== null ? (
+                    <span className="file-chip-meta">{formatBytes(a.size)}</span>
+                  ) : null}
+                </span>
               </a>
             </li>
           );
-        return (
-          <li key={a.id}>
-            <a className="file-chip" href={attachmentContentUrl(a.id, true)} download>
-              {a.kind === "audio" ? (
-                <Music size={18} aria-hidden />
-              ) : (
-                <FileText size={18} aria-hidden />
-              )}
-              <span className="file-chip-text">
-                <span className="file-chip-name">{a.filename}</span>
-                {a.size !== null ? (
-                  <span className="file-chip-meta">{formatBytes(a.size)}</span>
-                ) : null}
-              </span>
-            </a>
-          </li>
-        );
-      })}
-    </ul>
+        })}
+      </ul>
+    </>
+  );
+}
+
+/** A full-size image over the page: Escape, the backdrop or × closes it. */
+function ImageViewer(props: { image: MessageAttachmentDto | null; onClose: () => void }) {
+  const image = props.image;
+  return (
+    <RadixDialog.Root
+      open={image !== null}
+      onOpenChange={(open) => {
+        if (!open) props.onClose();
+      }}
+    >
+      <RadixDialog.Portal>
+        <RadixDialog.Overlay className="scrim" />
+        <RadixDialog.Content
+          className="image-viewer"
+          aria-describedby={undefined}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) props.onClose();
+          }}
+        >
+          <RadixDialog.Title className="sr-only">{image?.filename ?? "Image"}</RadixDialog.Title>
+          <div className="image-viewer-bar">
+            {image ? (
+              <a
+                className="icon-button"
+                href={attachmentContentUrl(image.id, true)}
+                download
+                aria-label="Download"
+                title="Download"
+              >
+                <Download size={20} aria-hidden />
+              </a>
+            ) : null}
+            <RadixDialog.Close className="icon-button" aria-label="Close" title="Close">
+              <X size={20} aria-hidden />
+            </RadixDialog.Close>
+          </div>
+          {image ? (
+            <img
+              src={attachmentContentUrl(image.id)}
+              alt={image.filename ?? "Image"}
+              onClick={props.onClose}
+            />
+          ) : null}
+        </RadixDialog.Content>
+      </RadixDialog.Portal>
+    </RadixDialog.Root>
   );
 }
 

@@ -1489,6 +1489,36 @@ textarea.input {
   object-fit: cover;
 }
 
+/* The image viewer: the picture as large as the window allows. */
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 64px 24px 24px;
+  outline: none;
+}
+
+.image-viewer img {
+  max-width: 100%;
+  max-height: calc(100dvh - 88px);
+  border-radius: var(--radius);
+  cursor: zoom-out;
+}
+
+.image-viewer-bar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+}
+
+.image-attachment a {
+  cursor: zoom-in;
+}
+
 .file-chip {
   display: inline-flex;
   align-items: center;

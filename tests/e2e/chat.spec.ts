@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signedInState } from "./auth.ts";
-import { RICH_CONVERSATION, RICH_TITLE, WIDE_CONVERSATION } from "./global-setup.ts";
+import {
+  ATTACHMENTS_CONVERSATION,
+  RICH_CONVERSATION,
+  RICH_TITLE,
+  WIDE_CONVERSATION,
+} from "./global-setup.ts";
 import { chooseModel } from "./model.ts";
 
 const base = () => process.env.E2E_BASE_URL ?? "";
@@ -126,4 +131,15 @@ test("an unknown chat id looks like not found", async ({ page }) => {
   const response = await page.goto(`${base()}/chat/00000000-0000-4000-8000-000000000000`);
   expect(response?.status()).toBe(404);
   await expect(page.getByRole("heading", { name: "This chat does not exist" })).toBeVisible();
+});
+
+test("an image opens in the in-page viewer; Escape closes it", async ({ page }) => {
+  await open(page, `/chat/${ATTACHMENTS_CONVERSATION}`);
+  const image = page.locator(".image-attachment a").last();
+  await image.scrollIntoViewIfNeeded();
+  await image.click();
+  await expect(page.getByRole("dialog").locator("img")).toBeVisible();
+  expect(page.url()).toContain(ATTACHMENTS_CONVERSATION);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
