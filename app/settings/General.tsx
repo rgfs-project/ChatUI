@@ -39,7 +39,7 @@ export function General(props: { userId: string }) {
 
   return (
     <>
-      <Group heading="Appearance" note="The model’s reasoning shows above its replies.">
+      <Group heading="Appearance">
         <Row label="Theme" id="g-theme">
           <div role="radiogroup" aria-labelledby="g-theme" className="segmented">
             {THEMES.map(({ value, label, icon: Icon }) => (
@@ -60,7 +60,10 @@ export function General(props: { userId: string }) {
             ))}
           </div>
         </Row>
-        <Row label="Show thought process">
+        <Row
+          label="Show thought process"
+          hint="The model’s reasoning above its replies, when it shares one."
+        >
           <Switch
             label="Show thought process"
             checked={reasoning}
@@ -71,11 +74,12 @@ export function General(props: { userId: string }) {
           />
         </Row>
       </Group>
-      <Group
-        heading="Images and audio"
-        note="Earlier images and audio go to the model again with each message. Large images shrink in your browser before upload."
-      >
-        <Row label="Earlier images and audio" id="g-hist">
+      <Group heading="Images and audio">
+        <Row
+          label="Earlier images and audio"
+          id="g-hist"
+          hint="Send them to the model again with each new message."
+        >
           <Choice
             labelledBy="g-hist"
             value={prefs.data?.historyImages ?? "include"}
@@ -87,7 +91,11 @@ export function General(props: { userId: string }) {
             onChange={(v) => void save({ historyImages: v })}
           />
         </Row>
-        <Row label="Shrink large images" id="g-edge">
+        <Row
+          label="Shrink large images"
+          id="g-edge"
+          hint="Resized in your browser before uploading."
+        >
           <Choice
             labelledBy="g-edge"
             value={prefs.data?.imageMaxEdge ?? DEFAULT_IMAGE_MAX_EDGE}

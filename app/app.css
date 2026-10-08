@@ -656,10 +656,6 @@ textarea.input {
   gap: 8px;
 }
 
-.center-card .group {
-  background: var(--sidebar);
-}
-
 /* ---- App shell ------------------------------------------------------------- */
 
 .app {
@@ -1934,7 +1930,6 @@ textarea.input {
   gap: 10px;
   min-height: 0;
   padding: 14px 12px;
-  border-right: 1px solid var(--line);
 }
 
 .settings-search {
@@ -1997,6 +1992,7 @@ textarea.input {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: var(--surface);
 }
 
 .settings-head {
@@ -2004,8 +2000,13 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 56px;
-  padding: 8px 20px 0 36px;
+  min-height: 64px;
+  padding: 12px 24px 4px;
+}
+
+/* One edge for everything: the title, the cards and the close icon line up. */
+.settings-head > .icon-button:last-child {
+  margin-right: -11px;
 }
 
 .settings-head h2 {
@@ -2022,35 +2023,34 @@ textarea.input {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px 28px 28px 20px;
+  padding: 8px 24px 24px;
 }
 
 .settings-group {
-  margin-bottom: 20px;
+  margin-bottom: 28px;
 }
 
 .group-heading {
-  margin: 8px 16px 6px;
+  margin: 8px 0 4px;
   color: var(--muted);
   font-size: 15px;
   font-weight: 500;
 }
 
+/* Flat rows on one left edge: description left, action right (no cards). */
 .group {
-  padding: 4px 0;
-  border-radius: var(--radius);
-  background: var(--raised);
+  padding: 0;
 }
 
 .group-note,
 .section-intro {
-  margin: 8px 16px 0;
+  margin: 8px 0 0;
   color: var(--muted);
   font-size: 14px;
 }
 
 .section-intro {
-  margin: 0 16px 14px;
+  margin: 0 0 14px;
 }
 
 .warnings {
@@ -2063,12 +2063,20 @@ textarea.input {
   justify-content: space-between;
   gap: 16px;
   width: 100%;
-  min-height: 52px;
-  padding: 8px 16px;
+  min-height: 56px;
+  padding: 10px 0;
   border: 0;
   background: transparent;
   color: var(--text);
   text-align: left;
+}
+
+/* A row that opens something: its hover fill reaches past the text edge. */
+.row-button {
+  width: calc(100% + 24px);
+  margin: 0 -12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
 }
 
 .row-button:hover {
@@ -2116,7 +2124,7 @@ textarea.input {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: 0 0 16px 16px;
+  margin: 0 0 16px;
 }
 
 .settings-empty {
@@ -2126,7 +2134,7 @@ textarea.input {
   gap: 6px;
   padding: 48px 24px;
   border-radius: var(--radius);
-  background: var(--raised);
+  background: var(--fill);
   text-align: center;
 }
 
@@ -2148,7 +2156,7 @@ textarea.input {
 .settings-form .field input,
 .settings-form .field textarea,
 .inline-form .input {
-  background: var(--raised);
+  background: var(--fill);
 }
 
 .form-actions {
@@ -2159,17 +2167,17 @@ textarea.input {
 
 .form-actions.sticky {
   position: sticky;
-  bottom: -28px;
-  margin: 0 -28px -28px -20px;
-  padding: 12px 28px 20px 20px;
-  background: var(--sidebar);
+  bottom: -24px;
+  margin: 0 -24px -24px;
+  padding: 12px 24px 20px;
+  background: var(--surface);
 }
 
 .sub-header {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin: 0 0 16px 16px;
+  margin: 0 0 16px;
 }
 
 .sub-header .link-button {

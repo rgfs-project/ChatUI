@@ -191,7 +191,7 @@ export function AdminModelsSection(props: { userId: string }) {
               <LinkRow
                 key={m.id}
                 label={modelLabel(m.id)}
-                hint={m.id}
+                hint={modelLabel(m.id) === m.id ? undefined : m.id}
                 value={s?.hidden ? "Hidden" : undefined}
                 onClick={() => {
                   setHidden(s?.hidden ?? false);
