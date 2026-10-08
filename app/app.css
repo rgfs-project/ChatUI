@@ -2174,12 +2174,11 @@ textarea.input {
   font-weight: 400;
 }
 
-/* No multi-row cards: every row is its own card, 16 px apart, the same
-   as between groups. */
+/* No multi-row cards: every row is its own card, 10 px apart. */
 .group {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 /* .row's own transparent background would otherwise win. */
