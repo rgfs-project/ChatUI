@@ -1045,7 +1045,7 @@ textarea.input {
  */
 @media (pointer: coarse) {
   .chat-header .title-button {
-    height: 44px;
+    height: 48px;
     font-size: 17px;
     font-weight: 600;
   }
