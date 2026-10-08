@@ -43,9 +43,9 @@
   --ok: light-dark(#1a7f37, #7ee2a0);
   --avatar: light-dark(#ececec, #3a3a3a);
   --focus: light-dark(#0d0d0d, #ececec);
-  --scrim: rgb(0 0 0 / 0.35);
+  --scrim: rgb(0 0 0 / 0.55);
   /* One light shadow, only on windows and popups. */
-  --shadow-pop: 0 4px 16px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.2));
+  --shadow-pop: 0 12px 48px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.3));
   --code-bg: light-dark(#f7f7f7, #1a1a1a);
   --code-comment: light-dark(#6e7781, #8b949e);
   --code-keyword: light-dark(#a0287a, #ff7ab2);
