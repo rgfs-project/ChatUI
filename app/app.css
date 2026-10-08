@@ -2581,7 +2581,7 @@ a svg,
  * Phones: one frame for every screen. Surfaces sit 12 px from the screen
  * edge and their content 12 px further in (24 px), so titles, labels, rows,
  * messages and the composer share one left edge. Rows and icon buttons are
- * 48 px; corners 12 px; rows 4 px apart. Pages stay clear of the status bar
+ * 48 px; corners 12 px; rows 8 px apart. Pages stay clear of the status bar
  * and home indicator (installed web app).
  */
 @media (hover: none) and (pointer: coarse) and (max-width: 932px) {
@@ -2629,11 +2629,12 @@ a svg,
   }
   .drawer .sidebar-actions,
   .drawer .sidebar-list ul,
-  .group {
-    gap: 4px;
+  .group,
+  .menu {
+    gap: 8px;
   }
   .settings-nav-item {
-    margin-bottom: 4px;
+    margin-bottom: 8px;
   }
   .drawer .account .avatar {
     width: 32px;
@@ -2694,7 +2695,6 @@ a svg,
   /* Every remaining control is 48 tall too. */
   .model-trigger,
   .choice,
-  .segmented,
   .search-row,
   .composer-row textarea,
   .brand {
@@ -2717,13 +2717,14 @@ a svg,
   .search-field input {
     align-self: stretch;
   }
+  /* Controls inside a 48 px row keep 8 px from its edges. */
   .segmented {
-    height: 48px;
-    padding: 4px;
+    height: 32px;
+    padding: 2px;
   }
   .segmented button {
-    height: 40px;
-    min-width: 48px;
+    height: 28px;
+    min-width: 44px;
   }
   .switch {
     width: 52px;
