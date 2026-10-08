@@ -215,14 +215,22 @@ export function Composer(props: ComposerProps) {
     const content = skill ? `/${skill.name}${body ? ` ${body}` : ""}` : body;
     setSending(true);
     setError(null);
+    // The box empties at once (the message shows as pending in the chat);
+    // if the send fails, what was sent comes back, unless something new was typed.
+    const sent = { text, skill, uploads };
+    setText("");
+    setSkill(null);
+    setUploads([]);
+    const restore = () => {
+      if (textarea.current?.value !== "") return;
+      setText(sent.text);
+      setSkill(sent.skill);
+      setUploads(sent.uploads);
+    };
     try {
-      const ok = await props.onSend({ content, attachments: ready });
-      if (ok) {
-        setText("");
-        setSkill(null);
-        setUploads([]);
-      }
+      if (!(await props.onSend({ content, attachments: ready }))) restore();
     } catch (e) {
+      restore();
       setError(messageOf(e));
     } finally {
       setSending(false);

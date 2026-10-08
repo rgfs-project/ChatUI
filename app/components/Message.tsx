@@ -280,8 +280,6 @@ export function AssistantMessage(props: {
       {thinking ? (
         <p className="thinking" aria-label="Thinking">
           <span />
-          <span />
-          <span />
         </p>
       ) : null}
       <div className="prose" data-testid="content">
