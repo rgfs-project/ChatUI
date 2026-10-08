@@ -934,8 +934,7 @@ textarea.input {
   height: 100%;
 }
 
-/* Floats over the transcript, like the composer: the chat scrolls behind
-   it and fades out under it. */
+/* Floats over the transcript with no fill: the chat scrolls behind it. */
 .chat-header {
   position: absolute;
   top: 0;
@@ -947,7 +946,6 @@ textarea.input {
   gap: 4px;
   height: 56px;
   padding: 0 12px;
-  background: linear-gradient(to bottom, var(--surface) 16px, transparent);
   pointer-events: none;
 }
 
