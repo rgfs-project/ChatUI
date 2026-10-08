@@ -23,6 +23,7 @@ import { lstat, mkdir, open, readdir, readFile, rm, writeFile } from "node:fs/pr
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
+import { TEMP_FILE_RE } from "./storage/fs.ts";
 
 export const BACKUP_FORMAT = "chatui-backup";
 const LOCK_FILE = path.join("_system", "server.lock");
@@ -60,6 +61,10 @@ export interface BackupManifest {
 /** Relative paths (POSIX) left out of every backup. */
 export function excluded(rel: string, includeSessions: boolean): boolean {
   if (rel === "_system/server.lock") return true;
+  // An atomic write in progress (".name.<random>.tmp"): never committed state,
+  // and it is renamed away while a live server keeps writing.
+  const base = rel.slice(rel.lastIndexOf("/") + 1);
+  if (TEMP_FILE_RE.test(base)) return true;
   if (!includeSessions && (rel === "_system/sessions" || rel.startsWith("_system/sessions/")))
     return true;
   const [first, second] = rel.split("/");
@@ -135,7 +140,18 @@ export async function createBackup(
   const files: BackupFile[] = [];
   for (const rel of (await walk(dataDir)).sort()) {
     if (excluded(rel, includeSessions)) continue;
-    const copied = await copyFile(path.join(dataDir, rel), path.join(dest, "data", rel));
+    // A file removed after the walk (a live server deleting or replacing it)
+    // is simply not in this snapshot.
+    let copied: { size: number; sha256: string };
+    try {
+      copied = await copyFile(path.join(dataDir, rel), path.join(dest, "data", rel));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        await rm(path.join(dest, "data", rel), { force: true });
+        continue;
+      }
+      throw error;
+    }
     files.push({ path: rel, ...copied });
   }
   const manifest: BackupManifest = {
