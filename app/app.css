@@ -1102,12 +1102,17 @@ textarea.input {
   padding: 72px 24px 0;
   overscroll-behavior: contain;
   overflow-x: hidden;
+  /* A column, so a short chat still puts the composer at the bottom. */
+  display: flex;
+  flex-direction: column;
 }
 
 .turns {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  flex: 1 0 auto;
+  width: 100%;
   max-width: var(--column);
   margin: 0 auto;
   min-width: 0;
@@ -1653,6 +1658,7 @@ textarea.input {
 /* ---- Composer -------------------------------------------------------------- */
 
 .composer-dock {
+  flex: none;
   position: sticky;
   bottom: 0;
   z-index: 1;
