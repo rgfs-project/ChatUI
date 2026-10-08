@@ -872,12 +872,18 @@ textarea.input {
   display: flex;
   align-items: center;
   height: 56px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
+/* Square 38 px buttons; one pixel less above and no gap keeps their icons
+   on the open sidebar's 36 px rows (2 px apart). */
 .rail .icon-button {
   width: 38px;
-  height: 36px;
+  height: 38px;
+}
+
+.rail .sidebar-actions {
+  gap: 0;
 }
 
 .drawer {
