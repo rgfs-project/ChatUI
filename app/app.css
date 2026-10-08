@@ -3319,3 +3319,56 @@ a svg,
     padding-left: 10px;
   }
 }
+
+/* Snapshot values: 70 % bubbles, a 36 px round Send, action rows pulled
+   10/4 px (touch 14/8 px) outside the text with 4 px padding, and 24 px
+   gutters that open to 64 px on large screens. */
+.bubble.bubble {
+  max-width: 70%;
+}
+.composer-row .icon-button.send.send.send {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 9999px;
+  align-self: center;
+}
+.message-actions.message-actions {
+  padding: 4px 0;
+}
+.assistant-turn .message-actions.message-actions {
+  margin-left: -10px;
+}
+.user-turn .message-actions.message-actions {
+  margin-right: -4px;
+}
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .transcript {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .composer-dock {
+    margin: 0 -24px;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+@media (min-width: 1024px) and (hover: hover) {
+  .transcript {
+    padding-left: 64px;
+    padding-right: 64px;
+  }
+  .composer-dock {
+    margin: 0 -64px;
+    padding-left: 64px;
+    padding-right: 64px;
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  .assistant-turn .message-actions.message-actions {
+    margin-left: -14px;
+  }
+  .user-turn .message-actions.message-actions {
+    margin-right: -8px;
+  }
+}
