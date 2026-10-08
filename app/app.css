@@ -1967,7 +1967,7 @@ textarea.input {
   flex-direction: column;
   gap: 4px;
   min-height: 0;
-  padding: 14px 28px 28px 20px;
+  padding: 14px 10px 28px 10px;
   border-right: 1px solid var(--line);
 }
 
