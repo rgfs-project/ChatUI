@@ -1,260 +1,253 @@
-import { ChevronRight, FileCode, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import { lazy, memo, Suspense, useEffect, type ReactNode } from "react";
-import type { MessageAttachmentDto } from "@shared/attachments";
-import type { MessageDto } from "@shared/conversations";
-import type { ProposalDto } from "@shared/memories";
+import {
+  Brain,
+  ChevronRight,
+  FileCode,
+  FileText,
+  Music,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { attachmentContentUrl, type MessageAttachmentDto } from "@shared/attachments";
 import type { MessageArtifactDto } from "@shared/artifacts";
-import { MessageAttachments } from "./MessageAttachments";
-import { count } from "../lib/render-counters";
 import { formatBytes } from "../lib/format";
+import { modelLabel } from "../lib/models";
 import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
+import { IconButton } from "./ui";
 
-export { CopyButton };
-
-/** Memory suggestion cards (Phase 13b): loaded only for replies that have some. */
-const MemorySuggestions = lazy(() => import("./MemorySuggestions"));
-
-const STATUS_LABEL: Record<NonNullable<MessageDto["status"]>, string> = {
-  complete: "",
-  cancelled: "Stopped",
-  failed: "Failed",
-  timed_out: "Timed out",
-  interrupted: "Interrupted",
-};
-
-/** Reasoning: collapsed by default, visually distinct from the answer. */
-export function Reasoning({
-  text,
-  done,
-  testId,
-}: {
-  text: string;
-  done: boolean;
-  testId?: string;
-}) {
+export function Attachments(props: { attachments: readonly MessageAttachmentDto[] }) {
+  if (props.attachments.length === 0) return null;
   return (
-    <details className="reasoning" data-testid={testId}>
-      <summary>
-        {done ? "Thought process" : "Thinking…"}
-        <ChevronRight size={16} className="chevron" aria-hidden />
-      </summary>
-      <div className="reasoning-body">{text}</div>
-    </details>
-  );
-}
-
-/** A per-message operation (Phase 13a); ConversationView decides what it means. */
-export type MessageAction = "edit" | "delete" | "regenerate";
-
-export interface MessageViewProps {
-  role: MessageDto["role"];
-  content: string;
-  reasoning: string | null;
-  status: MessageDto["status"];
-  testId?: string;
-  /** The stored message id: an anchor for search navigation (`#m-<id>`). */
-  messageId?: string;
-  /** User messages: their attachments (Phase 12). */
-  attachments?: readonly MessageAttachmentDto[];
-  onOpenImage?: (
-    items: readonly MessageAttachmentDto[],
-    index: number,
-    trigger: HTMLElement,
-  ) => void;
-  /** Operations offered on this message; a stable callback keeps the memo effective. */
-  actions?: readonly MessageAction[];
-  /** Operations are temporarily unavailable (a reply is running). */
-  actionsDisabled?: boolean;
-  onAction?: (action: MessageAction, messageId: string, trigger: HTMLElement) => void;
-  /** Rendered instead of the bubble while this message is being edited. */
-  editor?: ReactNode;
-  /** Assistant only: memory suggestions made with this reply (Phase 13b). */
-  suggestions?: readonly ProposalDto[] | undefined;
-  /** Owner and conversation of the suggestions (primitives keep the memo effective). */
-  userId?: string;
-  conversationId?: string;
-  /** Assistant only: source files captured from this reply (Phase 13c). */
-  artifacts?: readonly MessageArtifactDto[] | undefined;
-  onOpenArtifact?: (artifact: MessageArtifactDto, trigger: HTMLElement) => void;
-}
-
-/** A captured file under its reply: opens the lazy source panel. */
-function ArtifactCards({
-  artifacts,
-  onOpen,
-}: {
-  artifacts: readonly MessageArtifactDto[];
-  onOpen: NonNullable<MessageViewProps["onOpenArtifact"]>;
-}) {
-  return (
-    <ul className="artifact-cards" aria-label="Files from this reply">
-      {artifacts.map((artifact) => (
-        <li key={artifact.id}>
-          <button
-            type="button"
-            className="artifact-card"
-            data-testid="artifact-card"
-            onClick={(event) => {
-              onOpen(artifact, event.currentTarget);
-            }}
-          >
-            <FileCode size={18} aria-hidden />
-            <span className="artifact-card-name">{artifact.name}</span>
-            <span className="artifact-card-meta">
-              {artifact.language ?? "file"} · {formatBytes(artifact.size)}
-            </span>
-            <span className="visually-hidden">, view source</span>
-          </button>
-        </li>
-      ))}
+    <ul className="message-attachments" aria-label="Attachments">
+      {props.attachments.map((a) => {
+        if (a.missing)
+          return (
+            <li key={a.id} className="file-chip missing">
+              <FileText size={18} aria-hidden />
+              <span>File no longer available</span>
+            </li>
+          );
+        if (a.kind === "image")
+          return (
+            <li key={a.id} className="image-attachment">
+              <a href={attachmentContentUrl(a.id)} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={attachmentContentUrl(a.id)}
+                  alt={a.filename ?? "Image"}
+                  width={a.width ?? undefined}
+                  height={a.height ?? undefined}
+                  loading="lazy"
+                />
+              </a>
+            </li>
+          );
+        return (
+          <li key={a.id}>
+            <a className="file-chip" href={attachmentContentUrl(a.id, true)} download>
+              {a.kind === "audio" ? (
+                <Music size={18} aria-hidden />
+              ) : (
+                <FileText size={18} aria-hidden />
+              )}
+              <span className="file-chip-text">
+                <span className="file-chip-name">{a.filename}</span>
+                {a.size !== null ? (
+                  <span className="file-chip-meta">{formatBytes(a.size)}</span>
+                ) : null}
+              </span>
+            </a>
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
-const ACTION_LABEL: Record<MessageAction, string> = {
-  edit: "Edit message",
-  delete: "Delete message and reply",
-  regenerate: "Regenerate reply",
-};
-
-function ActionButtons({
-  messageId,
-  actions,
-  disabled,
-  onAction,
-  regenerateLabel,
-}: {
-  messageId: string;
-  actions: readonly MessageAction[];
-  disabled: boolean;
-  onAction: NonNullable<MessageViewProps["onAction"]>;
-  regenerateLabel: string;
+export function UserMessage(props: {
+  content: string;
+  attachments: readonly MessageAttachmentDto[];
+  pending?: boolean;
+  onEdit?: (content: string) => Promise<void>;
+  onDelete?: () => void;
+  disabled?: boolean;
 }) {
-  return actions.map((action) => (
-    <button
-      key={action}
-      type="button"
-      className="icon-btn"
-      aria-label={action === "regenerate" ? regenerateLabel : ACTION_LABEL[action]}
-      title={
-        disabled
-          ? "Stop the reply first"
-          : action === "regenerate"
-            ? regenerateLabel
-            : ACTION_LABEL[action]
-      }
-      disabled={disabled}
-      onClick={(event) => {
-        onAction(action, messageId, event.currentTarget);
-      }}
-    >
-      {action === "edit" ? (
-        <Pencil size={16} aria-hidden />
-      ) : action === "delete" ? (
-        <Trash2 size={16} aria-hidden />
-      ) : (
-        <RefreshCw size={16} aria-hidden />
-      )}
-    </button>
-  ));
-}
-
-function MessageImpl({
-  role,
-  content,
-  reasoning,
-  status,
-  testId,
-  messageId,
-  attachments,
-  onOpenImage,
-  actions = [],
-  actionsDisabled = false,
-  onAction,
-  editor,
-  suggestions,
-  userId,
-  conversationId,
-  artifacts,
-  onOpenArtifact,
-}: MessageViewProps) {
-  count("messageRenders");
-  useEffect(() => {
-    count("messageMounts");
-  }, []);
-  const label = role === "user" ? "You" : role === "assistant" ? "Assistant" : "System";
-  const statusLabel = status ? STATUS_LABEL[status] : "";
-  const anchor = messageId ? `m-${messageId}` : undefined;
-  const buttons =
-    messageId && onAction && actions.length > 0 ? (
-      <ActionButtons
-        messageId={messageId}
-        actions={actions}
-        disabled={actionsDisabled}
-        onAction={onAction}
-        regenerateLabel={role === "user" ? "Get a reply" : ACTION_LABEL.regenerate}
-      />
-    ) : null;
-  if (role === "user")
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(props.content);
+  const [busy, setBusy] = useState(false);
+  if (editing && props.onEdit) {
+    const onEdit = props.onEdit;
     return (
-      <li id={anchor} className="turn turn-user" data-testid={testId ?? "message-user"}>
-        <span className="visually-hidden">{label}</span>
-        {attachments?.length ? (
-          <MessageAttachments items={attachments} onOpenImage={onOpenImage} />
-        ) : null}
-        {editor ??
-          (content ? (
-            <div className="bubble">
-              <p className="plain-text" dir="auto">
-                {content}
-              </p>
-            </div>
-          ) : null)}
-        {editor ? null : (
-          <div className="turn-actions">
-            {content ? <CopyButton text={content} label="Copy message" /> : null}
-            {buttons}
-          </div>
-        )}
-      </li>
-    );
-  return (
-    <li id={anchor} className={`turn turn-${role}`} data-testid={testId ?? `message-${role}`}>
-      <span className="visually-hidden">{label}</span>
-      {statusLabel ? <span className={`badge status-${status ?? ""}`}>{statusLabel}</span> : null}
-      {reasoning ? <Reasoning text={reasoning} done /> : null}
-      {role === "assistant" ? <Markdown text={content} /> : <p className="plain-text">{content}</p>}
-      {role === "assistant" && artifacts?.length && onOpenArtifact ? (
-        <ArtifactCards artifacts={artifacts} onOpen={onOpenArtifact} />
-      ) : null}
-      {role === "assistant" && (content || buttons) ? (
-        <div className="turn-actions">
-          {content ? <CopyButton text={content} label="Copy reply" /> : null}
-          {buttons}
-        </div>
-      ) : null}
-      {role === "assistant" && suggestions?.length && userId && conversationId ? (
-        <Suspense fallback={null}>
-          <MemorySuggestions
-            userId={userId}
-            conversationId={conversationId}
-            proposals={suggestions}
-            emptyAnswer={content === "" && status === "complete"}
-            disabled={actionsDisabled}
-            onRegenerate={
-              messageId && onAction && actions.includes("regenerate")
-                ? (trigger) => {
-                    onAction("regenerate", messageId, trigger);
-                  }
-                : undefined
-            }
+      <div className="user-turn" data-testid="message-user">
+        <form
+          className="edit-box"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setBusy(true);
+            void onEdit(draft).then(
+              () => {
+                setEditing(false);
+                setBusy(false);
+              },
+              () => {
+                setBusy(false);
+              },
+            );
+          }}
+        >
+          <label className="sr-only" htmlFor="edit-message">
+            Edit message
+          </label>
+          <textarea
+            id="edit-message"
+            value={draft}
+            autoFocus
+            rows={Math.min(10, draft.split("\n").length + 1)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+            }}
           />
-        </Suspense>
-      ) : null}
-    </li>
+          <div className="edit-actions">
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button type="submit" className="button primary" disabled={busy || draft.trim() === ""}>
+              Send
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+  return (
+    <div className={`user-turn${props.pending ? " pending" : ""}`} data-testid="message-user">
+      <Attachments attachments={props.attachments} />
+      {props.content ? <div className="bubble">{props.content}</div> : null}
+      {props.pending ? null : (
+        <div className="message-actions">
+          <CopyButton text={props.content} />
+          {props.onEdit ? (
+            <IconButton
+              label="Edit message"
+              className="muted-icon"
+              disabled={props.disabled}
+              onClick={() => {
+                setDraft(props.content);
+                setEditing(true);
+              }}
+            >
+              <Pencil size={16} aria-hidden />
+            </IconButton>
+          ) : null}
+          {props.onDelete ? (
+            <IconButton
+              label="Delete this exchange"
+              className="muted-icon"
+              disabled={props.disabled}
+              onClick={props.onDelete}
+            >
+              <Trash2 size={16} aria-hidden />
+            </IconButton>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }
 
-/** Memoized: unrelated messages never re-render while another one streams. */
-export const Message = memo(MessageImpl);
+const STATUS_NOTE: Record<string, string> = {
+  cancelled: "Stopped",
+  failed: "The reply failed",
+  timed_out: "The reply timed out",
+  interrupted: "The reply was interrupted",
+};
+
+export function AssistantMessage(props: {
+  content: string;
+  reasoning: string | null;
+  /** complete | cancelled | failed | timed_out | interrupted, or live states. */
+  status: string | null;
+  streaming?: boolean;
+  errorMessage?: string | null;
+  model?: string | null;
+  artifacts?: readonly MessageArtifactDto[];
+  onOpenArtifact?: (artifact: MessageArtifactDto) => void;
+  onRegenerate?: () => void;
+  disabled?: boolean;
+  children?: ReactNode;
+}) {
+  const note = props.status ? STATUS_NOTE[props.status] : undefined;
+  const thinking = props.streaming && !props.content && !props.reasoning;
+  return (
+    <div className="assistant-turn" data-testid="message-assistant">
+      {props.reasoning ? (
+        <details className="reasoning" open={props.streaming && !props.content}>
+          <summary>
+            <Brain size={16} aria-hidden />
+            {props.streaming && !props.content ? "Thinking…" : "Thought process"}
+            <ChevronRight size={16} aria-hidden className="chevron" />
+          </summary>
+          <div className="reasoning-body">{props.reasoning}</div>
+        </details>
+      ) : null}
+      {thinking ? (
+        <p className="thinking" aria-label="Thinking">
+          <span />
+          <span />
+          <span />
+        </p>
+      ) : null}
+      <div className="prose" data-testid="content">
+        <Markdown text={props.content} />
+      </div>
+      {note || props.errorMessage ? (
+        <p className={`reply-note${props.status === "cancelled" ? "" : " error"}`}>
+          {note}
+          {note && props.errorMessage ? ": " : ""}
+          {props.errorMessage}
+        </p>
+      ) : null}
+      {props.artifacts && props.artifacts.length > 0 ? (
+        <ul className="artifact-list" aria-label="Files from this reply">
+          {props.artifacts.map((a) => (
+            <li key={a.id}>
+              <button type="button" className="file-chip" onClick={() => props.onOpenArtifact?.(a)}>
+                <FileCode size={18} aria-hidden />
+                <span className="file-chip-text">
+                  <span className="file-chip-name">{a.name}</span>
+                  <span className="file-chip-meta">
+                    {[a.language, formatBytes(a.size)].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {props.children}
+      {props.streaming ? null : (
+        <div className="message-actions start">
+          <CopyButton text={props.content} />
+          {props.onRegenerate ? (
+            <IconButton
+              label="Regenerate"
+              className="muted-icon"
+              disabled={props.disabled}
+              onClick={props.onRegenerate}
+            >
+              <RefreshCw size={16} aria-hidden />
+            </IconButton>
+          ) : null}
+          {props.model ? <span className="message-model">{modelLabel(props.model)}</span> : null}
+        </div>
+      )}
+    </div>
+  );
+}

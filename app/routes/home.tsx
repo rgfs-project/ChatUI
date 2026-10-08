@@ -4,99 +4,86 @@ import { appContext } from "../context";
 import type { Route } from "./+types/home";
 
 export function meta(): Route.MetaDescriptors {
-  return [{ title: "ChatUI · Status" }, { name: "description", content: "ChatUI server status" }];
+  return [{ title: "Status · ChatUI" }, { name: "description", content: "ChatUI server status" }];
 }
 
-/** Uses the internal health service directly, never an HTTP self-call. */
-export function loader({ context }: Route.LoaderArgs): { health: HealthDto; signedIn: boolean } {
+export function loader({ context }: Route.LoaderArgs) {
   const { services, auth } = context.get(appContext);
   return { health: services.health(), signedIn: auth !== null };
 }
 
-/** Lightweight guard: keeps the schema library out of the client bundle. */
-function isHealthDto(value: unknown): value is HealthDto {
+function isHealth(value: unknown): value is HealthDto {
   return (
     typeof value === "object" &&
     value !== null &&
-    "status" in value &&
-    value.status === "ok" &&
-    "version" in value &&
-    typeof value.version === "string"
+    (value as { status?: unknown }).status === "ok" &&
+    typeof (value as { version?: unknown }).version === "string"
   );
 }
 
-const noopSubscribe = () => () => undefined;
+const noSubscribe = () => () => undefined;
 
-/** false during SSR and hydration, true once React has hydrated on the client. */
-function useHydrated(): boolean {
-  return useSyncExternalStore(
-    noopSubscribe,
+/** The public status page. */
+export default function Status({ loaderData }: Route.ComponentProps) {
+  const [health, setHealth] = useState(loaderData.health);
+  const hydrated = useSyncExternalStore(
+    noSubscribe,
     () => true,
     () => false,
   );
-}
-
-type CheckState = { kind: "idle" } | { kind: "checking" } | { kind: "failed" };
-
-export default function Home({ loaderData }: Route.ComponentProps) {
-  const [health, setHealth] = useState<HealthDto>(loaderData.health);
-  const hydrated = useHydrated();
-  const [check, setCheck] = useState<CheckState>({ kind: "idle" });
+  const [state, setState] = useState<"idle" | "checking" | "failed">("idle");
 
   async function recheck() {
-    setCheck({ kind: "checking" });
+    setState("checking");
     try {
       const response = await fetch("/api/health", { headers: { Accept: "application/json" } });
-      if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
       const body: unknown = await response.json();
-      if (!isHealthDto(body)) throw new Error("Unexpected health response");
+      if (!response.ok || !isHealth(body)) throw new Error("bad health");
       setHealth(body);
-      setCheck({ kind: "idle" });
+      setState("idle");
     } catch {
-      setCheck({ kind: "failed" });
+      setState("failed");
     }
   }
 
   return (
-    <main className="page">
-      <h1>ChatUI</h1>
-      <p className="lede">Self-hosted AI chat.</p>
-      {/* The page's purpose for a person: get to the chats. Status is secondary. */}
-      <p className="home-primary">
-        {loaderData.signedIn ? (
-          <a href="/chat" className="button-link primary">
-            Open your chats
+    <main className="center-page">
+      <div className="center-card">
+        <h1>ChatUI</h1>
+        <h2 className="muted">Server status</h2>
+        <div className="group">
+          <div className="row">
+            <span>Server</span>
+            <span data-testid="health-status">{health.status.toUpperCase()}</span>
+          </div>
+          <div className="row">
+            <span>Version</span>
+            <span data-testid="health-version">{health.version}</span>
+          </div>
+          <div className="row">
+            <span>Page</span>
+            <span data-testid="hydration-state">{hydrated ? "Interactive" : "Loading"}</span>
+          </div>
+        </div>
+        {state === "failed" ? (
+          <p className="error" role="alert">
+            The server didn’t answer.
+          </p>
+        ) : null}
+        <div className="actions">
+          <button
+            type="button"
+            className="button"
+            disabled={!hydrated || state === "checking"}
+            onClick={() => void recheck()}
+          >
+            Check status again
+          </button>
+          <a className="button primary" href={loaderData.signedIn ? "/chat" : "/login"}>
+            {loaderData.signedIn ? "Open your chats" : "Sign in"}
           </a>
-        ) : (
-          <a href="/login" className="button-link primary">
-            Sign in
-          </a>
-        )}
-      </p>
-      <h2 className="home-status-heading">Server status</h2>
-      <dl className="status home-status">
-        <dt>Server</dt>
-        <dd data-testid="health-status">{health.status.toUpperCase()}</dd>
-        <dt>Version</dt>
-        <dd data-testid="health-version">{health.version}</dd>
-        <dt>Page</dt>
-        <dd data-testid="hydration-state">
-          {hydrated ? "Interactive" : "Server-rendered (JavaScript not yet active)"}
-        </dd>
-      </dl>
-      <p className="home-status">
-        <button
-          type="button"
-          className="link-button"
-          onClick={() => void recheck()}
-          disabled={!hydrated || check.kind === "checking"}
-        >
-          {check.kind === "checking" ? "Checking…" : "Check status again"}
-        </button>{" "}
-        <span role="status" aria-live="polite" data-testid="check-result">
-          {check.kind === "failed" ? "The server could not be reached." : ""}
-        </span>
-      </p>
+        </div>
+      </div>
     </main>
   );
 }

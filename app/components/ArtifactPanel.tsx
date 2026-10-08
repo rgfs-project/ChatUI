@@ -1,142 +1,67 @@
-import * as Dialog from "@radix-ui/react-dialog";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileCode, Trash2, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
+import { apiFetch, ensureOk } from "../lib/api";
 import { formatBytes } from "../lib/format";
-import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
-import { CopyButton } from "./Message";
-import { ConfirmDialog } from "./Dialogs";
-import "./artifacts.css";
+import { CodeBlock } from "./Markdown";
+import { CloseButton } from "./ui";
 
-/** What the panel needs to show before the source arrives. */
-export interface ArtifactRef {
+export interface OpenArtifact {
   id: string;
   name: string;
   language: string | null;
   size: number;
 }
 
-/**
- * The source panel (Phase 13c, INV-41), loaded when first opened. The source
- * is fetched as text and rendered as a text node: HTML, SVG and scripts are
- * shown, never parsed or run. A Radix Dialog: focus is trapped, Escape
- * closes and focus returns to the card that opened it.
- */
-export default function ArtifactPanel(props: {
+/** A file a reply produced, shown as source beside the chat. Never run. */
+export function ArtifactPanel(props: {
   userId: string;
-  artifact: ArtifactRef;
+  artifact: OpenArtifact;
   onClose: () => void;
-  /** Where focus goes back (the card or row that opened the panel). */
-  trigger: HTMLElement | null;
 }) {
-  const { userId, artifact } = props;
-  const client = useQueryClient();
-  const source = useQuery(queries.artifactSource(userId, artifact.id));
-  const [confirming, setConfirming] = useState(false);
-  const sourceRef = useRef<HTMLDivElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const remove = useMutation({
-    mutationFn: () =>
-      apiJson(`/api/artifacts/${encodeURIComponent(artifact.id)}`, { method: "DELETE" }),
-    onSuccess: () => {
-      client.removeQueries({ queryKey: queryKeys.artifactSource(userId, artifact.id) });
-      void client.invalidateQueries({ queryKey: queryKeys.artifacts(userId) });
-      // Transcript cards come with the conversation DTO.
-      void client.invalidateQueries({ queryKey: ["user", userId, "conversation"] });
-      props.onClose();
+  const source = useQuery({
+    queryKey: ["user", props.userId, "artifact-source", props.artifact.id],
+    queryFn: async ({ signal }) => {
+      const response = await apiFetch(
+        `/api/artifacts/${encodeURIComponent(props.artifact.id)}/source`,
+        { signal },
+      );
+      await ensureOk(response);
+      return response.text();
     },
-    onError: (e) => {
-      setError(e instanceof ApiError ? e.message : "The file couldn’t be deleted.");
-    },
+    staleTime: Infinity,
   });
-  const href = `/api/artifacts/${encodeURIComponent(artifact.id)}/source?download=1`;
   return (
-    <Dialog.Root
-      open
-      onOpenChange={(open) => {
-        if (!open) props.onClose();
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content
-          className="dialog-content artifact-panel"
-          data-testid="artifact-panel"
-          // Focus starts on the source (scrollable with the keyboard), not on Delete.
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            sourceRef.current?.focus();
-          }}
-          onCloseAutoFocus={(event) => {
-            if (props.trigger?.isConnected) {
-              event.preventDefault();
-              props.trigger.focus();
-            }
-          }}
+    <aside className="artifact-panel" aria-label={`File: ${props.artifact.name}`}>
+      <header className="panel-header">
+        <div className="panel-title">
+          <h2>{props.artifact.name}</h2>
+          <p className="muted small">
+            {[props.artifact.language, formatBytes(props.artifact.size)]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        <a
+          className="icon-button muted-icon"
+          href={`/api/artifacts/${encodeURIComponent(props.artifact.id)}/source?download=1`}
+          aria-label="Download file"
+          title="Download file"
         >
-          <header className="artifact-panel-head">
-            <FileCode size={18} aria-hidden />
-            <div className="artifact-panel-title">
-              <Dialog.Title className="artifact-name">{artifact.name}</Dialog.Title>
-              <Dialog.Description className="artifact-meta">
-                {artifact.language ? `${artifact.language} · ` : ""}
-                {formatBytes(artifact.size)} · source only, never run
-              </Dialog.Description>
-            </div>
-            <div className="artifact-panel-actions">
-              {source.data !== undefined ? (
-                <CopyButton text={source.data} label="Copy source" />
-              ) : null}
-              <a className="icon-btn" href={href} download={artifact.name} aria-label="Download">
-                <Download size={16} aria-hidden />
-              </a>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Delete file"
-                onClick={() => {
-                  setConfirming(true);
-                }}
-              >
-                <Trash2 size={16} aria-hidden />
-              </button>
-              <Dialog.Close className="icon-btn" aria-label="Close">
-                <X size={16} aria-hidden />
-              </Dialog.Close>
-            </div>
-          </header>
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="artifact-source-wrap" ref={sourceRef} tabIndex={0} aria-label="Source">
-            {source.isPending ? (
-              <p className="settings-hint" role="status">
-                Loading…
-              </p>
-            ) : source.isError ? (
-              <p className="form-error" role="alert">
-                The file couldn’t be loaded.
-              </p>
-            ) : (
-              <pre className="artifact-source" data-testid="artifact-source">
-                <code>{source.data}</code>
-              </pre>
-            )}
-          </div>
-          <ConfirmDialog
-            open={confirming}
-            onOpenChange={setConfirming}
-            title="Delete this file?"
-            description="It is removed from your files. The chat it came from keeps its text."
-            confirmLabel="Delete"
-            onConfirm={() => {
-              remove.mutate();
-            }}
-          />
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          <Download size={18} aria-hidden />
+        </a>
+        <CloseButton onClick={props.onClose} label="Close file" />
+      </header>
+      <div className="panel-body">
+        {source.isError ? (
+          <p className="error" role="alert">
+            Couldn’t load this file.
+          </p>
+        ) : source.data === undefined ? (
+          <p className="muted">Loading…</p>
+        ) : (
+          <CodeBlock code={source.data} language={props.artifact.language} />
+        )}
+      </div>
+    </aside>
   );
 }

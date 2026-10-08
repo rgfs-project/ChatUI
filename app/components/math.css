@@ -1,0 +1,24 @@
+/* A math font for systems without one (STIX Two Math, OFL); local fonts come first. */
+@font-face {
+  font-family: "ChatUI Math";
+  src:
+    local("STIX Two Math"),
+    local("STIXTwoMath-Regular"),
+    url("@fontsource/stix-two-math/files/stix-two-math-latin-400-normal.woff2") format("woff2");
+  font-display: swap;
+}
+
+math {
+  font-family: "Cambria Math", "STIX Two Math", "ChatUI Math", math;
+}
+
+.math-display {
+  display: block;
+  margin: 0 0 14px;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.math-inline math {
+  font-size: 1.05em;
+}

@@ -4,11 +4,6 @@ import { isbot } from "isbot";
 import { renderToPipeableStream, type RenderToPipeableStreamOptions } from "react-dom/server";
 import { ServerRouter, type EntryContext, type RouterContextProvider } from "react-router";
 import { appContext } from "./context";
-import { preloadRenderers } from "./lib/renderers";
-
-// On-demand answer renderers are ready before the first document render, so
-// server HTML always contains rendered math (the browser hydrates it lazily).
-void preloadRenderers();
 
 export const streamTimeout = 5_000;
 
@@ -19,24 +14,18 @@ export default function handleRequest(
   routerContext: EntryContext,
   loadContext: RouterContextProvider,
 ): Response | Promise<Response> {
-  // Documents can carry private, user-scoped markup and the CSRF bootstrap:
-  // never stored by any cache (contracts §9.2a).
+  // Documents carry private markup and the CSRF bootstrap: never cached.
   responseHeaders.set("Cache-Control", "private, no-store");
-
-  if (request.method.toUpperCase() === "HEAD") {
+  if (request.method.toUpperCase() === "HEAD")
     return new Response(null, { status: responseStatusCode, headers: responseHeaders });
-  }
 
-  // The same per-response nonce as the Content-Security-Policy header (§9.2b).
   const { nonce } = loadContext.get(appContext);
-
   return new Promise((resolve, reject) => {
     let shellRendered = false;
     let status = responseStatusCode;
     const userAgent = request.headers.get("user-agent");
     const readyOption: keyof RenderToPipeableStreamOptions =
       (userAgent && isbot(userAgent)) || routerContext.isSpaMode ? "onAllReady" : "onShellReady";
-
     let timeoutId: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
       abort();
     }, streamTimeout + 1000);
@@ -75,10 +64,7 @@ export default function handleRequest(
   });
 }
 
-/**
- * Route data for client navigations (`<path>.data`) carries the same private,
- * dehydrated state as the document, so it is never cacheable either.
- */
+/** Route data for client navigations is as private as the document. */
 export function handleDataRequest(response: Response): Response {
   response.headers.set("Cache-Control", "private, no-store");
   return response;

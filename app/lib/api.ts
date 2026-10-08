@@ -1,30 +1,70 @@
 import type { SessionDto } from "@shared/auth";
+import { sessionStore } from "./session";
 
-import { authStore } from "./auth-store";
+/** An API error answer (contracts §5) or a transport failure (`code` undefined). */
+export class ApiError extends Error {
+  override name = "ApiError";
+  readonly status: number;
+  readonly code: string | undefined;
+  readonly details: Record<string, unknown> | undefined;
+  constructor(
+    status: number,
+    code: string | undefined,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
+
+async function refreshSession(): Promise<SessionDto | null> {
+  try {
+    const response = await fetch("/api/auth/session", { headers: { Accept: "application/json" } });
+    if (!response.ok) return null;
+    const session = (await response.json()) as SessionDto;
+    sessionStore.set(session);
+    return session;
+  } catch {
+    return null;
+  }
+}
 
 /**
- * The shared browser fetch adapter (contracts §5, INV-59). Session state
- * lives in the auth store; this module never holds its own copy.
+ * fetch() for every API call. Mutations carry the CSRF token and the expected
+ * user; a stale token is refreshed once and the request retried only while the
+ * same account is signed in. A 401 marks the session as ended.
  */
-
-export class AccountChangedError extends Error {
-  override name = "AccountChangedError";
+export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const mutation = !SAFE.has(method);
+  const userId = sessionStore.get().session?.user?.id ?? null;
+  const send = () => {
+    const headers = new Headers(init.headers);
+    const session = sessionStore.get().session;
+    if (mutation && session?.csrfToken && session.user) {
+      headers.set("X-CSRF-Token", session.csrfToken);
+      headers.set("X-Expected-User", session.user.id);
+    }
+    return fetch(url, { ...init, method, headers });
+  };
+  let response = await send();
+  if (response.status === 401) {
+    sessionStore.expire();
+    return response;
+  }
+  if (mutation && response.status === 403 && (await codeOf(response)) === "CSRF_INVALID") {
+    const fresh = await refreshSession();
+    if (userId !== null && fresh?.user?.id === userId) response = await send();
+  }
+  return response;
 }
 
-/** The session ended mid-use (a 401): the request was not executed. */
-export class SessionExpiredError extends Error {
-  override name = "SessionExpiredError";
-}
-
-export function setSession(session: SessionDto): void {
-  authStore.applySession(session);
-}
-
-export function currentSession(): SessionDto | null {
-  return authStore.get().session;
-}
-
-async function errorCode(response: Response): Promise<string | undefined> {
+async function codeOf(response: Response): Promise<string | undefined> {
   try {
     const body = (await response.clone().json()) as { error?: { code?: string } };
     return body.error?.code;
@@ -33,81 +73,50 @@ async function errorCode(response: Response): Promise<string | undefined> {
   }
 }
 
-function isMutation(method: string): boolean {
-  return !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
-}
-
-/**
- * fetch() for every API call:
- * - mutations carry X-CSRF-Token and X-Expected-User;
- * - any 401 UNAUTHENTICATED moves auth to `unauthenticated` once (the app
- *   opens the re-authentication dialog) and throws SessionExpiredError;
- * - on CSRF_INVALID it refetches the session once and retries once only if the
- *   account and epoch are unchanged and the request is still current;
- *   otherwise the request is discarded (the account boundary purges state).
- * Aborts (`init.signal`) propagate as the platform AbortError.
- */
-export async function apiFetch(
-  url: string,
-  init: RequestInit & { isCurrent?: () => boolean } = {},
-): Promise<Response> {
-  const method = init.method ?? "GET";
-  const mutation = isMutation(method);
-  const origin = { userId: currentSession()?.user?.id ?? null, epoch: authStore.get().epoch };
-  const { isCurrent, ...requestInit } = init;
-  const send = () => {
-    const headers = new Headers(requestInit.headers);
-    const session = currentSession();
-    if (mutation && session?.csrfToken && session.user) {
-      headers.set("X-CSRF-Token", session.csrfToken);
-      headers.set("X-Expected-User", session.user.id);
-    }
-    return fetch(url, { ...requestInit, headers });
-  };
-  const response = await send();
-  if (response.status === 401 && (await errorCode(response)) === "UNAUTHENTICATED") {
-    authStore.expire();
-    throw new SessionExpiredError("The session has ended");
-  }
-  if (!mutation) return response;
-  const code = await errorCode(response);
-  if (code === "SESSION_CHANGED") {
-    await refreshSession();
-    throw new AccountChangedError("The signed-in account changed");
-  }
-  if (code !== "CSRF_INVALID") return response;
-  const fresh = await refreshSession(false);
-  if (
-    fresh?.user?.id === origin.userId &&
-    authStore.get().epoch === origin.epoch &&
-    (isCurrent?.() ?? true)
-  ) {
-    authStore.applySession(fresh);
-    return send();
-  }
-  if (fresh && !fresh.user) authStore.expire();
-  else if (fresh) authStore.applySession(fresh);
-  throw new AccountChangedError("The signed-in account changed");
-}
-
-/**
- * Reads the server's view of the session. With `apply`, a signed-out answer
- * while signed in counts as expiry (re-authentication dialog), anything else
- * is applied as the current session.
- */
-export async function refreshSession(apply = true): Promise<SessionDto | null> {
+/** Turns a non-2xx answer into an ApiError. */
+export async function ensureOk(response: Response): Promise<Response> {
+  if (response.ok) return response;
+  let code: string | undefined;
+  let message = `Request failed (${String(response.status)})`;
+  let details: Record<string, unknown> | undefined;
   try {
-    const response = await fetch("/api/auth/session", { headers: { Accept: "application/json" } });
-    if (!response.ok) return null;
-    const session = (await response.json()) as SessionDto;
-    if (apply) {
-      if (!session.user) authStore.expire();
-      else authStore.applySession(session);
-    }
-    return session;
+    const body = (await response.json()) as {
+      error?: { code?: string; message?: string; details?: Record<string, unknown> };
+    };
+    code = body.error?.code;
+    if (body.error?.message) message = body.error.message;
+    details = body.error?.details;
   } catch {
-    return null;
+    // Not a contract error body.
   }
+  throw new ApiError(response.status, code, message, details);
+}
+
+/** JSON request and response; `body` objects are serialized. */
+export async function api<T>(
+  url: string,
+  options: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+): Promise<T> {
+  const init: RequestInit = { method: options.method ?? "GET", signal: options.signal ?? null };
+  if (options.body !== undefined) {
+    init.body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
+    init.headers = { "Content-Type": "application/json" };
+  }
+  let response: Response;
+  try {
+    response = await apiFetch(url, init);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError(0, undefined, "Couldn’t reach ChatUI. Check your connection.");
+  }
+  await ensureOk(response);
+  return (await response.json()) as T;
+}
+
+/** A readable message for any error. */
+export function messageOf(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return "Something went wrong.";
 }
 
 /** Only same-origin in-app paths are allowed as a post-login destination. */

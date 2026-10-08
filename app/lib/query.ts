@@ -1,43 +1,11 @@
-import type { SkillDto } from "@shared/skills";
-import { QueryClient, queryOptions } from "@tanstack/react-query";
-import type { SessionDto } from "@shared/auth";
-import type { ConversationDto, ConversationSummary, SearchResponse } from "@shared/conversations";
+import { QueryClient, useQuery, type QueryKey } from "@tanstack/react-query";
+import type { ConversationDto, ConversationList } from "@shared/conversations";
 import type { ModelListDto } from "@shared/generations";
+import type { SkillDto } from "@shared/skills";
 import type { AttachmentLimitsDto } from "@shared/attachments";
-import type { MemoryList } from "@shared/memories";
-import type { ArtifactList } from "@shared/artifacts";
-import { apiFetch } from "./api";
+import { api, ApiError } from "./api";
 
-/**
- * The one canonical query-key factory (contracts §9.1). Every key starts
- * with the signed-in user's id, so a cache can never serve another
- * account's data; `queryClient.clear()` runs on every account change.
- */
-export const queryKeys = {
-  session: () => ["session"] as const,
-  conversations: (userId: string) => ["user", userId, "conversations"] as const,
-  conversation: (userId: string, id: string) => ["user", userId, "conversation", id] as const,
-  generation: (userId: string, id: string) => ["user", userId, "generation", id] as const,
-  models: (userId: string) => ["user", userId, "models"] as const,
-  preferences: (userId: string) => ["user", userId, "preferences"] as const,
-  skills: (userId: string) => ["user", userId, "skills"] as const,
-  /** Full-text search results per query (Phase 13a); never dehydrated. */
-  search: (userId: string, q: string) => ["user", userId, "search", q] as const,
-  /** Approved memories (Phase 13b); proposals ride on the conversation DTO. */
-  memories: (userId: string) => ["user", userId, "memories"] as const,
-  /** Generated source artifacts (Phase 13c): the list and one file's source text. */
-  artifacts: (userId: string) => ["user", userId, "artifacts"] as const,
-  artifactSource: (userId: string, id: string) => ["user", userId, "artifact-source", id] as const,
-  /** Attachment limits and the user's used bytes (Phase 12); read when attaching. */
-  attachmentLimits: (userId: string) => ["user", userId, "attachment-limits"] as const,
-  /** Mutation key for sends (optimistic messages are read from its state). */
-  sends: (userId: string) => ["user", userId, "send"] as const,
-  /** Mutation key for uploads and pending-attachment deletes (Phase 12). */
-  uploads: (userId: string) => ["user", userId, "upload"] as const,
-};
-
-/** The user's canonical preferences (contracts §12). */
-export interface PreferencesDto {
+export interface Preferences {
   pins: string[];
   defaultProvider: string | null;
   defaultModel: string | null;
@@ -45,233 +13,91 @@ export interface PreferencesDto {
   imageMaxEdge: number | null;
 }
 
-/** Only these key families may be dehydrated into HTML (browser-safe DTOs). */
-export const DEHYDRATE_ALLOWLIST = new Set([
-  "conversations",
-  "conversation",
-  "models",
-  "preferences",
-]);
+/** Every key starts with the user id, so one account never reads another's cache. */
+export const keys = {
+  user: (userId: string) => ["user", userId] as const,
+  conversations: (userId: string) => ["user", userId, "conversations"] as const,
+  conversation: (userId: string, id: string) => ["user", userId, "conversation", id] as const,
+  models: (userId: string) => ["user", userId, "models"] as const,
+  preferences: (userId: string) => ["user", userId, "preferences"] as const,
+  skills: (userId: string) => ["user", userId, "skills"] as const,
+  memories: (userId: string) => ["user", userId, "memories"] as const,
+  artifacts: (userId: string) => ["user", userId, "artifacts"] as const,
+  attachmentLimits: (userId: string) => ["user", userId, "attachment-limits"] as const,
+  admin: (userId: string, what: string) => ["user", userId, "admin", what] as const,
+};
 
-export function isDehydratable(key: readonly unknown[]): boolean {
-  return key[0] === "user" && typeof key[2] === "string" && DEHYDRATE_ALLOWLIST.has(key[2]);
-}
-
-let browserClient: QueryClient | undefined;
-
-/**
- * The page's QueryClient: one per page load in the browser (shared by the
- * root provider and route clientLoaders), a fresh one per call on the server
- * (never module-global there, INV-55).
- */
-export function getQueryClient(): QueryClient {
-  if (typeof window === "undefined") return createQueryClient();
-  browserClient ??= createQueryClient();
-  return browserClient;
-}
-
-/** Test helper: a new page load. */
-export function resetQueryClientForTests(): void {
-  browserClient?.clear();
-  browserClient = undefined;
+/** Queries the server may render into the first HTML (browser-safe, user-scoped). */
+export function isDehydratable(key: QueryKey): boolean {
+  return key[0] === "user" && (key[2] === "models" || key[2] === "conversation");
 }
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // SSR-seeded data is fresh on hydration: no immediate duplicate fetch.
         staleTime: 30_000,
-        retry: 1,
         refetchOnWindowFocus: false,
+        retry: (count, error) =>
+          count < 2 && !(error instanceof ApiError && error.status >= 400 && error.status < 500),
       },
     },
   });
 }
 
-export class ApiError extends Error {
-  override name = "ApiError";
-  readonly status: number;
-  readonly code: string | null;
-  /** The contract error's `details` (e.g. a conflict `reason`). */
-  readonly details: Record<string, unknown> | undefined;
-  constructor(
-    status: number,
-    code: string | null,
-    message: string,
-    details?: Record<string, unknown>,
-  ) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.details = details;
-  }
+let browserClient: QueryClient | undefined;
+
+/** One client per page in the browser; a fresh one per request on the server. */
+export function getQueryClient(): QueryClient {
+  if (typeof window === "undefined") return createQueryClient();
+  browserClient ??= createQueryClient();
+  return browserClient;
 }
 
-/** JSON request through the shared adapter (CSRF, expected user, epoch rules). */
-export async function apiJson<T>(
-  url: string,
-  init: RequestInit & { isCurrent?: () => boolean } = {},
-): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set("Accept", "application/json");
-  if (init.body) headers.set("Content-Type", "application/json");
-  const response = await apiFetch(url, { ...init, headers });
-  if (!response.ok) {
-    let code: string | null = null;
-    let message = `Request failed (${String(response.status)})`;
-    let details: Record<string, unknown> | undefined;
-    try {
-      const body = (await response.json()) as {
-        error?: { code?: string; message?: string; details?: Record<string, unknown> };
-      };
-      code = body.error?.code ?? null;
-      message = body.error?.message ?? message;
-      details = body.error?.details;
-    } catch {
-      // not JSON
-    }
-    throw new ApiError(response.status, code, message, details);
-  }
-  return (await response.json()) as T;
-}
+export const fetchConversation = (id: string, signal?: AbortSignal) =>
+  api<ConversationDto>(`/api/conversations/${encodeURIComponent(id)}`, signal ? { signal } : {});
 
-/**
- * Query functions. Each takes the query's AbortSignal, so a superseded,
- * unmounted or account-cancelled request is aborted rather than resolved late
- * (INV-23; TanStack Query only aborts when the signal is consumed).
- */
-export const fetchers = {
-  session: (signal?: AbortSignal) =>
-    apiJson<SessionDto>("/api/auth/session", signal ? { signal } : {}),
-  conversations: async (signal?: AbortSignal) =>
-    (
-      await apiJson<{ conversations: ConversationSummary[] }>(
-        "/api/conversations",
-        signal ? { signal } : {},
-      )
-    ).conversations,
-  conversation: (id: string, signal?: AbortSignal, priority?: RequestPriority) =>
-    apiJson<ConversationDto>(`/api/conversations/${encodeURIComponent(id)}`, {
-      ...(signal ? { signal } : {}),
-      ...(priority ? { priority } : {}),
-    }),
-  skills: async (signal?: AbortSignal) =>
-    (await apiJson<{ skills: SkillDto[] }>("/api/skills", signal ? { signal } : {})).skills,
-  search: (q: string, signal?: AbortSignal) =>
-    apiJson<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`, signal ? { signal } : {}),
-  preferences: (signal?: AbortSignal) =>
-    apiJson<PreferencesDto>("/api/preferences", signal ? { signal } : {}),
-  memories: (signal?: AbortSignal) =>
-    apiJson<MemoryList>("/api/memories", signal ? { signal } : {}),
-  artifacts: (signal?: AbortSignal) =>
-    apiJson<ArtifactList>("/api/artifacts", signal ? { signal } : {}),
-  /** The inert source as text (never parsed as HTML). */
-  artifactSource: async (id: string, signal?: AbortSignal) => {
-    const response = await apiFetch(`/api/artifacts/${encodeURIComponent(id)}/source`, {
-      ...(signal ? { signal } : {}),
-    });
-    if (!response.ok) throw new ApiError(response.status, null, "The file couldn’t be loaded");
-    return response.text();
-  },
-  attachmentLimits: (signal?: AbortSignal) =>
-    apiJson<AttachmentLimitsDto>("/api/attachments/limits", signal ? { signal } : {}),
-  models: (refresh = false, signal?: AbortSignal) =>
-    apiJson<ModelListDto>(`/api/models${refresh ? "?refresh=1" : ""}`, signal ? { signal } : {}),
-};
-
-/** Not worth retrying: the server answered with a definite client error. */
-function retryable(failureCount: number, error: Error): boolean {
-  // Definite answers (4xx), expiry and account changes are final; only
-  // network failures (TypeError) and 5xx get one more try.
-  if (error instanceof ApiError) return error.status >= 500 && failureCount < 1;
-  return error.name === "TypeError" && failureCount < 1;
-}
-
-/**
- * Query options: the one pairing of key and fetcher per resource, used by
- * every consumer (and any later prefetch), so the cache identity never forks.
- */
-/** How often the model list may be re-read on focus. */
-export const MODEL_REFRESH_MS = 30_000;
-
-export const queries = {
-  conversations: (userId: string) =>
-    queryOptions({
-      queryKey: queryKeys.conversations(userId),
-      queryFn: ({ signal }) => fetchers.conversations(signal),
-      retry: retryable,
-    }),
-  // The user's skills: loaded after hydration (secondary; the "/" list and Settings).
-  skills: (userId: string) =>
-    queryOptions({
-      queryKey: queryKeys.skills(userId),
-      queryFn: ({ signal }) => fetchers.skills(signal),
-      retry: retryable,
-    }),
-  search: (userId: string, q: string) =>
-    queryOptions({
-      queryKey: queryKeys.search(userId, q),
-      queryFn: ({ signal }) => fetchers.search(q, signal),
-      retry: retryable,
-      staleTime: 10_000,
-    }),
-  preferences: (userId: string) =>
-    queryOptions({
-      queryKey: queryKeys.preferences(userId),
-      queryFn: ({ signal }) => fetchers.preferences(signal),
-      retry: retryable,
-    }),
-  memories: (userId: string) =>
-    queryOptions({
-      queryKey: queryKeys.memories(userId),
-      queryFn: ({ signal }) => fetchers.memories(signal),
-      retry: retryable,
-    }),
-  artifacts: (userId: string) =>
-    queryOptions({
-      queryKey: queryKeys.artifacts(userId),
-      queryFn: ({ signal }) => fetchers.artifacts(signal),
-      retry: retryable,
-    }),
-  artifactSource: (userId: string, id: string) =>
-    queryOptions({
-      queryKey: queryKeys.artifactSource(userId, id),
-      queryFn: ({ signal }) => fetchers.artifactSource(id, signal),
-      retry: retryable,
-      // Artifacts are immutable: the source never changes once captured.
-      staleTime: Number.POSITIVE_INFINITY,
-    }),
-  attachmentLimits: (userId: string) =>
-    queryOptions({
-      queryKey: queryKeys.attachmentLimits(userId),
-      queryFn: ({ signal }) => fetchers.attachmentLimits(signal),
-      retry: retryable,
-    }),
-  conversation: (userId: string, id: string) =>
-    queryOptions({
-      queryKey: queryKeys.conversation(userId, id),
-      queryFn: ({ signal }) => fetchers.conversation(id, signal),
-      retry: retryable,
-    }),
-  // Re-read when the tab regains focus (at most every 30 s), so models loaded
-  // or unloaded on a provider appear without a refresh button. A re-read
-  // bypasses the server's discovery cache; the first read does not.
-  models: (userId: string) =>
-    queryOptions({
-      queryKey: queryKeys.models(userId),
-      queryFn: ({ client, queryKey, signal }) =>
-        fetchers.models(client.getQueryData(queryKey) !== undefined, signal),
-      retry: retryable,
-      staleTime: MODEL_REFRESH_MS,
-      refetchOnWindowFocus: true,
-    }),
-};
-
-/** Drops every cached query and mutation that does not belong to `userId`. */
-export function purgeOtherAccounts(client: QueryClient, userId: string | null): void {
-  client.removeQueries({
-    predicate: (query) => query.queryKey[0] !== "user" || query.queryKey[1] !== userId,
+export function useConversations(userId: string) {
+  return useQuery({
+    queryKey: keys.conversations(userId),
+    queryFn: ({ signal }) => api<ConversationList>("/api/conversations", { signal }),
   });
-  client.getMutationCache().clear();
+}
+
+export function useConversation(userId: string, id: string | undefined) {
+  return useQuery({
+    queryKey: keys.conversation(userId, id ?? ""),
+    queryFn: ({ signal }) => fetchConversation(id ?? "", signal),
+    enabled: Boolean(id),
+  });
+}
+
+export function useModels(userId: string) {
+  return useQuery({
+    queryKey: keys.models(userId),
+    queryFn: ({ signal }) => api<ModelListDto>("/api/models", { signal }),
+    staleTime: 60_000,
+  });
+}
+
+export function usePreferences(userId: string) {
+  return useQuery({
+    queryKey: keys.preferences(userId),
+    queryFn: ({ signal }) => api<Preferences>("/api/preferences", { signal }),
+  });
+}
+
+export function useSkills(userId: string) {
+  return useQuery({
+    queryKey: keys.skills(userId),
+    queryFn: ({ signal }) => api<{ skills: SkillDto[] }>("/api/skills", { signal }),
+    select: (data) => data.skills,
+  });
+}
+
+export function useAttachmentLimits(userId: string) {
+  return useQuery({
+    queryKey: keys.attachmentLimits(userId),
+    queryFn: ({ signal }) => api<AttachmentLimitsDto>("/api/attachments/limits", { signal }),
+  });
 }

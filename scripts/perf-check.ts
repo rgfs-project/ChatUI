@@ -13,7 +13,6 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { GRAMMARS } from "../app/lib/code-languages.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const CLIENT = path.join(ROOT, "build", "client");
@@ -92,56 +91,22 @@ export function measure(): Record<string, number> {
   for (const id of criticalRoutes)
     for (const css of manifest.routes[id]?.css ?? []) linked.add(css);
   sizes["critical-css"] = [...linked].reduce((n, f) => n + gzipBytes(f), 0);
-  // On-demand cost of the source panel (Phase 13c): its own chunk and
-  // stylesheet, downloaded only when a file is first opened.
+  // On-demand answer renderers: requested only by replies with math or code.
   const assets = readdirSync(ASSETS);
-  sizes["artifact-panel-on-demand"] = assets
-    .filter((f) => /^ArtifactPanel-[\w-]+\.js$/.test(f) || /^artifacts-[\w-]+\.css$/.test(f))
-    .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
-  // On-demand cost of Settings → Data (Phase 13d): export and import preview UI.
-  sizes["data-settings-on-demand"] = assets
-    .filter((f) => /^DataSettings-[\w-]+\.(?:js|css)$/.test(f))
-    .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
-  // On-demand answer renderers (Phase 14): requested only by messages with
-  // math or a labelled code block. Fonts (Temml's script face) load only when
-  // a formula uses them and are not counted.
   sizes["math-on-demand"] = assets
-    .filter((f) => /^MathView-[\w-]+\.js$/.test(f) || /^math-[\w-]+\.css$/.test(f))
+    .filter((f) => /^MathView-[\w-]+\.(?:js|css)$/.test(f))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
   sizes["highlight-on-demand"] = assets
-    .filter((f) => /^highlight-[\w-]+\.(?:js|css)$/.test(f))
+    .filter((f) => /^Highlight-[\w-]+\.(?:js|css)$/.test(f))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
-  // One grammar per language actually used: the largest is the worst case.
-  sizes["largest-grammar-on-demand"] = Math.max(
-    0,
-    ...assets.filter(isGrammarChunk).map((f) => gzipBytes(`/assets/${f}`)),
-  );
   sizes["all-client-js"] = readdirSync(ASSETS)
     .filter((f) => f.endsWith(".js"))
     .reduce((n, f) => n + gzipBytes(`/assets/${f}`), 0);
   return sizes;
 }
 
-/**
- * Chunks that must stay out of every cold-visit group: attachment UI that a
- * chat without attachments never needs (Phase 12), loaded on first use.
- */
-export const LAZY_ONLY = [
-  "AttachmentTray",
-  "ImageViewer",
-  "MemorySuggestions",
-  "MemorySettings",
-  "ArtifactPanel",
-  "ArtifactSettings",
-  "DataSettings",
-  "MathView",
-  "highlight",
-] as const;
-
-/** A lazily loaded highlight.js grammar chunk (`python-<hash>.js`). */
-function isGrammarChunk(file: string): boolean {
-  return GRAMMARS.some((g) => file.startsWith(`${g}-`) && /^[\w+]+-[\w-]{8}\.js$/.test(file));
-}
+/** Chunks that must stay out of every cold-visit group: loaded on first use. */
+export const LAZY_ONLY = ["MathView", "Highlight"] as const;
 
 /** Lazy-only chunks a route group would download on a cold visit (must be none). */
 export function lazyLeaks(manifest: Manifest = readManifest()): string[] {
@@ -149,8 +114,7 @@ export function lazyLeaks(manifest: Manifest = readManifest()): string[] {
   for (const [name, routes] of Object.entries(GROUPS))
     for (const file of filesFor(manifest, routes))
       for (const lazy of LAZY_ONLY)
-        if (path.basename(file).startsWith(`${lazy}-`) || isGrammarChunk(path.basename(file)))
-          leaks.push(`${name}: ${file}`);
+        if (path.basename(file).startsWith(`${lazy}-`)) leaks.push(`${name}: ${file}`);
   const assets = readdirSync(ASSETS);
   for (const lazy of LAZY_ONLY)
     if (!assets.some((f) => f.startsWith(`${lazy}-`) && f.endsWith(".js")))

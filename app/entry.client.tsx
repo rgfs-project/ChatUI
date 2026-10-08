@@ -3,8 +3,7 @@ import { hydrateRoot } from "react-dom/client";
 import { setNonce } from "get-nonce";
 import { HydratedRouter } from "react-router/dom";
 
-// Radix's scroll lock injects a <style> element; give it this response's CSP
-// nonce (browsers expose it as the script element's `nonce` property only).
+// Radix's scroll lock injects a <style>; give it this response's CSP nonce.
 const scriptNonce = document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce;
 if (scriptNonce) setNonce(scriptNonce);
 

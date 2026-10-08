@@ -1,20 +1,15 @@
-import { data } from "react-router";
+import { data, redirect } from "react-router";
 import { appContext } from "../context";
-import { SettingsPanel } from "./settings";
+import { paths } from "../lib/paths";
 import type { Route } from "./+types/admin";
 
-export function meta(): Route.MetaDescriptors {
-  return [{ title: "Administration · ChatUI" }];
-}
-
-/** The server decides who may see it (404 otherwise, never a hint that it exists). */
+/** Administration now lives in Settings; non-admins see nothing here. */
 export function loader({ context }: Route.LoaderArgs) {
   const { auth } = context.get(appContext);
   if (auth?.role !== "admin") throw data("Not found", { status: 404 });
-  return null;
+  throw redirect(paths.settings("users"));
 }
 
-/** Administration is a group of Settings sections: `/admin` opens Settings on Users. */
-export default function AdminOverlay() {
-  return <SettingsPanel initial="users" />;
+export default function Admin() {
+  return null;
 }

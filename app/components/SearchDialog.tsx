@@ -1,169 +1,127 @@
-import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquare, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-import { SEARCH_LIMITS, type SearchResult } from "@shared/conversations";
-import { useFocusReturn } from "../lib/focus-return";
+import { Link } from "react-router";
+import type { SearchResponse } from "@shared/conversations";
+import { api } from "../lib/api";
 import { paths } from "../lib/paths";
-import "./operations.css";
-import { queries } from "../lib/query";
+import { useConversations } from "../lib/query";
+import { splitConversations } from "./Sidebar";
+import { Dialog } from "./ui";
 
-/** Keystrokes settle this long before a query is sent. */
-const DEBOUNCE_MS = 200;
-
-function optionId(index: number): string {
-  return `search-option-${String(index)}`;
-}
-
-/** Where a result goes: the conversation, scrolled to the matching message. */
-export function resultHref(result: SearchResult): string {
-  return `${paths.chat(result.conversationId)}${result.messageId ? `#m-${result.messageId}` : ""}`;
-}
-
-/**
- * Search chats (Phase 13a, INV-36; loaded when opened). A Radix Dialog with a
- * combobox: typing searches the signed-in user's titles and messages
- * (debounced, bounded by the server); ↑/↓ move through the results, Enter
- * opens the conversation at the matching message, Escape closes.
- */
-export function SearchDialog({
-  userId,
-  onClose,
-  onNavigate,
-}: {
-  userId: string;
-  /** `navigated`: a result was opened (focus then stays with the new page). */
-  onClose: (navigated: boolean) => void;
-  onNavigate: () => void;
-}) {
-  const navigate = useNavigate();
-  const focus = useFocusReturn();
-  const [text, setText] = useState("");
-  const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
+function useDebounced(value: string, ms: number) {
+  const [debounced, setDebounced] = useState(value);
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setQuery(text.trim());
-      setActive(0);
-    }, DEBOUNCE_MS);
+    const t = setTimeout(() => {
+      setDebounced(value);
+    }, ms);
     return () => {
-      clearTimeout(timer);
+      clearTimeout(t);
     };
-  }, [text]);
-  const search = useQuery({ ...queries.search(userId, query), enabled: query !== "" });
-  const results = query === "" ? [] : (search.data?.results ?? []);
-  const current = Math.min(active, results.length - 1);
+  }, [value, ms]);
+  return debounced;
+}
 
-  const open = (result: SearchResult) => {
-    onNavigate();
-    onClose(true);
-    void navigate(resultHref(result));
+/** Search chats: recent ones until something is typed, then matches with snippets. */
+export function SearchDialog(props: {
+  userId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [text, setText] = useState("");
+  const q = useDebounced(text.trim(), 200);
+  const conversations = useConversations(props.userId);
+  const results = useQuery({
+    queryKey: ["user", props.userId, "search", q],
+    queryFn: ({ signal }) =>
+      api<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}`, { signal }),
+    enabled: props.open && q.length > 0,
+    staleTime: 10_000,
+  });
+  const close = () => {
+    props.onOpenChange(false);
+    setText("");
   };
-
-  const status =
-    query === ""
-      ? "Search your chat titles and messages."
-      : search.isPending
-        ? "Searching…"
-        : search.isError
-          ? "Search failed. Try again."
-          : results.length === 0
-            ? "No matches."
-            : `${String(results.length)}${search.data.truncated ? "+" : ""} result${results.length === 1 ? "" : "s"}${
-                search.data.skippedMalformed
-                  ? ` (${String(search.data.skippedMalformed)} unreadable chat${search.data.skippedMalformed === 1 ? "" : "s"} skipped)`
-                  : ""
-              }`;
+  const { pinned, recents } = splitConversations(conversations.data?.conversations ?? []);
+  const recent = [...pinned, ...recents].slice(0, 12);
 
   return (
-    <Dialog.Root
-      open
-      onOpenChange={(isOpen) => {
-        if (!isOpen) onClose(false);
+    <Dialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (open) props.onOpenChange(true);
+        else close();
       }}
+      title="Search chats"
+      hideTitle
+      className="search-dialog"
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content
-          className="dialog-content search-dialog"
-          data-testid="search-dialog"
-          onOpenAutoFocus={focus.onOpenAutoFocus}
-          onCloseAutoFocus={focus.onCloseAutoFocus}
-        >
-          <Dialog.Title className="visually-hidden">Search chats</Dialog.Title>
-          <Dialog.Description className="visually-hidden">
-            Type to search; use the arrow keys to choose a result and Enter to open it.
-          </Dialog.Description>
-          <div className="search-field">
-            <Search size={18} aria-hidden />
-            <input
-              className="search-input"
-              type="search"
-              role="combobox"
-              aria-label="Search chats"
-              aria-expanded={results.length > 0}
-              aria-controls="search-results"
-              aria-autocomplete="list"
-              aria-activedescendant={results.length > 0 ? optionId(current) : undefined}
-              placeholder="Search chats"
-              maxLength={SEARCH_LIMITS.maxQuery}
-              value={text}
-              autoFocus
-              onChange={(event) => {
-                setText(event.currentTarget.value);
-              }}
-              onKeyDown={(event) => {
-                if (results.length === 0) return;
-                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  const step = event.key === "ArrowDown" ? 1 : results.length - 1;
-                  setActive((current + step) % results.length);
-                } else if (event.key === "Enter") {
-                  event.preventDefault();
-                  const chosen = results[current];
-                  if (chosen) open(chosen);
-                }
-              }}
-            />
-          </div>
-          <p className="search-status" role="status" aria-live="polite">
-            {status}
+      <label className="search-field">
+        <Search size={18} aria-hidden />
+        <span className="sr-only">Search chats</span>
+        <input
+          type="search"
+          placeholder="Search chats"
+          value={text}
+          autoFocus
+          maxLength={200}
+          onChange={(e) => {
+            setText(e.target.value);
+          }}
+        />
+      </label>
+      <div className="search-results" aria-live="polite">
+        {q === "" ? (
+          <>
+            <p className="list-heading">Recent</p>
+            {recent.length === 0 ? <p className="muted pad">No conversations yet.</p> : null}
+            <ul>
+              {recent.map((c) => (
+                <li key={c.id}>
+                  <Link to={paths.chat(c.id)} onClick={close} className="search-row">
+                    <MessageSquare size={18} aria-hidden />
+                    <span className="search-title">{c.title || "New chat"}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : results.isError ? (
+          <p className="error pad" role="alert">
+            Search failed. Try again.
           </p>
-          <ul id="search-results" role="listbox" aria-label="Results" className="search-results">
-            {results.map((result, index) => (
-              <li
-                key={`${result.conversationId}:${result.messageId ?? "title"}`}
-                id={optionId(index)}
-                role="option"
-                aria-selected={index === current}
-                className={`search-result${index === current ? " active" : ""}`}
-                onPointerMove={() => {
-                  setActive(index);
-                }}
-                onClick={() => {
-                  open(result);
-                }}
-              >
-                <MessageSquare size={16} aria-hidden />
-                <span className="search-text">
-                  <span className="search-title">{result.title}</span>
-                  <span className="search-snippet">
-                    {result.role ? (
-                      <span className="visually-hidden">
-                        {result.role === "user" ? "You: " : "Assistant: "}
-                      </span>
-                    ) : null}
-                    {result.snippet.before}
-                    <mark>{result.snippet.match}</mark>
-                    {result.snippet.after}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        ) : results.data ? (
+          <>
+            {results.data.results.length === 0 ? (
+              <p className="muted pad">No chats match “{q}”.</p>
+            ) : null}
+            <ul>
+              {results.data.results.map((r) => (
+                <li key={`${r.conversationId}-${r.messageId ?? "title"}`}>
+                  <Link to={paths.chat(r.conversationId)} onClick={close} className="search-row">
+                    <MessageSquare size={18} aria-hidden />
+                    <span className="search-text">
+                      <span className="search-title">{r.title || "New chat"}</span>
+                      {r.messageId ? (
+                        <span className="search-snippet">
+                          {r.snippet.before}
+                          <mark>{r.snippet.match}</mark>
+                          {r.snippet.after}
+                        </span>
+                      ) : null}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {results.data.truncated ? (
+              <p className="muted pad">More matches exist; refine your search.</p>
+            ) : null}
+          </>
+        ) : (
+          <p className="muted pad">Searching…</p>
+        )}
+      </div>
+    </Dialog>
   );
 }

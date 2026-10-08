@@ -458,6 +458,16 @@ Structured JSON (pino). Redacted at the top level and one level down: `authoriza
 - Documents and `.data` route data are `private, no-store`.
 - HTML and JSON are deliberately _not_ compressed in-process. They carry the CSRF token and user content next to reflected input (a BREACH risk), so compression of those is left to the TLS proxy's policy.
 
+## Client UI rewrite (design direction B)
+
+The browser UI under `app/` was rebuilt from scratch to the "direction B" design (function over form: white space, one near-black, soft grey fills, one 12 px corner radius on every outer shape, no outlines, a faint shadow only where something floats; blue only for a tool that is on, red only for delete). The server, `shared/` and the API are unchanged. Where the client-side sections below (Phases 7–18) describe specific components, files or behaviors of the earlier client, this section takes precedence.
+
+- **Layout.** A 260 px sidebar (brand, New chat, Search chats, Pinned, Recents, the account menu) that hides to a 60 px icon rail on wide screens; on phones a top bar and a modal drawer. New chats show "How can I help?", the composer and the three most recent chats.
+- **Composer.** One bar: add files, the message box with a `/` menu (skills first, then `/model`, `/new`, `/rename`, `/delete`, `/settings`), the model picker beside Send (Stop while a reply is written). A chosen skill sits in the bar as a blue chip. It is a `<form>` whose Send button is disabled until there is something to send, so nothing is sent before hydration.
+- **Settings.** One dialog (`/settings?section=…`) over the chat you came from: General, Account, Data, Skills, Memories, Files, and for administrators Users, Providers, Models, Instance, Maintenance and Audit log (administration moved here; `/admin` redirects). Rows sit in white grouped cards on the grey panel; on phones the section list and a section are separate screens.
+- **Code.** `app/lib` holds the session store and fetch wrapper (CSRF and expected-user headers, one refresh on a stale token), query keys scoped by user id, the SSE reply watcher (`generation.ts`, pure `applyEvent` reducer) and idempotent sends (`send.ts`, one operation key per send, retried on unknown outcomes). `app/components` holds the chat surfaces; `app/settings` the settings sections. Math (Temml) and syntax colors (lowlight) are lazy chunks.
+- **Not in this UI.** The design shows two-step sign-in codes; the server has no two-step verification yet, so those screens are not built.
+
 ## Core UI (Phase 7)
 
 ### Routes and shell (INV-53)

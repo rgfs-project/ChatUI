@@ -1,506 +1,430 @@
-import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { ArrowUp, Plus, Square } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from "react";
-import { acceptAttribute } from "@shared/attachment-media";
-import type { ModelListDto } from "@shared/generations";
-import type { DraftAttachment } from "../lib/attachments";
-import { menuRequest, type MenuRequest } from "../lib/menu-request";
-import { markOnce } from "../lib/perf";
-import { fetchers, queryKeys } from "../lib/query";
-import { useShell } from "../lib/shell-context";
 import {
-  COMMAND_MENU_ID,
-  CommandMenu,
-  commandOptionId,
-  commandQuery,
-  filterCommands,
-  type Command,
-} from "./CommandMenu";
-import { ModelTrigger } from "./ModelTrigger";
+  ArrowUp,
+  BookOpen,
+  Cpu,
+  FileText,
+  Music,
+  Pencil,
+  Plus,
+  Settings,
+  Square,
+  SquarePen,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import {
+  acceptAttribute,
+  attachmentContentUrl,
+  type AttachmentDto,
+  type AttachmentKind,
+} from "@shared/attachments";
+import type { ModelListDto } from "@shared/generations";
+import type { SkillDto } from "@shared/skills";
+import { messageOf } from "../lib/api";
+import { deletePendingAttachment, uploadAttachment } from "../lib/attachments";
+import { formatBytes } from "../lib/format";
+import type { ModelChoice } from "../lib/models";
+import { ModelPicker } from "./ModelPicker";
+import { IconButton } from "./ui";
 
-// The model menu is Radix (Phase 9: menus load on demand); a same-looking
-// button stands in until it is first wanted.
-const loadMenus = () => import("./Menus");
-const ModelMenu = lazy(() => loadMenus().then((m) => ({ default: m.ModelMenu })));
+export type BuiltIn = "model" | "new" | "rename" | "delete" | "settings";
 
-// The tray loads with the first attachment (Phase 12): not in the critical chunk.
-const AttachmentTray = lazy(() =>
-  import("./AttachmentTray").then((m) => ({ default: m.AttachmentTray })),
-);
-
-/** Files from a paste or drop (images, audio and text files; the server decides). */
-function filesOf(list: FileList | null | undefined): File[] {
-  return list ? Array.from(list) : [];
+interface Command {
+  name: string;
+  hint: string;
+  icon: ReactNode;
+  builtIn?: BuiltIn;
+  skill?: SkillDto;
 }
 
-/**
- * An Enter that belongs to an input method (IME) composition, which must never
- * send. Safari reports the Enter that commits a composition with
- * `isComposing: false` but the legacy keyCode 229, so both are checked.
- */
-function composing(event: KeyboardEvent): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the only Safari signal
-  return event.isComposing || event.keyCode === 229;
-}
+const BUILT_INS: { name: BuiltIn; hint: string; icon: ReactNode; needsChat?: boolean }[] = [
+  { name: "model", hint: "Choose the model for this chat", icon: <Cpu size={18} aria-hidden /> },
+  { name: "new", hint: "Start a new chat", icon: <SquarePen size={18} aria-hidden /> },
+  {
+    name: "rename",
+    hint: "Rename this chat",
+    icon: <Pencil size={18} aria-hidden />,
+    needsChat: true,
+  },
+  {
+    name: "delete",
+    hint: "Delete this chat",
+    icon: <Trash2 size={18} aria-hidden />,
+    needsChat: true,
+  },
+  { name: "settings", hint: "Open settings", icon: <Settings size={18} aria-hidden /> },
+];
 
-/** A `(providerId, modelId)` pair; the server validates it on every send. */
-export type ModelChoice = [string, string];
-
-function pairKey(pair: ModelChoice): string {
-  return JSON.stringify(pair);
-}
-
-type ModelsState =
-  | { kind: "loading" }
-  | { kind: "error" }
-  | { kind: "none-configured" }
-  | { kind: "all-unavailable" }
-  | { kind: "no-models" }
-  | { kind: "ready"; degraded: boolean };
-
-function modelsState(models: UseQueryResult<ModelListDto>): ModelsState {
-  const data = models.data;
-  if (!data) return models.isError ? { kind: "error" } : { kind: "loading" };
-  const groups = data.providers;
-  const down = (g: (typeof groups)[number]) =>
-    g.provider.status === "unavailable" || g.provider.status === "invalid";
-  const count = groups.reduce((n, g) => n + g.models.length, 0);
-  if (groups.length === 0) return { kind: "none-configured" };
-  if (count === 0) return groups.every(down) ? { kind: "all-unavailable" } : { kind: "no-models" };
-  return { kind: "ready", degraded: groups.every(down) };
-}
-
-const EMPTY_MESSAGE: Record<Exclude<ModelsState["kind"], "ready" | "loading">, string> = {
-  error: "The model list couldn’t be loaded.",
-  "none-configured": "No models are available: no model provider is configured yet.",
-  "all-unavailable": "All model providers are unavailable right now.",
-  "no-models": "No models are available from the configured providers.",
-};
-
-/**
- * The composer: a native uncontrolled textarea (survives hydration; contracts
- * §13) in a pill with the model selector and Send/Stop. Sending needs a
- * hydrated page and a server-known model; nothing secondary gates it. The
- * parent decides whether a submission is sent now or queued (while a reply
- * runs). A message that is exactly "/filter" opens the command list instead.
- */
-export function Composer({
-  userId,
-  textareaRef,
-  draftKey,
-  hydrated,
-  inert,
-  running,
-  sending,
-  status,
-  models,
-  preferred: remembered,
-  commands,
-  onSubmit,
-  onCommand,
-  onCommandIntent,
-  onCancel,
-  attachments = [],
-  attachNotice = null,
-  onAttach,
-  onRemoveAttachment,
-}: {
-  userId: string;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
-  draftKey: string;
-  hydrated: boolean;
-  inert: boolean;
-  running: boolean;
-  sending: boolean;
-  status: string | null;
-  models: UseQueryResult<ModelListDto>;
-  preferred: ModelChoice | null;
-  commands: readonly Command[];
-  onSubmit: (content: string, choice: ModelChoice) => void;
-  onCommand: (name: string) => void;
-  /** The user started a "/" command (load anything the list needs). */
-  onCommandIntent?: () => void;
-  onCancel: () => void;
-  /** The draft's attachments (Phase 12). */
-  attachments?: readonly DraftAttachment[];
-  /** Why files were refused before upload (e.g. too many). */
-  attachNotice?: string | null;
-  onAttach?: (files: File[]) => void;
-  onRemoveAttachment?: (localId: string) => void;
-}) {
-  const shell = useShell();
-  const client = useQueryClient();
-  // The model menu: mounted (its chunk loaded) once first wanted, then kept.
-  const [modelMenu, setModelMenu] = useState<MenuRequest | null>(null);
-  const [modelOpen, setModelOpen] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [selected, setSelected] = useState<string | undefined>(undefined);
-  const [refreshing, setRefreshing] = useState(false);
-  const [hasDraft, setHasDraft] = useState(false);
-  // "/" commands: the typed filter (null: closed) and the highlighted option.
-  const [slash, setSlash] = useState<string | null>(null);
-  const [activeCommand, setActiveCommand] = useState(0);
-  const state = modelsState(models);
-  const groups = models.data?.providers ?? [];
-  const allModels = groups.flatMap((g) => g.models);
-  const preferred =
-    (remembered &&
-      allModels.find((m) => m.providerId === remembered[0] && m.id === remembered[1])) ??
-    allModels.find(
-      (m) =>
-        m.providerId === models.data?.defaultModel?.providerId &&
-        m.id === models.data.defaultModel.modelId,
-    ) ??
-    allModels.find((m) => m.status === "loaded") ??
-    allModels[0];
-  const selectedValue =
-    selected ?? (preferred ? pairKey([preferred.providerId, preferred.id]) : "");
-  const ready = hydrated && state.kind === "ready" && !inert;
-  // Attachments: sending waits for uploads; a model must read each modality (INV-44).
-  const live = attachments.filter((a) => a.status !== "error");
-  const uploading = live.some((a) => a.status === "uploading");
-  const hasReady = live.some((a) => a.status === "ready");
-  let selectedModel: (typeof allModels)[number] | undefined;
-  try {
-    const [providerId, modelId] = JSON.parse(selectedValue || "null") as ModelChoice;
-    selectedModel = allModels.find((m) => m.providerId === providerId && m.id === modelId);
-  } catch {
-    selectedModel = undefined;
-  }
-  const modelDisabled = allModels.length === 0 || inert;
-  const modelLabel =
-    selectedModel?.id ??
-    (allModels.length === 0
-      ? state.kind === "loading"
-        ? "Loading models…"
-        : "No models available"
-      : "Choose a model");
-  const modelGroups = groups.map((group) => ({
-    id: group.provider.id,
-    label: `${group.provider.name}${
-      group.provider.status === "unavailable"
-        ? " (unavailable)"
-        : group.stale
-          ? " (list may be out of date)"
-          : ""
-    }`,
-    options: group.models.map((model) => ({
-      value: pairKey([model.providerId, model.id]),
-      label: model.id,
-      detail: model.status === "unloaded" ? "Not loaded" : undefined,
-    })),
+/** The commands a "/query" offers: skills first, then the built-ins. */
+export function matchCommands(
+  query: string,
+  skills: readonly SkillDto[],
+  inChat: boolean,
+): Command[] {
+  const q = query.toLowerCase();
+  const fromSkills: Command[] = skills
+    .filter((s) => s.enabled && s.name.startsWith(q))
+    .map((s) => ({
+      name: s.name,
+      hint: s.description || "Your skill",
+      icon: <BookOpen size={18} aria-hidden />,
+      skill: s,
+    }));
+  const builtIns: Command[] = BUILT_INS.filter(
+    (b) => b.name.startsWith(q) && (inChat || !b.needsChat),
+  ).map((b) => ({
+    name: b.name,
+    hint: b.hint,
+    icon: b.icon,
+    builtIn: b.name,
   }));
-  const accepts = selectedModel?.capabilities.inputModalities ?? [];
-  const missing = (["image", "audio"] as const).filter(
-    (kind) => selectedModel && live.some((a) => a.kind === kind) && !accepts.includes(kind),
-  );
-  const capabilityWarning =
-    missing.length > 0 && selectedModel
-      ? `${selectedModel.id} can't read ${missing.map((k) => (k === "image" ? "images" : "audio")).join(" or ")}. Choose another model or remove the attachment.`
-      : null;
-  const canSend = ready && !running && !sending && !uploading && capabilityWarning === null;
+  return [...fromSkills, ...builtIns];
+}
 
-  const shown = slash === null ? [] : filterCommands(commands, slash);
-  const commandOpen = shown.length > 0;
-  const activeIndex = Math.min(activeCommand, shown.length - 1);
-  const active = shown[activeIndex];
+interface Upload {
+  key: string;
+  file: File;
+  status: "uploading" | "done" | "failed";
+  dto?: AttachmentDto;
+  error?: string;
+}
 
-  // Send controls are usable (hydrated, a server-known model): ComposerTTI ends.
-  const interactive = hydrated && state.kind === "ready" && !inert;
-  useEffect(() => {
-    if (interactive) markOnce("chatui:composer-interactive");
-  }, [interactive]);
+export interface ComposerProps {
+  models: ModelListDto | undefined;
+  model: ModelChoice | null;
+  onModelChange: (choice: ModelChoice) => void;
+  /** Kinds the chosen model accepts besides text. */
+  kinds: readonly AttachmentKind[];
+  maxPerMessage: number;
+  imageMaxEdge: number;
+  skills: readonly SkillDto[];
+  inChat: boolean;
+  generating: boolean;
+  onSend: (message: { content: string; attachments: AttachmentDto[] }) => Promise<boolean>;
+  onStop: () => void;
+  onCommand: (command: BuiltIn) => void;
+  placeholder?: string;
+}
 
-  function refreshModels() {
-    setRefreshing(true);
-    void fetchers
-      .models(true)
-      .then((data) => {
-        client.setQueryData(queryKeys.models(userId), data);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        setRefreshing(false);
-      });
-  }
+/** The message bar: add files, text with a "/" menu, the model, Send or Stop. */
+export function Composer(props: ComposerProps) {
+  const [text, setText] = useState("");
+  const [skill, setSkill] = useState<SkillDto | null>(null);
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [activeState, setActiveState] = useState({ query: "", index: 0 });
+  const [menuDismissed, setMenuDismissed] = useState<string | null>(null);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const listId = useId();
 
-  function clear() {
-    const el = textareaRef.current;
-    if (el) el.value = "";
-    shell.clearDraft(draftKey);
-    setHasDraft(false);
-    setSlash(null);
-  }
+  // Text typed before hydration is kept.
+  useLayoutEffect(() => {
+    const value = textarea.current?.value;
+    if (value) setText(value);
+  }, []);
 
-  function submit() {
-    const el = textareaRef.current;
-    const content = el?.value.trim() ?? "";
-    if (!content && !hasReady) {
-      el?.focus();
+  // The box grows with its text, up to a limit.
+  useLayoutEffect(() => {
+    const el = textarea.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${String(Math.min(el.scrollHeight, 240))}px`;
+  }, [text]);
+
+  const slash = /^\/([a-z0-9-]*)$/.exec(text);
+  const commands =
+    slash && menuDismissed !== text
+      ? matchCommands(slash[1] ?? "", props.skills, props.inChat)
+      : [];
+  const menuOpen = commands.length > 0;
+  // The highlighted command resets whenever the query changes.
+  const query = slash?.[1] ?? "";
+  const active = activeState.query === query ? activeState.index : 0;
+  const setActive = (index: number) => {
+    setActiveState({ query, index });
+  };
+  const activeIndex = Math.min(active, Math.max(0, commands.length - 1));
+
+  const uploading = uploads.some((u) => u.status === "uploading");
+  const ready = uploads
+    .filter((u) => u.status === "done" && u.dto)
+    .map((u) => u.dto as AttachmentDto);
+  const hasContent = text.trim() !== "" || ready.length > 0 || skill !== null;
+  const canSend = hasContent && !uploading && !sending && !props.generating && props.model !== null;
+
+  function choose(command: Command) {
+    setText("");
+    setMenuDismissed(null);
+    if (command.skill) {
+      setSkill(command.skill);
+      textarea.current?.focus();
       return;
     }
-    if (uploading || capabilityWarning) return;
-    let choice: ModelChoice;
+    if (command.builtIn === "model") {
+      setModelOpen(true);
+      return;
+    }
+    if (command.builtIn) props.onCommand(command.builtIn);
+  }
+
+  async function send() {
+    if (!canSend) return;
+    const body = text.trim();
+    const content = skill ? `/${skill.name}${body ? ` ${body}` : ""}` : body;
+    setSending(true);
+    setError(null);
     try {
-      choice = JSON.parse(selectedValue) as ModelChoice;
-    } catch {
-      return;
-    }
-    if (ready) onSubmit(content, choice);
-  }
-
-  function runCommand(command: Command) {
-    if (command.kind === "skill") {
-      // A skill applies to the message: insert "/name " and keep typing.
-      const el = textareaRef.current;
-      if (el) {
-        el.value = `/${command.name} `;
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
+      const ok = await props.onSend({ content, attachments: ready });
+      if (ok) {
+        setText("");
+        setSkill(null);
+        setUploads([]);
       }
-      return;
-    }
-    clear();
-    if (command.name !== "model") {
-      onCommand(command.name);
-      return;
-    }
-    // "/model" opens the model menu with its current model focused.
-    setModelMenu((request) => request ?? "keyboard");
-    setModelOpen(true);
-  }
-
-  function chooseModel(value: string) {
-    setSelected(value);
-    try {
-      shell.setModel(draftKey, JSON.parse(value) as ModelChoice);
-    } catch {
-      // not a model pair
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setSending(false);
     }
   }
 
-  const notice =
-    state.kind === "ready"
-      ? state.degraded
-        ? "Model providers are unreachable; the list may be out of date."
-        : null
-      : state.kind === "loading"
-        ? null
-        : EMPTY_MESSAGE[state.kind];
+  function addFiles(files: readonly File[]) {
+    const room = props.maxPerMessage - uploads.length;
+    if (files.length > room)
+      setError(`You can attach up to ${String(props.maxPerMessage)} files to a message.`);
+    for (const file of files.slice(0, Math.max(0, room))) {
+      const key = crypto.randomUUID();
+      setUploads((list) => [...list, { key, file, status: "uploading" }]);
+      uploadAttachment(file, props.imageMaxEdge).then(
+        (dto) => {
+          setUploads((list) =>
+            list.map((u) => (u.key === key ? { ...u, status: "done", dto } : u)),
+          );
+        },
+        (e: unknown) => {
+          setUploads((list) =>
+            list.map((u) => (u.key === key ? { ...u, status: "failed", error: messageOf(e) } : u)),
+          );
+        },
+      );
+    }
+  }
 
-  const attachable = hydrated && !inert && onAttach !== undefined;
+  function removeUpload(upload: Upload) {
+    setUploads((list) => list.filter((u) => u.key !== upload.key));
+    if (upload.dto) void deletePendingAttachment(upload.dto.id);
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing) return;
+    if (menuOpen) {
+      const command = commands[activeIndex];
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActive((activeIndex + 1) % commands.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActive((activeIndex - 1 + commands.length) % commands.length);
+        return;
+      }
+      if ((event.key === "Enter" || event.key === "Tab") && command) {
+        event.preventDefault();
+        choose(command);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMenuDismissed(text);
+        return;
+      }
+    }
+    if (event.key === "Backspace" && text === "" && skill) {
+      setSkill(null);
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void send();
+    }
+  }
+
   return (
-    <form
-      className={`composer${dragging ? " dragging" : ""}`}
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-      aria-label="Message composer"
-      onDragOver={(event) => {
-        if (!attachable || !event.dataTransfer.types.includes("Files")) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "copy";
-        setDragging(true);
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
-      }}
-      onDrop={(event) => {
-        setDragging(false);
-        const files = filesOf(event.dataTransfer.files);
-        if (!attachable || files.length === 0) return;
-        event.preventDefault();
-        onAttach(files);
-      }}
-    >
-      {notice ? (
-        <div className="models-notice" role="status" data-testid="models-notice">
-          <span>{notice}</span>
-          <button
-            type="button"
-            className="link-button"
-            onClick={refreshModels}
-            disabled={!hydrated || refreshing}
-          >
-            {refreshing ? "Checking…" : "Retry"}
-          </button>
-        </div>
-      ) : null}
-      {capabilityWarning ? (
-        <div className="models-notice" role="alert" data-testid="capability-warning">
-          <span>{capabilityWarning}</span>
-        </div>
-      ) : null}
-      <p
-        className="gen-status composer-status"
-        role="status"
-        aria-live="polite"
-        data-testid="status"
-      >
-        {status ?? attachNotice ?? ""}
-      </p>
-      {commandOpen ? (
-        <CommandMenu
-          commands={shown}
-          activeIndex={activeIndex}
-          onPick={runCommand}
-          onHover={setActiveCommand}
-        />
-      ) : null}
-      <div className={`composer-box${attachments.length > 0 ? " has-attachments" : ""}`}>
-        {attachments.length > 0 && onRemoveAttachment ? (
-          <Suspense fallback={null}>
-            <AttachmentTray items={attachments} onRemove={onRemoveAttachment} />
-          </Suspense>
-        ) : null}
-        <button
-          type="button"
-          className="icon-btn attach-btn"
-          aria-label="Attach files"
-          title="Attach images, audio or text files"
-          disabled={!attachable}
-          // The picker opens only from this genuine user activation.
-          onClick={() => fileRef.current?.click()}
-        >
-          <Plus size={20} aria-hidden />
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          hidden
-          tabIndex={-1}
-          accept={acceptAttribute()}
-          data-testid="file-input"
-          onChange={(event) => {
-            const files = filesOf(event.currentTarget.files);
-            event.currentTarget.value = "";
-            if (files.length > 0) onAttach?.(files);
-          }}
-        />
-        <label htmlFor="message" className="visually-hidden">
-          Message
-        </label>
-        <textarea
-          id="message"
-          name="message"
-          ref={textareaRef}
-          rows={1}
-          // Right-to-left scripts type right to left.
-          dir="auto"
-          placeholder={running ? "Queue a message" : "Ask anything"}
-          aria-autocomplete="list"
-          aria-controls={commandOpen ? COMMAND_MENU_ID : undefined}
-          aria-activedescendant={commandOpen && active ? commandOptionId(active.name) : undefined}
-          onInput={(event) => {
-            const value = event.currentTarget.value;
-            shell.setDraft(draftKey, value);
-            setHasDraft(value.trim() !== "");
-            const query = commandQuery(value);
-            if (query !== null) onCommandIntent?.();
-            if (query !== slash) setActiveCommand(0);
-            setSlash(query);
-          }}
-          onPaste={(event) => {
-            const files = filesOf(event.clipboardData.files);
-            if (!attachable || files.length === 0) return;
-            // Pasted files attach; pasted text (if any) still goes into the box.
-            if (!event.clipboardData.types.includes("text/plain")) event.preventDefault();
-            onAttach(files);
-          }}
-          onKeyDown={(event) => {
-            if (commandOpen) {
-              const n = shown.length;
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault();
-                const step = event.key === "ArrowDown" ? 1 : n - 1;
-                setActiveCommand((activeIndex + step) % n);
-                return;
-              }
-              if ((event.key === "Enter" || event.key === "Tab") && active) {
-                event.preventDefault();
-                runCommand(active);
-                return;
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setSlash(null);
-                return;
-              }
-            }
-            if (event.key === "Enter" && !event.shiftKey && !composing(event.nativeEvent)) {
-              event.preventDefault();
-              submit();
-            }
-          }}
-        />
-        <span className="model-picker">
-          {modelMenu === null ? (
-            <ModelTrigger
-              label={modelLabel}
-              disabled={modelDisabled}
-              aria-haspopup="menu"
-              aria-expanded={false}
-              // Warm the menu chunk on intent; the click mounts and opens it.
-              onPointerEnter={() => void loadMenus()}
-              onFocus={() => void loadMenus()}
-              onClick={(event) => {
-                setModelMenu(menuRequest(event));
-                setModelOpen(true);
+    <div className="composer-wrap">
+      {menuOpen ? (
+        <div id={listId} role="listbox" aria-label="Commands" className="command-menu">
+          {commands.map((c, i) => (
+            <div
+              key={`${c.skill ? "skill" : "cmd"}-${c.name}`}
+              id={`${listId}-${String(i)}`}
+              role="option"
+              aria-selected={i === activeIndex}
+              className="command"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                choose(c);
               }}
-            />
-          ) : (
-            <Suspense fallback={<ModelTrigger label={modelLabel} disabled aria-haspopup="menu" />}>
-              <ModelMenu
-                label={modelLabel}
-                value={selectedValue}
-                groups={modelGroups}
-                disabled={modelDisabled}
-                open={modelOpen}
-                onOpenChange={setModelOpen}
-                request={modelMenu}
-                onChange={chooseModel}
-              />
-            </Suspense>
-          )}
-        </span>
-        {running && hasDraft ? (
-          <button
-            type="submit"
-            className="send-btn secondary-send"
-            aria-label="Queue message"
-            title="Queue message (sent when the reply finishes)"
-            disabled={!ready}
-          >
-            <ArrowUp size={18} aria-hidden />
-          </button>
+              onPointerEnter={() => {
+                setActive(i);
+              }}
+            >
+              {c.icon}
+              <div>
+                <p>/{c.name}</p>
+                <p className="menu-hint">{c.hint}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <form
+        className="composer"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void send();
+        }}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          if (e.dataTransfer.files.length === 0) return;
+          e.preventDefault();
+          addFiles([...e.dataTransfer.files]);
+        }}
+      >
+        {uploads.length > 0 ? (
+          <ul className="tray" aria-label="Attachments">
+            {uploads.map((u) => (
+              <li key={u.key} className={`tray-item ${u.status}`}>
+                <TrayPreview upload={u} />
+                <span className="tray-text">
+                  <span className="tray-name">{u.file.name}</span>
+                  <span className="tray-meta">
+                    {u.status === "uploading"
+                      ? "Uploading…"
+                      : u.status === "failed"
+                        ? (u.error ?? "Failed")
+                        : formatBytes(u.dto?.size ?? u.file.size)}
+                  </span>
+                </span>
+                <IconButton
+                  label={`Remove ${u.file.name}`}
+                  className="muted-icon small"
+                  onClick={() => {
+                    removeUpload(u);
+                  }}
+                >
+                  <X size={14} aria-hidden />
+                </IconButton>
+              </li>
+            ))}
+          </ul>
         ) : null}
-        {running ? (
-          <button
-            type="button"
-            className="send-btn"
-            aria-label="Stop generating"
-            title="Stop generating"
-            onClick={onCancel}
-            disabled={!hydrated}
+        <div className="composer-row">
+          <IconButton
+            label="Add files"
+            onClick={() => fileInput.current?.click()}
+            disabled={uploads.length >= props.maxPerMessage}
           >
-            <Square size={14} fill="currentColor" aria-hidden />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className="send-btn"
-            aria-label="Send"
-            title="Send (Enter) · New line (Shift+Enter)"
-            disabled={!canSend}
-          >
-            <ArrowUp size={18} aria-hidden />
-          </button>
-        )}
-      </div>
-    </form>
+            <Plus size={22} aria-hidden />
+          </IconButton>
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            accept={acceptAttribute(["text", ...props.kinds])}
+            onChange={(e) => {
+              addFiles([...(e.target.files ?? [])]);
+              e.target.value = "";
+            }}
+          />
+          {skill ? (
+            <button
+              type="button"
+              className="skill-chip"
+              aria-pressed="true"
+              title="Remove skill"
+              onClick={() => {
+                setSkill(null);
+              }}
+            >
+              <BookOpen size={16} aria-hidden />
+              <span>{skill.name}</span>
+            </button>
+          ) : null}
+          <label htmlFor="message" className="sr-only">
+            Message
+          </label>
+          <textarea
+            id="message"
+            ref={textarea}
+            rows={1}
+            value={text}
+            placeholder={props.placeholder ?? "Ask anything"}
+            role={menuOpen ? "combobox" : undefined}
+            aria-expanded={menuOpen ? true : undefined}
+            aria-controls={menuOpen ? listId : undefined}
+            aria-activedescendant={menuOpen ? `${listId}-${String(activeIndex)}` : undefined}
+            aria-autocomplete={menuOpen ? "list" : undefined}
+            onChange={(e) => {
+              setText(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={onKeyDown}
+            onPaste={(e) => {
+              const files = [...e.clipboardData.files];
+              if (files.length) {
+                e.preventDefault();
+                addFiles(files);
+              }
+            }}
+          />
+          <ModelPicker
+            models={props.models}
+            value={props.model}
+            onChange={props.onModelChange}
+            open={modelOpen}
+            onOpenChange={setModelOpen}
+          />
+          {props.generating ? (
+            <IconButton label="Stop generating" className="send" onClick={props.onStop}>
+              <Square size={14} fill="currentColor" aria-hidden />
+            </IconButton>
+          ) : (
+            <IconButton label="Send" type="submit" className="send" disabled={!canSend}>
+              <ArrowUp size={20} strokeWidth={2.25} aria-hidden />
+            </IconButton>
+          )}
+        </div>
+      </form>
+      {error ? (
+        <p className="composer-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function TrayPreview(props: { upload: Upload }) {
+  const dto = props.upload.dto;
+  if (dto?.kind === "image")
+    return <img className="tray-thumb" src={attachmentContentUrl(dto.id)} alt="" />;
+  return (
+    <span className="tray-icon" aria-hidden>
+      {props.upload.file.type.startsWith("audio/") ? <Music size={18} /> : <FileText size={18} />}
+    </span>
   );
 }

@@ -1,23 +1,16 @@
-/**
- * Centralized path builders (INV-53). Conversation ids are opaque and always
- * encoded; the URL is the authoritative active-conversation identity.
- */
+/** Every in-app URL is built here; conversation ids are always encoded. */
 export const paths = {
   newChat: () => "/chat/new",
   chat: (conversationId: string) => `/chat/${encodeURIComponent(conversationId)}`,
-  /** Settings; `section` opens a tab directly (e.g. "data" for import and export). */
   settings: (section?: string) =>
     section ? `/settings?section=${encodeURIComponent(section)}` : "/settings",
-  admin: () => "/admin",
-  account: () => "/account",
   login: (returnTo?: string) =>
     returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login",
 } as const;
 
 /**
- * The document path a loader request stands for. Client navigations fetch
- * loader data from `<path>.data` (`/_root.data` for "/") with a `_routes`
- * parameter; a return-to must name the page, never the data endpoint.
+ * The page a loader request stands for: client navigations fetch
+ * `<path>.data?_routes=…`, but a return-to must name the page.
  */
 export function documentPathOf(requestUrl: string): string {
   const url = new URL(requestUrl);
@@ -29,7 +22,4 @@ export function documentPathOf(requestUrl: string): string {
   return pathname + (search ? `?${search}` : "");
 }
 
-/** Overlay routes keep the previous conversation behind them (history state). */
-export interface OverlayState {
-  background?: string;
-}
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
