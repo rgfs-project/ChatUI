@@ -2808,3 +2808,19 @@ a svg,
     font-size: 15px;
   }
 }
+
+/*
+ * Desktop: the whole interface at 95 %, like browser zoom. Viewport units
+ * scale with it, so full-height surfaces divide by the same factor.
+ */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  html {
+    zoom: 0.95;
+  }
+  .app {
+    height: calc(100dvh / 0.95);
+  }
+  .settings {
+    height: min(700px, calc((100dvh - 48px) / 0.95));
+  }
+}
