@@ -1732,14 +1732,14 @@ textarea.input {
 /* Scroll-down: a round button centred just above the composer. */
 .composer-dock > .scroll-down {
   position: absolute;
-  /* The composer starts at the dock's top padding; sit 8 px above it. */
+  /* The composer starts at the dock's top padding; sit 16 px above it. */
   top: var(--dock-pad, 40px);
   left: 50%;
   margin: 0;
   border-radius: 50%;
   background: var(--raised);
   box-shadow: var(--shadow-pop);
-  transform: translate(-50%, calc(-100% - 8px));
+  transform: translate(-50%, calc(-100% - 16px));
 }
 
 /* Hover stays opaque: the shared hover fill is translucent in dark mode. */
