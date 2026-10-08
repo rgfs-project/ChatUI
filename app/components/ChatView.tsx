@@ -313,6 +313,7 @@ export function ChatView(props: {
       imageMaxEdge={prefs.data?.imageMaxEdge ?? DEFAULT_IMAGE_MAX_EDGE}
       skills={skills.data ?? []}
       inChat={conversationId !== undefined}
+      skillChips={conversationId === undefined}
       generating={generating}
       onSend={send}
       onStop={() => void stop()}
@@ -363,11 +364,8 @@ export function ChatView(props: {
     </header>
   );
 
-  // ---- A new chat: the greeting, the composer and recent chats. ----
+  // ---- A new chat: the greeting, the composer and skill shortcuts. ----
   if (!conversationId) {
-    const recent = [...(list.data?.conversations ?? [])]
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .slice(0, 3);
     return (
       <main className="chat" inert={props.inert}>
         {header}
@@ -384,18 +382,6 @@ export function ChatView(props: {
               <h1>How can I help?</h1>
               {composer}
               {noModelsNote}
-              {recent.length > 0 ? (
-                <nav aria-labelledby="home-recent" className="home-recent">
-                  <p id="home-recent" className="list-heading">
-                    Recent
-                  </p>
-                  {recent.map((c) => (
-                    <Link key={c.id} to={paths.chat(c.id)}>
-                      {c.title || "New chat"}
-                    </Link>
-                  ))}
-                </nav>
-              ) : null}
             </div>
           </div>
         )}
