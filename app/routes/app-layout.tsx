@@ -6,16 +6,19 @@ import {
   Outlet,
   redirect,
   useLocation,
+  useRouteLoaderData,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { SearchDialog } from "../components/SearchDialog";
 import { Rail, Sidebar } from "../components/Sidebar";
 import { Dialog } from "../components/ui";
 import { appContext } from "../context";
+import { rememberSidebarOpen } from "../lib/display";
 import { documentPathOf, paths } from "../lib/paths";
 import { createQueryClient, getQueryClient, isDehydratable, keys } from "../lib/query";
 import { useSessionState } from "../lib/session";
 import { NARROW_QUERY, ShellProvider, useMediaQuery, type ShellControls } from "../lib/shell";
+import type { loader as rootLoader } from "../root";
 import type { Route } from "./+types/app-layout";
 
 const MODEL_BUDGET_MS = 2_500;
@@ -82,7 +85,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
 
 function Shell(props: { user: Route.ComponentProps["loaderData"]["user"]; expired: boolean }) {
   const narrow = useMediaQuery(NARROW_QUERY);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const root = useRouteLoaderData<typeof rootLoader>("root");
+  const [sidebarOpen, setSidebarOpen] = useState(root?.sidebarOpen ?? true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const location = useLocation();
@@ -96,12 +100,18 @@ function Shell(props: { user: Route.ComponentProps["loaderData"]["user"]; expire
 
   const openSidebar = useCallback(() => {
     if (narrow) setDrawerOpen(true);
-    else setSidebarOpen(true);
+    else {
+      setSidebarOpen(true);
+      rememberSidebarOpen(true);
+    }
   }, [narrow]);
   const closeSidebar = useCallback(() => {
-    setSidebarOpen(false);
-    setDrawerOpen(false);
-  }, []);
+    if (narrow) setDrawerOpen(false);
+    else {
+      setSidebarOpen(false);
+      rememberSidebarOpen(false);
+    }
+  }, [narrow]);
   const openSearch = useCallback(() => {
     setDrawerOpen(false);
     setSearchOpen(true);

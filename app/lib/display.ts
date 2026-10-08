@@ -1,4 +1,5 @@
 import { REASONING_COOKIE } from "@shared/reasoning-display";
+import { SIDEBAR_COOKIE } from "@shared/sidebar-display";
 import { THEME_COOKIE, THEME_COOKIE_MAX_AGE, type Theme } from "@shared/theme";
 
 function remember(name: string, value: string) {
@@ -28,4 +29,9 @@ export function applyReasoningShown(shown: boolean) {
 
 export function reasoningShown(): boolean {
   return document.documentElement.dataset.reasoning !== "hidden";
+}
+
+/** Remembers the sidebar open or collapsed, so a reload keeps it. */
+export function rememberSidebarOpen(open: boolean) {
+  remember(SIDEBAR_COOKIE, open ? "open" : "closed");
 }

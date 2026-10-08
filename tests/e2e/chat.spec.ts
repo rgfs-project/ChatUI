@@ -162,3 +162,17 @@ test("an image opens in the in-page viewer; Escape closes it", async ({ page }) 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+test("a collapsed sidebar stays collapsed after a reload", async ({ page }) => {
+  await open(page, "/chat/new");
+  await page.getByRole("button", { name: "Close sidebar" }).click();
+  await expect(page.getByRole("button", { name: "Open sidebar" })).toBeVisible();
+  await page.reload();
+  await page.waitForSelector('html[data-hydrated="true"]');
+  await expect(page.getByRole("button", { name: "Open sidebar" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close sidebar" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Open sidebar" }).click();
+  await page.reload();
+  await page.waitForSelector('html[data-hydrated="true"]');
+  await expect(page.getByRole("button", { name: "Close sidebar" })).toBeVisible();
+});

@@ -10,6 +10,7 @@ import {
   type LinksFunction,
 } from "react-router";
 import { reasoningShownFromCookieHeader } from "@shared/reasoning-display";
+import { sidebarOpenFromCookieHeader } from "@shared/sidebar-display";
 import { themeFromCookieHeader, type Theme } from "@shared/theme";
 import type { Route } from "./+types/root";
 import { appContext } from "./context";
@@ -29,6 +30,7 @@ export function loader({ context, request }: Route.LoaderArgs) {
     session: services.auth.sessionDto(auth),
     theme: themeFromCookieHeader(cookie),
     reasoningShown: reasoningShownFromCookieHeader(cookie),
+    sidebarOpen: sidebarOpenFromCookieHeader(cookie),
   };
 }
 
