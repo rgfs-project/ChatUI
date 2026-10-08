@@ -3264,3 +3264,58 @@ a svg,
     border-radius: 50%;
   }
 }
+
+/*
+ * Sidebar to the reference: rows 6 px in with 10 px padding (icons and
+ * titles 16 px from the edge), 8 px icon gap, and room above each section.
+ */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .sidebar {
+    padding-inline: 6px;
+  }
+  .sidebar-top {
+    padding-left: 12px;
+  }
+  .sidebar-action,
+  .sidebar-list li a,
+  .account {
+    padding-inline: 10px;
+    gap: 8px;
+  }
+  .sidebar-heading.sidebar-heading {
+    margin-top: 16px;
+    padding: 0 10px;
+  }
+  .sidebar-list {
+    margin: 0;
+    padding: 0;
+  }
+  .rail {
+    padding-inline: 6px;
+  }
+  .rail .icon-button.icon-button.icon-button,
+  .rail .account.compact {
+    width: 40px;
+  }
+  .rail-column {
+    flex-basis: 52px;
+  }
+
+  /* The user's message actions show on hover below the bubble without
+     taking space, so a reply starts 40 px under the bubble. */
+  .user-turn {
+    position: relative;
+  }
+  .user-turn > .message-actions {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    min-height: 0;
+  }
+}
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .rail .account.compact {
+    justify-content: flex-start;
+    padding-left: 10px;
+  }
+}

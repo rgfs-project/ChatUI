@@ -151,7 +151,12 @@ export function Composer(props: ComposerProps) {
       row?.removeAttribute("data-grown");
       el.style.height = "auto";
       // Phones always use the grown layout: text on top, controls below.
-      if (phone || el.value.includes("\n") || el.scrollHeight > 40) {
+      const cs = getComputedStyle(el);
+      const oneLine = Math.max(
+        parseFloat(cs.minHeight) || 0,
+        parseFloat(cs.lineHeight) + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom),
+      );
+      if (phone || el.value.includes("\n") || el.scrollHeight > oneLine + 2) {
         row?.setAttribute("data-grown", "");
         el.style.height = "auto";
       }
