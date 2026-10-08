@@ -2810,23 +2810,12 @@ a svg,
   }
 }
 
-/*
- * Desktop: the whole interface at 95 %, like browser zoom. Viewport units
- * scale with it, so full-height surfaces divide by the same factor.
- */
+/* Desktop: the app fills the viewport box. */
 @media (hover: hover), (pointer: fine), (min-width: 933px) {
-  html {
-    zoom: 0.95;
-  }
-  /* Browsers disagree on whether vh is zoomed (Chrome: no, Firefox: yes),
-     so full-height surfaces size from the viewport box instead. */
   .app {
     position: fixed;
     inset: 0;
     height: auto;
-  }
-  .settings {
-    height: min(700px, calc(100% - 48px));
   }
 }
 
@@ -2869,21 +2858,6 @@ a svg,
   }
 }
 
-/*
- * Popovers under the 95 % zoom: Radix places them with on-screen (already
- * zoomed) coordinates, which the zoom would shrink again and pull the menu
- * up and left of its button. The wrapper undoes the zoom so the position
- * lands exactly; the menu inside keeps the 95 % size.
- */
-@media (hover: hover), (pointer: fine), (min-width: 933px) {
-  [data-radix-popper-content-wrapper] {
-    zoom: calc(1 / 0.95);
-  }
-  [data-radix-popper-content-wrapper] > * {
-    zoom: 0.95;
-  }
-}
-
 /* Rail: the avatar sits on the same centre line as the icons above it. */
 .rail .account.compact {
   justify-content: center;
@@ -2899,5 +2873,186 @@ a svg,
   .settings-search {
     height: 40px;
     min-height: 40px;
+  }
+}
+
+/*
+ * Desktop scale: a 4 px spacing unit, 14/20 and 16/24 type, a 260 px
+ * sidebar with 32 px section headers and 36 px rows, 32 px response
+ * actions, a 52 px composer, a 640 px thread that widens to 768 px in a
+ * wide main column, and a 680 x 600 settings dialog with 16 px padding.
+ */
+:root {
+  --spacing: 0.25rem;
+  --text-sm: 0.875rem;
+  --text-sm-line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base-line-height: 1.5rem;
+  --font:
+    "-apple-system-body", ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica,
+    "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  body {
+    font-size: var(--text-base);
+    line-height: var(--text-base-line-height);
+  }
+
+  /* Thread width: 640 px, 768 px once the main column is wide. */
+  .chat-main {
+    container: thread / inline-size;
+    --column: 40rem;
+  }
+  @container thread (min-width: 1000px) {
+    .chat-main > * {
+      --column: 48rem;
+    }
+  }
+
+  /* Sidebar */
+  .sidebar {
+    padding-inline-end: 6px;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm-line-height);
+  }
+  .sidebar-actions,
+  .sidebar-list ul,
+  .rail .sidebar-actions {
+    gap: 0;
+  }
+  .sidebar-action,
+  .sidebar-list li a {
+    height: 36px;
+    min-height: 36px;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm-line-height);
+  }
+  .sidebar-heading {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    margin: 0;
+    padding: 0 10px;
+    font-size: var(--text-sm);
+  }
+  .rail .sidebar-actions .icon-button.icon-button.icon-button {
+    height: 36px;
+  }
+  /* Rows: 8 px inset, 12 px padding, 20 px icon, 12 px gap (text at 52 px);
+     section labels at 20 px. */
+  .sidebar {
+    padding-inline: 8px;
+  }
+  .sidebar-top {
+    padding: 0 0 0 12px;
+  }
+  .brand {
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 600;
+  }
+  .sidebar-action,
+  .sidebar-list li a,
+  .account {
+    padding-inline: 12px;
+    gap: 12px;
+  }
+  .sidebar-action,
+  .sidebar-list li,
+  .account {
+    border-radius: 8px;
+  }
+  .sidebar-action[aria-current="page"],
+  .sidebar-list li.current a {
+    font-weight: 500;
+  }
+  .sidebar-heading {
+    padding: 0 12px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+  .account-name {
+    font-weight: 500;
+  }
+  /* The rail repeats it: 44 px buttons centre each icon at 20 px. */
+  .rail-column {
+    flex-basis: 60px;
+  }
+  .rail {
+    padding-inline: 8px;
+  }
+  .rail .icon-button.icon-button.icon-button,
+  .rail .account.compact {
+    width: 44px;
+  }
+  .message-actions .icon-button svg {
+    width: 16px;
+    height: 16px;
+  }
+  .sidebar-list .row-actions.row-actions.row-actions {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Response actions: 32 px targets, no margin or padding. */
+  .message-actions {
+    gap: 0;
+    min-height: 46px;
+  }
+  .message-actions .icon-button.icon-button.icon-button {
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 24px;
+    border-radius: 8px;
+  }
+  .assistant-turn .message-actions.message-actions {
+    margin-left: -6px;
+  }
+  .user-turn .message-actions.message-actions {
+    margin-right: -6px;
+  }
+
+  /* Composer: 52 px, 8 px sides, 5 px compact / 9 px expanded. */
+  .composer-row {
+    gap: 8px;
+    min-height: 52px;
+    padding: 5px 8px;
+  }
+  .composer-row[data-grown] {
+    padding: 9px 8px;
+  }
+  .composer-row textarea {
+    min-height: 42px;
+    padding: 9px 4px;
+    font-size: var(--text-base);
+    line-height: var(--text-base-line-height);
+  }
+
+  /* Settings: 680 x 600, 16 px content padding, 44 px rows. */
+  .settings {
+    width: min(680px, calc(100vw - 32px));
+    height: min(600px, calc(100% - 32px));
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .settings-side,
+  .settings-body {
+    padding: 16px;
+  }
+  .settings-side {
+    padding-right: 12px;
+  }
+  .row {
+    min-height: 44px;
+    font-size: var(--text-sm);
+  }
+  .row:has(.row-hint) {
+    min-height: 64px;
   }
 }

@@ -48,7 +48,7 @@ test.describe("a narrow desktop window", () => {
       .getByRole("button", { name: /^Model: / })
       .evaluate((el) => el.getBoundingClientRect().height);
     // 40 px controls, drawn at the desktop's 95 % scale.
-    expect(height).toBeCloseTo(40 * 0.95, 0);
+    expect(height).toBeCloseTo(40, 0);
   });
 });
 
