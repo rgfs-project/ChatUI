@@ -2242,7 +2242,8 @@ textarea.input {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  padding: 12px 16px;
+  /* Same 12 px inset as every other row (the card adds 4 px). */
+  padding: 10px 12px;
 }
 
 .textarea-row textarea {
