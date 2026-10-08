@@ -270,6 +270,26 @@ describe("sessions (contracts §6)", () => {
     expect((await login(run, "alice", "another long password")).status).toBe(200);
   });
 
+  it("guessing the current password is rate limited like login", async () => {
+    const run = await start();
+    const session = await signIn(run.base, run.chatui);
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i++)
+      statuses.push(
+        (
+          await call(run, "POST", "/api/auth/password", {
+            session,
+            body: {
+              currentPassword: `wrong guess ${String(i)}`,
+              newPassword: "another long password",
+            },
+          })
+        ).status,
+      );
+    expect(statuses.slice(0, 10).every((s) => s === 400)).toBe(true);
+    expect(statuses[10]).toBe(429);
+  });
+
   it("cookie flags for an http://localhost origin: HttpOnly, SameSite=Lax, not Secure", async () => {
     const run = await start();
     await run.chatui.services.users.create({

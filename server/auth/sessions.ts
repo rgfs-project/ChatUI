@@ -1,6 +1,7 @@
 // Server-side sessions (contracts §6). Only the SHA-256 of the token is stored.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "../storage/fs.ts";
+import { KeyedLocks } from "../storage/locks.ts";
 import { isSha256Hex, type DataPaths } from "../storage/paths.ts";
 import type { Role } from "../storage/users.ts";
 
@@ -36,6 +37,8 @@ export function tokensEqual(a: string, b: string): boolean {
 const TOUCH_INTERVAL_MS = 60_000;
 
 export class SessionStore {
+  /** One refresh or revocation at a time per session. */
+  private readonly locks = new KeyedLocks();
   private readonly paths: DataPaths;
   private readonly absoluteTtlMs: number;
   private readonly idleTtlMs: number;
@@ -110,19 +113,24 @@ export class SessionStore {
     return record;
   }
 
-  /** Extends idle expiry (throttled). */
+  /**
+   * Extends idle expiry (throttled). Serialized with `revoke` per session and
+   * re-checked under the lock: a refresh that read the session before a
+   * logout or password change must not write it back afterwards.
+   */
   async touch(tokenHash: string, record: SessionRecord): Promise<void> {
     const now = this.now();
     if (now.getTime() - Date.parse(record.lastSeenAt) < TOUCH_INTERVAL_MS) return;
-    await atomicWrite(
-      this.paths.sessionFile(tokenHash),
-      JSON.stringify({ ...record, lastSeenAt: now.toISOString() }),
-    );
+    await this.locks.run(tokenHash, async () => {
+      const file = this.paths.sessionFile(tokenHash);
+      if (!(await readOrNull(file))) return;
+      await atomicWrite(file, JSON.stringify({ ...record, lastSeenAt: now.toISOString() }));
+    });
   }
 
   async revoke(tokenHash: string): Promise<void> {
     if (!isSha256Hex(tokenHash)) return;
-    await durableUnlink(this.paths.sessionFile(tokenHash));
+    await this.locks.run(tokenHash, () => durableUnlink(this.paths.sessionFile(tokenHash)));
     for (const listener of this.revokedListeners) listener(tokenHash);
   }
 

@@ -72,6 +72,9 @@ export async function listEntries(
   const entries: yauzl.Entry[] = [];
   const seen = new Set<string>();
   let expanded = 0;
+  // Every central-directory record counts, directories included.
+  let records = 0;
+  const deadline = Date.now() + limits.maxMs;
   await new Promise<void>((resolve, reject) => {
     zip.on("error", (error: Error) => {
       // yauzl refuses unsafe names itself (absolute, "..", backslashes).
@@ -90,7 +93,8 @@ export async function listEntries(
       try {
         const name = entry.fileName;
         const mode = (entry.externalFileAttributes >>> 16) & S_IFMT;
-        if (entries.length + 1 > limits.maxEntries)
+        if (Date.now() > deadline) throw new ArchiveError("Reading the archive took too long");
+        if (++records > limits.maxEntries)
           throw new ArchiveError(`The archive has more than ${String(limits.maxEntries)} entries`);
         if (mode === S_IFLNK) throw new ArchiveError(`${name} is a symbolic link`);
         if (name.startsWith("/") || name.includes("\\") || name.split("/").includes(".."))

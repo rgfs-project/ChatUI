@@ -8,21 +8,36 @@ export class RateLimiter {
   private readonly limit: number;
   private readonly windowMs: number;
   private readonly now: () => number;
+  private readonly maxKeys: number;
 
-  constructor(options: { limit: number; windowMs: number; now?: () => number }) {
+  constructor(options: { limit: number; windowMs: number; now?: () => number; maxKeys?: number }) {
     this.limit = options.limit;
     this.windowMs = options.windowMs;
     this.now = options.now ?? Date.now;
+    this.maxKeys = options.maxKeys ?? 10_000;
+  }
+
+  /** Seconds to wait if `key` is already over the limit, without recording a hit. */
+  blocked(key: string): number {
+    const now = this.now();
+    const entry = this.hits.get(key);
+    if (!entry || entry.resetAt <= now || entry.count <= this.limit) return 0;
+    return Math.ceil((entry.resetAt - now) / 1000);
   }
 
   /** Records a hit; returns seconds to wait when over the limit, else 0. */
   hit(key: string): number {
     const now = this.now();
-    if (this.hits.size > 10_000) {
-      for (const [k, v] of this.hits) if (v.resetAt <= now) this.hits.delete(k);
-    }
     const entry = this.hits.get(key);
     if (!entry || entry.resetAt <= now) {
+      // Every window is the same length, so the map's insertion order is
+      // expiry order: drop expired keys from the front, then, at capacity,
+      // the oldest live one. A hard cap with no full scans.
+      this.hits.delete(key);
+      for (const [k, v] of this.hits) {
+        if (v.resetAt > now && this.hits.size < this.maxKeys) break;
+        this.hits.delete(k);
+      }
       this.hits.set(key, { count: 1, resetAt: now + this.windowMs });
       return 0;
     }

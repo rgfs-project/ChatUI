@@ -353,9 +353,13 @@ export const forgedUser = (req: { headers: Record<string, unknown> }) => req.hea
     id: "INV-42",
     file: "server/portability/read-archive.ts",
     what: "the archive entry-count limit is not enforced",
-    find: "        if (entries.length + 1 > limits.maxEntries)",
+    find: "        if (++records > limits.maxEntries)",
     replace: "        if (false)",
-    tests: ["tests/server/portability.test.ts", "tests/server/import-adapters.test.ts"],
+    tests: [
+      "tests/server/portability.test.ts",
+      "tests/server/import-adapters.test.ts",
+      "tests/server/audit-fixes.test.ts",
+    ],
   },
   {
     id: "INV-44",

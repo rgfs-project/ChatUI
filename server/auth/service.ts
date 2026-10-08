@@ -47,6 +47,7 @@ export class AuthService {
   private readonly onAccountRejected: (userId: string) => void;
   private readonly byAddress = new RateLimiter(LOGIN_LIMIT);
   private readonly byUsername = new RateLimiter(LOGIN_LIMIT);
+  private readonly passwordAttempts = new RateLimiter(LOGIN_LIMIT);
   readonly cookieName: string;
 
   constructor(options: {
@@ -196,7 +197,11 @@ export class AuthService {
   }
 
   private limit(req: Request, username: string): void {
-    const byAddress = this.byAddress.hit(`addr:${req.ip ?? "unknown"}`);
+    // A blocked address is turned away before any per-username state is made.
+    const address = `addr:${req.ip ?? "unknown"}`;
+    const blocked = this.byAddress.blocked(address);
+    if (blocked > 0) throw rateLimited(blocked);
+    const byAddress = this.byAddress.hit(address);
     const byName = this.byUsername.hit(`user:${normalizeUsername(username)}`);
     const wait = Math.max(byAddress, byName);
     if (wait > 0) throw rateLimited(wait);
@@ -330,6 +335,10 @@ export class AuthService {
     next: string,
   ): Promise<void> {
     this.validatePassword(next);
+    // Guessing the current password here is held to the login limits, per
+    // account across sessions, before any hashing work.
+    const wait = this.passwordAttempts.hit(`user:${auth.userId}`);
+    if (wait > 0) throw rateLimited(wait);
     const user = await this.users.get(auth.userId);
     const ok = await this.withHasher(() => this.hasher.verify(user?.passwordHash, current));
     if (!user || !ok) throw new AppError(ErrorCode.VALIDATION, "The current password is incorrect");
