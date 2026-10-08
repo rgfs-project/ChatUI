@@ -2017,8 +2017,8 @@ textarea.input {
 .settings-nav-group {
   margin: 14px 12px 4px;
   color: var(--muted);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .settings-nav-item {
@@ -2109,8 +2109,8 @@ textarea.input {
 .group-heading {
   margin: 0 16px 4px 0;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 400;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 /* No inner padding: a row's hover fill reaches the card's rounded edge. */
