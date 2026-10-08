@@ -2514,3 +2514,36 @@ textarea.input {
 .user-turn .message-actions {
   margin-right: -10px;
 }
+
+/*
+ * Installed web app (and any notched phone): the page runs under the status
+ * bar and home indicator, so every full-screen surface keeps clear of them.
+ */
+@media (hover: none) and (pointer: coarse) and (max-width: 932px) {
+  .app {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top);
+  }
+  .drawer .sidebar,
+  .settings,
+  .search-dialog {
+    padding-top: env(safe-area-inset-top);
+  }
+  .settings,
+  .search-dialog {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Settings: the list and a section share one frame, so nothing jumps. */
+  .settings-side,
+  .settings-body {
+    padding: 8px 16px 24px;
+  }
+  .settings-side .settings-head {
+    padding: 0;
+  }
+  .settings-head {
+    height: 44px;
+    margin: 0 0 12px;
+  }
+}
