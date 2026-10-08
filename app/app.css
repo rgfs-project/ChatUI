@@ -760,7 +760,7 @@ textarea.input {
 }
 
 .sidebar-heading {
-  margin: 20px 10px 8px 12px;
+  margin: 20px 10px 4px 12px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 400;
@@ -1902,7 +1902,7 @@ textarea.input {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-top: 6px;
+  padding-top: 4px;
   border-top: 1px solid var(--line);
 }
 
