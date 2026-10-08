@@ -935,9 +935,15 @@ textarea.input {
   font-size: 16px;
 }
 
-.title-button:hover,
 .title-button[data-state="open"] {
   background: var(--hover);
+}
+
+/* Touch screens keep :hover after a tap; only a real pointer gets it. */
+@media (hover: hover) {
+  .title-button:hover {
+    background: var(--hover);
+  }
 }
 
 .title-text {
@@ -957,7 +963,10 @@ textarea.input {
   }
   .chat-header .title-button {
     flex: 1;
-    justify-content: center;
+    justify-content: flex-start;
+    height: 44px;
+    padding: 0 8px;
+    font-size: 18px;
   }
 }
 
