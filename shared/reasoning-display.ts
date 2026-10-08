@@ -9,5 +9,6 @@ import { readCookie } from "./cookies";
 export const REASONING_COOKIE = "chatui_reasoning";
 
 export function reasoningShownFromCookieHeader(header: string | null | undefined): boolean {
-  return readCookie(header, REASONING_COOKIE) !== "hidden";
+  // Off unless the user turned it on.
+  return readCookie(header, REASONING_COOKIE) === "shown";
 }

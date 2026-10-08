@@ -2783,7 +2783,11 @@ a svg,
   .settings-nav-group,
   .group-heading,
   .group-note,
-  .row-hint {
+  .row-hint,
+  .drawer .sidebar-heading,
+  .time-stamp,
+  .reasoning summary,
+  .message-model {
     font-size: 15px;
   }
 }
