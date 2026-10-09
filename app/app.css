@@ -3685,3 +3685,17 @@ a svg,
   width: 12px;
   height: 12px;
 }
+
+/* Header controls match everywhere: the sidebar toggle (open sidebar,
+   drawer, rail) and the header's new chat are 20 px in the text colour. */
+.sidebar-top .icon-button.icon-button,
+.rail-top .icon-button.icon-button,
+.chat-header .icon-button.icon-button {
+  color: var(--text);
+}
+.sidebar-top .icon-button svg.lucide,
+.rail-top .icon-button svg.lucide,
+.chat-header .icon-button svg.lucide {
+  width: 20px;
+  height: 20px;
+}
