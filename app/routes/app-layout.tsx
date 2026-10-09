@@ -147,15 +147,16 @@ function Shell(props: { user: Route.ComponentProps["loaderData"]["user"]; expire
   return (
     <ShellProvider value={controls}>
       <div className={`app${sidebarOpen ? "" : " sidebar-hidden"}`} data-testid="app-shell">
-        {sidebarOpen ? (
-          <div className="sidebar-column">
+        {/* One column slides between the sidebar (260 px) and the rail; the
+            one not shown is inert and hidden, so it is never focused or read. */}
+        <div className={`side-column${sidebarOpen ? " open" : ""}`}>
+          <div className="sidebar-column" inert={!sidebarOpen}>
             <Sidebar onClose={closeSidebar} closeLabel="Close sidebar" />
           </div>
-        ) : (
-          <div className="rail-column">
+          <div className="rail-column" inert={sidebarOpen}>
             <Rail />
           </div>
-        )}
+        </div>
         <RadixDialog.Root open={narrow && drawerOpen} onOpenChange={setDrawerOpen}>
           <RadixDialog.Portal>
             <RadixDialog.Overlay className="scrim drawer-scrim" />

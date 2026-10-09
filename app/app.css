@@ -3716,3 +3716,58 @@ a svg,
     padding-left: 7px;
   }
 }
+
+/*
+ * The sidebar slides: one column animates its width between the rail
+ * (52 px) and the sidebar (260 px). The sidebar keeps its full width inside
+ * and is clipped as the column narrows; the rail fades over it.
+ */
+.side-column {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 100%;
+  overflow: hidden;
+  transition: width 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+.side-column.open {
+  width: 260px;
+}
+.side-column > .sidebar-column,
+.side-column > .rail-column {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  transition:
+    opacity 160ms ease,
+    visibility 0s linear 220ms;
+}
+.side-column > .sidebar-column {
+  width: 260px;
+}
+.side-column > .rail-column {
+  width: 52px;
+}
+.side-column:not(.open) > .sidebar-column,
+.side-column.open > .rail-column {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.side-column.open > .sidebar-column,
+.side-column:not(.open) > .rail-column {
+  transition:
+    opacity 160ms ease 60ms,
+    visibility 0s;
+}
+@media (hover: none) and (pointer: coarse) and (max-width: 932px) {
+  .side-column {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .side-column,
+  .side-column > * {
+    transition: none;
+  }
+}
