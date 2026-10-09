@@ -49,8 +49,8 @@ test.describe("a narrow desktop window", () => {
     const height = await page
       .getByRole("button", { name: /^Model: / })
       .evaluate((el) => el.getBoundingClientRect().height);
-    // Desktop controls stay 40 px.
-    expect(height).toBeCloseTo(40, 0);
+    // The model picker is a 36 px pill.
+    expect(height).toBeCloseTo(36, 0);
   });
 });
 

@@ -3608,3 +3608,80 @@ a svg,
     padding-bottom: 8px;
   }
 }
+
+/* Composer controls are round, like Send: a 36 px circle for +, a pill for
+   the model picker. */
+.composer-row .icon-button.icon-button.icon-button {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 9999px;
+}
+.composer-row .model-trigger.model-trigger {
+  height: 36px;
+  min-height: 36px;
+  border-radius: 9999px;
+}
+
+/* A selected chat keeps the regular weight (only its background changes);
+   section labels are medium everywhere. */
+.sidebar-action[aria-current="page"],
+.sidebar-list li.current a {
+  font-weight: 400;
+}
+.sidebar-heading.sidebar-heading {
+  font-weight: 500;
+}
+
+/* Subtitles are medium: group labels, the date, the model under a reply. */
+.group-heading,
+.settings-nav-group.settings-nav-group,
+.time-stamp,
+.message-model {
+  font-weight: 500;
+}
+
+/* Account menu: the person at the top, then the actions; rounder, wider. */
+.account-menu {
+  min-width: 240px;
+  padding: 6px;
+  border-radius: 20px;
+}
+.account-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.account-menu-head .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+}
+.account-menu .menu-item {
+  border-radius: 12px;
+}
+
+/* A light grey page with a white composer behind a faint stroke, and a
+   hairline on the sidebar's right edge. */
+:root {
+  --surface: light-dark(#fafafa, #212121);
+  --composer-bg: light-dark(#ffffff, #2a2a2a);
+}
+.composer {
+  border: 1px solid light-dark(#e6e6e6, rgb(255 255 255 / 0.08));
+  box-shadow: 0 4px 24px light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.25));
+}
+.sidebar,
+.rail {
+  border-right: 1px solid var(--line);
+}
+
+/* Stop: a small filled square (about 11 px) inside the 36 px circle. */
+.composer-row .send svg.stop-icon {
+  width: 12px;
+  height: 12px;
+}

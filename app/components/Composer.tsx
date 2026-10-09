@@ -449,7 +449,7 @@ export function Composer(props: ComposerProps) {
           />
           {props.generating && !(props.canQueue && hasContent) ? (
             <IconButton label="Stop generating" className="send" onClick={props.onStop}>
-              <Square size={14} fill="currentColor" aria-hidden />
+              <Square size={14} fill="currentColor" aria-hidden className="stop-icon" />
             </IconButton>
           ) : (
             <IconButton
