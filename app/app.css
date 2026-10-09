@@ -3124,7 +3124,7 @@ a svg,
  * Settings below 768 px (phones and split screen): one column, the sections
  * as a row of tabs under the search, 10 px from the screen sides, 85vh tall.
  */
-@media (max-width: 767px) {
+@media (hover: none) and (pointer: coarse) and (max-width: 932px) {
   .settings.settings {
     inset: auto;
     top: 50%;
@@ -3217,7 +3217,7 @@ a svg,
 .settings-top {
   display: none;
 }
-@media (max-width: 767px) {
+@media (hover: none) and (pointer: coarse) and (max-width: 932px) {
   .settings-top {
     flex: none;
     display: flex;
@@ -3373,14 +3373,6 @@ a svg,
   }
 }
 
-/* Below 768 px the sidebar goes behind the menu button on any device. */
-@media (max-width: 767px) {
-  .sidebar-column,
-  .rail-column {
-    display: none;
-  }
-}
-
 /* Design tokens: the relationships the layout is built from. */
 :root {
   --space: 4px;
@@ -3408,7 +3400,7 @@ a svg,
   backdrop-filter: blur(1px);
   transition: opacity 250ms;
 }
-@media (min-width: 768px) {
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
   .settings.settings {
     width: min(680px, calc(100vw - 20px));
     height: min(600px, 85vh, calc(100% - 40px));
