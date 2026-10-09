@@ -3691,3 +3691,28 @@ a svg,
   width: 20px;
   height: 20px;
 }
+
+/* One column of icons, open or collapsed: every icon and the avatar centre
+   25 px from the edge (avatar row padded 5 px; rail padded 5 px). */
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .sidebar .account {
+    padding-left: 5px;
+  }
+  .rail.rail {
+    padding-inline: 5px;
+  }
+}
+
+/* The avatar is a 24 px circle on the same 25 px centre line as the icons. */
+.sidebar .avatar,
+.rail .avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  font-size: 11px;
+}
+@media (hover: hover), (pointer: fine), (min-width: 933px) {
+  .sidebar .account {
+    padding-left: 7px;
+  }
+}
