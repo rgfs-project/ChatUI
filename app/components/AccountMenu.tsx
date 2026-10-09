@@ -29,11 +29,6 @@ export function AccountMenu(props: { user: ShellUser; compact?: boolean }) {
         </button>
       </MenuTrigger>
       <MenuContent side="top" align="start" className="account-menu">
-        <div className="account-menu-head" aria-hidden>
-          <span className="avatar">{initial(props.user.username)}</span>
-          <span className="account-name">{props.user.username}</span>
-        </div>
-        <MenuSeparator />
         <MenuItem
           icon={<Settings size={18} aria-hidden />}
           onSelect={() =>
@@ -42,6 +37,7 @@ export function AccountMenu(props: { user: ShellUser; compact?: boolean }) {
         >
           Settings
         </MenuItem>
+        <MenuSeparator />
         <MenuItem icon={<LogOut size={18} aria-hidden />} onSelect={() => void signOut()}>
           Sign out
         </MenuItem>

@@ -3639,20 +3639,6 @@ a svg,
   padding: 6px;
   border-radius: 20px;
 }
-.account-menu-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 6px 10px;
-  font-size: 14px;
-  font-weight: 500;
-}
-.account-menu-head .avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 9999px;
-}
 .account-menu .menu-item {
   border-radius: 12px;
 }

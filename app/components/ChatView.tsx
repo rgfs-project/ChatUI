@@ -82,15 +82,15 @@ function lastModel(dto: ConversationDto | undefined): ModelChoice | null {
 }
 
 /** Keeps the transcript at the bottom while the reader is there. */
-function useStickToBottom(dependency: unknown) {
+function useStickToBottom(dependency: unknown, chat?: string) {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  // Opening another chat starts at its bottom.
+  useLayoutEffect(() => {
+    pinned.current = true;
+  }, [chat]);
   // Away from the bottom: shows the scroll-down button.
   const [away, setAway] = useState(false);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el && pinned.current) el.scrollTop = el.scrollHeight;
-  }, [dependency]);
   const onScroll = useCallback(() => {
     const el = ref.current;
     if (!el) return;
@@ -98,6 +98,26 @@ function useStickToBottom(dependency: unknown) {
     pinned.current = gap < 80;
     setAway(gap > 200);
   }, []);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && pinned.current) el.scrollTop = el.scrollHeight;
+    // Content can change without a scroll event (another chat, a shorter
+    // reply, a collapsed section), so the button is measured here too.
+    onScroll();
+  }, [dependency, onScroll]);
+  // ...and whenever the transcript or its content changes size.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      onScroll();
+    });
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+    return () => {
+      observer.disconnect();
+    };
+  }, [dependency, onScroll]);
   const pin = useCallback(() => {
     pinned.current = true;
   }, []);
@@ -174,7 +194,8 @@ export function ChatView(props: {
   }, [dto?.title]);
 
   const [scrollRef, onScroll, pinScroll, scrolledAway, scrollToBottom] = useStickToBottom(
-    `${String(dto?.messages.length)}:${live?.content.length ?? 0}:${pending ? 1 : 0}`,
+    `${conversationId ?? ""}:${String(dto?.messages.length)}:${live?.content.length ?? 0}:${pending ? 1 : 0}`,
+    conversationId,
   );
 
   async function refetch(id: string) {
