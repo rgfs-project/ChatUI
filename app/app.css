@@ -3757,3 +3757,18 @@ a svg,
     transition: none;
   }
 }
+
+/* The waiting dot: 16 x 16, blinking. */
+.thinking span {
+  width: 16px;
+  height: 16px;
+  animation: blink 1s infinite steps(1, end);
+}
+@keyframes blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
