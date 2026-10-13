@@ -138,7 +138,7 @@ function SkillList(props: {
             box and pick one, or start a message with <code>/name</code>.
           </p>
           <button
-            className="btn primary"
+            className="btn small"
             type="button"
             onClick={() => {
               props.onOpen(null);

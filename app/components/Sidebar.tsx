@@ -17,11 +17,14 @@ import { endIntent, prefetchIntent } from "../lib/prefetch";
 import { queries } from "../lib/query";
 import { count } from "../lib/render-counters";
 import { useCollapsedSections } from "../lib/sidebar-sections";
+import { useSignOut } from "../lib/use-sign-out";
 import { AccountLabel } from "./AccountLabel";
 import { preloadDialogs, useConversationActions } from "./ConversationActions";
 
 // The row menu loads on demand; a same-looking placeholder stands in.
-const RowMenu = lazy(() => import("./Menus").then((m) => ({ default: m.RowMenu })));
+const loadMenus = () => import("./Menus");
+const RowMenu = lazy(() => loadMenus().then((m) => ({ default: m.RowMenu })));
+const AccountMenu = lazy(() => loadMenus().then((m) => ({ default: m.AccountMenu })));
 // Search loads when opened.
 const SearchDialog = lazy(() =>
   import("./SearchDialog").then((m) => ({ default: m.SearchDialog })),
@@ -164,16 +167,7 @@ function SidebarImpl({
         onNavigate={onNavigate}
       />
       <div className="sidebar-foot">
-        <Link
-          to={paths.settings()}
-          state={settingsState}
-          className="nav-row account-btn"
-          aria-label={`Settings (${user.username})`}
-          onClick={onNavigate}
-          prefetch="intent"
-        >
-          <AccountLabel username={user.username} />
-        </Link>
+        <Account user={user} settingsState={settingsState} onNavigate={onNavigate} />
       </div>
       {searching ? (
         <Suspense fallback={null}>
@@ -384,6 +378,45 @@ function SectionToggle(props: {
       {props.label}
       <ChevronRight size={14} aria-hidden />
     </button>
+  );
+}
+
+/** Avatar and name at the bottom, opening Settings, the theme, Administration and Sign out. */
+function Account({
+  user,
+  settingsState,
+  onNavigate,
+}: {
+  user: SidebarUser;
+  settingsState: { background: string };
+  onNavigate: () => void;
+}) {
+  const signOut = useSignOut();
+  const [openRequest, setOpenRequest] = useState<MenuRequest>(false);
+  return (
+    <Suspense
+      fallback={
+        <button
+          type="button"
+          className="nav-row account-btn"
+          aria-label={`Account (${user.username})`}
+          onClick={(event) => {
+            setOpenRequest(menuRequest(event));
+          }}
+        >
+          <AccountLabel username={user.username} />
+        </button>
+      }
+    >
+      <AccountMenu
+        username={user.username}
+        isAdmin={user.role === "admin"}
+        defaultOpen={openRequest}
+        settingsState={settingsState}
+        onNavigate={onNavigate}
+        onSignOut={() => void signOut()}
+      />
+    </Suspense>
   );
 }
 

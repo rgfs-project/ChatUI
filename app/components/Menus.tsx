@@ -4,15 +4,22 @@ import {
   Check,
   Download,
   Ellipsis,
+  LogOut,
+  Moon,
   Pencil,
   Pin,
   PinOff,
-  Search,
+  Settings,
+  Shield,
   SlidersHorizontal,
+  Sun,
   Trash2,
 } from "lucide-react";
 import { useState, type ReactNode, type Ref } from "react";
 import { Link } from "react-router";
+import { paths } from "../lib/paths";
+import { applyTheme, currentTheme } from "../lib/theme";
+import { AccountLabel } from "./AccountLabel";
 import { ModelTrigger } from "./ModelTrigger";
 
 /**
@@ -156,6 +163,91 @@ export function RowMenu(props: {
   );
 }
 
+/** Whether the page is dark now: an explicit theme, else the system's. */
+function isDark(): boolean {
+  const theme = currentTheme();
+  if (theme !== "system") return theme === "dark";
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+}
+
+/** The sidebar's account row: Settings, the theme, Administration (admins) and Sign out. */
+export function AccountMenu(props: {
+  username: string;
+  isAdmin: boolean;
+  /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
+  defaultOpen: MenuRequest;
+  /** Settings keeps the current conversation to come back to. */
+  settingsState: { background: string };
+  onNavigate: () => void;
+  onSignOut: () => void;
+}) {
+  const [dark, setDark] = useState(false);
+  // Real links: the router prefetches their routes while the menu is open.
+  const linkItem = (to: string, label: string, icon: ReactNode) => (
+    <Menu.Item asChild className="menu-item">
+      <Link to={to} state={props.settingsState} prefetch="render" onClick={props.onNavigate}>
+        {icon}
+        {label}
+      </Link>
+    </Menu.Item>
+  );
+  return (
+    <Menu.Root
+      modal={false}
+      defaultOpen={props.defaultOpen !== false}
+      onOpenChange={(open) => {
+        if (open) setDark(isDark());
+      }}
+    >
+      <Menu.Trigger
+        className="nav-row account-btn"
+        aria-label={`Account (${props.username})`}
+        ref={(element) => {
+          // Opened on mount: read the theme the first open didn't report.
+          if (element && props.defaultOpen !== false) setDark(isDark());
+        }}
+      >
+        <AccountLabel username={props.username} />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content
+          ref={focusFirstItem(props.defaultOpen)}
+          className="menu account-menu"
+          side="top"
+          align="start"
+          sideOffset={8}
+          collisionPadding={8}
+        >
+          {linkItem(paths.settings(), "Settings", <Settings size={20} aria-hidden />)}
+          {props.isAdmin
+            ? linkItem(paths.admin(), "Administration", <Shield size={20} aria-hidden />)
+            : null}
+          <Items
+            items={[
+              {
+                label: dark ? "Light mode" : "Dark mode",
+                icon: dark ? <Sun size={20} aria-hidden /> : <Moon size={20} aria-hidden />,
+                onSelect: () => {
+                  applyTheme(dark ? "light" : "dark");
+                },
+              },
+              "separator",
+              {
+                label: "Sign out",
+                icon: <LogOut size={20} aria-hidden />,
+                onSelect: props.onSignOut,
+              },
+            ]}
+          />
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
 export interface ModelOption {
   /** The JSON (providerId, modelId) pair, as the composer stores it. */
   value: string;
@@ -171,14 +263,11 @@ export interface ModelGroup {
   options: ModelOption[];
 }
 
-/** Long lists get a filter field; short ones stay a plain menu. */
-const SEARCH_THRESHOLD = 6;
-
 /**
  * The composer's model picker: the current model's name with a chevron,
  * opening a card of models (name over a muted detail, a check on the chosen
- * one), a filter for long lists and, for administrators, "Manage models".
- * Controlled by the composer, which also opens it for "/model".
+ * one) and, for administrators, "Manage models". Controlled by the composer,
+ * which also opens it for "/model".
  */
 export function ModelMenu(props: {
   label: string;
@@ -193,25 +282,10 @@ export function ModelMenu(props: {
   /** Settings → Models, shown to administrators. */
   manageHref?: string;
 }) {
-  const [filter, setFilter] = useState("");
-  const total = props.groups.reduce((n, g) => n + g.options.length, 0);
-  const needle = filter.trim().toLowerCase();
-  const groups = props.groups
-    .map((g) => ({
-      ...g,
-      options: needle ? g.options.filter((o) => o.label.toLowerCase().includes(needle)) : g.options,
-    }))
-    .filter((g) => g.options.length > 0);
+  const groups = props.groups.filter((g) => g.options.length > 0);
   const headed = groups.length > 1;
   return (
-    <Menu.Root
-      modal={false}
-      open={props.open}
-      onOpenChange={(open) => {
-        if (!open) setFilter("");
-        props.onOpenChange(open);
-      }}
-    >
+    <Menu.Root modal={false} open={props.open} onOpenChange={props.onOpenChange}>
       <Menu.Trigger asChild disabled={props.disabled}>
         <ModelTrigger label={props.label} disabled={props.disabled} />
       </Menu.Trigger>
@@ -224,24 +298,6 @@ export function ModelMenu(props: {
           sideOffset={8}
           collisionPadding={8}
         >
-          {total > SEARCH_THRESHOLD ? (
-            <label className="model-search">
-              <Search size={18} aria-hidden />
-              <span className="visually-hidden">Search models</span>
-              <input
-                type="search"
-                placeholder="Search models"
-                value={filter}
-                onChange={(event) => {
-                  setFilter(event.currentTarget.value);
-                }}
-                // Typing filters; Radix's typeahead must not steal the keys.
-                onKeyDown={(event) => {
-                  if (event.key !== "Escape" && event.key !== "ArrowDown") event.stopPropagation();
-                }}
-              />
-            </label>
-          ) : null}
           <Menu.RadioGroup value={props.value} onValueChange={props.onChange}>
             {groups.map((group) => (
               <Menu.Group key={group.id}>
@@ -265,7 +321,6 @@ export function ModelMenu(props: {
               </Menu.Group>
             ))}
           </Menu.RadioGroup>
-          {needle && groups.length === 0 ? <p className="menu-label">No matching models</p> : null}
           {props.manageHref ? (
             <>
               <Menu.Separator className="menu-separator" />

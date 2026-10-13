@@ -53,7 +53,7 @@ export default function MemorySettings({ userId }: { userId: string }) {
           <h3>Add your first memory</h3>
           <p>No memories yet. Add a note and the assistant will remember it in every chat.</p>
           <button
-            className="btn primary"
+            className="btn small"
             type="button"
             onClick={() => {
               setEditing({ id: null });

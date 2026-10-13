@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   Brain,
-  ChevronRight,
   CircleUserRound,
   ClipboardList,
   Cpu,
@@ -18,7 +17,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useRouteLoaderData, useSearchParams } from "react-router";
 import { isTheme, type Theme } from "@shared/theme";
-import { ConfirmDialog } from "../components/Dialogs";
+import { ConfirmDialog, PasswordDialog } from "../components/Dialogs";
 import { Spinner } from "../components/Spinner";
 import { AttachmentSettings } from "../components/AttachmentSettings";
 import { SkillsSettings } from "../components/SkillsSettings";
@@ -204,6 +203,7 @@ function GeneralSection({ userId }: { userId: string }) {
 /** Settings → Account: who is signed in, the password and signing out. */
 function AccountSection({ username, isAdmin }: { username: string; isAdmin: boolean }) {
   const signOut = useSignOut();
+  const [changingPassword, setChangingPassword] = useState(false);
   return (
     <div className="settings-body" id="account" aria-labelledby="settings-account">
       <h1 id="settings-account">Account</h1>
@@ -223,14 +223,26 @@ function AccountSection({ username, isAdmin }: { username: string; isAdmin: bool
           <span className="settings-label">Username</span>
           <span className="settings-value">{username}</span>
         </div>
-        <Link to={paths.account()} className="settings-row">
+        <div className="settings-row">
           <span className="settings-label">Password</span>
-          <span className="settings-value">
+          <button
+            type="button"
+            className="btn small"
+            aria-haspopup="dialog"
+            onClick={() => {
+              setChangingPassword(true);
+            }}
+          >
             Change
-            <ChevronRight size={16} aria-hidden />
-          </span>
-        </Link>
+          </button>
+        </div>
       </Group>
+      <PasswordDialog
+        open={changingPassword}
+        onOpenChange={setChangingPassword}
+        // The change ended every session; leave the way signing out does.
+        onChanged={() => void signOut()}
+      />
       <Group>
         <div className="settings-row">
           <div>

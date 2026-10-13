@@ -1,5 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useState, type ReactNode } from "react";
+import { apiFetch } from "../lib/api";
 import { useFocusReturn } from "../lib/focus-return";
 
 /**
@@ -71,6 +72,95 @@ export function ConfirmDialog(props: {
           {props.confirmLabel}
         </button>
       </div>
+    </DialogFrame>
+  );
+}
+
+/** Settings → Account → Password. A change signs out every session, this one too. */
+export function PasswordDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChanged: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <DialogFrame
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) setError(null);
+        props.onOpenChange(open);
+      }}
+      title="Change password"
+      description="You’ll be signed out everywhere."
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setBusy(true);
+          void (async () => {
+            const response = await apiFetch("/api/auth/password", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                currentPassword: form.get("current"),
+                newPassword: form.get("next"),
+              }),
+            }).catch(() => null);
+            setBusy(false);
+            if (response?.ok) {
+              props.onChanged();
+              return;
+            }
+            const body = (await response?.json().catch(() => null)) as {
+              error?: { message?: string };
+            } | null;
+            setError(body?.error?.message ?? "Couldn’t change the password.");
+          })();
+        }}
+      >
+        <label htmlFor="password-current" className="visually-hidden">
+          Current password
+        </label>
+        <input
+          id="password-current"
+          name="current"
+          type="password"
+          className="text-input"
+          placeholder="Current password"
+          autoComplete="current-password"
+          required
+        />
+        <label htmlFor="password-next" className="visually-hidden">
+          New password
+        </label>
+        <input
+          id="password-next"
+          name="next"
+          type="password"
+          className="text-input"
+          placeholder="New password (10+ characters)"
+          autoComplete="new-password"
+          minLength={10}
+          required
+        />
+        {error ? (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="dialog-actions">
+          <Dialog.Close asChild>
+            <button type="button" className="btn">
+              Cancel
+            </button>
+          </Dialog.Close>
+          <button type="submit" className="btn primary" disabled={busy}>
+            Change
+          </button>
+        </div>
+      </form>
     </DialogFrame>
   );
 }

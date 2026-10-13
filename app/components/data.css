@@ -29,6 +29,12 @@
 
 .data-file {
   cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.data-file:hover {
+  background: var(--hover);
 }
 
 .data-file:focus-within {

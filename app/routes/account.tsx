@@ -14,7 +14,7 @@ export function loader({ context }: Route.LoaderArgs) {
   return { username: auth.username };
 }
 
-export default function Account({ loaderData }: Route.ComponentProps) {
+export default function Account() {
   const navigate = useNavigate();
   const [message, setMessage] = useState<string | null>(null);
 
@@ -39,9 +39,7 @@ export default function Account({ loaderData }: Route.ComponentProps) {
       <div className="page-card">
         <p className="page-brand">ChatUI</p>
         <h1>Change password</h1>
-        <p className="lede">
-          Signed in as <strong>{loaderData.username}</strong>. Changing it signs you out everywhere.
-        </p>
+        <p className="lede">You’ll be signed out everywhere.</p>
         <form className="auth-form" onSubmit={(event) => void changePassword(event)}>
           <label htmlFor="current" className="visually-hidden">
             Current password
@@ -56,20 +54,20 @@ export default function Account({ loaderData }: Route.ComponentProps) {
             required
           />
           <label htmlFor="next" className="visually-hidden">
-            New password (at least 10 characters)
+            New password
           </label>
           <input
             id="next"
             name="next"
             type="password"
             className="text-input"
-            placeholder="New password (at least 10 characters)"
+            placeholder="New password (10+ characters)"
             autoComplete="new-password"
             minLength={10}
             required
           />
           <button type="submit" className="btn primary large">
-            Change password and sign out everywhere
+            Change password
           </button>
           {message ? (
             <p className="error" role="alert">
