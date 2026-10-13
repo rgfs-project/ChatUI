@@ -288,7 +288,8 @@ textarea {
 }
 
 .icon-btn:hover:not(:disabled),
-.icon-btn[aria-expanded="true"],
+/* The sidebar toggle is expanded by default, so it only highlights on hover. */
+.icon-btn[aria-expanded="true"]:not(.toggle-btn),
 .icon-btn[data-state="open"] {
   background: var(--hover);
   color: var(--fg);
