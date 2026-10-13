@@ -84,7 +84,7 @@ test.describe("conversation operations (INV-35)", () => {
     await page.reload();
     await hydrated(page);
     await expect(page.getByTestId("pinned-list")).toContainText(title ?? "");
-    await page.locator(".chat-title .title-trigger").click();
+    await page.locator(".app-header .title-trigger").click();
     await page.getByRole("menuitem", { name: "Unpin" }).click();
     await expect(page.getByTestId("pinned-list")).toHaveCount(0);
   });

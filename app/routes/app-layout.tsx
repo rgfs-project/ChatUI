@@ -7,13 +7,12 @@ import {
   useMatches,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { ConversationView } from "../components/ConversationView";
 import { SectionBoundary } from "../components/SectionBoundary";
 import { Sidebar } from "../components/Sidebar";
 import { SignedOutShell } from "../components/SignedOutShell";
 import { appContext } from "../context";
 import { useAuth } from "../lib/auth-store";
-import { documentPathOf, paths, type OverlayState } from "../lib/paths";
+import { documentPathOf, paths } from "../lib/paths";
 import { getQueryClient, queryKeys } from "../lib/query";
 import { prefetchForRequest } from "../lib/server-query";
 import { LiveAnnouncer } from "../lib/announcer";
@@ -100,8 +99,8 @@ const SidebarDrawer = lazy(loadDrawer);
 const noop = () => undefined;
 
 function Shell({ loaderData }: Route.ComponentProps) {
-  // Wide screens: a column that can be hidden. Narrow screens: a modal
-  // drawer (Phase 11), closed by default and after navigating.
+  // Wide screens: a column that folds to an icon rail. Narrow screens: a
+  // modal drawer, closed by default and after navigating.
   const narrow = useMediaQuery(NARROW_QUERY);
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -119,13 +118,7 @@ function Shell({ loaderData }: Route.ComponentProps) {
   useVisualViewportHeight();
   const matches = useMatches();
   const auth = useAuth();
-  const overlay = matches.some((m) => /routes\/(settings|admin)$/.test(m.id));
-  const background = (location.state as OverlayState | null)?.background;
-  // `/chat/new` is the empty draft, not a conversation id (fetching it 400s).
-  const backgroundSegment = background?.startsWith("/chat/")
-    ? decodeURIComponent(background.slice(6))
-    : undefined;
-  const backgroundId = backgroundSegment === "new" ? undefined : backgroundSegment;
+  const settingsPage = matches.some((m) => /routes\/(settings|admin)$/.test(m.id));
   // The account the tab belongs to (kept through an expiry). Shell state
   // (drafts, model choices, queue) is scoped to it: another account remounts it.
   const account = auth.expired?.userId ?? auth.session?.user?.id ?? loaderData.user.id;
@@ -133,8 +126,8 @@ function Shell({ loaderData }: Route.ComponentProps) {
   const signedIn = auth.status === "authenticated" && user !== null;
 
   const sidebarVisible = !narrow && !collapsed;
-  const hide = useCallback(() => {
-    setCollapsed(true);
+  const toggle = useCallback(() => {
+    setCollapsed((value) => !value);
   }, []);
   const show = useCallback(() => {
     if (narrow) {
@@ -164,27 +157,26 @@ function Shell({ loaderData }: Route.ComponentProps) {
     <HydrationBoundary state={loaderData.dehydratedState}>
       <ShellProvider key={account}>
         <SidebarProvider value={sidebarControls}>
-          <div
-            className={`app-shell${sidebarVisible && signedIn ? "" : " sidebar-collapsed"}`}
-            data-testid="app-shell"
-            data-auth={auth.status}
-          >
+          <div className="app-shell" data-testid="app-shell" data-auth={auth.status}>
             {signedIn ? (
               <>
-                <SectionBoundary
-                  label="The conversation list"
-                  resetKeys={[user.id]}
-                  queryKey={queryKeys.conversations(user.id)}
-                  className="sidebar"
-                >
-                  <Sidebar
-                    user={user}
-                    hidden={!sidebarVisible}
-                    drawer={false}
-                    onHide={hide}
-                    onNavigate={noop}
-                  />
-                </SectionBoundary>
+                {/* Settings brings its own navigation in place of the conversation list. */}
+                {settingsPage ? null : (
+                  <SectionBoundary
+                    label="The conversation list"
+                    resetKeys={[user.id]}
+                    queryKey={queryKeys.conversations(user.id)}
+                    className="sidebar"
+                  >
+                    <Sidebar
+                      user={user}
+                      collapsed={collapsed}
+                      drawer={false}
+                      onToggle={toggle}
+                      onNavigate={noop}
+                    />
+                  </SectionBoundary>
+                )}
                 {narrow && drawerUsed ? (
                   <Suspense fallback={null}>
                     <SidebarDrawer
@@ -198,25 +190,12 @@ function Shell({ loaderData }: Route.ComponentProps) {
                 {/* The background is inert while the drawer is open. */}
                 <div className="app-main" inert={drawerShown}>
                   <SectionBoundary
-                    label="This conversation"
+                    label={settingsPage ? "Settings" : "This conversation"}
                     resetKeys={[location.pathname]}
                     queryKey={["user", user.id]}
                     className="chat"
                   >
-                    {overlay ? (
-                      <>
-                        {/* URL-backed overlay: the previous conversation stays behind it. */}
-                        <ConversationView
-                          key={backgroundId ?? "new"}
-                          userId={user.id}
-                          conversationId={backgroundId}
-                          inert
-                        />
-                        <Outlet />
-                      </>
-                    ) : (
-                      <Outlet />
-                    )}
+                    <Outlet />
                   </SectionBoundary>
                 </div>
                 {/* Outside the inert area, so it keeps speaking under the drawer. */}
@@ -243,6 +222,7 @@ export function ErrorBoundary() {
       <p>Something went wrong while loading the app.</p>
       <button
         type="button"
+        className="btn primary"
         onClick={() => {
           window.location.reload();
         }}

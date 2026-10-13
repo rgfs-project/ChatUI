@@ -6,7 +6,19 @@ import {
   useQueryClient,
   type Mutation,
 } from "@tanstack/react-query";
-import { ArrowDown, ChevronDown, PanelLeft, SquarePen, X } from "lucide-react";
+import {
+  ArrowDown,
+  Code,
+  Ellipsis,
+  FileText,
+  GripVertical,
+  Lightbulb,
+  PanelLeft,
+  Pencil,
+  PenLine,
+  SquarePen,
+  X,
+} from "lucide-react";
 import {
   Fragment,
   lazy,
@@ -175,6 +187,97 @@ function Greeting({ level, text }: { level: 1 | 2; text: string }) {
   return level === 1 ? <h1 className="greeting">{text}</h1> : <h2 className="greeting">{text}</h2>;
 }
 
+/** Starters under the empty composer: each fills the box with a prompt to finish. */
+const SUGGESTIONS = [
+  { label: "Help me write", prompt: "Help me write ", icon: <PenLine size={18} aria-hidden /> },
+  { label: "Code", prompt: "Help me with this code: ", icon: <Code size={18} aria-hidden /> },
+  {
+    label: "Brainstorm",
+    prompt: "Brainstorm ideas for ",
+    icon: <Lightbulb size={18} aria-hidden />,
+  },
+  { label: "Summarize", prompt: "Summarize this: ", icon: <FileText size={18} aria-hidden /> },
+] as const;
+
+function Suggestions({ onPick }: { onPick: (prompt: string) => void }) {
+  return (
+    <div className="suggestions" data-testid="suggestions">
+      {SUGGESTIONS.map((s) => (
+        <button
+          key={s.label}
+          type="button"
+          className="suggestion"
+          onClick={() => {
+            onPick(s.prompt);
+          }}
+        >
+          {s.icon}
+          {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Messages typed while a reply runs, above the composer: sent in order when it
+ * finishes. Each can go back into the box to edit, or be removed.
+ */
+function QueuePanel(props: {
+  items: readonly { id: string; content: string; attachments?: readonly AttachmentDto[] }[];
+  onEdit: (id: string) => void;
+  onRemove: (id: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <section className="queue" aria-label="Queued messages">
+      <div className="queue-head">
+        <span>{props.items.length} queued</span>
+        <button type="button" className="btn ghost" onClick={props.onClear}>
+          Clear all
+        </button>
+      </div>
+      <ol className="conversation-list">
+        {props.items.map((item) => {
+          const files = item.attachments?.length ?? 0;
+          const text = item.content || `${String(files)} attachment${files === 1 ? "" : "s"}`;
+          return (
+            <li key={item.id} className="queue-item" data-testid="message-queued">
+              <GripVertical size={16} aria-hidden />
+              <span className="queue-text">
+                <span className="visually-hidden">Queued: </span>
+                {text}
+              </span>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Edit queued message"
+                title="Edit"
+                onClick={() => {
+                  props.onEdit(item.id);
+                }}
+              >
+                <Pencil size={16} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Remove queued message"
+                title="Remove"
+                onClick={() => {
+                  props.onRemove(item.id);
+                }}
+              >
+                <X size={16} aria-hidden />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 /**
  * One conversation (or the /chat/new draft). Server-owned state only: the
  * transcript comes from the conversation query, the running reply from the
@@ -195,14 +298,7 @@ export function ConversationView(props: {
   const location = useLocation();
   const client = useQueryClient();
   const shell = useShell();
-  const {
-    visible: sidebarVisible,
-    show: showSidebar,
-    narrow,
-    drawerOpen,
-    setDrawerTrigger,
-    warmDrawer,
-  } = useSidebar();
+  const { show: showSidebar, narrow, drawerOpen, setDrawerTrigger, warmDrawer } = useSidebar();
   const actions = useConversationActions(userId);
   const draftKey = conversationId ?? NEW_DRAFT;
   const queued = useQueue(draftKey);
@@ -679,7 +775,7 @@ export function ConversationView(props: {
 
   if (loadError?.code === "CONVERSATION_MALFORMED") {
     return (
-      <main className="chat empty-state" data-testid="malformed-state" inert={props.inert}>
+      <main className="chat-view empty-state" data-testid="malformed-state" inert={props.inert}>
         <h1>This conversation can’t be opened</h1>
         <p>
           Its file on the server is not valid ChatUI Markdown, so it can’t be shown or changed. The
@@ -687,7 +783,7 @@ export function ConversationView(props: {
         </p>
         <button
           type="button"
-          className="secondary danger-outline"
+          className="btn danger"
           onClick={() => {
             setConfirmUsed(true);
             setConfirmDelete(true);
@@ -713,10 +809,12 @@ export function ConversationView(props: {
   }
   if (loadError?.status === 404) {
     return (
-      <main className="chat empty-state" data-testid="missing-state" inert={props.inert}>
+      <main className="chat-view empty-state" data-testid="missing-state" inert={props.inert}>
         <h1>This conversation does not exist</h1>
         <p>It may have been deleted.</p>
-        <Link to={paths.newChat()}>Start a new chat</Link>
+        <Link to={paths.newChat()} className="btn primary">
+          Start a new chat
+        </Link>
       </main>
     );
   }
@@ -752,51 +850,62 @@ export function ConversationView(props: {
       })),
   ];
 
+  const exportConversation = (id: string) => {
+    // The exact canonical bytes as a download (no attachments).
+    const link = document.createElement("a");
+    link.href = `/api/conversations/${encodeURIComponent(id)}/export`;
+    link.download = "";
+    link.click();
+  };
+
   return (
     <main
-      className={`chat${empty ? " chat-empty" : ""}`}
+      className={`chat-view${empty ? " empty" : ""}`}
       data-testid="conversation"
       inert={props.inert}
     >
-      <header className="chat-header app-header">
-        {sidebarVisible ? null : (
+      <header className="app-header">
+        {narrow ? (
           <span className="header-nav">
             <button
               ref={setDrawerTrigger}
               type="button"
               className="icon-btn"
-              aria-label={narrow ? "Open conversations" : "Show sidebar"}
-              aria-expanded={narrow ? drawerOpen : false}
-              aria-controls={narrow ? undefined : "sidebar"}
-              aria-haspopup={narrow ? "dialog" : undefined}
-              title={narrow ? "Conversations" : "Show sidebar"}
+              aria-label="Open sidebar"
+              aria-expanded={drawerOpen}
+              aria-haspopup="dialog"
+              title="Open sidebar"
               // Warm the drawer chunk on intent (touch or mouse), never required.
               onPointerDown={warmDrawer}
-              onFocus={() => {
-                if (narrow) warmDrawer();
-              }}
+              onFocus={warmDrawer}
               onClick={showSidebar}
             >
-              <PanelLeft size={18} aria-hidden />
+              <PanelLeft size={20} aria-hidden />
             </button>
-            <Link to={paths.newChat()} className="icon-btn" aria-label="New chat" title="New chat">
-              <SquarePen size={18} aria-hidden />
-            </Link>
           </span>
-        )}
-        {conversation ? (
-          <h1 className="chat-title">
+        ) : null}
+        <div className="header-title">
+          {conversation ? <h1 className="title-text">{conversation.title}</h1> : null}
+        </div>
+        <div className="header-actions">
+          {narrow ? (
+            <Link to={paths.newChat()} className="icon-btn" aria-label="New chat" title="New chat">
+              <SquarePen size={20} aria-hidden />
+            </Link>
+          ) : null}
+          {conversation ? (
             <Suspense
               fallback={
                 <button
                   type="button"
-                  className="title-trigger"
+                  className="icon-btn title-trigger"
+                  aria-label={`Actions for ${conversation.title}`}
+                  title="More options"
                   onClick={(event) => {
                     setTitleMenuRequested(menuRequest(event));
                   }}
                 >
-                  <span className="title-text">{conversation.title}</span>
-                  <ChevronDown size={16} aria-hidden />
+                  <Ellipsis size={20} aria-hidden />
                 </button>
               }
             >
@@ -816,23 +925,18 @@ export function ConversationView(props: {
                   actions.remove(conversation, titleTriggerRef.current);
                 }}
                 onExport={() => {
-                  // The exact canonical bytes as a download (no attachments).
-                  const link = document.createElement("a");
-                  link.href = `/api/conversations/${encodeURIComponent(conversation.id)}/export`;
-                  link.download = "";
-                  link.click();
+                  exportConversation(conversation.id);
                 }}
               />
             </Suspense>
-          </h1>
-        ) : null}
+          ) : null}
+        </div>
       </header>
 
-      {/* Not a Tab stop of its own (owner's request): keyboard users reach its
-          buttons, and the arrow keys scroll it from any of them. Focusable by
-          script only (tabIndex -1). */}
+      {/* Not a Tab stop of its own: keyboard users reach its buttons, and the
+          arrow keys scroll it from any of them. Focusable by script only. */}
       <div
-        className="scroll"
+        className="transcript"
         ref={transcriptRef}
         {...scrollHandlers}
         tabIndex={-1}
@@ -841,8 +945,8 @@ export function ConversationView(props: {
         aria-busy={loading}
         data-testid="transcript"
       >
-        {empty ? <Greeting level={conversation ? 2 : 1} text="How can I help?" /> : null}
-        <ol className="history" aria-label="Messages">
+        {empty ? <Greeting level={conversation ? 2 : 1} text="Hello! How can I help?" /> : null}
+        <ol className="transcript-inner" aria-label="Messages" hidden={empty}>
           {conversation?.messages.map((message) => (
             <Fragment key={message.id}>
               {separators.has(message.id) ? (
@@ -916,7 +1020,11 @@ export function ConversationView(props: {
             ) : null,
           )}
           {showLive ? (
-            <li className="turn turn-assistant live" data-testid="response" aria-busy={running}>
+            <li
+              className={`turn turn-assistant live${running ? " streaming" : ""}`}
+              data-testid="response"
+              aria-busy={running}
+            >
               <span className="visually-hidden">Assistant</span>
               {live.reasoning ? (
                 <Reasoning
@@ -930,13 +1038,20 @@ export function ConversationView(props: {
               <div data-testid="content">
                 <Markdown text={live.content} live growing={!isTerminalState(live.state)} />
               </div>
-              {running && live.content === "" ? <span className="cursor" aria-hidden /> : null}
-              <p className="gen-status" data-testid="generation-status">
+              {running && live.content === "" ? (
+                <span className="thinking" aria-hidden>
+                  <span className="breathe" />
+                </span>
+              ) : null}
+              <p
+                className={running ? "visually-hidden" : "gen-status"}
+                data-testid="generation-status"
+              >
                 {STATE_LABEL[live.state]}
                 {live.error ? ` — ${live.error.message}` : ""}
               </p>
               {live.proposals.some((p) => p.status === "pending") ? (
-                // Previews only: they become actionable once the reply is stored (§4.3).
+                // Previews only: they become actionable once the reply is stored.
                 <p className="memory-previews" data-testid="memory-previews">
                   Memory suggestions to review when the reply finishes:{" "}
                   {live.proposals
@@ -947,45 +1062,15 @@ export function ConversationView(props: {
               ) : null}
             </li>
           ) : null}
-          {queued.map((item) => (
-            <li key={item.id} className="turn turn-user turn-queued" data-testid="message-queued">
-              <span className="visually-hidden">You (queued)</span>
-              {item.attachments?.length ? (
-                <MessageAttachments
-                  items={item.attachments.map(asMessageAttachment)}
-                  onOpenImage={openImage}
-                />
-              ) : null}
-              {item.content ? (
-                <div className="bubble">
-                  <p className="plain-text">{item.content}</p>
-                </div>
-              ) : null}
-              <div className="queued-meta">
-                <span>Queued</span>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  aria-label="Remove queued message"
-                  title="Remove"
-                  onClick={() => {
-                    shell.removeQueued(draftKey, item.id);
-                  }}
-                >
-                  <X size={14} aria-hidden />
-                </button>
-              </div>
-            </li>
-          ))}
         </ol>
         {loading ? (
           <Spinner label="Loading conversation…" testId="transcript-loading" />
         ) : fetchError ? (
-          <div className="placeholder" role="alert" data-testid="transcript-error">
-            <p>This conversation couldn’t be loaded.</p>
+          <div className="notice error" role="alert" data-testid="transcript-error">
+            <span>This conversation couldn’t be loaded.</span>
             <button
               type="button"
-              className="secondary"
+              className="btn small"
               onClick={() => void conversationQuery.refetch()}
             >
               Try again
@@ -993,12 +1078,11 @@ export function ConversationView(props: {
           </div>
         ) : null}
         {showJump ? (
-          // Sticky at the bottom of the transcript: centered in the column, a
-          // fixed distance above the composer however tall it grows.
+          // Sticky at the bottom of the transcript, a fixed distance above the composer.
           <div className="jump-anchor">
             <button
               type="button"
-              className="jump-to-latest"
+              className="btn jump-to-latest"
               onClick={jumpToLatest}
               data-testid="jump-to-latest"
             >
@@ -1007,34 +1091,66 @@ export function ConversationView(props: {
           </div>
         ) : null}
       </div>
-      <Composer
-        userId={userId}
-        textareaRef={textareaRef}
-        draftKey={draftKey}
-        hydrated={hydrated}
-        inert={props.inert === true}
-        running={running}
-        sending={sending}
-        status={status}
-        models={modelsQuery}
-        preferred={
-          shell.getModel(draftKey) ??
-          (lastReply?.provider && lastReply.model ? [lastReply.provider, lastReply.model] : null)
-        }
-        commands={commands}
-        onSubmit={submit}
-        onCommand={runCommand}
-        onCommandIntent={() => {
-          setWantSkills(true);
-        }}
-        onCancel={() => void cancel()}
-        attachments={tray}
-        attachNotice={attachNotice}
-        onAttach={attach}
-        onRemoveAttachment={(localId) => {
-          removeAttachment(userId, draftKey, localId);
-        }}
-      />
+      <div className="composer-dock">
+        {queued.length > 0 ? (
+          <QueuePanel
+            items={queued}
+            onEdit={(id) => {
+              const item = queued.find((q) => q.id === id);
+              const el = textareaRef.current;
+              if (!item || !el) return;
+              shell.removeQueued(draftKey, id);
+              restoreReady(userId, draftKey, item.attachments ?? []);
+              setBox(el, [item.content, el.value].filter((t) => t !== "").join("\n\n"));
+              el.focus();
+            }}
+            onRemove={(id) => {
+              shell.removeQueued(draftKey, id);
+            }}
+            onClear={() => {
+              shell.takeQueue(draftKey);
+            }}
+          />
+        ) : null}
+        <Composer
+          userId={userId}
+          textareaRef={textareaRef}
+          draftKey={draftKey}
+          hydrated={hydrated}
+          inert={props.inert === true}
+          running={running}
+          sending={sending}
+          status={status}
+          models={modelsQuery}
+          preferred={
+            shell.getModel(draftKey) ??
+            (lastReply?.provider && lastReply.model ? [lastReply.provider, lastReply.model] : null)
+          }
+          commands={commands}
+          onSubmit={submit}
+          onCommand={runCommand}
+          onCommandIntent={() => {
+            setWantSkills(true);
+          }}
+          onCancel={() => void cancel()}
+          attachments={tray}
+          attachNotice={attachNotice}
+          onAttach={attach}
+          onRemoveAttachment={(localId) => {
+            removeAttachment(userId, draftKey, localId);
+          }}
+        />
+      </div>
+      {empty ? (
+        <Suggestions
+          onPick={(text) => {
+            const el = textareaRef.current;
+            if (!el) return;
+            setBox(el, text);
+            el.focus();
+          }}
+        />
+      ) : null}
       {actions.dialogs}
       {opsUsed ? (
         <Suspense fallback={null}>
@@ -1163,7 +1279,7 @@ function PendingMessage(props: {
       {props.status === "pending" ? <span className="queued-meta">Sending…</span> : null}
       {unknown ? (
         <div className="pending-actions" role="alert">
-          <span className="badge status-failed">Outcome unknown</span>
+          <span className="badge danger">Outcome unknown</span>
           <p>
             {notFound
               ? "The server has no record of this message. It was probably not saved."
@@ -1172,7 +1288,7 @@ function PendingMessage(props: {
           <div className="pending-buttons">
             <button
               type="button"
-              className="secondary"
+              className="btn small"
               disabled={checking}
               onClick={() => {
                 setChecking(true);
@@ -1192,7 +1308,7 @@ function PendingMessage(props: {
             {notFound ? (
               <button
                 type="button"
-                className="secondary"
+                className="btn small"
                 onClick={() => {
                   props.onEdit(props.vars.content);
                 }}

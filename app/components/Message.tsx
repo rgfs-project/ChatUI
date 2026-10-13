@@ -150,11 +150,11 @@ function ActionButtons({
       }}
     >
       {action === "edit" ? (
-        <Pencil size={16} aria-hidden />
+        <Pencil size={18} aria-hidden />
       ) : action === "delete" ? (
-        <Trash2 size={16} aria-hidden />
+        <Trash2 size={18} aria-hidden />
       ) : (
-        <RefreshCw size={16} aria-hidden />
+        <RefreshCw size={18} aria-hidden />
       )}
     </button>
   ));

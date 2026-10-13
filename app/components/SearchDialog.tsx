@@ -1,16 +1,17 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquare, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { MessageCircle, Plus, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { SEARCH_LIMITS, type SearchResult } from "@shared/conversations";
 import { useFocusReturn } from "../lib/focus-return";
 import { paths } from "../lib/paths";
-import "./operations.css";
 import { queries } from "../lib/query";
 
 /** Keystrokes settle this long before a query is sent. */
 const DEBOUNCE_MS = 200;
+/** Recent chats offered before anything is typed. */
+const RECENT_COUNT = 5;
 
 function optionId(index: number): string {
   return `search-option-${String(index)}`;
@@ -21,11 +22,19 @@ export function resultHref(result: SearchResult): string {
   return `${paths.chat(result.conversationId)}${result.messageId ? `#m-${result.messageId}` : ""}`;
 }
 
+interface Option {
+  key: string;
+  href: string;
+  icon: ReactNode;
+  title: string;
+  snippet?: ReactNode;
+}
+
 /**
- * Search chats (Phase 13a, INV-36; loaded when opened). A Radix Dialog with a
- * combobox: typing searches the signed-in user's titles and messages
- * (debounced, bounded by the server); ↑/↓ move through the results, Enter
- * opens the conversation at the matching message, Escape closes.
+ * Search chats (loaded when opened). A Radix Dialog with a combobox: before
+ * typing it offers a new chat and the latest chats; typing searches the
+ * signed-in user's titles and messages (debounced, bounded by the server).
+ * ↑/↓ move through the options, Enter opens one, Escape closes.
  */
 export function SearchDialog({
   userId,
@@ -33,7 +42,7 @@ export function SearchDialog({
   onNavigate,
 }: {
   userId: string;
-  /** `navigated`: a result was opened (focus then stays with the new page). */
+  /** `navigated`: an option was opened (focus then stays with the new page). */
   onClose: (navigated: boolean) => void;
   onNavigate: () => void;
 }) {
@@ -52,13 +61,50 @@ export function SearchDialog({
     };
   }, [text]);
   const search = useQuery({ ...queries.search(userId, query), enabled: query !== "" });
+  // The sidebar already loaded the list: read it from the cache, never refetch.
+  const recents = useQuery({ ...queries.conversations(userId), enabled: false });
   const results = query === "" ? [] : (search.data?.results ?? []);
-  const current = Math.min(active, results.length - 1);
 
-  const open = (result: SearchResult) => {
+  const options: Option[] =
+    query === ""
+      ? [
+          {
+            key: "new",
+            href: paths.newChat(),
+            icon: <Plus size={20} aria-hidden />,
+            title: "New chat",
+          },
+          ...(recents.data ?? []).slice(0, RECENT_COUNT).map((c) => ({
+            key: c.id,
+            href: paths.chat(c.id),
+            icon: <MessageCircle size={20} aria-hidden />,
+            title: c.title,
+          })),
+        ]
+      : results.map((result) => ({
+          key: `${result.conversationId}:${result.messageId ?? "title"}`,
+          href: resultHref(result),
+          icon: <MessageCircle size={20} aria-hidden />,
+          title: result.title,
+          snippet: (
+            <>
+              {result.role ? (
+                <span className="visually-hidden">
+                  {result.role === "user" ? "You: " : "Assistant: "}
+                </span>
+              ) : null}
+              {result.snippet.before}
+              <mark>{result.snippet.match}</mark>
+              {result.snippet.after}
+            </>
+          ),
+        }));
+  const current = Math.min(active, options.length - 1);
+
+  const open = (option: Option) => {
     onNavigate();
     onClose(true);
-    void navigate(resultHref(result));
+    void navigate(option.href);
   };
 
   const status =
@@ -95,18 +141,16 @@ export function SearchDialog({
           <Dialog.Description className="visually-hidden">
             Type to search; use the arrow keys to choose a result and Enter to open it.
           </Dialog.Description>
-          <div className="search-field">
-            <Search size={18} aria-hidden />
+          <div className="search-head">
             <input
-              className="search-input"
               type="search"
               role="combobox"
               aria-label="Search chats"
-              aria-expanded={results.length > 0}
+              aria-expanded={options.length > 0}
               aria-controls="search-results"
               aria-autocomplete="list"
-              aria-activedescendant={results.length > 0 ? optionId(current) : undefined}
-              placeholder="Search chats"
+              aria-activedescendant={options.length > 0 ? optionId(current) : undefined}
+              placeholder="Search…"
               maxLength={SEARCH_LIMITS.maxQuery}
               value={text}
               autoFocus
@@ -114,54 +158,55 @@ export function SearchDialog({
                 setText(event.currentTarget.value);
               }}
               onKeyDown={(event) => {
-                if (results.length === 0) return;
+                if (options.length === 0) return;
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                   event.preventDefault();
-                  const step = event.key === "ArrowDown" ? 1 : results.length - 1;
-                  setActive((current + step) % results.length);
+                  const step = event.key === "ArrowDown" ? 1 : options.length - 1;
+                  setActive((current + step) % options.length);
                 } else if (event.key === "Enter") {
                   event.preventDefault();
-                  const chosen = results[current];
+                  const chosen = options[current];
                   if (chosen) open(chosen);
                 }
               }}
             />
+            <Dialog.Close asChild>
+              <button type="button" className="icon-btn" aria-label="Close" title="Close">
+                <X size={20} aria-hidden />
+              </button>
+            </Dialog.Close>
           </div>
-          <p className="search-status" role="status" aria-live="polite">
+          <p className="visually-hidden" role="status" aria-live="polite">
             {status}
           </p>
           <ul id="search-results" role="listbox" aria-label="Results" className="search-results">
-            {results.map((result, index) => (
+            {options.map((option, index) => (
               <li
-                key={`${result.conversationId}:${result.messageId ?? "title"}`}
+                key={option.key}
                 id={optionId(index)}
                 role="option"
                 aria-selected={index === current}
-                className={`search-result${index === current ? " active" : ""}`}
+                className="search-result"
                 onPointerMove={() => {
                   setActive(index);
                 }}
                 onClick={() => {
-                  open(result);
+                  open(option);
                 }}
               >
-                <MessageSquare size={16} aria-hidden />
-                <span className="search-text">
-                  <span className="search-title">{result.title}</span>
-                  <span className="search-snippet">
-                    {result.role ? (
-                      <span className="visually-hidden">
-                        {result.role === "user" ? "You: " : "Assistant: "}
-                      </span>
-                    ) : null}
-                    {result.snippet.before}
-                    <mark>{result.snippet.match}</mark>
-                    {result.snippet.after}
-                  </span>
+                {option.icon}
+                <span className="grow">
+                  <span className="title">{option.title}</span>
+                  {option.snippet ? <span className="snippet">{option.snippet}</span> : null}
                 </span>
               </li>
             ))}
           </ul>
+          {query !== "" && !search.isPending && results.length === 0 ? (
+            <p className="search-empty">
+              {search.isError ? "Search failed. Try again." : "No matches."}
+            </p>
+          ) : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

@@ -40,7 +40,7 @@ test.describe("export and import (INV-42, INV-43)", () => {
 
   test("a chat exports as its exact Markdown from the title menu", async ({ page }) => {
     await sendMessage(page, "export me");
-    await page.locator(".chat-title .title-trigger").click();
+    await page.locator(".app-header .title-trigger").click();
     const [download] = await Promise.all([
       page.waitForEvent("download"),
       page.getByRole("menuitem", { name: "Export as Markdown" }).click(),

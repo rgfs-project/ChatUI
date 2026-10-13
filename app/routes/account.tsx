@@ -36,36 +36,51 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="page">
-      <h1>Account</h1>
-      <p>
-        Signed in as <strong>{loaderData.username}</strong>. <a href="/chat">Back to chats</a>
-      </p>
-      <h2>Change password</h2>
-      <form className="auth-form" onSubmit={(event) => void changePassword(event)}>
-        <label htmlFor="current">Current password</label>
-        <input
-          id="current"
-          name="current"
-          type="password"
-          autoComplete="current-password"
-          required
-        />
-        <label htmlFor="next">New password (at least 10 characters)</label>
-        <input
-          id="next"
-          name="next"
-          type="password"
-          autoComplete="new-password"
-          minLength={10}
-          required
-        />
-        <button type="submit">Change password and sign out everywhere</button>
-        {message ? (
-          <p className="error" role="alert">
-            {message}
-          </p>
-        ) : null}
-      </form>
+      <div className="page-card">
+        <p className="page-brand">ChatUI</p>
+        <h1>Change password</h1>
+        <p className="lede">
+          Signed in as <strong>{loaderData.username}</strong>. Changing it signs you out everywhere.
+        </p>
+        <form className="auth-form" onSubmit={(event) => void changePassword(event)}>
+          <label htmlFor="current" className="visually-hidden">
+            Current password
+          </label>
+          <input
+            id="current"
+            name="current"
+            type="password"
+            className="text-input"
+            placeholder="Current password"
+            autoComplete="current-password"
+            required
+          />
+          <label htmlFor="next" className="visually-hidden">
+            New password (at least 10 characters)
+          </label>
+          <input
+            id="next"
+            name="next"
+            type="password"
+            className="text-input"
+            placeholder="New password (at least 10 characters)"
+            autoComplete="new-password"
+            minLength={10}
+            required
+          />
+          <button type="submit" className="btn primary large">
+            Change password and sign out everywhere
+          </button>
+          {message ? (
+            <p className="error" role="alert">
+              {message}
+            </p>
+          ) : null}
+        </form>
+        <p className="page-foot">
+          <a href="/chat">Back to chats</a>
+        </p>
+      </div>
     </main>
   );
 }

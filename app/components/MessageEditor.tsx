@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import "./operations.css";
 
 /**
  * Inline editor for a user message (Phase 13a, loaded on first use). "Send"
@@ -56,12 +55,12 @@ export function MessageEditor({
         }}
       />
       <div className="message-editor-actions">
-        <button type="button" className="secondary" onClick={onCancel} disabled={busy}>
+        <button type="button" className="btn" onClick={onCancel} disabled={busy}>
           Cancel
         </button>
         <button
           type="button"
-          className="secondary"
+          className="btn"
           onClick={() => {
             submit(false);
           }}
@@ -70,7 +69,12 @@ export function MessageEditor({
         >
           Save
         </button>
-        <button type="submit" disabled={busy} title="Save and get a new reply (Ctrl+Enter)">
+        <button
+          className="btn primary"
+          type="submit"
+          disabled={busy}
+          title="Save and get a new reply (Ctrl+Enter)"
+        >
           Send
         </button>
       </div>

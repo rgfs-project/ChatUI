@@ -103,7 +103,7 @@ test.describe("as an admin", () => {
     ).not.toBeChecked();
 
     // Settings: a validated time zone.
-    await panel.getByRole("button", { name: "Instance settings", exact: true }).click();
+    await panel.getByRole("button", { name: "Instance", exact: true }).click();
     const settings = panel.getByRole("form", { name: "Instance settings" });
     await settings.getByLabel("Time zone (IANA)").fill("Not/AZone");
     await settings.getByRole("button", { name: "Save settings" }).click();
@@ -113,7 +113,7 @@ test.describe("as an admin", () => {
     await expect(panel.getByTestId("admin-status").last()).toContainText("done");
 
     // Audit log: actions, never values.
-    await panel.getByRole("button", { name: "Audit log", exact: true }).click();
+    await panel.getByRole("button", { name: "Logs", exact: true }).click();
     const audit = panel.getByTestId("admin-audit");
     await expect(audit).toContainText("user.create");
     await expect(audit).toContainText("model.settings");

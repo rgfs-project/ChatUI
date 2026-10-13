@@ -1,30 +1,28 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { menuRequest, type MenuRequest } from "../lib/menu-request";
 import {
   AlertTriangle,
   ChevronRight,
-  MoreHorizontal,
+  Ellipsis,
+  FolderClosed,
   PanelLeft,
   Search,
   SquarePen,
 } from "lucide-react";
 import type { ConversationSummary } from "@shared/conversations";
-import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useMatches, useParams } from "react-router";
-import { paths, type OverlayState } from "../lib/paths";
+import { lazy, memo, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
+import { Link, useLocation, useParams } from "react-router";
+import { menuRequest, type MenuRequest } from "../lib/menu-request";
+import { paths } from "../lib/paths";
 import { endIntent, prefetchIntent } from "../lib/prefetch";
 import { queries } from "../lib/query";
 import { count } from "../lib/render-counters";
 import { useCollapsedSections } from "../lib/sidebar-sections";
-import { useSignOut } from "../lib/use-sign-out";
 import { AccountLabel } from "./AccountLabel";
 import { preloadDialogs, useConversationActions } from "./ConversationActions";
 
-// Menus load on demand (Phase 9); a same-looking placeholder stands in.
-const loadMenus = () => import("./Menus");
-const RowMenu = lazy(() => loadMenus().then((m) => ({ default: m.RowMenu })));
-const AccountMenu = lazy(() => loadMenus().then((m) => ({ default: m.AccountMenu })));
-// Search (Phase 13a) loads when opened.
+// The row menu loads on demand; a same-looking placeholder stands in.
+const RowMenu = lazy(() => import("./Menus").then((m) => ({ default: m.RowMenu })));
+// Search loads when opened.
 const SearchDialog = lazy(() =>
   import("./SearchDialog").then((m) => ({ default: m.SearchDialog })),
 );
@@ -37,49 +35,39 @@ export interface SidebarUser {
 
 interface SidebarProps {
   user: SidebarUser;
-  hidden: boolean;
-  /** Rendered inside the narrow-screen drawer (Phase 11). */
+  /** Wide screens: folded to an icon rail (the toggle reopens it). */
+  collapsed: boolean;
+  /** Rendered inside the narrow-screen drawer. */
   drawer: boolean;
   /** The drawer instance needs its own id. */
   navId?: string;
-  /** Accessible name of the hide/close button. */
-  hideLabel?: string;
-  onHide: () => void;
+  /** Folds the rail, or closes the drawer. */
+  onToggle: () => void;
   /** Called after choosing a destination (closes the drawer). */
   onNavigate: () => void;
 }
 
 function SidebarImpl({
   user,
-  hidden,
+  collapsed,
   drawer,
   navId = "sidebar",
-  hideLabel = "Hide sidebar",
-  onHide,
+  onToggle,
   onNavigate,
 }: SidebarProps) {
   count("sidebarRenders");
   useEffect(() => {
     count("sidebarMounts");
   }, []);
-  const { conversationId } = useParams();
-  const client = useQueryClient();
-  // Secondary data: loaded after hydration, never gating the composer.
-  const list = useQuery(queries.conversations(user.id));
-  const conversations = list.data ?? [];
-  const actions = useConversationActions(user.id);
-  // The row menu trigger last used: dialogs return focus there (INV-47).
-  const menuTrigger = useRef<HTMLElement | null>(null);
-  // A placeholder trigger clicked before the menu chunk arrived opens it then.
-  const [openRequest, setOpenRequest] = useState<{ id: string; mode: MenuRequest } | null>(null);
   const [searching, setSearching] = useState(false);
-  const searchTrigger = useRef<HTMLButtonElement>(null);
-  const pinned = conversations
-    .filter((c) => typeof c.pinnedRank === "number")
-    .sort((a, b) => (a.pinnedRank ?? 0) - (b.pinnedRank ?? 0));
-  const others = conversations.filter((c) => typeof c.pinnedRank !== "number");
+  const searchTrigger = useRef<HTMLElement | null>(null);
+  const location = useLocation();
+  // Settings keeps the current conversation to come back to.
+  const settingsState = { background: location.pathname };
+  const rail = collapsed && !drawer;
+  const toggleLabel = drawer ? "Close sidebar" : rail ? "Open sidebar" : "Close sidebar";
 
-  // Ctrl/⌘+K opens search (the in-grid sidebar owns the shortcut, not the drawer copy).
+  // Ctrl/⌘+K opens search (the in-page sidebar owns the shortcut, not the drawer copy).
   useEffect(() => {
     if (drawer) return;
     const onKey = (event: KeyboardEvent) => {
@@ -94,169 +82,98 @@ function SidebarImpl({
     };
   }, [drawer]);
 
-  const row = (item: ConversationSummary) => (
-    <li key={item.id} className={item.id === conversationId ? "current" : undefined}>
-      <Link
-        to={paths.chat(item.id)}
-        aria-current={item.id === conversationId ? "page" : undefined}
-        onClick={onNavigate}
-        // Route chunk on intent; the data through the shared query cache.
-        prefetch="intent"
-        onPointerEnter={(event) => {
-          if (event.pointerType === "mouse") prefetchIntent(client, user.id, item.id);
-        }}
-        onPointerLeave={endIntent}
-        onFocus={() => {
-          prefetchIntent(client, user.id, item.id, 0);
-        }}
-        onBlur={endIntent}
-      >
-        {item.malformed ? <AlertTriangle size={14} aria-label="Unreadable" /> : null}
-        <span className="row-title">
-          {item.malformed ? `${item.title} (unreadable)` : item.title}
-        </span>
-      </Link>
-      <Suspense
-        fallback={
-          <button
-            type="button"
-            className="icon-btn row-menu"
-            aria-label={`Actions for ${item.title}`}
-            title="More"
-            onClick={(event) => {
-              setOpenRequest({ id: item.id, mode: menuRequest(event) });
-            }}
-          >
-            <MoreHorizontal size={16} aria-hidden />
-          </button>
-        }
-      >
-        <RowMenu
-          title={item.title}
-          malformed={item.malformed}
-          pinned={typeof item.pinnedRank === "number"}
-          onTogglePin={() => {
-            actions.togglePin({ ...item, pinned: typeof item.pinnedRank === "number" });
-          }}
-          defaultOpen={openRequest?.id === item.id ? openRequest.mode : false}
-          onTriggerFocus={(element) => {
-            menuTrigger.current = element;
-          }}
-          onOpen={() => {
-            // Intent: fetch the dialog chunk before it is needed.
-            void preloadDialogs();
-          }}
-          onRename={() => {
-            actions.rename(item, menuTrigger.current);
-          }}
-          onDelete={() => {
-            actions.remove(item, menuTrigger.current);
-          }}
-        />
-      </Suspense>
-    </li>
-  );
+  const openSearch = (event: MouseEvent<HTMLElement>) => {
+    searchTrigger.current = event.currentTarget;
+    setSearching(true);
+  };
 
-  const [collapsed, setCollapsed] = useCollapsedSections();
   return (
     <nav
       id={navId}
-      className={`sidebar${drawer ? " in-drawer" : ""}`}
+      className={`sidebar${rail ? " rail" : ""}`}
       aria-label="Conversations"
-      hidden={hidden}
+      data-collapsed={rail ? "true" : undefined}
     >
       <div className="sidebar-top">
-        <Link to={paths.newChat()} className="brand" onClick={onNavigate}>
+        <Link
+          to={paths.newChat()}
+          className="brand label"
+          onClick={onNavigate}
+          tabIndex={rail ? -1 : 0}
+          aria-hidden={rail ? true : undefined}
+        >
           ChatUI
         </Link>
         <button
           type="button"
-          className="icon-btn"
-          aria-label={hideLabel}
-          aria-expanded={drawer ? undefined : true}
-          aria-controls={drawer ? undefined : navId}
-          title={hideLabel}
-          onClick={onHide}
+          className="icon-btn search-btn label"
+          aria-label="Search chats"
+          aria-haspopup="dialog"
+          title="Search chats (Ctrl+K)"
+          tabIndex={rail ? -1 : 0}
+          aria-hidden={rail ? true : undefined}
+          onClick={openSearch}
         >
-          <PanelLeft size={18} aria-hidden />
+          <Search size={20} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className="icon-btn toggle-btn"
+          aria-label={toggleLabel}
+          aria-expanded={drawer ? undefined : !rail}
+          aria-controls={drawer ? undefined : `${navId}-lists`}
+          title={toggleLabel}
+          onClick={onToggle}
+        >
+          <PanelLeft size={20} aria-hidden />
         </button>
       </div>
-      <Link to={paths.newChat()} className="nav-row" onClick={onNavigate}>
-        <SquarePen size={18} aria-hidden /> New chat
-      </Link>
-      <button
-        ref={searchTrigger}
-        type="button"
-        className="nav-row"
-        aria-haspopup="dialog"
-        title="Search chats (Ctrl+K)"
-        onClick={() => {
-          setSearching(true);
-        }}
-      >
-        <Search size={18} aria-hidden /> Search chats
-      </button>
-      {/* The one scrolling region: the header above and the account below stay put. */}
-      <div className="sidebar-scroll" data-testid="sidebar-scroll">
-        {pinned.length > 0 ? (
-          <>
-            <SectionToggle
-              id={`${navId}-pinned`}
-              controls={`${navId}-pinned-list`}
-              label="Pinned"
-              open={!collapsed.pinned}
-              onToggle={(open) => {
-                setCollapsed("pinned", !open);
-              }}
-            />
-            <ul
-              id={`${navId}-pinned-list`}
-              className="chat-list"
-              aria-labelledby={`${navId}-pinned`}
-              data-testid="pinned-list"
-              hidden={collapsed.pinned}
-            >
-              {pinned.map(row)}
-            </ul>
-          </>
-        ) : null}
-        <SectionToggle
-          id={`${navId}-recents`}
-          controls={`${navId}-recents-list`}
-          label="Recents"
-          open={!collapsed.recents}
-          onToggle={(open) => {
-            setCollapsed("recents", !open);
-          }}
-        />
-        <div id={`${navId}-recents-list`} hidden={collapsed.recents}>
-          {list.isPending ? (
-            // Rows the size of real ones, so the list doesn't shift when it arrives.
-            <div className="skeleton-list" aria-busy="true" data-testid="conversations-loading">
-              <span className="visually-hidden">Loading conversations…</span>
-              {/* No inline styles (CSP): the uneven widths come from app.css. */}
-              {[0, 1, 2, 3].map((i) => (
-                <span key={i} className="skeleton-row" aria-hidden>
-                  <span className="skeleton" />
-                </span>
-              ))}
-            </div>
-          ) : list.isError && !list.data ? (
-            <div className="sidebar-note" role="alert" data-testid="conversations-error">
-              <p>Conversations couldn’t be loaded.</p>
-              <button type="button" className="link-button" onClick={() => void list.refetch()}>
-                Try again
-              </button>
-            </div>
-          ) : conversations.length === 0 ? (
-            <p className="sidebar-note" data-testid="conversations-empty">
-              No conversations yet.
-            </p>
-          ) : null}
-          <ul className="chat-list" data-testid="conversation-list">
-            {others.map(row)}
-          </ul>
-        </div>
+      <div className="sidebar-nav">
+        <Link to={paths.newChat()} className="nav-row" aria-label="New chat" onClick={onNavigate}>
+          <SquarePen size={20} aria-hidden />
+          <span className="label">New chat</span>
+        </Link>
+        {drawer ? null : (
+          <button
+            type="button"
+            className="nav-row rail-only"
+            aria-label="Search chats"
+            aria-haspopup="dialog"
+            tabIndex={rail ? 0 : -1}
+            aria-hidden={rail ? undefined : true}
+            onClick={openSearch}
+          >
+            <Search size={20} aria-hidden />
+          </button>
+        )}
+        <Link
+          to={paths.settings("files")}
+          state={settingsState}
+          className="nav-row"
+          aria-label="Files"
+          onClick={onNavigate}
+        >
+          <FolderClosed size={20} aria-hidden />
+          <span className="label">Files</span>
+        </Link>
+      </div>
+      <ConversationLists
+        user={user}
+        listId={`${navId}-lists`}
+        hidden={rail}
+        onNavigate={onNavigate}
+      />
+      <div className="sidebar-foot">
+        <Link
+          to={paths.settings()}
+          state={settingsState}
+          className="nav-row account-btn"
+          aria-label={`Settings (${user.username})`}
+          onClick={onNavigate}
+          prefetch="intent"
+        >
+          <AccountLabel username={user.username} />
+        </Link>
       </div>
       {searching ? (
         <Suspense fallback={null}>
@@ -270,9 +187,178 @@ function SidebarImpl({
           />
         </Suspense>
       ) : null}
-      <Account user={user} onNavigate={onNavigate} />
-      {actions.dialogs}
     </nav>
+  );
+}
+
+/** Pinned and Recents: the one scrolling region of the sidebar. */
+function ConversationLists({
+  user,
+  listId,
+  hidden,
+  onNavigate,
+}: {
+  user: SidebarUser;
+  listId: string;
+  hidden: boolean;
+  onNavigate: () => void;
+}) {
+  const { conversationId } = useParams();
+  const client = useQueryClient();
+  // Secondary data: loaded after hydration, never gating the composer.
+  const list = useQuery(queries.conversations(user.id));
+  const conversations = list.data ?? [];
+  const actions = useConversationActions(user.id);
+  // The row menu trigger last used: dialogs return focus there.
+  const menuTrigger = useRef<HTMLElement | null>(null);
+  // A placeholder trigger clicked before the menu chunk arrived opens it then.
+  const [openRequest, setOpenRequest] = useState<{ id: string; mode: MenuRequest } | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useCollapsedSections();
+  const pinned = conversations
+    .filter((c) => typeof c.pinnedRank === "number")
+    .sort((a, b) => (a.pinnedRank ?? 0) - (b.pinnedRank ?? 0));
+  const others = conversations.filter((c) => typeof c.pinnedRank !== "number");
+
+  const row = (item: ConversationSummary) => {
+    const current = item.id === conversationId;
+    const isPinned = typeof item.pinnedRank === "number";
+    return (
+      <li
+        key={item.id}
+        className={`conversation-row${current ? " current" : ""}${menuOpenId === item.id ? " menu-open" : ""}`}
+      >
+        <Link
+          to={paths.chat(item.id)}
+          aria-current={current ? "page" : undefined}
+          onClick={onNavigate}
+          // Route chunk on intent; the data through the shared query cache.
+          prefetch="intent"
+          onPointerEnter={(event) => {
+            if (event.pointerType === "mouse") prefetchIntent(client, user.id, item.id);
+          }}
+          onPointerLeave={endIntent}
+          onFocus={() => {
+            prefetchIntent(client, user.id, item.id, 0);
+          }}
+          onBlur={endIntent}
+        >
+          {item.malformed ? <AlertTriangle size={14} aria-label="Unreadable" /> : null}
+          <span className="row-title">
+            {item.malformed ? `${item.title} (unreadable)` : item.title}
+          </span>
+        </Link>
+        <Suspense
+          fallback={
+            <button
+              type="button"
+              className="icon-btn row-menu-btn"
+              aria-label={`Actions for ${item.title}`}
+              title="More"
+              onClick={(event) => {
+                setOpenRequest({ id: item.id, mode: menuRequest(event) });
+              }}
+            >
+              <Ellipsis size={18} aria-hidden />
+            </button>
+          }
+        >
+          <RowMenu
+            title={item.title}
+            malformed={item.malformed}
+            pinned={isPinned}
+            onTogglePin={() => {
+              actions.togglePin({ ...item, pinned: isPinned });
+            }}
+            defaultOpen={openRequest?.id === item.id ? openRequest.mode : false}
+            onTriggerFocus={(element) => {
+              menuTrigger.current = element;
+            }}
+            onOpen={() => {
+              // Intent: fetch the dialog chunk before it is needed.
+              void preloadDialogs();
+            }}
+            onOpenChange={(open) => {
+              setMenuOpenId(open ? item.id : null);
+            }}
+            onRename={() => {
+              actions.rename(item, menuTrigger.current);
+            }}
+            onDelete={() => {
+              actions.remove(item, menuTrigger.current);
+            }}
+          />
+        </Suspense>
+      </li>
+    );
+  };
+
+  return (
+    <div
+      id={listId}
+      className="sidebar-lists"
+      data-testid="sidebar-scroll"
+      aria-hidden={hidden ? true : undefined}
+      inert={hidden}
+    >
+      {pinned.length > 0 ? (
+        <>
+          <SectionToggle
+            id={`${listId}-pinned`}
+            controls={`${listId}-pinned-list`}
+            label="Pinned"
+            open={!collapsed.pinned}
+            onToggle={(open) => {
+              setCollapsed("pinned", !open);
+            }}
+          />
+          <ul
+            id={`${listId}-pinned-list`}
+            className="conversation-list"
+            aria-labelledby={`${listId}-pinned`}
+            data-testid="pinned-list"
+            hidden={collapsed.pinned}
+          >
+            {pinned.map(row)}
+          </ul>
+        </>
+      ) : null}
+      <SectionToggle
+        id={`${listId}-recents`}
+        controls={`${listId}-recents-list`}
+        label="Recents"
+        open={!collapsed.recents}
+        onToggle={(open) => {
+          setCollapsed("recents", !open);
+        }}
+      />
+      <div id={`${listId}-recents-list`} hidden={collapsed.recents}>
+        {list.isPending ? (
+          // Rows the size of real ones, so the list doesn't shift when it arrives.
+          <div aria-busy="true" data-testid="conversations-loading">
+            <span className="visually-hidden">Loading conversations…</span>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="skeleton-row" aria-hidden />
+            ))}
+          </div>
+        ) : list.isError && !list.data ? (
+          <div className="sidebar-empty" role="alert" data-testid="conversations-error">
+            <p>Conversations couldn’t be loaded.</p>
+            <button type="button" className="link-button" onClick={() => void list.refetch()}>
+              Try again
+            </button>
+          </div>
+        ) : conversations.length === 0 ? (
+          <p className="sidebar-empty" data-testid="conversations-empty">
+            No conversations yet.
+          </p>
+        ) : null}
+        <ul className="conversation-list" data-testid="conversation-list">
+          {others.map(row)}
+        </ul>
+      </div>
+      {actions.dialogs}
+    </div>
   );
 }
 
@@ -296,44 +382,8 @@ function SectionToggle(props: {
       }}
     >
       {props.label}
-      <ChevronRight size={14} aria-hidden className="section-chevron" />
+      <ChevronRight size={14} aria-hidden />
     </button>
-  );
-}
-
-/** Avatar and name at the bottom, opening Settings, Administration and Sign out. */
-function Account({ user, onNavigate }: { user: SidebarUser; onNavigate: () => void }) {
-  const location = useLocation();
-  const matches = useMatches();
-  const signOut = useSignOut();
-  const [openRequest, setOpenRequest] = useState<MenuRequest>(false);
-  const inOverlay = matches.some((m) => /routes\/(settings|admin)$/.test(m.id));
-  const background = inOverlay
-    ? (location.state as OverlayState | null)?.background
-    : location.pathname;
-  return (
-    <Suspense
-      fallback={
-        <button
-          type="button"
-          className="account-trigger"
-          onClick={(event) => {
-            setOpenRequest(menuRequest(event));
-          }}
-        >
-          <AccountLabel username={user.username} />
-        </button>
-      }
-    >
-      <AccountMenu
-        username={user.username}
-        isAdmin={user.role === "admin"}
-        defaultOpen={openRequest}
-        overlayState={background ? { background } : {}}
-        onNavigate={onNavigate}
-        onSignOut={() => void signOut()}
-      />
-    </Suspense>
   );
 }
 

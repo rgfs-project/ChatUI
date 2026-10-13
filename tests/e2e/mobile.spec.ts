@@ -20,9 +20,8 @@ test.use({
 /** Settings is in the account menu (inside the drawer below the breakpoint). */
 async function openSettings(page: Page, inDrawer: boolean) {
   const scope = inDrawer ? page.getByRole("dialog", { name: "Conversations" }) : page;
-  if (inDrawer) await page.getByRole("button", { name: "Open conversations" }).click();
-  await scope.getByTestId("signed-in-user").click();
-  await page.getByRole("menuitem", { name: "Settings" }).click();
+  if (inDrawer) await page.getByRole("button", { name: "Open sidebar" }).click();
+  await scope.getByRole("link", { name: /^Settings/ }).click();
 }
 
 async function open(page: Page, path: string) {
@@ -93,7 +92,7 @@ test.describe("phone 390x844", () => {
   }) => {
     await open(page, `/chat/${LONG_CONVERSATION}`);
     await expect(page.locator("#sidebar")).toBeHidden();
-    const trigger = page.getByRole("button", { name: "Open conversations" });
+    const trigger = page.getByRole("button", { name: "Open sidebar" });
     await trigger.click();
     const drawer = page.getByRole("dialog", { name: "Conversations" });
     await expect(drawer).toBeVisible();
@@ -208,7 +207,7 @@ test.describe("phone 390x844", () => {
     await page.getByRole("button", { name: "Close" }).click();
     await expect(sheet).toBeHidden();
     // A conversation menu opened at the right edge stays within the viewport.
-    await page.getByRole("button", { name: "Open conversations" }).click();
+    await page.getByRole("button", { name: "Open sidebar" }).click();
     const drawer = page.getByRole("dialog", { name: "Conversations" });
     await drawer
       .getByRole("button", { name: /Actions for/ })
@@ -228,7 +227,7 @@ test.describe("phone 390x844", () => {
       ["Rename", "Rename conversation"],
       ["Delete", "Delete conversation?"],
     ] as const) {
-      await page.getByRole("button", { name: "Open conversations" }).click();
+      await page.getByRole("button", { name: "Open sidebar" }).click();
       await page
         .getByRole("dialog", { name: "Conversations" })
         .getByRole("button", { name: /Actions for/ })
@@ -251,7 +250,7 @@ test.describe("phone 390x844", () => {
   test("every control is a 44x44 touch target (shell, drawer)", async ({ page }) => {
     await open(page, `/chat/${LONG_CONVERSATION}`);
     expect(await smallTargets(page)).toEqual([]);
-    await page.getByRole("button", { name: "Open conversations" }).click();
+    await page.getByRole("button", { name: "Open sidebar" }).click();
     await expect(page.getByRole("dialog", { name: "Conversations" })).toBeVisible();
     // The drawer lists menu triggers once the menu chunk has loaded.
     await page.waitForLoadState("networkidle");
@@ -273,7 +272,7 @@ test.describe("phone 390x844", () => {
     expect(g.composerBottom).toBeLessThanOrEqual(390);
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator("#sidebar")).toBeHidden();
-    await expect(page.getByRole("button", { name: "Open conversations" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open sidebar" })).toBeVisible();
   });
 });
 
@@ -288,10 +287,10 @@ test.describe("breakpoint 768 ±1", () => {
       await open(page, `/chat/${WIDE_CONVERSATION}`);
       if (drawer) {
         await expect(page.locator("#sidebar")).toBeHidden();
-        await expect(page.getByRole("button", { name: "Open conversations" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Open sidebar" })).toBeVisible();
       } else {
         await expect(page.locator("#sidebar")).toBeVisible();
-        await expect(page.getByRole("button", { name: "Hide sidebar" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Close sidebar" })).toBeVisible();
       }
       const g = await geometry(page);
       expect(g.pageScrollX).toBeLessThanOrEqual(0);
@@ -311,9 +310,9 @@ test.describe("tablet 820x1180", () => {
     expect((await geometry(page)).pageScrollX).toBeLessThanOrEqual(0);
     mkdirSync(SHOTS, { recursive: true });
     await page.screenshot({ path: `${SHOTS}/tablet.png` });
-    await page.getByRole("button", { name: "Hide sidebar" }).click();
+    await page.getByRole("button", { name: "Close sidebar" }).click();
     await expect(page.locator("#sidebar")).toBeHidden();
-    await page.getByRole("button", { name: "Show sidebar" }).click();
+    await page.getByRole("button", { name: "Open sidebar" }).click();
     await expect(page.locator("#sidebar")).toBeVisible();
   });
 });

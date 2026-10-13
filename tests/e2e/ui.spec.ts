@@ -20,8 +20,7 @@ const hydrated = (page: Page) => page.waitForSelector('html[data-hydrated="true"
 
 /** Settings lives in the account menu at the bottom of the sidebar. */
 async function openSettings(page: Page) {
-  await page.getByTestId("signed-in-user").click();
-  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByRole("link", { name: /^Settings/ }).click();
 }
 
 async function openLong(page: Page) {
@@ -169,12 +168,12 @@ test("scrolled up during streaming: the viewport stays put; jump to latest re-pi
 
 test("sidebar collapses and expands; the transcript takes the space", async ({ page }) => {
   await openLong(page);
-  const toggle = page.getByRole("button", { name: "Hide sidebar" });
+  const toggle = page.getByRole("button", { name: "Close sidebar" });
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   const wide = await page.getByTestId("transcript").boundingBox();
   await toggle.click();
   await expect(page.getByRole("navigation", { name: "Conversations" })).toBeHidden();
-  const show = page.getByRole("button", { name: "Show sidebar" });
+  const show = page.getByRole("button", { name: "Open sidebar" });
   await expect(show).toHaveAttribute("aria-expanded", "false");
   const wider = await page.getByTestId("transcript").boundingBox();
   expect(wider?.width ?? 0).toBeGreaterThan(wide?.width ?? 0);

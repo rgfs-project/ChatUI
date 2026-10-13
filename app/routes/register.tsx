@@ -41,26 +41,51 @@ export default function Register() {
 
   return (
     <main className="page">
-      <h1>Create account</h1>
-      <form className="auth-form" onSubmit={(event) => void submit(event)}>
-        <label htmlFor="username">Username (3-32: a-z 0-9 _ . -)</label>
-        <input id="username" name="username" autoComplete="username" required />
-        <label htmlFor="password">Password (at least 10 characters)</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          minLength={10}
-          required
-        />
-        <button type="submit">Create account</button>
-        {error ? (
-          <p className="error" role="alert">
-            {error}
+      <div className="page-card">
+        <p className="page-brand">ChatUI</p>
+        <h1>Create account</h1>
+        <form className="auth-form" onSubmit={(event) => void submit(event)}>
+          <label htmlFor="username" className="visually-hidden">
+            Username (3-32: a-z 0-9 _ . -)
+          </label>
+          <input
+            id="username"
+            name="username"
+            className="text-input"
+            placeholder="Username"
+            aria-describedby="username-hint"
+            autoComplete="username"
+            required
+          />
+          <p className="hint" id="username-hint">
+            3 to 32 characters: a–z, 0–9, _ . -
           </p>
-        ) : null}
-      </form>
+          <label htmlFor="password" className="visually-hidden">
+            Password (at least 10 characters)
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className="text-input"
+            placeholder="Password (at least 10 characters)"
+            autoComplete="new-password"
+            minLength={10}
+            required
+          />
+          <button type="submit" className="btn primary large">
+            Create account
+          </button>
+          {error ? (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </form>
+        <p className="page-foot">
+          Have an account? <a href="/login">Sign in</a>
+        </p>
+      </div>
     </main>
   );
 }

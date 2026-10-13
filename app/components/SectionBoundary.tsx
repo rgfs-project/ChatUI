@@ -44,7 +44,7 @@ export function SectionBoundary(props: {
               <p>{props.label} couldn’t be displayed.</p>
               <button
                 type="button"
-                className="secondary"
+                className="btn small"
                 onClick={() => {
                   // A code chunk that failed to load (offline, or a new
                   // deployment replaced it) only recovers with a fresh page.

@@ -114,8 +114,7 @@ test.describe("signed in", () => {
     await hydrated(page);
     expect(await background(page)).toBe(LIGHT_CANVAS);
 
-    await page.getByTestId("signed-in-user").click();
-    await page.getByRole("menuitem", { name: "Settings" }).click();
+    await page.getByRole("link", { name: /^Settings/ }).click();
     const select = page.getByRole("combobox", { name: "Theme" });
     await expect(select).toHaveValue("system");
     await select.selectOption("dark");
@@ -304,7 +303,7 @@ test.describe("signed in", () => {
         };
       });
     const open = await geometry();
-    await page.getByRole("button", { name: "Hide sidebar" }).click();
+    await page.getByRole("button", { name: "Close sidebar" }).click();
     const closed = await geometry();
     // The first thing in the bar starts at the same x, in line with the
     // sidebar's row icons; everything shares one vertical center.
@@ -313,7 +312,7 @@ test.describe("signed in", () => {
       expect(Math.abs(c - 28)).toBeLessThanOrEqual(1);
     // The title sits the same distance after whatever precedes it.
     expect(Math.abs(open.titleGap - closed.titleGap)).toBeLessThanOrEqual(1);
-    await page.getByRole("button", { name: "Show sidebar" }).click();
+    await page.getByRole("button", { name: "Open sidebar" }).click();
   });
 
   test("Pinned and Recents collapse, and stay collapsed after a reload", async ({ page }) => {
@@ -380,8 +379,7 @@ test.describe("signed in", () => {
     await expect(reply.getByText("Thought process")).toBeVisible({ timeout: 20_000 });
     const url = page.url();
 
-    await page.getByTestId("signed-in-user").click();
-    await page.getByRole("menuitem", { name: "Settings" }).click();
+    await page.getByRole("link", { name: /^Settings/ }).click();
     const toggle = page.getByRole("switch", { name: "Show thought process" });
     await expect(toggle).toBeChecked();
     await toggle.uncheck();
@@ -396,8 +394,7 @@ test.describe("signed in", () => {
       page.getByTestId("message-assistant").last().getByText("Thought process"),
     ).toBeHidden();
 
-    await page.getByTestId("signed-in-user").click();
-    await page.getByRole("menuitem", { name: "Settings" }).click();
+    await page.getByRole("link", { name: /^Settings/ }).click();
     await page.getByRole("switch", { name: "Show thought process" }).check();
     await page.keyboard.press("Escape");
     await expect(

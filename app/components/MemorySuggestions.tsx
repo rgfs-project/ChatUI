@@ -97,7 +97,7 @@ export default function MemorySuggestions(props: {
           {props.onRegenerate ? (
             <button
               type="button"
-              className="secondary"
+              className="btn"
               disabled={props.disabled}
               onClick={(event) => {
                 props.onRegenerate?.(event.currentTarget);
@@ -133,6 +133,7 @@ export default function MemorySuggestions(props: {
               {proposal.status === "pending" ? (
                 <div className="memory-card-actions">
                   <button
+                    className="btn primary"
                     type="button"
                     aria-describedby={textId}
                     disabled={busy || props.disabled}
@@ -144,7 +145,7 @@ export default function MemorySuggestions(props: {
                   </button>
                   <button
                     type="button"
-                    className="secondary"
+                    className="btn"
                     aria-describedby={textId}
                     disabled={busy || props.disabled}
                     onClick={() => {

@@ -27,7 +27,13 @@ function Page(props: { initialError?: { status: number; code: string } }) {
   const { conversationId } = useParams();
   return (
     <>
-      <Sidebar user={TEST_USER} hidden={false} drawer={false} onHide={noop} onNavigate={noop} />
+      <Sidebar
+        user={TEST_USER}
+        collapsed={false}
+        drawer={false}
+        onToggle={noop}
+        onNavigate={noop}
+      />
       <ConversationView
         key={conversationId ?? "new"}
         userId={USER}

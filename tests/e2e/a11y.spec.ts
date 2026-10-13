@@ -128,7 +128,7 @@ test.describe("signed in", () => {
     await page.goto(`${base()}/chat/${LONG_CONVERSATION}`);
     await hydrated(page);
     found.push(...(await scan(page, "phone conversation")));
-    await page.getByRole("button", { name: "Open conversations" }).click();
+    await page.getByRole("button", { name: "Open sidebar" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     found.push(...(await scan(page, "phone drawer")));
     expect(found).toEqual([]);

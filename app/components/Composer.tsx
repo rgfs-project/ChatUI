@@ -43,6 +43,22 @@ function composing(event: KeyboardEvent): boolean {
   return event.isComposing || event.keyCode === 229;
 }
 
+/** Past this many characters on one line the composer takes two rows. */
+const LONG_LINE = 60;
+/** The textarea grows to this many lines, then scrolls. */
+const MAX_LINES = 8;
+const LINE_HEIGHT = 26;
+
+function isExpanded(value: string): boolean {
+  return value.includes("\n") || value.length > LONG_LINE;
+}
+
+/** Grows the textarea with its content, up to MAX_LINES. */
+function fitHeight(el: HTMLTextAreaElement) {
+  el.style.height = "auto";
+  el.style.height = `${String(Math.min(el.scrollHeight, MAX_LINES * LINE_HEIGHT + 10))}px`;
+}
+
 /** A `(providerId, modelId)` pair; the server validates it on every send. */
 export type ModelChoice = [string, string];
 
@@ -79,7 +95,8 @@ const EMPTY_MESSAGE: Record<Exclude<ModelsState["kind"], "ready" | "loading">, s
 
 /**
  * The composer: a native uncontrolled textarea (survives hydration; contracts
- * §13) in a pill with the model selector and Send/Stop. Sending needs a
+ * §13) in a pill with Attach, the model selector and Send/Stop. A second line
+ * moves the text above the controls. Sending needs a
  * hydrated page and a server-known model; nothing secondary gates it. The
  * parent decides whether a submission is sent now or queued (while a reply
  * runs). A message that is exactly "/filter" opens the command list instead.
@@ -104,6 +121,7 @@ export function Composer({
   attachNotice = null,
   onAttach,
   onRemoveAttachment,
+  manageModelsHref,
 }: {
   userId: string;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -127,6 +145,8 @@ export function Composer({
   attachNotice?: string | null;
   onAttach?: (files: File[]) => void;
   onRemoveAttachment?: (localId: string) => void;
+  /** Settings → Models, offered in the model menu to administrators. */
+  manageModelsHref?: string;
 }) {
   const shell = useShell();
   const client = useQueryClient();
@@ -138,6 +158,8 @@ export function Composer({
   const [selected, setSelected] = useState<string | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
+  // A second line (or a long first one) moves the text above the controls.
+  const [expanded, setExpanded] = useState(false);
   // "/" commands: the typed filter (null: closed) and the highlighted option.
   const [slash, setSlash] = useState<string | null>(null);
   const [activeCommand, setActiveCommand] = useState(0);
@@ -227,7 +249,11 @@ export function Composer({
 
   function clear() {
     const el = textareaRef.current;
-    if (el) el.value = "";
+    if (el) {
+      el.value = "";
+      fitHeight(el);
+    }
+    setExpanded(false);
     shell.clearDraft(draftKey);
     setHasDraft(false);
     setSlash(null);
@@ -291,37 +317,15 @@ export function Composer({
         : EMPTY_MESSAGE[state.kind];
 
   const attachable = hydrated && !inert && onAttach !== undefined;
+  const placeholder = running ? "Queue another message" : "Ask anything";
   return (
-    <form
-      className={`composer${dragging ? " dragging" : ""}`}
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-      aria-label="Message composer"
-      onDragOver={(event) => {
-        if (!attachable || !event.dataTransfer.types.includes("Files")) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "copy";
-        setDragging(true);
-      }}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
-      }}
-      onDrop={(event) => {
-        setDragging(false);
-        const files = filesOf(event.dataTransfer.files);
-        if (!attachable || files.length === 0) return;
-        event.preventDefault();
-        onAttach(files);
-      }}
-    >
+    <>
       {notice ? (
-        <div className="models-notice" role="status" data-testid="models-notice">
+        <div className="notice composer-notice" role="status" data-testid="models-notice">
           <span>{notice}</span>
           <button
             type="button"
-            className="link-button"
+            className="btn small"
             onClick={refreshModels}
             disabled={!hydrated || refreshing}
           >
@@ -330,35 +334,55 @@ export function Composer({
         </div>
       ) : null}
       {capabilityWarning ? (
-        <div className="models-notice" role="alert" data-testid="capability-warning">
+        <div className="notice error composer-notice" role="alert" data-testid="capability-warning">
           <span>{capabilityWarning}</span>
         </div>
       ) : null}
-      <p
-        className="gen-status composer-status"
-        role="status"
-        aria-live="polite"
-        data-testid="status"
-      >
+      <p className="visually-hidden" role="status" aria-live="polite" data-testid="status">
         {status ?? attachNotice ?? ""}
       </p>
-      {commandOpen ? (
-        <CommandMenu
-          commands={shown}
-          activeIndex={activeIndex}
-          onPick={runCommand}
-          onHover={setActiveCommand}
-        />
-      ) : null}
-      <div className={`composer-box${attachments.length > 0 ? " has-attachments" : ""}`}>
+      <form
+        className={`composer${expanded ? " expanded" : ""}${dragging ? " dragging" : ""}`}
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+        aria-label="Message composer"
+        onDragOver={(event) => {
+          if (!attachable || !event.dataTransfer.types.includes("Files")) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setDragging(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+        }}
+        onDrop={(event) => {
+          setDragging(false);
+          const files = filesOf(event.dataTransfer.files);
+          if (!attachable || files.length === 0) return;
+          event.preventDefault();
+          onAttach(files);
+        }}
+      >
+        {commandOpen ? (
+          <CommandMenu
+            commands={shown}
+            activeIndex={activeIndex}
+            onPick={runCommand}
+            onHover={setActiveCommand}
+          />
+        ) : null}
         {attachments.length > 0 && onRemoveAttachment ? (
-          <Suspense fallback={null}>
-            <AttachmentTray items={attachments} onRemove={onRemoveAttachment} />
-          </Suspense>
+          <div className="tray-slot">
+            <Suspense fallback={null}>
+              <AttachmentTray items={attachments} onRemove={onRemoveAttachment} />
+            </Suspense>
+          </div>
         ) : null}
         <button
           type="button"
-          className="icon-btn attach-btn"
+          className="icon-btn round attach-btn"
           aria-label="Attach files"
           title="Attach images, audio or text files"
           disabled={!attachable}
@@ -387,11 +411,12 @@ export function Composer({
         <textarea
           id="message"
           name="message"
+          className="composer-input"
           ref={textareaRef}
           rows={1}
           // Right-to-left scripts type right to left.
           dir="auto"
-          placeholder={running ? "Queue a message" : "Ask anything"}
+          placeholder={placeholder}
           aria-autocomplete="list"
           aria-controls={commandOpen ? COMMAND_MENU_ID : undefined}
           aria-activedescendant={commandOpen && active ? commandOptionId(active.name) : undefined}
@@ -399,6 +424,8 @@ export function Composer({
             const value = event.currentTarget.value;
             shell.setDraft(draftKey, value);
             setHasDraft(value.trim() !== "");
+            setExpanded(isExpanded(value));
+            fitHeight(event.currentTarget);
             const query = commandQuery(value);
             if (query !== null) onCommandIntent?.();
             if (query !== slash) setActiveCommand(0);
@@ -437,7 +464,7 @@ export function Composer({
             }
           }}
         />
-        <span className="model-picker">
+        <span className="model-slot">
           {modelMenu === null ? (
             <ModelTrigger
               label={modelLabel}
@@ -463,44 +490,47 @@ export function Composer({
                 onOpenChange={setModelOpen}
                 request={modelMenu}
                 onChange={chooseModel}
+                manageHref={manageModelsHref}
               />
             </Suspense>
           )}
         </span>
-        {running && hasDraft ? (
-          <button
-            type="submit"
-            className="send-btn secondary-send"
-            aria-label="Queue message"
-            title="Queue message (sent when the reply finishes)"
-            disabled={!ready}
-          >
-            <ArrowUp size={18} aria-hidden />
-          </button>
-        ) : null}
-        {running ? (
-          <button
-            type="button"
-            className="send-btn"
-            aria-label="Stop generating"
-            title="Stop generating"
-            onClick={onCancel}
-            disabled={!hydrated}
-          >
-            <Square size={14} fill="currentColor" aria-hidden />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            className="send-btn"
-            aria-label="Send"
-            title="Send (Enter) · New line (Shift+Enter)"
-            disabled={!canSend}
-          >
-            <ArrowUp size={18} aria-hidden />
-          </button>
-        )}
-      </div>
-    </form>
+        <span className="send-slot">
+          {running && hasDraft ? (
+            <button
+              type="submit"
+              className="send-btn"
+              aria-label="Queue message"
+              title="Queue message (sent when the reply finishes)"
+              disabled={!ready}
+            >
+              <ArrowUp size={20} aria-hidden />
+            </button>
+          ) : null}
+          {running ? (
+            <button
+              type="button"
+              className="send-btn stop-btn"
+              aria-label="Stop generating"
+              title="Stop generating"
+              onClick={onCancel}
+              disabled={!hydrated}
+            >
+              <Square size={14} fill="currentColor" aria-hidden />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="send-btn"
+              aria-label="Send"
+              title="Send (Enter) · New line (Shift+Enter)"
+              disabled={!canSend}
+            >
+              <ArrowUp size={20} aria-hidden />
+            </button>
+          )}
+        </span>
+      </form>
+    </>
   );
 }

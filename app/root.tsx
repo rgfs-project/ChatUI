@@ -108,11 +108,13 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return (
     <main className="page">
       <title>{`${title} · ChatUI`}</title>
-      <h1>{title}</h1>
-      <p>{message}</p>
-      <p>
-        <a href="/status">Return to the status page</a>
-      </p>
+      <div className="page-card">
+        <h1>{title}</h1>
+        <p className="lede">{message}</p>
+        <a href="/status" className="btn primary large">
+          Return to the status page
+        </a>
+      </div>
     </main>
   );
 }

@@ -2,29 +2,24 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import type { MenuRequest } from "../lib/menu-request";
 import {
   Check,
-  ChevronDown,
-  LogOut,
-  MoreHorizontal,
+  Download,
+  Ellipsis,
   Pencil,
   Pin,
-  ArrowDownUp,
   PinOff,
-  Settings,
-  Shield,
+  Search,
+  SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import type { ReactNode, Ref } from "react";
+import { useState, type ReactNode, type Ref } from "react";
 import { Link } from "react-router";
-import { paths, type OverlayState } from "../lib/paths";
-import { AccountLabel } from "./AccountLabel";
 import { ModelTrigger } from "./ModelTrigger";
 
 /**
- * The app's dropdown menus (Radix DropdownMenu, non-modal; INV-47). This
- * module is loaded on demand (Phase 9): each call site renders a plain,
- * same-looking trigger until it arrives, and a click on that placeholder
- * opens the menu once it has (`defaultOpen`). Radix and Floating UI stay out
- * of the critical chat bundle.
+ * The app's dropdown menus (Radix DropdownMenu, non-modal). This module is
+ * loaded on demand: each call site renders a plain, same-looking trigger
+ * until it arrives, and a click on that placeholder opens the menu once it
+ * has (`defaultOpen`). Radix stays out of the critical chat bundle.
  */
 
 interface MenuItemSpec {
@@ -51,12 +46,10 @@ function Items({ items }: { items: (MenuItemSpec | "separator")[] }) {
   );
 }
 
-/** The "…" menu on a sidebar row. */
 /**
  * Radix focuses a menu's first item only when it saw the key press itself;
- * the press that opened a lazy menu reached its placeholder instead, before
- * the menu existed. A keyboard request therefore focuses the first item here
- * (WAI-ARIA menu button pattern), once, when the content mounts.
+ * the press that opened a lazy menu reached its placeholder instead. A
+ * keyboard request therefore focuses the first item here, once, on mount.
  */
 function focusFirstItem(request: MenuRequest) {
   return (content: HTMLElement | null) => {
@@ -74,6 +67,44 @@ function focusFirstItem(request: MenuRequest) {
   };
 }
 
+/** The conversation actions shared by the sidebar row and the header menu. */
+function conversationItems(props: {
+  malformed?: boolean;
+  pinned: boolean;
+  onRename: () => void;
+  onTogglePin: () => void;
+  onExport?: () => void;
+  onDelete: () => void;
+}): (MenuItemSpec | "separator")[] {
+  return [
+    ...(props.malformed
+      ? []
+      : [{ label: "Rename", icon: <Pencil size={18} aria-hidden />, onSelect: props.onRename }]),
+    {
+      label: props.pinned ? "Unpin" : "Pin",
+      icon: props.pinned ? <PinOff size={18} aria-hidden /> : <Pin size={18} aria-hidden />,
+      onSelect: props.onTogglePin,
+    },
+    ...(props.onExport
+      ? [
+          {
+            label: "Export as Markdown",
+            icon: <Download size={18} aria-hidden />,
+            onSelect: props.onExport,
+          },
+        ]
+      : []),
+    "separator",
+    {
+      label: "Delete",
+      icon: <Trash2 size={18} aria-hidden />,
+      danger: true,
+      onSelect: props.onDelete,
+    },
+  ];
+}
+
+/** The "…" menu on a sidebar row. */
 export function RowMenu(props: {
   title: string;
   malformed: boolean;
@@ -83,6 +114,7 @@ export function RowMenu(props: {
   defaultOpen: MenuRequest;
   onTriggerFocus: (element: HTMLElement) => void;
   onOpen: () => void;
+  onOpenChange?: (open: boolean) => void;
   onRename: () => void;
   onDelete: () => void;
 }) {
@@ -92,56 +124,32 @@ export function RowMenu(props: {
       defaultOpen={props.defaultOpen !== false}
       onOpenChange={(open) => {
         if (open) props.onOpen();
+        props.onOpenChange?.(open);
       }}
     >
       <Menu.Trigger asChild>
         <button
           type="button"
-          className="icon-btn row-menu"
+          className="icon-btn row-menu-btn"
           aria-label={`Actions for ${props.title}`}
           title="More"
           onFocus={(event) => {
             props.onTriggerFocus(event.currentTarget);
           }}
         >
-          <MoreHorizontal size={16} aria-hidden />
+          <Ellipsis size={18} aria-hidden />
         </button>
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
           ref={focusFirstItem(props.defaultOpen)}
-          className="menu-popover"
+          className="menu"
+          side="right"
           align="start"
-          sideOffset={4}
+          sideOffset={8}
+          collisionPadding={8}
         >
-          <Items
-            items={[
-              ...(props.malformed
-                ? []
-                : [
-                    {
-                      label: "Rename",
-                      icon: <Pencil size={16} aria-hidden />,
-                      onSelect: props.onRename,
-                    },
-                  ]),
-              {
-                label: props.pinned ? "Unpin" : "Pin",
-                icon: props.pinned ? (
-                  <PinOff size={16} aria-hidden />
-                ) : (
-                  <Pin size={16} aria-hidden />
-                ),
-                onSelect: props.onTogglePin,
-              },
-              {
-                label: "Delete",
-                icon: <Trash2 size={16} aria-hidden />,
-                danger: true,
-                onSelect: props.onDelete,
-              },
-            ]}
-          />
+          <Items items={conversationItems(props)} />
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>
@@ -163,10 +171,14 @@ export interface ModelGroup {
   options: ModelOption[];
 }
 
+/** Long lists get a filter field; short ones stay a plain menu. */
+const SEARCH_THRESHOLD = 6;
+
 /**
- * The composer's model picker (owner's request, after ChatGPT): the current
- * model's name with a chevron, opening a menu of models with a check on the
- * selected one. Controlled by the composer, which also opens it for "/model".
+ * The composer's model picker: the current model's name with a chevron,
+ * opening a card of models (name over a muted detail, a check on the chosen
+ * one), a filter for long lists and, for administrators, "Manage models".
+ * Controlled by the composer, which also opens it for "/model".
  */
 export function ModelMenu(props: {
   label: string;
@@ -178,54 +190,100 @@ export function ModelMenu(props: {
   /** How it was opened before this chunk arrived ("keyboard" focuses an item). */
   request: MenuRequest;
   onChange: (value: string) => void;
+  /** Settings → Models, shown to administrators. */
+  manageHref?: string;
 }) {
-  const headed = props.groups.length > 1;
+  const [filter, setFilter] = useState("");
+  const total = props.groups.reduce((n, g) => n + g.options.length, 0);
+  const needle = filter.trim().toLowerCase();
+  const groups = props.groups
+    .map((g) => ({
+      ...g,
+      options: needle ? g.options.filter((o) => o.label.toLowerCase().includes(needle)) : g.options,
+    }))
+    .filter((g) => g.options.length > 0);
+  const headed = groups.length > 1;
   return (
-    <Menu.Root modal={false} open={props.open} onOpenChange={props.onOpenChange}>
+    <Menu.Root
+      modal={false}
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) setFilter("");
+        props.onOpenChange(open);
+      }}
+    >
       <Menu.Trigger asChild disabled={props.disabled}>
         <ModelTrigger label={props.label} disabled={props.disabled} />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
           ref={focusFirstItem(props.request)}
-          className="menu-popover model-menu"
+          className="menu model-menu"
           side="top"
           align="end"
           sideOffset={8}
           collisionPadding={8}
         >
+          {total > SEARCH_THRESHOLD ? (
+            <label className="model-search">
+              <Search size={18} aria-hidden />
+              <span className="visually-hidden">Search models</span>
+              <input
+                type="search"
+                placeholder="Search models"
+                value={filter}
+                onChange={(event) => {
+                  setFilter(event.currentTarget.value);
+                }}
+                // Typing filters; Radix's typeahead must not steal the keys.
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape" && event.key !== "ArrowDown") event.stopPropagation();
+                }}
+              />
+            </label>
+          ) : null}
           <Menu.RadioGroup value={props.value} onValueChange={props.onChange}>
-            {props.groups.map((group) => (
+            {groups.map((group) => (
               <Menu.Group key={group.id}>
                 {headed ? <Menu.Label className="menu-label">{group.label}</Menu.Label> : null}
                 {group.options.map((option) => (
                   <Menu.RadioItem
                     key={option.value}
                     value={option.value}
-                    className="menu-item model-item"
+                    className="menu-item model-option"
                     data-model={option.value}
                   >
-                    <span className="model-item-text">
-                      <span>{option.label}</span>
-                      {option.detail ? (
-                        <span className="menu-item-detail">{option.detail}</span>
-                      ) : null}
+                    <span className="text">
+                      <span className="name">{option.label}</span>
+                      {option.detail ? <span className="desc">{option.detail}</span> : null}
                     </span>
-                    <Menu.ItemIndicator className="menu-check">
-                      <Check size={16} aria-hidden />
+                    <Menu.ItemIndicator className="trail">
+                      <Check size={18} aria-hidden />
                     </Menu.ItemIndicator>
                   </Menu.RadioItem>
                 ))}
               </Menu.Group>
             ))}
           </Menu.RadioGroup>
+          {needle && groups.length === 0 ? <p className="menu-label">No matching models</p> : null}
+          {props.manageHref ? (
+            <>
+              <Menu.Separator className="menu-separator" />
+              <Menu.Item asChild className="menu-item">
+                <Link to={props.manageHref}>
+                  <SlidersHorizontal size={18} aria-hidden />
+                  Manage models
+                </Link>
+              </Menu.Item>
+            </>
+          ) : null}
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>
   );
 }
 
-/** The conversation title in the header: Rename, Pin, Export, Delete. */
+/** The header's "…" menu for the open conversation: Rename, Pin, Export, Delete. */
 export function TitleMenu({
   title,
   defaultOpen,
@@ -240,7 +298,7 @@ export function TitleMenu({
   title: string;
   pinned: boolean;
   onTogglePin: () => void;
-  /** Downloads the chat's exact Markdown (Phase 13d). */
+  /** Downloads the chat's exact Markdown. */
   onExport?: () => void;
   /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
   defaultOpen: MenuRequest;
@@ -257,83 +315,23 @@ export function TitleMenu({
         if (open) onOpen();
       }}
     >
-      <Menu.Trigger ref={triggerRef} className="title-trigger">
-        <span className="title-text">{title}</span>
-        <ChevronDown size={16} aria-hidden />
+      <Menu.Trigger
+        ref={triggerRef}
+        className="icon-btn title-trigger"
+        aria-label={`Actions for ${title}`}
+        title="More options"
+      >
+        <Ellipsis size={20} aria-hidden />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
           ref={focusFirstItem(defaultOpen)}
-          className="menu-popover"
-          align="start"
+          className="menu"
+          align="end"
           sideOffset={6}
+          collisionPadding={8}
         >
-          <Items
-            items={[
-              { label: "Rename", onSelect: onRename },
-              { label: pinned ? "Unpin" : "Pin", onSelect: onTogglePin },
-              ...(onExport ? [{ label: "Export as Markdown", onSelect: onExport }] : []),
-              { label: "Delete", danger: true, onSelect: onDelete },
-            ]}
-          />
-        </Menu.Content>
-      </Menu.Portal>
-    </Menu.Root>
-  );
-}
-
-/** Avatar and name at the bottom of the sidebar: Settings, Administration, Sign out. */
-export function AccountMenu(props: {
-  username: string;
-  isAdmin: boolean;
-  /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
-  defaultOpen: MenuRequest;
-  /** Settings/Administration keep the current view behind them (URL-backed overlays). */
-  overlayState: OverlayState;
-  onNavigate: () => void;
-  onSignOut: () => void;
-}) {
-  // Real links: the router discovers and prefetches the overlay routes while
-  // the menu is open, so choosing one is instant.
-  const overlayItem = (to: string, label: string, icon: ReactNode) => (
-    <Menu.Item asChild className="menu-item">
-      <Link to={to} state={props.overlayState} prefetch="render" onClick={props.onNavigate}>
-        {icon}
-        {label}
-      </Link>
-    </Menu.Item>
-  );
-  return (
-    <Menu.Root modal={false} defaultOpen={props.defaultOpen !== false}>
-      <Menu.Trigger className="account-trigger">
-        <AccountLabel username={props.username} />
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Content
-          ref={focusFirstItem(props.defaultOpen)}
-          className="menu-popover account-popover"
-          side="top"
-          sideOffset={6}
-        >
-          {overlayItem(paths.settings(), "Settings", <Settings size={16} aria-hidden />)}
-          {overlayItem(
-            paths.settings("data"),
-            "Import & export",
-            <ArrowDownUp size={16} aria-hidden />,
-          )}
-          {props.isAdmin
-            ? overlayItem(paths.admin(), "Administration", <Shield size={16} aria-hidden />)
-            : null}
-          <Items
-            items={[
-              "separator",
-              {
-                label: "Sign out",
-                icon: <LogOut size={16} aria-hidden />,
-                onSelect: props.onSignOut,
-              },
-            ]}
-          />
+          <Items items={conversationItems({ pinned, onRename, onTogglePin, onExport, onDelete })} />
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>

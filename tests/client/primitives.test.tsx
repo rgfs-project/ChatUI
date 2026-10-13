@@ -59,7 +59,13 @@ function renderSidebar() {
   ]);
   const page = (
     <div style={{ overflow: "hidden" }} data-testid="clipping-ancestor">
-      <Sidebar user={TEST_USER} hidden={false} drawer={false} onHide={noop} onNavigate={noop} />
+      <Sidebar
+        user={TEST_USER}
+        collapsed={false}
+        drawer={false}
+        onToggle={noop}
+        onNavigate={noop}
+      />
     </div>
   );
   return render(

@@ -50,32 +50,48 @@ export default function Login({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="page">
-      <h1>Sign in</h1>
-      <form className="auth-form" method="post" onSubmit={(event) => void submit(event)}>
-        <label htmlFor="username">Username</label>
-        <input id="username" name="username" autoComplete="username" required />
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-        />
-        <button type="submit" disabled={busy}>
-          Sign in
-        </button>
-        {error ? (
-          <p className="error" role="alert">
-            {error}
+      <div className="page-card">
+        <p className="page-brand">ChatUI</p>
+        <h1 className="visually-hidden">Sign in</h1>
+        <form className="auth-form" method="post" onSubmit={(event) => void submit(event)}>
+          <label htmlFor="username" className="visually-hidden">
+            Username
+          </label>
+          <input
+            id="username"
+            name="username"
+            className="text-input"
+            placeholder="Username"
+            autoComplete="username"
+            required
+          />
+          <label htmlFor="password" className="visually-hidden">
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className="text-input"
+            placeholder="Password"
+            autoComplete="current-password"
+            required
+          />
+          <button type="submit" className="btn primary large" disabled={busy}>
+            Sign in
+          </button>
+          {error ? (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </form>
+        {loaderData.registrationOpen ? (
+          <p className="page-foot">
+            New here? <a href="/register">Create an account</a>
           </p>
         ) : null}
-      </form>
-      {loaderData.registrationOpen ? (
-        <p>
-          New here? <a href="/register">Create an account</a>
-        </p>
-      ) : null}
+      </div>
     </main>
   );
 }

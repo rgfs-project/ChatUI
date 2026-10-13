@@ -14,9 +14,9 @@ export function ErrorBoundary() {
   return (
     <main className="empty-state" role="main">
       <h1>Page not found</h1>
-      <p>
-        <Link to={paths.newChat()}>Start a new chat</Link>
-      </p>
+      <Link to={paths.newChat()} className="btn primary">
+        Start a new chat
+      </Link>
     </main>
   );
 }

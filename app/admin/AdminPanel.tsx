@@ -179,7 +179,7 @@ function UsersTab() {
                 <td className="admin-actions">
                   <button
                     type="button"
-                    className="secondary"
+                    className="btn"
                     onClick={() => {
                       setPassword(u);
                     }}
@@ -188,7 +188,7 @@ function UsersTab() {
                   </button>
                   <button
                     type="button"
-                    className="danger"
+                    className="btn danger"
                     onClick={() => {
                       setConfirmName("");
                       setDeleting(u);
@@ -218,7 +218,7 @@ function UsersTab() {
             <option value="admin">Admin</option>
           </select>
         </label>
-        <button type="submit" disabled={busy}>
+        <button className="btn primary" type="submit" disabled={busy}>
           Create user
         </button>
       </form>
@@ -240,12 +240,12 @@ function UsersTab() {
             New password for {password.username} (signs them out everywhere)
             <input name="password" type="password" required autoComplete="new-password" />
           </label>
-          <button type="submit" disabled={busy}>
+          <button className="btn primary" type="submit" disabled={busy}>
             Save password
           </button>
           <button
             type="button"
-            className="secondary"
+            className="btn"
             onClick={() => {
               setPassword(null);
             }}
@@ -364,7 +364,7 @@ function ProvidersTab() {
                 <td className="admin-actions">
                   <button
                     type="button"
-                    className="secondary"
+                    className="btn"
                     disabled={busy}
                     onClick={() =>
                       void run("Test connection", "POST", `/api/admin/providers/${p.id}/test`)
@@ -374,7 +374,7 @@ function ProvidersTab() {
                   </button>
                   <button
                     type="button"
-                    className="secondary"
+                    className="btn"
                     onClick={() => {
                       setEditing(p);
                       setFormOpen(true);
@@ -384,7 +384,7 @@ function ProvidersTab() {
                   </button>
                   <button
                     type="button"
-                    className="danger"
+                    className="btn danger"
                     onClick={() => {
                       setRemoving(p);
                     }}
@@ -401,7 +401,7 @@ function ProvidersTab() {
         <div className="admin-after-table">
           <button
             type="button"
-            className="secondary"
+            className="btn"
             onClick={() => {
               setEditing(null);
               setFormOpen(true);
@@ -469,12 +469,12 @@ function ProvidersTab() {
               defaultChecked={editing?.capabilities.reasoning ?? false}
             />
           </label>
-          <button type="submit" disabled={busy}>
+          <button className="btn primary" type="submit" disabled={busy}>
             {editing ? "Save provider" : "Add provider"}
           </button>
           <button
             type="button"
-            className="secondary"
+            className="btn"
             onClick={() => {
               setEditing(null);
               setFormOpen(false);
@@ -553,7 +553,7 @@ function ModelsTab() {
                     <td className="col-end">
                       <button
                         type="button"
-                        className="secondary"
+                        className="btn"
                         onClick={() => {
                           setEditing({ providerId: m.providerId, modelId: m.id });
                         }}
@@ -591,7 +591,7 @@ function ModelsTab() {
       <div className="admin-after-table">
         <button
           type="button"
-          className="secondary"
+          className="btn"
           disabled={busy}
           onClick={() => {
             // Forces discovery on every provider, then shows the fresh lists.
@@ -657,12 +657,12 @@ function ModelsTab() {
               defaultChecked={current?.timeContext ?? false}
             />
           </label>
-          <button type="submit" disabled={busy}>
+          <button className="btn primary" type="submit" disabled={busy}>
             Save settings
           </button>
           <button
             type="button"
-            className="secondary"
+            className="btn"
             onClick={() => {
               setEditing(null);
             }}
@@ -821,7 +821,7 @@ function SettingsTab() {
             />
           </label>
         </fieldset>
-        <button type="submit" disabled={busy}>
+        <button className="btn primary" type="submit" disabled={busy}>
           Save settings
         </button>
       </form>
@@ -864,7 +864,7 @@ function MaintenanceTab() {
             ))}
           </select>
         </label>
-        <button type="submit" disabled={busy}>
+        <button className="btn primary" type="submit" disabled={busy}>
           Rebuild index
         </button>
       </form>

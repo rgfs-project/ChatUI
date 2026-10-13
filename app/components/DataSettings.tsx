@@ -278,6 +278,7 @@ export default function DataSettings({ userId }: { userId: string }) {
       </p>
       <div className="data-row">
         <button
+          className="btn primary"
           type="button"
           disabled={exportAll.isPending}
           onClick={() => {
@@ -289,7 +290,7 @@ export default function DataSettings({ userId }: { userId: string }) {
         </button>
         {exported ? (
           <a
-            className="button-link secondary"
+            className="btn"
             href={`/api/exports/${encodeURIComponent(exported.exportId)}/download`}
             download
             data-testid="export-download"
@@ -306,7 +307,7 @@ export default function DataSettings({ userId }: { userId: string }) {
         changes until you confirm, and nothing you have is ever overwritten.
       </p>
       <div className="data-row">
-        <label className="button-link secondary data-file">
+        <label className="btn data-file">
           <Upload size={16} aria-hidden /> Choose file…
           <input
             ref={fileRef}
@@ -322,7 +323,7 @@ export default function DataSettings({ userId }: { userId: string }) {
             <progress max={1} value={uploading.fraction} aria-label="Uploading file" />
             <button
               type="button"
-              className="secondary"
+              className="btn"
               onClick={() => {
                 uploading.controller.abort();
               }}
@@ -417,10 +418,11 @@ export default function DataSettings({ userId }: { userId: string }) {
             </label>
           ) : null}
           <div className="dialog-actions">
-            <button type="button" className="secondary" onClick={() => void cancel()}>
+            <button type="button" className="btn" onClick={() => void cancel()}>
               Cancel
             </button>
             <button
+              className="btn primary"
               type="button"
               disabled={commit.isPending || (preview.previousImport !== null && !again)}
               onClick={() => {

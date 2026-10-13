@@ -59,44 +59,44 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="page">
-      <h1>ChatUI</h1>
-      <p className="lede">Self-hosted AI chat.</p>
-      {/* The page's purpose for a person: get to the chats. Status is secondary. */}
-      <p className="home-primary">
+      <div className="page-card wide">
+        <h1 className="page-brand">ChatUI</h1>
+        <p className="lede">Self-hosted AI chat.</p>
+        {/* The page's purpose for a person: get to the chats. Status is secondary. */}
         {loaderData.signedIn ? (
-          <a href="/chat" className="button-link primary">
+          <a href="/chat" className="btn primary large">
             Open your chats
           </a>
         ) : (
-          <a href="/login" className="button-link primary">
+          <a href="/login" className="btn primary large">
             Sign in
           </a>
         )}
-      </p>
-      <h2 className="home-status-heading">Server status</h2>
-      <dl className="status home-status">
-        <dt>Server</dt>
-        <dd data-testid="health-status">{health.status.toUpperCase()}</dd>
-        <dt>Version</dt>
-        <dd data-testid="health-version">{health.version}</dd>
-        <dt>Page</dt>
-        <dd data-testid="hydration-state">
-          {hydrated ? "Interactive" : "Server-rendered (JavaScript not yet active)"}
-        </dd>
-      </dl>
-      <p className="home-status">
-        <button
-          type="button"
-          className="link-button"
-          onClick={() => void recheck()}
-          disabled={!hydrated || check.kind === "checking"}
-        >
-          {check.kind === "checking" ? "Checking…" : "Check status again"}
-        </button>{" "}
-        <span role="status" aria-live="polite" data-testid="check-result">
-          {check.kind === "failed" ? "The server could not be reached." : ""}
-        </span>
-      </p>
+        <h2>Server status</h2>
+        <dl className="status">
+          <dt>Server</dt>
+          <dd data-testid="health-status">{health.status.toUpperCase()}</dd>
+          <dt>Version</dt>
+          <dd data-testid="health-version">{health.version}</dd>
+          <dt>Page</dt>
+          <dd data-testid="hydration-state">
+            {hydrated ? "Interactive" : "Server-rendered (JavaScript not yet active)"}
+          </dd>
+        </dl>
+        <p className="page-foot">
+          <button
+            type="button"
+            className="btn small"
+            onClick={() => void recheck()}
+            disabled={!hydrated || check.kind === "checking"}
+          >
+            {check.kind === "checking" ? "Checking…" : "Check status again"}
+          </button>{" "}
+          <span role="status" aria-live="polite" data-testid="check-result">
+            {check.kind === "failed" ? "The server could not be reached." : ""}
+          </span>
+        </p>
+      </div>
     </main>
   );
 }

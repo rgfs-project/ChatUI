@@ -38,11 +38,10 @@ export default function SidebarDrawer(props: {
           <Dialog.Title className="visually-hidden">Conversations</Dialog.Title>
           <Sidebar
             user={props.user}
-            hidden={false}
+            collapsed={false}
             drawer
             navId="sidebar-drawer-nav"
-            hideLabel="Close conversations"
-            onHide={close}
+            onToggle={close}
             onNavigate={close}
           />
         </Dialog.Content>

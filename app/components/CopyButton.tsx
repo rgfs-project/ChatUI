@@ -5,17 +5,19 @@ import { useState } from "react";
 export function CopyButton({
   text,
   label,
-  size = 16,
+  size = 18,
+  className = "icon-btn",
 }: {
   text: string;
   label: string;
-  size?: number;
+  size?: 14 | 16 | 18 | 20;
+  className?: string;
 }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
-      className="icon-btn"
+      className={className}
       aria-label={copied ? "Copied" : label}
       title={copied ? "Copied" : label}
       onClick={() => {

@@ -8,7 +8,7 @@ const ReauthDialog = lazy(() => import("./ReauthDialog"));
 /**
  * The shell with no private content: while auth is `unknown` (a neutral
  * placeholder, never a login form), after sign-out, or after the session
- * expired mid-use (the re-authentication dialog, contracts §12).
+ * expired mid-use (the re-authentication dialog).
  */
 export function SignedOutShell(props: {
   expired: { userId: string; username: string } | null;
@@ -24,9 +24,9 @@ export function SignedOutShell(props: {
     <div className="app-main locked" data-testid="signed-out">
       <div className="empty-state">
         <h1>{props.expired ? "Your session has ended" : "You are signed out"}</h1>
-        <p>
-          <Link to={paths.login()}>Go to the sign-in page</Link>
-        </p>
+        <Link to={paths.login()} className="btn primary large">
+          Sign in
+        </Link>
       </div>
       {props.expired ? (
         <Suspense fallback={null}>

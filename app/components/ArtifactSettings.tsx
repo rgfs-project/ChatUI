@@ -68,7 +68,7 @@ export default function ArtifactSettings({ userId }: { userId: string }) {
                 <div className="artifact-row-actions">
                   <button
                     type="button"
-                    className="secondary"
+                    className="btn"
                     aria-label={`View ${artifact.name}`}
                     onClick={(event) => {
                       setOpen({ artifact, trigger: event.currentTarget });
@@ -77,7 +77,7 @@ export default function ArtifactSettings({ userId }: { userId: string }) {
                     View
                   </button>
                   <a
-                    className="button-link secondary"
+                    className="btn"
                     href={`/api/artifacts/${encodeURIComponent(artifact.id)}/source?download=1`}
                     download={artifact.name}
                     aria-label={`Download ${artifact.name}`}

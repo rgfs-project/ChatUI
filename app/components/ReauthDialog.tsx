@@ -69,36 +69,44 @@ export default function ReauthDialog({
             kept in this tab.
           </Dialog.Description>
           <form className="auth-form" onSubmit={(event) => void submit(event)}>
-            <label htmlFor="reauth-username">Username</label>
+            <label htmlFor="reauth-username" className="visually-hidden">
+              Username
+            </label>
             <input
               id="reauth-username"
               name="username"
+              className="text-input"
+              placeholder="Username"
               autoComplete="username"
               defaultValue={expired.username}
               required
             />
-            <label htmlFor="reauth-password">Password</label>
+            <label htmlFor="reauth-password" className="visually-hidden">
+              Password
+            </label>
             <input
               id="reauth-password"
               name="password"
               type="password"
+              className="text-input"
+              placeholder="Password"
               autoComplete="current-password"
               required
             />
             {error ? (
-              <p className="form-error" role="alert">
+              <p className="error" role="alert">
                 {error}
               </p>
             ) : null}
             <div className="dialog-actions">
               <Link
                 to={paths.login(location.pathname)}
-                className="secondary-link"
+                className="btn"
                 data-testid="reauth-login-page"
               >
                 Sign-in page
               </Link>
-              <button type="submit" disabled={busy}>
+              <button type="submit" className="btn primary" disabled={busy}>
                 {busy ? "Signing in…" : "Sign in"}
               </button>
             </div>

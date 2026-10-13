@@ -148,15 +148,13 @@ test("a failed route chunk load recovers: the page reloads into a working app an
     await route.continue();
   });
   const reloaded = page.waitForEvent("load");
-  await page.getByTestId("signed-in-user").click();
-  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByRole("link", { name: /^Settings/ }).click();
   // React Router reloads the document when a route module can't be loaded
   // (e.g. deploy skew); the reloaded page is a working app.
   await reloaded;
   await page.waitForSelector('html[data-hydrated="true"]');
   expect(failures).toBe(1);
-  await page.getByTestId("signed-in-user").click();
-  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByRole("link", { name: /^Settings/ }).click();
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
 });

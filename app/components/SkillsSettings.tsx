@@ -138,6 +138,7 @@ function SkillList(props: {
             box and pick one, or start a message with <code>/name</code>.
           </p>
           <button
+            className="btn primary"
             type="button"
             onClick={() => {
               props.onOpen(null);
@@ -182,7 +183,7 @@ function SkillList(props: {
           </ul>
           <button
             type="button"
-            className="secondary"
+            className="btn"
             onClick={() => {
               props.onOpen(null);
             }}
@@ -284,7 +285,7 @@ function SkillEditor(props: { userId: string; skill: SkillDto | undefined; onDon
             confirming ? (
               <button
                 type="button"
-                className="secondary danger-outline"
+                className="btn danger"
                 disabled={remove.isPending}
                 onClick={() => {
                   remove.mutate(skill.id, { onSuccess: props.onDone });
@@ -295,7 +296,7 @@ function SkillEditor(props: { userId: string; skill: SkillDto | undefined; onDon
             ) : (
               <button
                 type="button"
-                className="ghost danger"
+                className="btn ghost danger"
                 onClick={() => {
                   setConfirming(true);
                 }}
@@ -305,10 +306,10 @@ function SkillEditor(props: { userId: string; skill: SkillDto | undefined; onDon
             )
           ) : null}
           <span className="spacer" />
-          <button type="button" className="secondary" onClick={props.onDone}>
+          <button type="button" className="btn" onClick={props.onDone}>
             Cancel
           </button>
-          <button type="submit" disabled={save.isPending}>
+          <button className="btn primary" type="submit" disabled={save.isPending}>
             {save.isPending ? "Saving…" : "Save"}
           </button>
         </div>

@@ -6,8 +6,8 @@ import { apiJson, queries, queryKeys, type PreferencesDto } from "../lib/query";
 const EDGES = [1024, 1536, 2048, 3072, 4096];
 
 /**
- * Settings → Customize → Attachments (Phase 12): the two prompt/upload
- * preferences. `historyImages` decides whether earlier images and audio are
+ * Settings → General → Chat: the two attachment
+ * preferences (rows of the Chat card). `historyImages` decides whether earlier images and audio are
  * sent to the model again; `imageMaxEdge` shrinks large images in the browser
  * before upload (unset: the default edge; 0: never).
  */
@@ -32,8 +32,7 @@ export function AttachmentSettings({ userId }: { userId: string }) {
   const prefs = preferences.data;
   const disabled = !prefs || save.isPending;
   return (
-    <section className="settings-body" aria-labelledby="settings-attachments">
-      <h2 id="settings-attachments">Attachments</h2>
+    <>
       <div className="settings-row">
         <div>
           <label className="settings-label" htmlFor="history-images">
@@ -46,7 +45,7 @@ export function AttachmentSettings({ userId }: { userId: string }) {
         </div>
         <select
           id="history-images"
-          className="text-input settings-select"
+          className="text-input"
           disabled={disabled}
           value={prefs?.historyImages ?? "include"}
           onChange={(event) => {
@@ -68,7 +67,7 @@ export function AttachmentSettings({ userId }: { userId: string }) {
         </div>
         <select
           id="image-max-edge"
-          className="text-input settings-select"
+          className="text-input"
           disabled={disabled}
           value={String(prefs?.imageMaxEdge ?? "")}
           onChange={(event) => {
@@ -90,6 +89,6 @@ export function AttachmentSettings({ userId }: { userId: string }) {
           {error ?? "Your settings couldn’t be loaded."}
         </p>
       ) : null}
-    </section>
+    </>
   );
 }

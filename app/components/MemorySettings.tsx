@@ -53,6 +53,7 @@ export default function MemorySettings({ userId }: { userId: string }) {
           <h3>Add your first memory</h3>
           <p>No memories yet. Add a note and the assistant will remember it in every chat.</p>
           <button
+            className="btn primary"
             type="button"
             onClick={() => {
               setEditing({ id: null });
@@ -81,7 +82,7 @@ export default function MemorySettings({ userId }: { userId: string }) {
                 </div>
                 <button
                   type="button"
-                  className="secondary"
+                  className="btn"
                   aria-label={`Edit ${memory.name}`}
                   onClick={() => {
                     setEditing({ id: memory.id });
@@ -94,7 +95,7 @@ export default function MemorySettings({ userId }: { userId: string }) {
           </ul>
           <button
             type="button"
-            className="secondary"
+            className="btn"
             onClick={() => {
               setEditing({ id: null });
             }}
@@ -209,7 +210,7 @@ function MemoryEditor(props: {
           {memory ? (
             <button
               type="button"
-              className="ghost danger"
+              className="btn ghost danger"
               onClick={() => {
                 setConfirming(true);
               }}
@@ -218,10 +219,10 @@ function MemoryEditor(props: {
             </button>
           ) : null}
           <span className="spacer" />
-          <button type="button" className="secondary" onClick={props.onDone}>
+          <button type="button" className="btn" onClick={props.onDone}>
             Cancel
           </button>
-          <button type="submit" disabled={save.isPending}>
+          <button className="btn primary" type="submit" disabled={save.isPending}>
             {save.isPending ? "Saving…" : "Save"}
           </button>
         </div>

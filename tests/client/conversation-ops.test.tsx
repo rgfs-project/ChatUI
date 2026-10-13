@@ -192,9 +192,9 @@ describe("pins in the sidebar", () => {
             element: (
               <Sidebar
                 user={TEST_USER}
-                hidden={false}
+                collapsed={false}
                 drawer={false}
-                onHide={noop}
+                onToggle={noop}
                 onNavigate={noop}
               />
             ),
