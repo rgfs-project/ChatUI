@@ -159,7 +159,7 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 - **Search** (sidebar "Search chats", or Ctrl/⌘+K) looks through your chat titles and messages and opens a result at the matching message.
 - **Pin** a chat from its "…" menu or the title menu; pinned chats stay at the top (stored in your preferences).
 - Hover (or, on touch screens, look under) a message for its actions:
-  - **Edit** a message: "Send" replaces the reply; "Save" keeps the turn unanswered. Later messages are removed either way.
+  - **Edit** a message: "Send" saves it and gets a new reply. Later messages are removed.
   - **Delete** a message together with its reply.
   - **Regenerate** a reply, or "Get a reply" for an unanswered message.
 
