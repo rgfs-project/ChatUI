@@ -1566,7 +1566,7 @@ svg {
 
 .greeting {
   font-size: var(--text-2xl);
-  font-weight: var(--weight-medium);
+  font-weight: 400;
   line-height: 1.2;
   text-align: center;
 }
