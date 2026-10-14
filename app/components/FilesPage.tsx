@@ -1,6 +1,7 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   Download,
   Ellipsis,
   Eye,
@@ -10,9 +11,7 @@ import {
   FileText,
   Image,
   Music,
-  PanelLeft,
   Search,
-  SquarePen,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -96,7 +95,7 @@ function uploadToLibrary(file: File): Promise<void> {
  */
 export function FilesPage({ userId }: { userId: string }) {
   const client = useQueryClient();
-  const { narrow, show, drawerOpen, setDrawerTrigger, warmDrawer } = useSidebar();
+  const { narrow } = useSidebar();
   const list = useQuery(queries.files(userId));
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FileCategory | "all">("all");
@@ -166,29 +165,11 @@ export function FilesPage({ userId }: { userId: string }) {
   return (
     <main className="files-page" data-testid="files-page">
       {narrow ? (
-        <header className="app-header">
-          <span className="header-nav">
-            <button
-              ref={setDrawerTrigger}
-              type="button"
-              className="icon-btn"
-              aria-label="Open sidebar"
-              aria-expanded={drawerOpen}
-              aria-haspopup="dialog"
-              onPointerDown={warmDrawer}
-              onClick={show}
-            >
-              <PanelLeft size={20} aria-hidden />
-            </button>
-          </span>
-          <div className="header-title">
-            <span className="title-text">Files</span>
-          </div>
-          <div className="header-actions">
-            <Link to={paths.newChat()} className="icon-btn" aria-label="New chat">
-              <SquarePen size={20} aria-hidden />
-            </Link>
-          </div>
+        <header className="mobile-head">
+          <Link to={paths.newChat()} className="icon-btn" aria-label="Back">
+            <ArrowLeft size={20} aria-hidden />
+          </Link>
+          <span className="title">Files</span>
         </header>
       ) : null}
       <div className="page-scroll">
@@ -289,7 +270,10 @@ export function FilesPage({ userId }: { userId: string }) {
                     <div className="col-name file-text">
                       <span className="file-name">{file.name}</span>
                       <span className="file-meta">
-                        {file.kindLabel} · {formatBytes(file.size)}
+                        <span className="wide-only">
+                          {file.kindLabel} · {formatBytes(file.size)}
+                        </span>
+                        <span className="narrow-only">{added(file.createdAt)}</span>
                       </span>
                     </div>
                     <span className="col-chat">

@@ -1,3 +1,4 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import {
   Check,
@@ -9,12 +10,14 @@ import {
   Shield,
   SlidersHorizontal,
   Sun,
+  X,
 } from "lucide-react";
 import { useState, type ReactNode, type Ref } from "react";
 import { Link } from "react-router";
 import type { MenuRequest } from "../lib/menu-request";
 import { paths } from "../lib/paths";
 import { applyTheme, currentTheme } from "../lib/theme";
+import { NARROW_QUERY, useMediaQuery } from "../lib/use-media-query";
 import { AccountLabel, type ProfileUser } from "./AccountLabel";
 import { ModelTrigger } from "./ModelTrigger";
 
@@ -231,6 +234,8 @@ export function ModelMenu(props: {
 }) {
   const groups = props.groups.filter((g) => g.options.length > 0);
   const headed = groups.length > 1;
+  const narrow = useMediaQuery(NARROW_QUERY);
+  if (narrow) return <ModelSheet {...props} groups={groups} headed={headed} />;
   return (
     <Menu.Root modal={false} open={props.open} onOpenChange={props.onOpenChange}>
       <Menu.Trigger asChild disabled={props.disabled}>
@@ -282,6 +287,79 @@ export function ModelMenu(props: {
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>
+  );
+}
+
+/**
+ * Phones (the MobileModelPicker artboard): a bottom sheet with a grab handle,
+ * "Model" and Close, then the models. No search field, as requested.
+ */
+function ModelSheet(props: {
+  label: string;
+  value: string;
+  groups: ModelGroup[];
+  headed: boolean;
+  disabled: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChange: (value: string) => void;
+  manageHref?: string;
+}) {
+  return (
+    <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
+      <Dialog.Trigger asChild disabled={props.disabled}>
+        <ModelTrigger label={props.label} disabled={props.disabled} />
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="overlay" />
+        <Dialog.Content className="dialog model-sheet" aria-describedby={undefined}>
+          <span className="sheet-handle" aria-hidden />
+          <div className="model-sheet-head">
+            <Dialog.Title className="model-sheet-title">Model</Dialog.Title>
+            <Dialog.Close className="icon-btn" aria-label="Close">
+              <X size={20} aria-hidden />
+            </Dialog.Close>
+          </div>
+          {props.groups.map((group) => (
+            <div key={group.id} role="listbox" aria-label={props.headed ? group.label : "Models"}>
+              {props.headed ? <div className="menu-label">{group.label}</div> : null}
+              {group.options.map((option) => {
+                const selected = option.value === props.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    className="model-option sheet-option"
+                    data-model={option.value}
+                    onClick={() => {
+                      props.onChange(option.value);
+                      props.onOpenChange(false);
+                    }}
+                  >
+                    <span className="text">
+                      <span className="name">{option.label}</span>
+                      {option.detail ? <span className="desc">{option.detail}</span> : null}
+                    </span>
+                    {selected ? <Check size={18} className="check" aria-hidden /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+          {props.manageHref ? (
+            <>
+              <div className="sheet-separator" role="separator" />
+              <Link to={props.manageHref} className="model-option sheet-option manage">
+                <SlidersHorizontal size={20} className="muted-icon" aria-hidden />
+                Manage models
+              </Link>
+            </>
+          ) : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

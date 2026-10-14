@@ -167,6 +167,8 @@
 }
 
 .file-pick {
+  gap: 6px;
+  font-weight: var(--weight-medium);
   cursor: pointer;
 }
 
@@ -179,15 +181,68 @@
   outline-offset: 2px;
 }
 
-/* Phones: name and date only; the chat moves under the name. */
+.narrow-only {
+  display: none;
+}
+
+/* Phones (the MobileFiles artboard): search, then name over date in 64px rows. */
 @media (max-width: 767px) {
-  .files-head .col-chat,
-  .file-row .col-chat {
+  .files-page .page-body.wide {
+    gap: 16px;
+    padding: 8px 16px 24px;
+  }
+
+  /* The heading stays for screen readers (the header names the page). */
+  .files-page .page-head {
+    position: absolute;
+  }
+
+  .files-page .file-pick,
+  .files-page .chips,
+  .files-page .files-head,
+  .files-page .col-chat,
+  .files-page .col-date,
+  .files-page .files-foot,
+  .wide-only {
     display: none;
   }
 
-  .col-date {
-    width: auto;
+  .narrow-only {
+    display: inline;
+  }
+
+  .search-field {
+    height: 44px;
+  }
+
+  .search-field input {
+    font-size: var(--text-lg);
+  }
+
+  .files-table {
+    padding: 0 12px;
+  }
+
+  .file-row {
+    min-height: 64px;
+    padding: 0;
+  }
+
+  .file-row .col-icon,
+  .file-row .file-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .file-row .file-name {
+    font-size: var(--text-base);
+    line-height: 22px;
+  }
+
+  .file-row .file-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronRight, Copy, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
 import { useState, type ReactNode, type SyntheticEvent } from "react";
 import {
   LOG_LEVELS,
@@ -1094,15 +1094,10 @@ function LogList({ onOpen }: { onOpen: (id: string) => void }) {
                   }}
                 >
                   <span className="row-text">
-                    <span className="row-label">
-                      {entry.level === "error" || entry.level === "warn" ? (
-                        <span className={`level-dot ${entry.level}`} aria-hidden />
-                      ) : null}
-                      {entry.message}
-                    </span>
+                    <span className="row-label">{entry.message}</span>
                     <span className="visually-hidden">, {LEVEL_LABEL[entry.level]}</span>
                   </span>
-                  <span className="row-value">
+                  <span className="row-value log-time">
                     <time dateTime={entry.time}>{timeOf(entry.time)}</time>
                     <ChevronRight size={16} aria-hidden />
                   </span>
@@ -1145,7 +1140,7 @@ function CopyDetails({ text }: { text: string }) {
   return (
     <button
       type="button"
-      className="btn sm primary"
+      className="btn primary pill-btn"
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => {
           setCopied(true);
@@ -1155,7 +1150,6 @@ function CopyDetails({ text }: { text: string }) {
         });
       }}
     >
-      {copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
       {copied ? "Copied" : "Copy details"}
     </button>
   );
@@ -1189,7 +1183,7 @@ function LogDetail({ id, onBack }: { id: string; onBack: () => void }) {
       ) : null}
       {e ? (
         <>
-          <h1 className="page-title">{e.message}</h1>
+          <h1 className="page-title tall">{e.message}</h1>
           <section className="group" data-testid="log-detail">
             <div className="row">
               <span>Level</span>
@@ -1216,7 +1210,7 @@ function LogDetail({ id, onBack }: { id: string; onBack: () => void }) {
             {e.requestId ? (
               <div className="row">
                 <span>Request ID</span>
-                <span className="row-value mono">{e.requestId}</span>
+                <span className="row-value">{e.requestId}</span>
               </div>
             ) : null}
           </section>

@@ -414,13 +414,13 @@ svg {
 .select {
   height: 32px;
   max-width: 100%;
-  padding: 0 34px 0 12px;
+  padding: 0 32px 0 12px;
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--fill) url("./icons/select-chevron.svg") no-repeat right 12px center / 16px;
   color: var(--fg);
   font-size: var(--text-md);
-  line-height: 32px;
+  line-height: 18px;
   appearance: none;
   cursor: pointer;
 }
@@ -432,6 +432,7 @@ svg {
   width: 40px;
   height: 24px;
   margin: 0;
+  padding: 2px;
   border-radius: var(--radius-pill);
   background: var(--field-line);
   appearance: none;
@@ -478,7 +479,7 @@ svg {
   background: var(--avatar);
   color: var(--on-avatar);
   font-size: var(--text-xs);
-  line-height: 1;
+  line-height: 16px;
 }
 
 .avatar img {
@@ -512,6 +513,10 @@ svg {
   font-weight: var(--weight-medium);
   line-height: 16px;
   white-space: nowrap;
+}
+
+.row .badge {
+  align-self: center;
 }
 
 .badge.danger {
@@ -654,7 +659,7 @@ svg {
 
 .menu.wide .menu-item {
   gap: 8px;
-  padding: 0 8px;
+  padding: 6px 8px;
   border-radius: var(--radius-md);
 }
 
@@ -728,6 +733,57 @@ svg {
 
 .model-option .check {
   color: var(--fg);
+}
+
+/* The phone model sheet (MobileModelPicker): 8 / 8 / 12, 56px options. */
+.model-sheet-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding-left: 12px;
+}
+
+.model-sheet-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: 24px;
+}
+
+.sheet-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  text-decoration: none;
+}
+
+.sheet-option[aria-selected="true"] {
+  background: var(--fill);
+}
+
+.sheet-option .name {
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.sheet-option.manage {
+  min-height: 48px;
+  font-size: var(--text-base);
+  line-height: 20px;
+}
+
+.sheet-separator {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--line);
 }
 
 /* ---- Dialogs (Radix Dialog): a card on wide screens, a bottom sheet on phones ------- */
@@ -919,7 +975,7 @@ svg {
   flex: none;
   width: 100%;
   height: 36px;
-  padding: 6px 8px;
+  padding: 8px;
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-md);
@@ -1017,6 +1073,12 @@ svg {
   font-size: var(--text-md);
   line-height: 20px;
   text-decoration: none;
+}
+
+/* The Home artboard draws sidebar rows with 6 / 8 padding (8 elsewhere). */
+.app-shell:has(.chat-view.empty) > .sidebar .nav-row:not(.account-row),
+.app-shell:has(.chat-view.empty) > .sidebar .chat-row > a {
+  padding: 6px 8px;
 }
 
 .row-title {
@@ -1208,6 +1270,10 @@ svg {
   .header-title {
     visibility: hidden;
   }
+
+  .chat-view.empty .app-header {
+    padding-left: 16px;
+  }
 }
 
 /* ---- Conversation ------------------------------------------------------------------ */
@@ -1224,7 +1290,7 @@ svg {
   min-height: 0;
   overflow-y: auto;
   overflow-anchor: none;
-  padding: 24px 20px 32px;
+  padding: 24px 20px;
 }
 
 .transcript-inner {
@@ -1482,7 +1548,7 @@ svg {
 .greeting {
   font-size: var(--text-2xl);
   font-weight: var(--weight-medium);
-  line-height: 29px;
+  line-height: 1.2;
   text-align: center;
 }
 
@@ -1941,13 +2007,12 @@ svg {
   display: flex;
   flex-direction: column;
   gap: 40px;
-  width: 100%;
-  max-width: calc(var(--column) + 64px);
-  padding: 56px 32px 64px;
+  width: min(var(--column), 100% - 64px);
+  padding: 56px 0 64px;
 }
 
 .page-body.wide {
-  max-width: calc(960px + 64px);
+  width: min(960px, 100% - 64px);
   gap: 24px;
 }
 
@@ -1958,11 +2023,17 @@ svg {
   margin-bottom: -16px;
   font-size: var(--text-2xl);
   font-weight: var(--weight-semibold);
+  line-height: 26px;
+}
+
+.page-title.tall {
   line-height: 30px;
 }
 
 .page-body.wide .page-title {
+  min-height: 0;
   margin-bottom: 0;
+  line-height: 30px;
 }
 
 .page-head {
@@ -2035,7 +2106,7 @@ svg {
   gap: 16px;
   width: 100%;
   min-height: 56px;
-  padding: 8px 0;
+  padding: 0;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
@@ -2160,6 +2231,7 @@ a.row {
 }
 
 .mobile-head .title {
+  flex: 1;
   font-size: var(--text-lg);
   font-weight: var(--weight-medium);
   line-height: 26px;
@@ -2328,13 +2400,15 @@ a.row {
       "input input input input"
       "plus . model send";
     row-gap: 4px;
+    align-content: space-between;
+    min-height: 96px;
     padding: 10px;
     border-radius: var(--radius-dialog);
   }
 
   .composer-input,
   .composer.expanded .composer-input {
-    padding: 2px 8px 0;
+    padding: 0 8px;
   }
 
   .chat-view.empty .transcript {
@@ -2345,7 +2419,7 @@ a.row {
   .chat-view.empty .composer-dock {
     order: 3;
     margin-top: auto;
-    padding: 0 16px 16px;
+    padding: 40px 16px 16px;
     padding-bottom: max(16px, env(safe-area-inset-bottom));
   }
 
@@ -2360,7 +2434,9 @@ a.row {
     max-height: calc(100dvh - 16px);
   }
 
-  .page-body {
+  .page-body,
+  .page-body.wide {
+    width: 100%;
     gap: 32px;
     padding: 8px 16px 40px;
   }
@@ -2395,6 +2471,16 @@ a.row {
     transform: none;
   }
 
+  .dialog.model-sheet {
+    gap: 0;
+    padding: 8px 8px 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .model-sheet .sheet-handle {
+    margin: 4px 0 8px;
+  }
+
   .sheet-handle {
     display: block;
     align-self: center;
@@ -2425,12 +2511,6 @@ a.row {
     height: 48px;
     border-radius: var(--radius-card);
     font-size: var(--text-base);
-  }
-
-  .icon-btn,
-  .turn-actions .icon-btn {
-    min-width: 40px;
-    min-height: 40px;
   }
 }
 

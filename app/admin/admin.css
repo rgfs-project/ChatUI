@@ -13,6 +13,19 @@
 
 .admin-row {
   flex-wrap: wrap;
+  padding: 8px 0;
+}
+
+/* Log rows: the time in 13 / 16 beside the chevron. */
+.log-time {
+  font-size: var(--text-sm);
+  line-height: 16px;
+}
+
+/* "Copy details": the artboard's 36px dropdown-style pill. */
+.pill-btn {
+  padding: 0 12px;
+  line-height: 18px;
 }
 
 .admin-row .grow {
@@ -44,23 +57,6 @@
   margin-top: 12px;
 }
 
-.level-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 8px;
-  border-radius: var(--radius-pill);
-  vertical-align: middle;
-}
-
-.level-dot.error {
-  background: var(--danger);
-}
-
-.level-dot.warn {
-  background: var(--warn);
-}
-
 .badge.warn {
   background: var(--warn-fill);
   color: var(--warn);
@@ -69,4 +65,9 @@
 .mono {
   font-family: var(--mono);
   font-size: var(--text-sm);
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
 }
