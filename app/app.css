@@ -3033,3 +3033,24 @@ textarea,
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* A finished reply fades in whole (it is not shown while generating). */
+.turn.appear {
+  animation: fade-in 400ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turn.appear {
+    animation: none;
+  }
+}
+
+/* A reply still generating: laid out off-screen, never painted. */
+.turn .held {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}

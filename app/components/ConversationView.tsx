@@ -1037,6 +1037,7 @@ export function ConversationView(props: {
                 onOpenArtifact={onOpenArtifact}
                 userId={userId}
                 conversationId={conversationId}
+                appear={live?.assistantMessageId === message.id}
                 actions={
                   message.role === "user"
                     ? unanswered.has(message.id)
@@ -1103,16 +1104,21 @@ export function ConversationView(props: {
                   testId="reasoning"
                 />
               ) : null}
-              {/* Streaming Markdown block by block: unfinished fences and tables
-                  render stably, and finished blocks keep their DOM. */}
-              <div data-testid="content">
+              {/* The reply streams out of sight (kept rendered block by block) and
+                  its stored copy fades in whole once complete; a failed reply
+                  shows what arrived. */}
+              <div
+                data-testid="content"
+                className={live.error ? undefined : "held"}
+                aria-hidden={live.error ? undefined : true}
+              >
                 <Markdown text={live.content} live growing={!isTerminalState(live.state)} />
               </div>
-              {running && live.content === "" ? (
+              {live.error ? null : (
                 <span className="thinking" role="status" aria-label="Generating a reply">
                   <span className="breathe" aria-hidden />
                 </span>
-              ) : null}
+              )}
               {live.error ? (
                 <div className="alert danger" role="alert">
                   <span className="alert-text">
@@ -1120,10 +1126,7 @@ export function ConversationView(props: {
                   </span>
                 </div>
               ) : null}
-              <p
-                className={running || live.error ? "visually-hidden" : "status-line"}
-                data-testid="generation-status"
-              >
+              <p className="visually-hidden" data-testid="generation-status">
                 {STATE_LABEL[live.state]}
                 {live.error ? ` — ${live.error.message}` : ""}
               </p>

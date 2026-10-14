@@ -88,6 +88,8 @@ export interface MessageViewProps {
   conversationId?: string;
   artifacts?: readonly MessageArtifactDto[] | undefined;
   onOpenArtifact?: (artifact: MessageArtifactDto, trigger: HTMLElement) => void;
+  /** A reply that just finished generating: it fades in once, whole. */
+  appear?: boolean;
 }
 
 /** Files a reply produced: each opens the source panel. */
@@ -303,6 +305,7 @@ function MessageImpl({
   conversationId,
   artifacts,
   onOpenArtifact,
+  appear = false,
 }: MessageViewProps) {
   count("messageRenders");
   useEffect(() => {
@@ -337,7 +340,11 @@ function MessageImpl({
     );
   const statusLabel = status ? STATUS_LABEL[status] : "";
   return (
-    <li id={anchor} className={`turn turn-${role}`} data-testid={testId ?? `message-${role}`}>
+    <li
+      id={anchor}
+      className={`turn turn-${role}${appear ? " appear" : ""}`}
+      data-testid={testId ?? `message-${role}`}
+    >
       <span className="visually-hidden">{role === "assistant" ? "Assistant" : "System"}</span>
       {statusLabel ? (
         <span className={`badge${status === "cancelled" ? "" : " danger"}`}>{statusLabel}</span>
