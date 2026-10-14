@@ -3034,23 +3034,19 @@ textarea,
   user-select: text;
 }
 
-/* A finished reply fades in whole (it is not shown while generating). */
-.turn.appear {
-  animation: fade-in 400ms ease both;
+/* A streaming reply appears a block (paragraph, list, code block…) at a
+   time: the block still being written is held back, and each one fades in
+   as it completes. */
+.turn.live .markdown > * {
+  transition: opacity 300ms ease;
+}
+
+.turn.live.streaming .markdown > :last-child {
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .turn.appear {
-    animation: none;
+  .turn.live .markdown > * {
+    transition: none;
   }
-}
-
-/* A reply still generating: laid out off-screen, never painted. */
-.turn .held {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
 }

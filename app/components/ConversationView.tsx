@@ -1037,7 +1037,6 @@ export function ConversationView(props: {
                 onOpenArtifact={onOpenArtifact}
                 userId={userId}
                 conversationId={conversationId}
-                appear={live?.assistantMessageId === message.id}
                 actions={
                   message.role === "user"
                     ? unanswered.has(message.id)
@@ -1104,21 +1103,17 @@ export function ConversationView(props: {
                   testId="reasoning"
                 />
               ) : null}
-              {/* The reply streams out of sight (kept rendered block by block) and
-                  its stored copy fades in whole once complete; a failed reply
-                  shows what arrived. */}
-              <div
-                data-testid="content"
-                className={live.error ? undefined : "held"}
-                aria-hidden={live.error ? undefined : true}
-              >
+              {/* Streaming Markdown block by block: unfinished fences and tables
+                  render stably, and finished blocks keep their DOM. Each block
+                  fades in once complete; the one still being written is held. */}
+              <div data-testid="content">
                 <Markdown text={live.content} live growing={!isTerminalState(live.state)} />
               </div>
-              {live.error ? null : (
+              {running ? (
                 <span className="thinking" role="status" aria-label="Generating a reply">
                   <span className="breathe" aria-hidden />
                 </span>
-              )}
+              ) : null}
               {live.error ? (
                 <div className="alert danger" role="alert">
                   <span className="alert-text">
