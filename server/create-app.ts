@@ -32,6 +32,7 @@ import { createSafeFetch, systemResolver, type Resolver } from "./providers/ssrf
 import { PasswordHasher } from "./auth/passwords.ts";
 import { AuthService, type AuthContext } from "./auth/service.ts";
 import { SessionStore } from "./auth/sessions.ts";
+import { ProfileStore } from "./storage/profiles.ts";
 import { LibraryStore } from "./storage/library.ts";
 import { PreferencesStore } from "./storage/preferences.ts";
 import { SkillsStore } from "./storage/skills.ts";
@@ -276,6 +277,7 @@ export function createApp(options: AppOptions): ChatUiApp {
   const audit = new AuditLog({ paths, locks, now });
   const preferences = new PreferencesStore(paths, locks, accountWrites);
   const library = new LibraryStore({ paths, locks, writes: accountWrites, now });
+  const profiles = new ProfileStore({ paths, locks, writes: accountWrites });
   const mutations = new ConversationMutations({
     store: conversations,
     generations,
@@ -348,7 +350,9 @@ export function createApp(options: AppOptions): ChatUiApp {
     // A disabled or removed account's generations are cancelled (Phase 6).
     onAccountRejected: (userId) => {
       generations.cancelForUser(userId);
+      profiles.forget(userId);
     },
+    profiles,
     registrationMode: () => settings.get().registrationMode,
   });
   const accountAdmin = new AccountAdmin({
@@ -516,6 +520,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     users,
     preferences,
     library,
+    profiles,
     attachments,
     mutations,
     skills,

@@ -202,6 +202,16 @@ export class DataPaths {
     return this.inside(this.uuid(userId, "user id"), "library.json");
   }
 
+  /** Display name, email, initials colour and photo metadata. */
+  profileFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "profile.json");
+  }
+
+  /** The profile photo's bytes (type in profile.json). */
+  profilePhotoFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "profile-photo");
+  }
+
   skillsFile(userId: string): string {
     return this.inside(this.uuid(userId, "user id"), "skills.json");
   }

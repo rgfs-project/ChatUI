@@ -196,6 +196,30 @@ export class UserStore {
     });
   }
 
+  /** Changes a username under the registry lock (case-insensitive uniqueness). */
+  async rename(id: string, username: string): Promise<UserRecord> {
+    const name = normalizeUsername(username);
+    if (!USERNAME_RE.test(name)) {
+      throw new UserError("invalid", "Usernames are 3-32 characters: a-z, 0-9, _ . -");
+    }
+    return this.locks.run(REGISTRY_LOCK, async () => {
+      const current = await this.get(id);
+      if (!current) throw new UserError("not_found", "Account not found");
+      if (current.username === name) return current;
+      await this.rebuildIndex();
+      if (this.byName.has(name)) throw new UserError("taken", "That username is taken");
+      const next: UserRecord = { ...current, username: name, updatedAt: this.now().toISOString() };
+      await atomicWrite(this.paths.userFile(id), `${JSON.stringify(next, null, 2)}\n`);
+      this.byName.delete(current.username);
+      this.byName.set(name, id);
+      await atomicWrite(
+        this.paths.usersIndexFile(),
+        `${JSON.stringify({ version: 1, users: Object.fromEntries(this.byName) }, null, 2)}\n`,
+      );
+      return next;
+    });
+  }
+
   /** Updates mutable fields of an existing account (never creates one). */
   async update(
     id: string,

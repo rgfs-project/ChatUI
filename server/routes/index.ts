@@ -70,6 +70,14 @@ import {
   unarchiveChatRoute,
 } from "./library.ts";
 import { getOperationRoute } from "./operations.ts";
+import {
+  deletePhotoRoute,
+  getAccountRoute,
+  getPhotoRoute,
+  putPhotoRoute,
+  updateAccountRoute,
+} from "./account.ts";
+import { usageRoute } from "./usage.ts";
 import { createSkillRoute, deleteSkillRoute, listSkillsRoute, updateSkillRoute } from "./skills.ts";
 import { listModelsRoute, listProvidersRoute } from "./models.ts";
 import {
@@ -100,6 +108,12 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(registerRoute),
   erase(logoutRoute),
   erase(changePasswordRoute),
+  erase(getAccountRoute),
+  erase(updateAccountRoute),
+  erase(putPhotoRoute),
+  erase(deletePhotoRoute),
+  erase(getPhotoRoute),
+  erase(usageRoute),
   erase(getPreferencesRoute),
   erase(updatePreferencesRoute),
   erase(listProvidersRoute),

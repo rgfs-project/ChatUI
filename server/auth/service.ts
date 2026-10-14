@@ -4,6 +4,7 @@ import { ErrorCode } from "@shared/errors";
 import type { AuthConfig } from "../config.ts";
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
+import type { Profile, ProfileStore } from "../storage/profiles.ts";
 import {
   UserError,
   USERNAME_RE,
@@ -28,6 +29,8 @@ export interface AuthContext {
   /** SHA-256 of the session token (the token itself is never kept). */
   tokenHash: string;
   csrfToken: string;
+  /** How the user appears (display only; never used to authorize). */
+  profile?: Profile;
 }
 
 const LOGIN_LIMIT = { limit: 10, windowMs: 15 * 60_000 };
@@ -45,6 +48,7 @@ export class AuthService {
   private readonly config: AuthConfig;
   private readonly logger: Logger;
   private readonly onAccountRejected: (userId: string) => void;
+  private readonly profiles: ProfileStore | undefined;
   private readonly byAddress = new RateLimiter(LOGIN_LIMIT);
   private readonly byUsername = new RateLimiter(LOGIN_LIMIT);
   readonly cookieName: string;
@@ -56,6 +60,7 @@ export class AuthService {
     config: AuthConfig;
     logger: Logger;
     onAccountRejected?: (userId: string) => void;
+    profiles?: ProfileStore;
     /** Instance setting that overrides REGISTRATION_MODE once saved (Phase 10). */
     registrationMode?: () => "open" | "closed" | undefined;
   }) {
@@ -66,6 +71,7 @@ export class AuthService {
     this.config = options.config;
     this.logger = options.logger;
     this.onAccountRejected = options.onAccountRejected ?? (() => undefined);
+    this.profiles = options.profiles;
     // __Host- cookies must be Secure, host-only and Path=/ (https origins).
     this.cookieName = this.config.secureCookies ? "__Host-chatui_session" : "chatui_session";
     void this.refreshFirstRun().catch(() => undefined);
@@ -142,12 +148,27 @@ export class AuthService {
       role: user.role,
       tokenHash,
       csrfToken: session.csrfToken,
+      ...(this.profiles ? { profile: await this.profiles.get(user.id) } : {}),
     };
   }
 
   sessionDto(auth: AuthContext | null): SessionDto {
+    const profile = auth?.profile;
     return {
-      user: auth ? { id: auth.userId, username: auth.username, role: auth.role } : null,
+      user: auth
+        ? {
+            id: auth.userId,
+            username: auth.username,
+            role: auth.role,
+            ...(profile
+              ? {
+                  displayName: profile.displayName,
+                  avatarColor: profile.avatarColor,
+                  photoVersion: profile.photo?.version ?? null,
+                }
+              : {}),
+          }
+        : null,
       csrfToken: auth?.csrfToken ?? null,
       registrationOpen: this.registrationOpen,
     };
@@ -229,6 +250,7 @@ export class AuthService {
       role,
       tokenHash: issued.tokenHash,
       csrfToken: issued.record.csrfToken,
+      ...(this.profiles ? { profile: await this.profiles.get(userId) } : {}),
     });
   }
 
