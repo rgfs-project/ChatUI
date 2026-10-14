@@ -214,6 +214,7 @@ describe("hydration reuses the seeded cache", () => {
   it("no duplicate initial fetch of conversations, the conversation or models", async () => {
     const state = await prefetchForRequest((client) => {
       client.setQueryData(queryKeys.conversations(USER), [summary(CONV, "Seeded chat")]);
+      client.setQueryData(queryKeys.projects(USER), []);
       client.setQueryData(queryKeys.models(USER), MODELS);
       client.setQueryData(
         queryKeys.conversation(USER, CONV),

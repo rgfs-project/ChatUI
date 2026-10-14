@@ -3208,3 +3208,13 @@ textarea,
 .nav-list > div + div > .settings-group {
   margin-top: 16px;
 }
+
+/* A project's chats, under it in the sidebar's Projects section. */
+.project-chats {
+  padding-left: 18px;
+}
+
+.chat-row > a > .lucide {
+  flex: none;
+  color: var(--muted);
+}

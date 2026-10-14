@@ -13,12 +13,20 @@ import {
   Pin,
   PinOff,
   Search,
-  Shapes,
   SquarePen,
   Trash2,
 } from "lucide-react";
 import type { ConversationSummary } from "@shared/conversations";
-import { lazy, memo, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  Fragment,
+  lazy,
+  memo,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { menuRequest, type MenuRequest } from "../lib/menu-request";
 import { paths } from "../lib/paths";
@@ -142,17 +150,6 @@ function SidebarImpl({
           <span className="label">Search</span>
         </button>
         <Link
-          to={paths.projects()}
-          state={background}
-          className="nav-row"
-          aria-label="Projects"
-          aria-current={location.pathname.startsWith("/projects") ? "page" : undefined}
-          onClick={onNavigate}
-        >
-          <Shapes size={20} aria-hidden />
-          <span className="label">Projects</span>
-        </Link>
-        <Link
           to={paths.files()}
           state={background}
           className="nav-row"
@@ -211,9 +208,10 @@ function ChatLists({
   const [openRequest, setOpenRequest] = useState<{ id: string; mode: MenuRequest } | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useCollapsedSections();
-  // Projects are needed only for "Move to project": loaded once a row menu opens.
-  const [wantProjects, setWantProjects] = useState(false);
-  const projects = useQuery({ ...queries.projects(user.id), enabled: wantProjects });
+  // Projects: their own sidebar section (as ChatGPT), and "Move to project".
+  const projects = useQuery(queries.projects(user.id));
+  const { projectId: openProjectId } = useParams();
+  const location = useLocation();
   const visible = chats.filter((c) => c.archived !== true);
   const pinned = visible
     .filter((c) => typeof c.pinnedRank === "number")
@@ -328,7 +326,6 @@ function ChatLists({
               title="More"
               onClick={(event) => {
                 void preloadDialogs();
-                setWantProjects(true);
                 setOpenRequest({ id: chat.id, mode: menuRequest(event) });
               }}
             >
@@ -346,7 +343,6 @@ function ChatLists({
             onOpenChange={(open) => {
               if (open) {
                 void preloadDialogs();
-                setWantProjects(true);
               }
               setMenuOpenId(open ? chat.id : null);
             }}
@@ -386,6 +382,59 @@ function ChatLists({
           </ul>
         </>
       ) : null}
+      <SectionToggle
+        id={`${listId}-projects`}
+        controls={`${listId}-projects-list`}
+        label="Projects"
+        open={!collapsed.projects}
+        onToggle={(open) => {
+          setCollapsed("projects", !open);
+        }}
+      />
+      <ul
+        id={`${listId}-projects-list`}
+        className="chat-list"
+        aria-labelledby={`${listId}-projects`}
+        data-testid="project-list"
+        hidden={collapsed.projects}
+      >
+        <li className="chat-row">
+          <Link
+            to={paths.projects()}
+            state={{ background: location.pathname }}
+            onClick={onNavigate}
+          >
+            <FolderPlus size={18} aria-hidden />
+            <span className="row-title">New project</span>
+          </Link>
+        </li>
+        {(projects.data ?? []).map((project) => {
+          const current = openProjectId === project.id;
+          const currentChat = chats.find((c) => c.id === conversationId);
+          // The open project (or the open chat's project) shows its chats beneath it.
+          const expanded = current || currentChat?.projectId === project.id;
+          const inside = expanded ? visible.filter((c) => c.projectId === project.id) : [];
+          return (
+            <Fragment key={project.id}>
+              <li className={`chat-row${current ? " current" : ""}`}>
+                <Link
+                  to={paths.projects(project.id)}
+                  aria-current={current ? "page" : undefined}
+                  onClick={onNavigate}
+                >
+                  <FolderClosed size={18} aria-hidden />
+                  <span className="row-title">{project.name}</span>
+                </Link>
+              </li>
+              {inside.length > 0 ? (
+                <li className="project-chats">
+                  <ul className="chat-list">{inside.map(row)}</ul>
+                </li>
+              ) : null}
+            </Fragment>
+          );
+        })}
+      </ul>
       <SectionToggle
         id={`${listId}-recents`}
         controls={`${listId}-recents-list`}

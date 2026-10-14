@@ -63,6 +63,7 @@ export const DEHYDRATE_ALLOWLIST = new Set([
   "conversation",
   "models",
   "preferences",
+  "projects",
 ]);
 
 export function isDehydratable(key: readonly unknown[]): boolean {
