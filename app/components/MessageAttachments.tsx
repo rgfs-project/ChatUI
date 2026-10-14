@@ -1,27 +1,26 @@
 import { FileText, FileX, Music } from "lucide-react";
 import type { MessageAttachmentDto } from "@shared/attachments";
 import { attachmentContentUrl } from "@shared/attachment-media";
+import { formatBytes } from "../lib/format";
 
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${String(bytes)} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+type OpenImage = (
+  items: readonly MessageAttachmentDto[],
+  index: number,
+  trigger: HTMLElement,
+) => void;
 
 /**
- * A user message's attachments (Phase 12): square image thumbnails in a row
- * above the bubble (a click opens the viewer), accessible chips for audio and
- * text files, a placeholder for a missing one. Bytes are demand-loaded: images
- * use native lazy loading, audio `preload="none"`, text only on download.
+ * A sent message's files: square thumbnails above the bubble (a click opens
+ * the viewer), cards for audio and text files, a placeholder for a missing
+ * one. Bytes load on demand: lazy images, `preload="none"` audio, text only
+ * when downloaded.
  */
 export function MessageAttachments({
   items,
   onOpenImage,
 }: {
   items: readonly MessageAttachmentDto[];
-  onOpenImage?:
-    | ((items: readonly MessageAttachmentDto[], index: number, trigger: HTMLElement) => void)
-    | undefined;
+  onOpenImage?: OpenImage | undefined;
 }) {
   const images = items.filter((a) => !a.missing && a.kind === "image");
   const others = items.filter((a) => a.missing || a.kind !== "image");
@@ -55,7 +54,7 @@ export function MessageAttachments({
         <ul className="attachment-files" aria-label="Files">
           {others.map((item) => (
             <li key={item.id}>
-              <AttachmentFile item={item} />
+              <FileCard item={item} />
             </li>
           ))}
         </ul>
@@ -64,23 +63,29 @@ export function MessageAttachments({
   );
 }
 
-function AttachmentFile({ item }: { item: MessageAttachmentDto }) {
+function FileCard({ item }: { item: MessageAttachmentDto }) {
   if (item.missing)
     return (
-      <span className="attachment-file missing" data-testid="attachment-missing">
-        <FileX size={18} aria-hidden />
-        <span className="attachment-name">Attachment unavailable</span>
+      <span className="file-card missing" data-testid="attachment-missing">
+        <span className="file-icon">
+          <FileX size={18} aria-hidden />
+        </span>
+        <span className="file-text">
+          <span className="file-name">Attachment unavailable</span>
+        </span>
       </span>
     );
   const meta = `${item.kind === "audio" ? "Audio" : "File"} · ${formatBytes(item.size ?? 0)}`;
   if (item.kind === "audio")
     return (
-      <span className="attachment-file audio" data-testid="attachment-audio">
-        <span className="attachment-row">
-          <Music size={18} aria-hidden />
-          <span className="attachment-label">
-            <span className="attachment-name">{item.filename}</span>
-            <span className="attachment-meta">{meta}</span>
+      <span className="file-card audio" data-testid="attachment-audio">
+        <span className="file-head">
+          <span className="file-icon">
+            <Music size={18} aria-hidden />
+          </span>
+          <span className="file-text">
+            <span className="file-name">{item.filename}</span>
+            <span className="file-meta">{meta}</span>
           </span>
         </span>
         <audio
@@ -93,18 +98,18 @@ function AttachmentFile({ item }: { item: MessageAttachmentDto }) {
     );
   return (
     <a
-      className="attachment-file"
+      className="file-card"
       href={attachmentContentUrl(item.id, true)}
       download={item.filename ?? true}
       data-testid="attachment-file"
       aria-label={`Download ${item.filename ?? "file"} (${formatBytes(item.size ?? 0)})`}
     >
-      <span className="attachment-row">
+      <span className="file-icon">
         <FileText size={18} aria-hidden />
-        <span className="attachment-label">
-          <span className="attachment-name">{item.filename}</span>
-          <span className="attachment-meta">{meta}</span>
-        </span>
+      </span>
+      <span className="file-text">
+        <span className="file-name">{item.filename}</span>
+        <span className="file-meta">{meta}</span>
       </span>
     </a>
   );

@@ -6,10 +6,9 @@ import { authStore } from "../lib/auth-store";
 import { paths } from "../lib/paths";
 
 /**
- * In-app re-authentication: no document navigation. The same account gets
- * its tab-memory drafts back; another account starts clean (the shell state
- * is scoped to the account). "Sign-in page" leaves the shell, which discards
- * the draft.
+ * Signing in again without leaving the page. The same account gets its
+ * unsent drafts back; another account starts clean (shell state is scoped to
+ * the account). "Sign-in page" leaves the shell, which drops the draft.
  */
 export default function ReauthDialog({
   expired,
@@ -52,9 +51,9 @@ export default function ReauthDialog({
   return (
     <Dialog.Root open>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Overlay className="overlay" />
         <Dialog.Content
-          className="dialog-content"
+          className="dialog"
           data-testid="reauth-dialog"
           onEscapeKeyDown={(event) => {
             event.preventDefault();
@@ -63,19 +62,19 @@ export default function ReauthDialog({
             event.preventDefault();
           }}
         >
+          <span className="sheet-handle" aria-hidden />
           <Dialog.Title className="dialog-title">Sign in again</Dialog.Title>
-          <Dialog.Description className="dialog-description">
-            Your session has ended. Sign in to continue where you left off; your unsent message is
-            kept in this tab.
+          <Dialog.Description className="dialog-desc">
+            Your session ended. Your unsent message is kept in this tab.
           </Dialog.Description>
-          <form className="auth-form" onSubmit={(event) => void submit(event)}>
+          <form className="dialog-body" onSubmit={(event) => void submit(event)}>
             <label htmlFor="reauth-username" className="visually-hidden">
               Username
             </label>
             <input
               id="reauth-username"
               name="username"
-              className="text-input"
+              className="input"
               placeholder="Username"
               autoComplete="username"
               defaultValue={expired.username}
@@ -88,25 +87,25 @@ export default function ReauthDialog({
               id="reauth-password"
               name="password"
               type="password"
-              className="text-input"
+              className="input"
               placeholder="Password"
               autoComplete="current-password"
               required
             />
             {error ? (
-              <p className="error" role="alert">
+              <p className="form-error" role="alert">
                 {error}
               </p>
             ) : null}
             <div className="dialog-actions">
               <Link
                 to={paths.login(location.pathname)}
-                className="btn"
+                className="btn dialog"
                 data-testid="reauth-login-page"
               >
                 Sign-in page
               </Link>
-              <button type="submit" className="btn primary" disabled={busy}>
+              <button type="submit" className="btn dialog primary" disabled={busy}>
                 {busy ? "Signing in…" : "Sign in"}
               </button>
             </div>

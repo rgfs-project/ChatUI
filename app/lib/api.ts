@@ -114,7 +114,11 @@ export async function refreshSession(apply = true): Promise<SessionDto | null> {
 export function safeReturnTo(value: string | null | undefined): string {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\"))
     return "/chat";
-  if (!/^\/(chat(\/[A-Za-z0-9%_-]{1,200})?|account|settings)(\?[A-Za-z0-9=&%_.-]*)?$/.test(value))
+  if (
+    !/^\/(chat(\/[A-Za-z0-9%_-]{1,200})?|account|settings|files|library(\/[0-9a-f-]{36})?)(\?[A-Za-z0-9=&%_.-]*)?$/.test(
+      value,
+    )
+  )
     return "/chat";
   return value;
 }

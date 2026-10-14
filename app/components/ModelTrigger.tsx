@@ -2,9 +2,8 @@ import { ChevronDown } from "lucide-react";
 import type { ComponentProps } from "react";
 
 /**
- * The composer's model button ("Gemma 4 ⌄"). Shared by the placeholder on the
- * critical path and the lazy model menu (as its Radix trigger), so both look
- * and are named the same ("Model: …").
+ * "Gemma 4 ⌄" in the composer. The critical-path placeholder and the lazy
+ * model menu's Radix trigger share it, so both look and are named alike.
  */
 export function ModelTrigger({
   label,
@@ -13,7 +12,7 @@ export function ModelTrigger({
   return (
     <button
       type="button"
-      className="model-select"
+      className="model-trigger"
       aria-label={`Model: ${label}`}
       title={label}
       {...props}

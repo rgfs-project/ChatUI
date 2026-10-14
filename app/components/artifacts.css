@@ -1,121 +1,53 @@
-/* Source panel and Settings → Files (Phase 13c): loaded with their components. */
+/* A file's source panel: loaded with it. */
 
-.artifact-panel {
-  width: min(900px, calc(100vw - 32px));
-  height: min(85dvh, 900px);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+.source-panel {
+  width: min(880px, calc(100vw - 32px));
+  height: min(720px, calc(100dvh - 32px));
+  padding: 16px;
+  gap: 12px;
+  border-radius: var(--radius-menu);
 }
 
-.artifact-panel-head {
+.source-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  flex: none;
 }
 
-.artifact-panel-title {
+.source-head .file-text {
   flex: 1;
-  min-width: 0;
 }
 
-.artifact-name {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semibold);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.artifact-meta {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.artifact-panel-actions {
+.source-actions {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
-.artifact-panel-actions a.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--fg);
-}
-
-.artifact-source-wrap {
+.source-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  overscroll-behavior: contain;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
   background: var(--code);
 }
 
-.artifact-source {
+.source-body:focus-visible {
+  outline-offset: -2px;
+}
+
+.source-text {
   margin: 0;
-  padding: 12px;
+  padding: 16px;
   font-family: var(--mono);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: 21px;
   white-space: pre;
-  tab-size: 4;
 }
 
-@media (max-width: 767.98px) {
-  .artifact-panel {
-    width: 100vw;
-    height: 100dvh;
-    max-height: none;
-    border-radius: 0;
+@media (max-width: 767px) {
+  .source-panel {
+    height: calc(100dvh - 16px);
   }
-}
-
-/* Settings → Files */
-
-.artifact-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.artifact-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
-}
-
-.artifact-row-text {
-  flex: 1 1 200px;
-  min-width: 0;
-}
-
-.artifact-row-name {
-  margin: 0;
-  font-weight: var(--weight-medium);
-  overflow-wrap: anywhere;
-}
-
-.artifact-row-meta {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.artifact-row-actions {
-  display: flex;
-  gap: 8px;
 }

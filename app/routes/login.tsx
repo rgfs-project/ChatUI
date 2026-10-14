@@ -49,18 +49,18 @@ export default function Login({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <main className="page">
-      <div className="page-card">
-        <p className="page-brand">ChatUI</p>
+    <main className="auth-page">
+      <div className="auth-card">
+        <p className="auth-brand">ChatUI</p>
         <h1 className="visually-hidden">Sign in</h1>
-        <form className="auth-form" method="post" onSubmit={(event) => void submit(event)}>
+        <form method="post" onSubmit={(event) => void submit(event)}>
           <label htmlFor="username" className="visually-hidden">
             Username
           </label>
           <input
             id="username"
             name="username"
-            className="text-input"
+            className="input"
             placeholder="Username"
             autoComplete="username"
             required
@@ -72,22 +72,22 @@ export default function Login({ loaderData }: Route.ComponentProps) {
             id="password"
             name="password"
             type="password"
-            className="text-input"
+            className="input"
             placeholder="Password"
             autoComplete="current-password"
             required
           />
-          <button type="submit" className="btn primary large" disabled={busy}>
-            Sign in
+          <button type="submit" className="btn lg primary block" disabled={busy}>
+            {busy ? "Signing in…" : "Sign in"}
           </button>
           {error ? (
-            <p className="error" role="alert">
+            <p className="form-error" role="alert">
               {error}
             </p>
           ) : null}
         </form>
         {loaderData.registrationOpen ? (
-          <p className="page-foot">
+          <p className="auth-foot">
             New here? <a href="/register">Create an account</a>
           </p>
         ) : null}

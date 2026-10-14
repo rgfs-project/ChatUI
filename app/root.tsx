@@ -106,13 +106,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     ? "The page you requested does not exist."
     : "An unexpected error occurred. Please try again.";
   return (
-    <main className="page">
+    <main className="auth-page">
       <title>{`${title} · ChatUI`}</title>
-      <div className="page-card">
+      <div className="auth-card">
+        <p className="auth-brand">ChatUI</p>
         <h1>{title}</h1>
         <p className="lede">{message}</p>
-        <a href="/status" className="btn primary large">
-          Return to the status page
+        <a href={notFound ? "/chat" : "/status"} className="btn lg primary block">
+          {notFound ? "Go to your chats" : "Check the server status"}
         </a>
       </div>
     </main>

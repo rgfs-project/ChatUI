@@ -1,7 +1,7 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
-/** Copies text to the clipboard, confirming briefly. */
+/** Copies text, then shows a check for a moment. */
 export function CopyButton({
   text,
   label,

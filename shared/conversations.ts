@@ -16,6 +16,10 @@ export const conversationSummarySchema = z.strictObject({
   malformed: z.boolean(),
   /** Position in the user's pins (Phase 13a), or null when not pinned. */
   pinnedRank: z.number().int().nonnegative().nullable(),
+  /** The project it belongs to, or null (library.json). */
+  projectId: z.uuid().nullable().optional(),
+  /** Archived: out of the sidebar, still searchable and openable. */
+  archived: z.boolean().optional(),
 });
 export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
 

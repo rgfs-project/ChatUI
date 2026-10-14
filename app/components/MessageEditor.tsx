@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Inline editor for a user message (Phase 13a, loaded on first use). "Send"
- * is edit then regenerate (contracts §4.2); "Save" only edits, leaving the
- * turn unanswered. Escape cancels; Ctrl/⌘+Enter sends.
+ * Editing a sent message in place (loaded on first use). "Send" saves and gets
+ * a new reply; "Save" only edits, leaving the turn unanswered. Escape cancels,
+ * Ctrl/⌘+Enter sends.
  */
 export function MessageEditor({
   initial,
@@ -55,12 +55,13 @@ export function MessageEditor({
         }}
       />
       <div className="message-editor-actions">
-        <button type="button" className="btn" onClick={onCancel} disabled={busy}>
+        <p className="message-editor-note">Later messages in this chat will be removed.</p>
+        <button type="button" className="btn sm" onClick={onCancel} disabled={busy}>
           Cancel
         </button>
         <button
           type="button"
-          className="btn"
+          className="btn sm"
           onClick={() => {
             submit(false);
           }}
@@ -70,7 +71,7 @@ export function MessageEditor({
           Save
         </button>
         <button
-          className="btn primary"
+          className="btn sm primary"
           type="submit"
           disabled={busy}
           title="Save and get a new reply (Ctrl+Enter)"
@@ -78,7 +79,6 @@ export function MessageEditor({
           Send
         </button>
       </div>
-      <p className="message-editor-note">Later messages in this chat will be removed.</p>
     </form>
   );
 }

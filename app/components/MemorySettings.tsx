@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Brain, Plus } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import { MEMORY_LIMITS, memoryNameProblem, type MemoryDto } from "@shared/memories";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
@@ -8,10 +8,9 @@ import "./memories.css";
 import "./skills.css";
 
 /**
- * Settings → Customize → Memories (Phase 13b, contracts §12): the notes the
- * user approved for the assistant to remember. Loaded lazily with its tab.
- * Only the user creates, edits or deletes them here or by saving a
- * suggestion; notes over the prompt budget are marked as not included.
+ * Settings → Memories (lazy): the notes you approved for the assistant to
+ * read in every chat. Only you add, change or delete them, here or by saving
+ * a suggestion. Notes over the prompt budget are marked as left out.
  */
 export default function MemorySettings({ userId }: { userId: string }) {
   const list = useQuery(queries.memories(userId));
@@ -30,59 +29,79 @@ export default function MemorySettings({ userId }: { userId: string }) {
     );
   }
   const omitted = new Set(list.data?.omittedIds ?? []);
+  const any = (list.data?.memories.length ?? 0) > 0;
   return (
-    <section className="settings-body" aria-labelledby="settings-memories">
-      <div className="skills-head">
-        <h2 id="settings-memories">Memories</h2>
-      </div>
-      <p className="settings-hint">
-        Notes you approved for the assistant to remember in every chat. The assistant can suggest
-        notes, but nothing is saved unless you save it.
-      </p>
-      {list.isPending ? (
-        <p className="settings-hint">Loading memories…</p>
-      ) : list.isError ? (
-        <p className="settings-hint" role="alert">
-          Memories couldn’t be loaded.{" "}
-          <button type="button" className="link-button" onClick={() => void list.refetch()}>
-            Try again
-          </button>
-        </p>
-      ) : list.data.memories.length === 0 ? (
-        <div className="skills-empty" data-testid="memories-empty">
-          <h3>Add your first memory</h3>
-          <p>No memories yet. Add a note and the assistant will remember it in every chat.</p>
+    <>
+      <div className="page-head">
+        <h1 className="page-title">Memories</h1>
+        {any ? (
           <button
-            className="btn small"
             type="button"
+            className="btn sm primary"
             onClick={() => {
               setEditing({ id: null });
             }}
           >
-            Add a memory
+            <Plus size={16} aria-hidden /> Add a memory
+          </button>
+        ) : null}
+      </div>
+      {list.isPending ? (
+        <p className="hint">Loading memories…</p>
+      ) : list.isError ? (
+        <div className="alert danger" role="alert">
+          <span className="alert-text">Memories couldn’t be loaded.</span>
+          <button type="button" className="btn" onClick={() => void list.refetch()}>
+            Try again
           </button>
         </div>
+      ) : !any ? (
+        <section className="group" data-testid="memories-empty">
+          <div className="row">
+            <div className="row-text">
+              <h2 className="row-label">Add your first memory</h2>
+              <p className="row-hint">The assistant reads your notes in every chat.</p>
+            </div>
+            <button
+              className="btn sm"
+              type="button"
+              onClick={() => {
+                setEditing({ id: null });
+              }}
+            >
+              Add a memory
+            </button>
+          </div>
+        </section>
       ) : (
-        <>
+        <section className="section">
+          <p className="section-hint">
+            The assistant reads these in every chat. It may suggest more; nothing is saved until you
+            save it.
+          </p>
           {omitted.size > 0 ? (
-            <p className="settings-hint" role="note">
+            <p className="section-hint" role="note">
               {String(omitted.size)} {omitted.size === 1 ? "note doesn’t" : "notes don’t"} fit in
-              the space chats reserve for memories and {omitted.size === 1 ? "is" : "are"} left out.
+              the space chats keep for memories, so {omitted.size === 1 ? "it’s" : "they’re"} left
+              out.
             </p>
           ) : null}
-          <ul className="memory-list" aria-label="Your memories">
+          <ul className="group" aria-label="Your memories">
             {list.data.memories.map((memory) => (
-              <li key={memory.id} className="memory-row" data-testid="memory-row">
-                <div className="memory-row-text">
-                  <p className="memory-row-name">{memory.name}</p>
-                  <p className="memory-row-content">{memory.content}</p>
+              <li key={memory.id} className="row" data-testid="memory-row">
+                <span className="file-icon" aria-hidden>
+                  <Brain size={18} />
+                </span>
+                <div className="row-text memory-text">
+                  <p className="row-label">{memory.name}</p>
+                  <p className="row-hint">{memory.content}</p>
                   {omitted.has(memory.id) ? (
-                    <span className="memory-omitted">Not included in chats (over the limit)</span>
+                    <span className="badge">Not included in chats (over the limit)</span>
                   ) : null}
                 </div>
                 <button
                   type="button"
-                  className="btn"
+                  className="btn sm"
                   aria-label={`Edit ${memory.name}`}
                   onClick={() => {
                     setEditing({ id: memory.id });
@@ -93,23 +112,15 @@ export default function MemorySettings({ userId }: { userId: string }) {
               </li>
             ))}
           </ul>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              setEditing({ id: null });
-            }}
-          >
-            Add a memory
-          </button>
-        </>
+        </section>
       )}
       {list.data?.unreadable ? (
-        <p className="settings-hint">
-          {String(list.data.unreadable)} memory file(s) couldn’t be read and are not used.
+        <p className="section-hint">
+          {String(list.data.unreadable)} memory file{list.data.unreadable === 1 ? "" : "s"} couldn’t
+          be read and {list.data.unreadable === 1 ? "isn’t" : "aren’t"} used.
         </p>
       ) : null}
-    </section>
+    </>
   );
 }
 
@@ -177,40 +188,50 @@ function MemoryEditor(props: {
   }
 
   return (
-    <section className="settings-body" aria-labelledby="memory-editor-title">
-      <button type="button" className="link-back" onClick={props.onDone}>
-        <ArrowLeft size={16} aria-hidden /> Your memories
+    <>
+      <button type="button" className="back-link" onClick={props.onDone}>
+        <ArrowLeft size={16} aria-hidden /> Memories
       </button>
-      <h2 id="memory-editor-title">{memory ? memory.name : "New memory"}</h2>
-      <form className="memory-form" onSubmit={submit}>
-        <label htmlFor="memory-name">Name</label>
-        <input
-          id="memory-name"
-          name="name"
-          required
-          maxLength={MEMORY_LIMITS.nameMax}
-          defaultValue={memory?.name ?? ""}
-          autoComplete="off"
-        />
-        <label htmlFor="memory-content">Note</label>
-        <textarea
-          id="memory-content"
-          name="content"
-          required
-          rows={6}
-          maxLength={MEMORY_LIMITS.contentMaxBytes}
-          defaultValue={memory?.content ?? ""}
-        />
+      <h1 className="page-title">{memory ? memory.name : "New memory"}</h1>
+      <form className="section skill-form" onSubmit={submit}>
+        <div className="field">
+          <label className="field-label" htmlFor="memory-name">
+            Name
+          </label>
+          <input
+            id="memory-name"
+            name="name"
+            className="input"
+            required
+            maxLength={MEMORY_LIMITS.nameMax}
+            defaultValue={memory?.name ?? ""}
+            autoComplete="off"
+          />
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="memory-content">
+            Note
+          </label>
+          <textarea
+            id="memory-content"
+            name="content"
+            className="textarea"
+            required
+            rows={6}
+            maxLength={MEMORY_LIMITS.contentMaxBytes}
+            defaultValue={memory?.content ?? ""}
+          />
+        </div>
         {error ? (
           <p className="form-error" role="alert">
             {error}
           </p>
         ) : null}
-        <div className="dialog-actions">
+        <div className="form-actions">
           {memory ? (
             <button
               type="button"
-              className="btn ghost danger"
+              className="btn danger"
               onClick={() => {
                 setConfirming(true);
               }}
@@ -232,13 +253,13 @@ function MemoryEditor(props: {
           open={confirming}
           onOpenChange={setConfirming}
           title="Delete this memory?"
-          description="The assistant will no longer see this note. This cannot be undone."
+          description="The assistant won’t see this note any more. You can’t undo this."
           confirmLabel="Delete"
           onConfirm={() => {
             remove.mutate(memory);
           }}
         />
       ) : null}
-    </section>
+    </>
   );
 }

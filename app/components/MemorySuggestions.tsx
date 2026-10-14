@@ -18,11 +18,10 @@ const DONE: Record<ProposalDto["tool"], string> = {
   forget: "Memory forgotten",
 };
 
-/** What a 409 on accept means for the user (contracts §4.3 conflicts). */
+/** What a refused accept means, in words (contracts §4.3 conflicts). */
 function conflictText(error: unknown): string {
   if (!(error instanceof ApiError)) return "Couldn’t save. Check your connection and try again.";
-  const reason = error.details?.reason;
-  switch (reason) {
+  switch (error.details?.reason) {
     case "note_changed":
       return "This memory changed since the suggestion was made, so it wasn’t overwritten. Review it in Settings → Memories.";
     case "note_missing":
@@ -39,15 +38,14 @@ function conflictText(error: unknown): string {
 }
 
 /**
- * Memory suggestions under a reply (Phase 13b, INV-37). Suggestions are only
- * proposals: nothing is saved unless the user presses Save. Loaded lazily,
- * only for replies that have suggestions.
+ * Memory suggestions under a reply (INV-37): proposals only, nothing is saved
+ * until you press Save. Loaded only for replies that have some.
  */
 export default function MemorySuggestions(props: {
   userId: string;
   conversationId: string;
   proposals: readonly ProposalDto[];
-  /** The reply is complete but empty: the model only made suggestions. */
+  /** The reply finished empty: the model only made suggestions. */
   emptyAnswer: boolean;
   disabled: boolean;
   onRegenerate?: ((trigger: HTMLElement) => void) | undefined;
@@ -82,7 +80,6 @@ export default function MemorySuggestions(props: {
     },
     onError: (error, input) => {
       setErrors((current) => ({ ...current, [input.id]: conflictText(error) }));
-      // The suggestion's status may have changed (e.g. invalid): reload it.
       void client.invalidateQueries({ queryKey: conversationKey });
     },
   });
@@ -90,14 +87,16 @@ export default function MemorySuggestions(props: {
   const shown = props.proposals.filter((p) => p.status !== "suppressed");
   if (shown.length === 0 && !props.emptyAnswer) return null;
   return (
-    <section className="memory-suggestions" aria-labelledby={headingId}>
+    <section className="suggestion-cards" aria-labelledby={headingId}>
       {props.emptyAnswer ? (
-        <p className="memory-empty-answer" data-testid="answer-not-generated">
-          The answer wasn’t generated — the model only made suggestions.
+        <div className="alert" data-testid="answer-not-generated">
+          <span className="alert-text">
+            The answer wasn’t generated — the model only made suggestions.
+          </span>
           {props.onRegenerate ? (
             <button
               type="button"
-              className="btn"
+              className="btn sm"
               disabled={props.disabled}
               onClick={(event) => {
                 props.onRegenerate?.(event.currentTarget);
@@ -106,46 +105,33 @@ export default function MemorySuggestions(props: {
               <RefreshCw size={16} aria-hidden /> Regenerate
             </button>
           ) : null}
-        </p>
+        </div>
       ) : null}
-      <h3 id={headingId} className="memory-suggestions-title">
+      <h3 id={headingId} className="suggestion-title">
         <Brain size={16} aria-hidden /> Memory suggestions
       </h3>
-      <ul className="memory-cards">
+      <ul className="group flush">
         {shown.map((proposal) => {
           const textId = `${headingId}-${proposal.id}`;
           const busy = decide.isPending && decide.variables.id === proposal.id;
           return (
             <li
               key={proposal.id}
-              className="memory-card"
+              className="suggestion-card"
               data-testid="memory-suggestion"
               data-status={proposal.status}
             >
-              <div id={textId} className="memory-card-text">
-                <p className="memory-card-title">
+              <div id={textId} className="row-text">
+                <p className="row-label">
                   {VERB[proposal.tool]} “{proposal.name}”
                 </p>
-                {proposal.content !== null ? (
-                  <p className="memory-card-content">{proposal.content}</p>
-                ) : null}
+                {proposal.content !== null ? <p className="row-hint">{proposal.content}</p> : null}
               </div>
               {proposal.status === "pending" ? (
-                <div className="memory-card-actions">
-                  <button
-                    className="btn primary"
-                    type="button"
-                    aria-describedby={textId}
-                    disabled={busy || props.disabled}
-                    onClick={() => {
-                      decide.mutate({ id: proposal.id, action: "accept" });
-                    }}
-                  >
-                    <Check size={16} aria-hidden /> {proposal.tool === "forget" ? "Forget" : "Save"}
-                  </button>
+                <div className="row-actions">
                   <button
                     type="button"
-                    className="btn"
+                    className="btn sm"
                     aria-describedby={textId}
                     disabled={busy || props.disabled}
                     onClick={() => {
@@ -154,9 +140,20 @@ export default function MemorySuggestions(props: {
                   >
                     <X size={16} aria-hidden /> Dismiss
                   </button>
+                  <button
+                    type="button"
+                    className="btn sm primary"
+                    aria-describedby={textId}
+                    disabled={busy || props.disabled}
+                    onClick={() => {
+                      decide.mutate({ id: proposal.id, action: "accept" });
+                    }}
+                  >
+                    <Check size={16} aria-hidden /> {proposal.tool === "forget" ? "Forget" : "Save"}
+                  </button>
                 </div>
               ) : (
-                <p className="memory-card-status">
+                <p className="row-hint">
                   {proposal.status === "accepted"
                     ? DONE[proposal.tool]
                     : proposal.status === "rejected"

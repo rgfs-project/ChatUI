@@ -2,7 +2,7 @@ import { QueryErrorResetBoundary, useQueryClient, type QueryKey } from "@tanstac
 import type { ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
-/** Dynamic import failures, as reported by Chromium, Firefox and Safari. */
+/** A dynamic import that failed, as Chromium, Firefox and Safari word it. */
 export function isChunkLoadError(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -13,10 +13,10 @@ export function isChunkLoadError(error: unknown): boolean {
 }
 
 /**
- * Error boundary for one section of the shell (sidebar, transcript). A render
- * failure there leaves the rest of the app usable; "Try again" resets the
- * section's queries (refetching them) and re-renders it. Navigating (a new
- * `resetKeys` value) also resets it.
+ * Keeps a failure in one part of the shell (the sidebar, the chat) from taking
+ * down the rest. "Try again" resets that part's queries and renders it again;
+ * a code chunk that failed to load only recovers with a fresh page. A new
+ * `resetKeys` value (navigating) resets it too.
  */
 export function SectionBoundary(props: {
   label: string;
@@ -37,17 +37,15 @@ export function SectionBoundary(props: {
           }}
           fallbackRender={({ error, resetErrorBoundary }) => (
             <div
-              className={`section-error${props.className ? ` ${props.className}` : ""}`}
+              className={`empty-state${props.className ? ` ${props.className}` : ""}`}
               role="alert"
               data-testid="section-error"
             >
               <p>{props.label} couldn’t be displayed.</p>
               <button
                 type="button"
-                className="btn small"
+                className="btn sm"
                 onClick={() => {
-                  // A code chunk that failed to load (offline, or a new
-                  // deployment replaced it) only recovers with a fresh page.
                   if (isChunkLoadError(error)) window.location.reload();
                   else resetErrorBoundary();
                 }}

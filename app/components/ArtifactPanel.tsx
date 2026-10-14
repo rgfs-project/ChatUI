@@ -4,11 +4,11 @@ import { Download, FileCode, Trash2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { formatBytes } from "../lib/format";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
-import { CopyButton } from "./Message";
+import { CopyButton } from "./CopyButton";
 import { ConfirmDialog } from "./Dialogs";
 import "./artifacts.css";
 
-/** What the panel needs to show before the source arrives. */
+/** What the panel shows before the source arrives. */
 export interface ArtifactRef {
   id: string;
   name: string;
@@ -17,16 +17,14 @@ export interface ArtifactRef {
 }
 
 /**
- * The source panel (Phase 13c, INV-41), loaded when first opened. The source
- * is fetched as text and rendered as a text node: HTML, SVG and scripts are
- * shown, never parsed or run. A Radix Dialog: focus is trapped, Escape
- * closes and focus returns to the card that opened it.
+ * A file's source (INV-41), loaded when first opened. The source is fetched as
+ * text and rendered as a text node: HTML, SVG and scripts are shown, never
+ * parsed or run. Focus starts on the source and returns to the opener.
  */
 export default function ArtifactPanel(props: {
   userId: string;
   artifact: ArtifactRef;
   onClose: () => void;
-  /** Where focus goes back (the card or row that opened the panel). */
   trigger: HTMLElement | null;
 }) {
   const { userId, artifact } = props;
@@ -41,7 +39,6 @@ export default function ArtifactPanel(props: {
     onSuccess: () => {
       client.removeQueries({ queryKey: queryKeys.artifactSource(userId, artifact.id) });
       void client.invalidateQueries({ queryKey: queryKeys.artifacts(userId) });
-      // Transcript cards come with the conversation DTO.
       void client.invalidateQueries({ queryKey: ["user", userId, "conversation"] });
       props.onClose();
     },
@@ -58,11 +55,10 @@ export default function ArtifactPanel(props: {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Overlay className="overlay" />
         <Dialog.Content
-          className="dialog-content artifact-panel"
+          className="dialog source-panel"
           data-testid="artifact-panel"
-          // Focus starts on the source (scrollable with the keyboard), not on Delete.
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             sourceRef.current?.focus();
@@ -74,21 +70,23 @@ export default function ArtifactPanel(props: {
             }
           }}
         >
-          <header className="artifact-panel-head">
-            <FileCode size={18} aria-hidden />
-            <div className="artifact-panel-title">
-              <Dialog.Title className="artifact-name">{artifact.name}</Dialog.Title>
-              <Dialog.Description className="artifact-meta">
+          <header className="source-head">
+            <span className="file-icon">
+              <FileCode size={18} aria-hidden />
+            </span>
+            <div className="file-text">
+              <Dialog.Title className="file-name">{artifact.name}</Dialog.Title>
+              <Dialog.Description className="file-meta">
                 {artifact.language ? `${artifact.language} · ` : ""}
                 {formatBytes(artifact.size)} · source only, never run
               </Dialog.Description>
             </div>
-            <div className="artifact-panel-actions">
+            <div className="source-actions">
               {source.data !== undefined ? (
                 <CopyButton text={source.data} label="Copy source" />
               ) : null}
               <a className="icon-btn" href={href} download={artifact.name} aria-label="Download">
-                <Download size={16} aria-hidden />
+                <Download size={18} aria-hidden />
               </a>
               <button
                 type="button"
@@ -98,10 +96,10 @@ export default function ArtifactPanel(props: {
                   setConfirming(true);
                 }}
               >
-                <Trash2 size={16} aria-hidden />
+                <Trash2 size={18} aria-hidden />
               </button>
               <Dialog.Close className="icon-btn" aria-label="Close">
-                <X size={16} aria-hidden />
+                <X size={18} aria-hidden />
               </Dialog.Close>
             </div>
           </header>
@@ -110,9 +108,9 @@ export default function ArtifactPanel(props: {
               {error}
             </p>
           ) : null}
-          <div className="artifact-source-wrap" ref={sourceRef} tabIndex={0} aria-label="Source">
+          <div className="source-body" ref={sourceRef} tabIndex={0} aria-label="Source">
             {source.isPending ? (
-              <p className="settings-hint" role="status">
+              <p className="hint" role="status">
                 Loading…
               </p>
             ) : source.isError ? (
@@ -120,7 +118,7 @@ export default function ArtifactPanel(props: {
                 The file couldn’t be loaded.
               </p>
             ) : (
-              <pre className="artifact-source" data-testid="artifact-source">
+              <pre className="source-text" data-testid="artifact-source">
                 <code>{source.data}</code>
               </pre>
             )}

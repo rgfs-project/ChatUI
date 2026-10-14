@@ -4,30 +4,35 @@ import { apiFetch } from "../lib/api";
 import { useFocusReturn } from "../lib/focus-return";
 
 /**
- * Dialog primitives (Radix Dialog): focus trap, focus restoration, Escape,
- * portal layering and ARIA labelling. A rounded card over a light scrim; a
- * bottom sheet on phones.
+ * Dialogs on Radix Dialog: focus trap, Escape, portal layering, labelling,
+ * and focus back to whatever opened them. A card on wide screens; on phones
+ * the same element becomes a bottom sheet with a grab handle (CSS only).
  */
-function DialogFrame(props: {
+export function DialogFrame(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description: ReactNode;
+  /** Visually hidden description (still read by screen readers). */
+  hideDescription?: boolean;
+  wide?: boolean;
+  className?: string;
   returnFocus?: () => HTMLElement | null;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   const focus = useFocusReturn(props.returnFocus);
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Overlay className="overlay" />
         <Dialog.Content
-          className="dialog-content"
+          className={`dialog${props.wide ? " wide" : ""}${props.className ? ` ${props.className}` : ""}`}
           onOpenAutoFocus={focus.onOpenAutoFocus}
           onCloseAutoFocus={focus.onCloseAutoFocus}
         >
+          <span className="sheet-handle" aria-hidden />
           <Dialog.Title className="dialog-title">{props.title}</Dialog.Title>
-          <Dialog.Description className="dialog-description">
+          <Dialog.Description className={props.hideDescription ? "visually-hidden" : "dialog-desc"}>
             {props.description}
           </Dialog.Description>
           {props.children}
@@ -37,6 +42,19 @@ function DialogFrame(props: {
   );
 }
 
+export const DialogClose = Dialog.Close;
+
+function CancelButton() {
+  return (
+    <Dialog.Close asChild>
+      <button type="button" className="btn dialog">
+        Cancel
+      </button>
+    </Dialog.Close>
+  );
+}
+
+/** "Delete all chats?" — a question, Cancel and one (usually destructive) action. */
 export function ConfirmDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -44,7 +62,8 @@ export function ConfirmDialog(props: {
   description: ReactNode;
   confirmLabel: string;
   onConfirm: () => void;
-  /** Where focus goes on close (a menu's trigger); otherwise the element that opened it. */
+  /** A non-destructive confirmation gets the blue button. */
+  tone?: "danger" | "primary";
   returnFocus?: () => HTMLElement | null;
 }) {
   return (
@@ -56,14 +75,10 @@ export function ConfirmDialog(props: {
       returnFocus={props.returnFocus}
     >
       <div className="dialog-actions">
-        <Dialog.Close asChild>
-          <button type="button" className="btn">
-            Cancel
-          </button>
-        </Dialog.Close>
+        <CancelButton />
         <button
           type="button"
-          className="btn danger"
+          className={`btn dialog ${props.tone === "primary" ? "primary" : "danger"}`}
           onClick={() => {
             props.onConfirm();
             props.onOpenChange(false);
@@ -73,6 +88,90 @@ export function ConfirmDialog(props: {
         </button>
       </div>
     </DialogFrame>
+  );
+}
+
+/** One line of text: a title, a project name, a display name. */
+export function TextDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: ReactNode;
+  label: string;
+  initial: string;
+  submitLabel: string;
+  maxLength: number;
+  type?: "text" | "email";
+  /** Allow saving an empty value (clears an optional field). */
+  allowEmpty?: boolean;
+  onSubmit: (value: string) => void;
+  returnFocus?: () => HTMLElement | null;
+}) {
+  const [value, setValue] = useState(props.initial);
+  const id = `text-dialog-${props.label.toLowerCase().replace(/\W+/g, "-")}`;
+  return (
+    <DialogFrame
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title={props.title}
+      description={props.description}
+      returnFocus={props.returnFocus}
+    >
+      <form
+        className="dialog-body"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const next = value.trim();
+          if (!next && !props.allowEmpty) return;
+          props.onSubmit(next);
+          props.onOpenChange(false);
+        }}
+      >
+        <label htmlFor={id} className="visually-hidden">
+          {props.label}
+        </label>
+        <input
+          id={id}
+          className="input"
+          type={props.type ?? "text"}
+          value={value}
+          maxLength={props.maxLength}
+          placeholder={props.label}
+          onChange={(event) => {
+            setValue(event.currentTarget.value);
+          }}
+        />
+        <div className="dialog-actions">
+          <CancelButton />
+          <button type="submit" className="btn dialog primary">
+            {props.submitLabel}
+          </button>
+        </div>
+      </form>
+    </DialogFrame>
+  );
+}
+
+export function RenameDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initial: string;
+  onRename: (title: string) => void;
+  returnFocus?: () => HTMLElement | null;
+}) {
+  return (
+    <TextDialog
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title="Rename conversation"
+      description="1 to 200 characters."
+      label="Title"
+      initial={props.initial}
+      submitLabel="Rename"
+      maxLength={200}
+      onSubmit={props.onRename}
+      returnFocus={props.returnFocus}
+    />
   );
 }
 
@@ -95,6 +194,7 @@ export function PasswordDialog(props: {
       description="You’ll be signed out everywhere."
     >
       <form
+        className="dialog-body"
         onSubmit={(event) => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
@@ -127,7 +227,7 @@ export function PasswordDialog(props: {
           id="password-current"
           name="current"
           type="password"
-          className="text-input"
+          className="input"
           placeholder="Current password"
           autoComplete="current-password"
           required
@@ -139,77 +239,21 @@ export function PasswordDialog(props: {
           id="password-next"
           name="next"
           type="password"
-          className="text-input"
+          className="input"
           placeholder="New password (10+ characters)"
           autoComplete="new-password"
           minLength={10}
           required
         />
         {error ? (
-          <p className="error" role="alert">
+          <p className="form-error" role="alert">
             {error}
           </p>
         ) : null}
         <div className="dialog-actions">
-          <Dialog.Close asChild>
-            <button type="button" className="btn">
-              Cancel
-            </button>
-          </Dialog.Close>
-          <button type="submit" className="btn primary" disabled={busy}>
+          <CancelButton />
+          <button type="submit" className="btn dialog primary" disabled={busy}>
             Change
-          </button>
-        </div>
-      </form>
-    </DialogFrame>
-  );
-}
-
-export function RenameDialog(props: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  initial: string;
-  onRename: (title: string) => void;
-  returnFocus?: () => HTMLElement | null;
-}) {
-  const [value, setValue] = useState(props.initial);
-  return (
-    <DialogFrame
-      open={props.open}
-      onOpenChange={props.onOpenChange}
-      title="Rename conversation"
-      description="1 to 200 characters."
-      returnFocus={props.returnFocus}
-    >
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          const title = value.trim();
-          if (!title) return;
-          props.onRename(title);
-          props.onOpenChange(false);
-        }}
-      >
-        <label htmlFor="rename-title" className="visually-hidden">
-          Title
-        </label>
-        <input
-          id="rename-title"
-          className="text-input"
-          value={value}
-          maxLength={200}
-          onChange={(event) => {
-            setValue(event.currentTarget.value);
-          }}
-        />
-        <div className="dialog-actions">
-          <Dialog.Close asChild>
-            <button type="button" className="btn">
-              Cancel
-            </button>
-          </Dialog.Close>
-          <button type="submit" className="btn primary">
-            Rename
           </button>
         </div>
       </form>

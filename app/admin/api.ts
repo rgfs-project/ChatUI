@@ -5,6 +5,8 @@ import type {
   AdminSettingsDto,
   AdminUserDto,
   AuditEntryDto,
+  LogEntryDto,
+  LogSettingsDto,
 } from "@shared/admin";
 import type { ProviderModelsDto } from "@shared/generations";
 import { apiJson } from "../lib/query";
@@ -21,6 +23,8 @@ export const adminKeys = {
   models: (userId: string) => ["user", userId, "admin", "models"] as const,
   settings: (userId: string) => ["user", userId, "admin", "settings"] as const,
   audit: (userId: string) => ["user", userId, "admin", "audit"] as const,
+  logs: (userId: string) => ["user", userId, "admin", "logs"] as const,
+  log: (userId: string, id: string) => ["user", userId, "admin", "logs", id] as const,
 };
 
 export const adminQueries = {
@@ -57,6 +61,20 @@ export const adminQueries = {
       queryFn: async ({ signal }) =>
         (await apiJson<{ entries: AuditEntryDto[] }>("/api/admin/audit?limit=100", { signal }))
           .entries,
+    }),
+  logs: (userId: string) =>
+    queryOptions({
+      queryKey: adminKeys.logs(userId),
+      queryFn: ({ signal }) =>
+        apiJson<{ entries: LogEntryDto[]; settings: LogSettingsDto }>("/api/admin/logs?limit=200", {
+          signal,
+        }),
+    }),
+  log: (userId: string, id: string) =>
+    queryOptions({
+      queryKey: adminKeys.log(userId, id),
+      queryFn: ({ signal }) =>
+        apiJson<LogEntryDto>(`/api/admin/logs/${encodeURIComponent(id)}`, { signal }),
     }),
 };
 

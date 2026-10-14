@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, Upload } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ExportResult, ImportItem, ImportPreview } from "@shared/portability";
 import { currentSession } from "../lib/api";
 import { formatBytes } from "../lib/format";
@@ -32,13 +32,12 @@ const SOURCE_LABELS: Record<ImportPreview["source"], string> = {
   duckai: "duck.ai chat",
 };
 
-/** When the source was made: a ChatUI export's date; the latest change otherwise. */
 function sourceDate(preview: ImportPreview): string {
   const when = new Date(preview.exportCreatedAt).toLocaleString();
   return preview.source === "chatui" ? `Exported ${when}.` : `Latest change ${when}.`;
 }
 
-/** The browser's IANA time zone, for sources that record none (duck.ai). */
+/** The browser's time zone, for sources that record none (duck.ai). */
 function timeZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -48,9 +47,8 @@ function timeZone(): string {
 }
 
 /**
- * Uploads the file with progress (XHR: fetch has no upload progress). The
- * server detects the source; a non-ZIP goes as opaque bytes so no body
- * parser touches it.
+ * Uploads with progress (XHR: fetch reports no upload progress). The server
+ * works out the source; a non-ZIP goes as opaque bytes no body parser reads.
  */
 function uploadArchive(
   file: File,
@@ -100,10 +98,9 @@ function uploadArchive(
 
 function Summary({ counts }: { counts: ImportPreview["counts"] }) {
   const kinds = Object.keys(counts) as ImportItem["kind"][];
-  if (kinds.length === 0)
-    return <p className="settings-hint">Nothing in this file can be imported.</p>;
+  if (kinds.length === 0) return <p className="row-hint">Nothing in this file can be imported.</p>;
   return (
-    <table className="data-summary">
+    <table className="data-table">
       <caption className="visually-hidden">What the file contains</caption>
       <thead>
         <tr>
@@ -143,7 +140,7 @@ function ItemList({ items, title }: { items: readonly ImportItem[]; title: strin
       <ul>
         {items.map((i) => (
           <li key={`${i.kind}:${i.id}`}>
-            <span className="data-item-kind">{KIND_LABEL[i.kind]}</span> {i.label} —{" "}
+            <span className="data-kind">{KIND_LABEL[i.kind]}</span> {i.label} —{" "}
             {ACTION_LABEL[i.action]}
             {i.reason ? ` (${i.reason})` : ""}
             {i.rewritten ? " · references rewritten" : ""}
@@ -155,16 +152,14 @@ function ItemList({ items, title }: { items: readonly ImportItem[]; title: strin
 }
 
 /**
- * Settings → Data (Phase 13d, lazy): export everything as a portable
- * archive, and import one, a Claude data export or a duck.ai chat (13e;
- * the server detects which). An import is previewed first (counts, conflicts,
- * skipped items), needs explicit confirmation, can be cancelled before it
- * commits, and ends with a report.
+ * Settings → Data (lazy): export everything as one archive, and import a
+ * ChatUI export, a Claude data export or a duck.ai chat. An import is shown
+ * first, needs confirming, can be cancelled before it commits, and ends with
+ * a report.
  */
 export default function DataSettings({ userId }: { userId: string }) {
   const client = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
-  const headingId = useId();
   const [exported, setExported] = useState<ExportResult | null>(null);
   const [uploading, setUploading] = useState<{
     fraction: number;
@@ -196,16 +191,14 @@ export default function DataSettings({ userId }: { userId: string }) {
     },
   });
 
-  // Bounded progress: poll while the commit runs, then refresh what it touched.
+  // Poll while the commit runs, then refresh everything it may have touched.
   const committing = preview?.state === "committing";
   const previewId = preview?.importId;
   useEffect(() => {
     if (!committing || !previewId) return;
     const timer = setInterval(() => {
       void apiJson<ImportPreview>(`/api/imports/${encodeURIComponent(previewId)}`).then(
-        (next) => {
-          setPreview(next);
-        },
+        setPreview,
         () => undefined,
       );
     }, 500);
@@ -224,6 +217,7 @@ export default function DataSettings({ userId }: { userId: string }) {
       "preferences",
       "skills",
       "search",
+      "projects",
     ])
       void client.invalidateQueries({ queryKey: ["user", userId, family] });
   }, [finished, client, userId]);
@@ -267,177 +261,199 @@ export default function DataSettings({ userId }: { userId: string }) {
     preview?.items.filter((i) => i.action === "skipped" || i.action === "degraded") ?? [];
   const report = preview?.report;
   return (
-    <section className="settings-body" aria-labelledby={headingId}>
-      <h2 id={headingId}>Data</h2>
-
-      <h3 className="data-heading">Export</h3>
-      <p className="settings-hint">
-        One archive with your chats, attachments, files, memories, memory suggestions, skills and
-        preferences. Your password and sign-in sessions are not included. To save a single chat, use
-        “Export as Markdown” in its title menu (text only, no attachments).
-      </p>
-      <div className="data-row">
-        <button
-          className="btn primary"
-          type="button"
-          disabled={exportAll.isPending}
-          onClick={() => {
-            exportAll.mutate();
-          }}
-        >
-          <Download size={16} aria-hidden />{" "}
-          {exportAll.isPending ? "Preparing…" : "Export all data"}
-        </button>
-        {exported ? (
-          <a
-            className="btn"
-            href={`/api/exports/${encodeURIComponent(exported.exportId)}/download`}
-            download
-            data-testid="export-download"
-          >
-            Download ({formatBytes(exported.size)})
-          </a>
-        ) : null}
-      </div>
-
-      <h3 className="data-heading">Import</h3>
-      <p className="settings-hint">
-        Import a ChatUI export, a Claude data export (the ZIP files from Claude’s Settings → Privacy
-        → Export data, or their conversations.json), or a chat downloaded from duck.ai. Nothing
-        changes until you confirm, and nothing you have is ever overwritten.
-      </p>
-      <div className="data-row">
-        <label className="btn data-file">
-          <Upload size={16} aria-hidden /> Choose file…
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".zip,.json,.txt,application/zip,application/json,text/plain"
-            className="visually-hidden"
-            disabled={uploading !== null || committing}
-            onChange={(event) => void choose(event.currentTarget.files?.[0])}
-          />
-        </label>
-        {uploading ? (
-          <>
-            <progress max={1} value={uploading.fraction} aria-label="Uploading file" />
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                uploading.controller.abort();
-              }}
-            >
-              Cancel
-            </button>
-          </>
-        ) : null}
-      </div>
-      {error ? (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      {preview?.state === "previewed" ? (
-        <div className="data-preview" data-testid="import-preview">
-          <h4>Preview: {SOURCE_LABELS[preview.source]}</h4>
-          <p className="settings-hint">{sourceDate(preview)}</p>
-          <Summary counts={preview.counts} />
-          {preview.warnings.map((w) => (
-            <p key={w} className="settings-hint">
-              {w}
-            </p>
-          ))}
-          <ItemList items={conflictItems} title="Conflicts" />
-          <ItemList items={skippedItems} title="Skipped or changed" />
-          {conflictItems.length > 0 ? (
-            <fieldset className="data-choice">
-              <legend>Items that differ from yours</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="conflicts"
-                  checked={conflicts === "skip"}
-                  onChange={() => {
-                    setConflicts("skip");
-                  }}
-                />{" "}
-                Skip them (keep yours)
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="conflicts"
-                  checked={conflicts === "copy"}
-                  onChange={() => {
-                    setConflicts("copy");
-                  }}
-                />{" "}
-                Import them as copies
-              </label>
-            </fieldset>
-          ) : null}
-          {preview.memories.length > 0 ? (
-            <fieldset className="data-choice">
-              <legend>Memories to import (none unless you choose)</legend>
-              {preview.memories.map((m) => (
-                <label key={m.id}>
-                  <input
-                    type="checkbox"
-                    checked={memoryIds.includes(m.id)}
-                    disabled={m.action !== "new"}
-                    onChange={(event) => {
-                      const on = event.currentTarget.checked;
-                      setMemoryIds((ids) =>
-                        on ? [...ids, m.id] : ids.filter((id) => id !== m.id),
-                      );
-                    }}
-                  />{" "}
-                  <strong>{m.name}</strong>
-                  {m.action === "identical"
-                    ? " (already saved)"
-                    : m.action === "conflict"
-                      ? " (a memory with this name exists)"
-                      : ""}
-                </label>
-              ))}
-            </fieldset>
-          ) : null}
-          {preview.previousImport ? (
-            <label className="data-again">
-              <input
-                type="checkbox"
-                checked={again}
-                onChange={(event) => {
-                  setAgain(event.currentTarget.checked);
+    <>
+      <h1 className="page-title">Data</h1>
+      <section className="section">
+        <h2 className="section-title">Export</h2>
+        <div className="group">
+          <div className="row">
+            <div className="row-text">
+              <span className="row-label">All your data</span>
+              <span className="row-hint">
+                Chats, files, memories, skills and preferences in one archive. Your password isn’t
+                included.
+              </span>
+            </div>
+            <div className="row-actions">
+              {exported ? (
+                <a
+                  className="btn sm outline"
+                  href={`/api/exports/${encodeURIComponent(exported.exportId)}/download`}
+                  download
+                  data-testid="export-download"
+                >
+                  Download ({formatBytes(exported.size)})
+                </a>
+              ) : null}
+              <button
+                className="btn sm primary"
+                type="button"
+                disabled={exportAll.isPending}
+                onClick={() => {
+                  exportAll.mutate();
                 }}
-              />{" "}
-              This export was imported on{" "}
-              {new Date(preview.previousImport.committedAt).toLocaleString()}. Import it again
-            </label>
-          ) : null}
-          <div className="dialog-actions">
-            <button type="button" className="btn" onClick={() => void cancel()}>
-              Cancel
-            </button>
-            <button
-              className="btn primary"
-              type="button"
-              disabled={commit.isPending || (preview.previousImport !== null && !again)}
-              onClick={() => {
-                commit.mutate(preview.importId);
-              }}
-            >
-              Import
-            </button>
+              >
+                <Download size={16} aria-hidden />
+                {exportAll.isPending ? "Preparing…" : "Export all data"}
+              </button>
+            </div>
           </div>
         </div>
+      </section>
+
+      <section className="section">
+        <h2 className="section-title">Import</h2>
+        <div className="group">
+          <div className="row">
+            <div className="row-text">
+              <span className="row-label">Import chats</span>
+              <span className="row-hint">
+                A ChatUI export, a Claude data export or a duck.ai chat. Nothing changes until you
+                confirm, and nothing is overwritten.
+              </span>
+            </div>
+            <div className="row-actions">
+              {uploading ? (
+                <>
+                  <progress max={1} value={uploading.fraction} aria-label="Uploading file" />
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => {
+                      uploading.controller.abort();
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <label className="btn sm outline file-pick">
+                  <Upload size={16} aria-hidden /> Choose file…
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".zip,.json,.txt,application/zip,application/json,text/plain"
+                    className="visually-hidden"
+                    disabled={committing}
+                    onChange={(event) => void choose(event.currentTarget.files?.[0])}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+        </div>
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </section>
+
+      {preview?.state === "previewed" ? (
+        <section className="section" data-testid="import-preview">
+          <h2 className="section-title">Preview: {SOURCE_LABELS[preview.source]}</h2>
+          <div className="group data-card">
+            <p className="row-hint">{sourceDate(preview)}</p>
+            <Summary counts={preview.counts} />
+            {preview.warnings.map((w) => (
+              <p key={w} className="row-hint">
+                {w}
+              </p>
+            ))}
+            <ItemList items={conflictItems} title="Conflicts" />
+            <ItemList items={skippedItems} title="Skipped or changed" />
+            {conflictItems.length > 0 ? (
+              <fieldset className="data-choice">
+                <legend>Items that differ from yours</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="conflicts"
+                    checked={conflicts === "skip"}
+                    onChange={() => {
+                      setConflicts("skip");
+                    }}
+                  />
+                  Skip them (keep yours)
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="conflicts"
+                    checked={conflicts === "copy"}
+                    onChange={() => {
+                      setConflicts("copy");
+                    }}
+                  />
+                  Import them as copies
+                </label>
+              </fieldset>
+            ) : null}
+            {preview.memories.length > 0 ? (
+              <fieldset className="data-choice">
+                <legend>Memories to import (none unless you choose)</legend>
+                {preview.memories.map((m) => (
+                  <label key={m.id}>
+                    <input
+                      type="checkbox"
+                      checked={memoryIds.includes(m.id)}
+                      disabled={m.action !== "new"}
+                      onChange={(event) => {
+                        const on = event.currentTarget.checked;
+                        setMemoryIds((ids) =>
+                          on ? [...ids, m.id] : ids.filter((id) => id !== m.id),
+                        );
+                      }}
+                    />
+                    <span>
+                      {m.name}
+                      {m.action === "identical"
+                        ? " (already saved)"
+                        : m.action === "conflict"
+                          ? " (a memory with this name exists)"
+                          : ""}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
+            {preview.previousImport ? (
+              <label className="data-again">
+                <input
+                  type="checkbox"
+                  checked={again}
+                  onChange={(event) => {
+                    setAgain(event.currentTarget.checked);
+                  }}
+                />
+                <span>
+                  This export was imported on{" "}
+                  {new Date(preview.previousImport.committedAt).toLocaleString()}. Import it again
+                </span>
+              </label>
+            ) : null}
+            <div className="dialog-actions">
+              <button type="button" className="btn dialog" onClick={() => void cancel()}>
+                Cancel
+              </button>
+              <button
+                className="btn dialog primary"
+                type="button"
+                disabled={commit.isPending || (preview.previousImport !== null && !again)}
+                onClick={() => {
+                  commit.mutate(preview.importId);
+                }}
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       {preview && committing ? (
-        <div className="data-preview" role="status">
-          Importing…{" "}
+        <div className="group data-card" role="status">
+          <span>Importing…</span>
           <progress
             max={Math.max(1, preview.progress.total)}
             value={preview.progress.done}
@@ -447,25 +463,35 @@ export default function DataSettings({ userId }: { userId: string }) {
       ) : null}
 
       {preview && report ? (
-        <div className="data-preview" data-testid="import-report" role="status">
-          <h4>{preview.state === "committed" ? "Import complete" : "Import failed"}</h4>
-          {report.error ? <p className="form-error">{report.error}</p> : null}
-          {preview.state === "committed" ? (
-            <p className="settings-hint">
-              {
-                report.items.filter(
-                  (i) => i.action === "new" || i.action === "copy" || i.action === "degraded",
-                ).length
-              }{" "}
-              items imported, {report.items.filter((i) => i.action === "identical").length} already
-              present,{" "}
-              {report.items.filter((i) => i.action === "conflict" || i.action === "skipped").length}{" "}
-              skipped.
-            </p>
-          ) : null}
-          <ItemList items={report.items.filter((i) => i.action !== "identical")} title="Details" />
-        </div>
+        <section className="section" data-testid="import-report" role="status">
+          <h2 className="section-title">
+            {preview.state === "committed" ? "Import complete" : "Import failed"}
+          </h2>
+          <div className="group data-card">
+            {report.error ? <p className="form-error">{report.error}</p> : null}
+            {preview.state === "committed" ? (
+              <p className="row-hint">
+                {
+                  report.items.filter(
+                    (i) => i.action === "new" || i.action === "copy" || i.action === "degraded",
+                  ).length
+                }{" "}
+                items imported, {report.items.filter((i) => i.action === "identical").length}{" "}
+                already present,{" "}
+                {
+                  report.items.filter((i) => i.action === "conflict" || i.action === "skipped")
+                    .length
+                }{" "}
+                skipped.
+              </p>
+            ) : null}
+            <ItemList
+              items={report.items.filter((i) => i.action !== "identical")}
+              title="Details"
+            />
+          </div>
+        </section>
       ) : null}
-    </section>
+    </>
   );
 }

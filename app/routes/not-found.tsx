@@ -12,8 +12,9 @@ export default function NotFound() {
 
 export function ErrorBoundary() {
   return (
-    <main className="empty-state" role="main">
+    <main className="empty-state">
       <h1>Page not found</h1>
+      <p>There’s nothing at this address.</p>
       <Link to={paths.newChat()} className="btn primary">
         Start a new chat
       </Link>

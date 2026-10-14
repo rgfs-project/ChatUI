@@ -9,6 +9,11 @@ export const paths = {
   settings: (section?: string) =>
     section ? `/settings?section=${encodeURIComponent(section)}` : "/settings",
   admin: () => "/admin",
+  /** Every file you uploaded or a reply produced. */
+  files: () => "/files",
+  /** Projects and the chats in them. */
+  library: (projectId?: string) =>
+    projectId ? `/library/${encodeURIComponent(projectId)}` : "/library",
   account: () => "/account",
   login: (returnTo?: string) =>
     returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login",

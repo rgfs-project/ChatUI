@@ -35,12 +35,12 @@ export default function Account() {
   }
 
   return (
-    <main className="page">
-      <div className="page-card">
-        <p className="page-brand">ChatUI</p>
+    <main className="auth-page">
+      <div className="auth-card">
+        <p className="auth-brand">ChatUI</p>
         <h1>Change password</h1>
         <p className="lede">You’ll be signed out everywhere.</p>
-        <form className="auth-form" onSubmit={(event) => void changePassword(event)}>
+        <form onSubmit={(event) => void changePassword(event)}>
           <label htmlFor="current" className="visually-hidden">
             Current password
           </label>
@@ -48,7 +48,7 @@ export default function Account() {
             id="current"
             name="current"
             type="password"
-            className="text-input"
+            className="input"
             placeholder="Current password"
             autoComplete="current-password"
             required
@@ -60,22 +60,22 @@ export default function Account() {
             id="next"
             name="next"
             type="password"
-            className="text-input"
+            className="input"
             placeholder="New password (10+ characters)"
             autoComplete="new-password"
             minLength={10}
             required
           />
-          <button type="submit" className="btn primary large">
+          <button type="submit" className="btn lg primary block">
             Change password
           </button>
           {message ? (
-            <p className="error" role="alert">
+            <p className="form-error" role="alert">
               {message}
             </p>
           ) : null}
         </form>
-        <p className="page-foot">
+        <p className="auth-foot">
           <a href="/chat">Back to chats</a>
         </p>
       </div>

@@ -8,16 +8,14 @@ import { useFocusReturn } from "../lib/focus-return";
 import { paths } from "../lib/paths";
 import { queries } from "../lib/query";
 
-/** Keystrokes settle this long before a query is sent. */
+/** Typing settles this long before a query goes out. */
 const DEBOUNCE_MS = 200;
 /** Recent chats offered before anything is typed. */
 const RECENT_COUNT = 5;
 
-function optionId(index: number): string {
-  return `search-option-${String(index)}`;
-}
+const optionId = (index: number) => `search-option-${String(index)}`;
 
-/** Where a result goes: the conversation, scrolled to the matching message. */
+/** A result opens its conversation, scrolled to the matching message. */
 export function resultHref(result: SearchResult): string {
   return `${paths.chat(result.conversationId)}${result.messageId ? `#m-${result.messageId}` : ""}`;
 }
@@ -31,10 +29,9 @@ interface Option {
 }
 
 /**
- * Search chats (loaded when opened). A Radix Dialog with a combobox: before
- * typing it offers a new chat and the latest chats; typing searches the
- * signed-in user's titles and messages (debounced, bounded by the server).
- * ↑/↓ move through the options, Enter opens one, Escape closes.
+ * Search chats: a combobox in a dialog. Empty, it offers a new chat and the
+ * latest chats; typing searches titles and messages (debounced, bounded by the
+ * server). ↑/↓ move, Enter opens, Escape closes.
  */
 export function SearchDialog({
   userId,
@@ -42,7 +39,7 @@ export function SearchDialog({
   onNavigate,
 }: {
   userId: string;
-  /** `navigated`: an option was opened (focus then stays with the new page). */
+  /** `navigated`: an option was opened, so focus stays with the new page. */
   onClose: (navigated: boolean) => void;
   onNavigate: () => void;
 }) {
@@ -61,7 +58,7 @@ export function SearchDialog({
     };
   }, [text]);
   const search = useQuery({ ...queries.search(userId, query), enabled: query !== "" });
-  // The sidebar already loaded the list: read it from the cache, never refetch.
+  // The sidebar loaded the list already: read the cache, never refetch here.
   const recents = useQuery({ ...queries.conversations(userId), enabled: false });
   const results = query === "" ? [] : (search.data?.results ?? []);
 
@@ -130,9 +127,9 @@ export function SearchDialog({
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Overlay className="overlay" />
         <Dialog.Content
-          className="dialog-content search-dialog"
+          className="dialog search-dialog"
           data-testid="search-dialog"
           onOpenAutoFocus={focus.onOpenAutoFocus}
           onCloseAutoFocus={focus.onCloseAutoFocus}
@@ -186,7 +183,7 @@ export function SearchDialog({
                 id={optionId(index)}
                 role="option"
                 aria-selected={index === current}
-                className="search-result"
+                className={`search-result${option.snippet ? " has-snippet" : ""}`}
                 onPointerMove={() => {
                   setActive(index);
                 }}
@@ -195,7 +192,7 @@ export function SearchDialog({
                 }}
               >
                 {option.icon}
-                <span className="grow">
+                <span className="text">
                   <span className="title">{option.title}</span>
                   {option.snippet ? <span className="snippet">{option.snippet}</span> : null}
                 </span>

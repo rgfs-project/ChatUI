@@ -27,6 +27,8 @@ export interface ShellState {
   getQueue(key: string): readonly QueuedMessage[];
   enqueue(key: string, message: QueuedMessage): void;
   removeQueued(key: string, id: string): void;
+  /** Moves one queued message to the front (it goes out next). */
+  promoteQueued(key: string, id: string): void;
   /** Removes and returns the whole queue for `key`. */
   takeQueue(key: string): QueuedMessage[];
   /** Moves a queue to another key (the draft becoming a conversation). */
@@ -70,6 +72,12 @@ function createShellState(): ShellState {
         key,
         (queues.get(key) ?? []).filter((m) => m.id !== id),
       );
+    },
+    promoteQueued: (key, id) => {
+      const queue = queues.get(key) ?? [];
+      const item = queue.find((m) => m.id === id);
+      if (!item || queue[0] === item) return;
+      setQueue(key, [item, ...queue.filter((m) => m !== item)]);
     },
     takeQueue: (key) => {
       const taken = [...(queues.get(key) ?? [])];

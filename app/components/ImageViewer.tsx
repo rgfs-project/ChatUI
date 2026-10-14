@@ -8,11 +8,9 @@ import "./attachments.css";
 const STEPS = [0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8];
 
 /**
- * Full-screen image viewer (Phase 12; loaded on the first click of a
- * thumbnail). Radix Dialog: focus trap, Escape, focus back to the thumbnail.
- * The image opens fitted to the screen; − / + step the zoom (also the − and
- * + keys, 0 to fit), a zoomed image scrolls. ←/→ move between a message's
- * images. Download fetches the bytes with `Content-Disposition: attachment`.
+ * A full-screen image (loaded on the first thumbnail click). Opens fitted to
+ * the screen; − and + step the zoom (keys too, 0 fits again) and a zoomed
+ * image scrolls. ←/→ move between a message's images.
  */
 export function ImageViewer({
   items,
@@ -24,14 +22,14 @@ export function ImageViewer({
   onClose: () => void;
 }) {
   const [index, setIndex] = useState(initial);
-  const [scale, setScale] = useState<number | null>(null); // null: fit
+  const [scale, setScale] = useState<number | null>(null); // null: fitted
   const [fit, setFit] = useState(1);
   // State, not a ref: the portal mounts the stage after this component's first effects.
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const item = items[index] ?? items[0];
   const natural = { width: item?.width ?? 0, height: item?.height ?? 0 };
 
-  // The fitted scale: the whole image visible, never enlarged past 100%.
+  // Fitted: the whole image visible, never enlarged past 100%.
   useLayoutEffect(() => {
     const el = stage;
     if (!el || !natural.width || !natural.height) return;
@@ -58,7 +56,7 @@ export function ImageViewer({
   };
   const go = (step: 1 | -1) => {
     setIndex((i) => (i + step + items.length) % items.length);
-    setScale(null); // each image opens fitted
+    setScale(null);
   };
   if (!item) return null;
   const width = Math.max(1, Math.round(natural.width * current));
@@ -88,7 +86,8 @@ export function ImageViewer({
           }}
         >
           <Dialog.Title className="visually-hidden">{item.filename ?? "Image"}</Dialog.Title>
-          <div className="viewer-actions">
+          <div className="viewer-top">
+            <span className="viewer-name">{item.filename ?? "Image"}</span>
             <a
               className="viewer-btn"
               href={attachmentContentUrl(item.id, true)}

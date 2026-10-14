@@ -2,18 +2,16 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Sidebar, type SidebarUser } from "./Sidebar";
 
 /**
- * The sidebar below the breakpoint (Phase 11): a modal drawer on Radix
- * Dialog, per the Phase 7 primitive decision record. Focus is trapped inside,
- * Escape and the backdrop dismiss it, focus returns to the button that opened
- * it, and the background is hidden from assistive technology (and made
- * `inert` by the layout). Loaded on demand: never in the critical chat
- * bundle. There is no swipe-to-dismiss, so a horizontal scroll can't close it.
+ * The sidebar on phones: a 260px drawer over a scrim (Radix Dialog). Focus is
+ * trapped inside, Escape and the scrim close it, focus goes back to the button
+ * that opened it, and the page behind is inert. Loaded on demand. No swipe to
+ * dismiss, so scrolling sideways can't close it by accident.
  */
 export default function SidebarDrawer(props: {
   user: SidebarUser;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Focus goes back here on close (a touch tap may not have focused it). */
+  /** Focus returns here (a tap may not have focused the trigger). */
   returnFocus: () => HTMLElement | null;
 }) {
   const close = () => {
@@ -22,9 +20,9 @@ export default function SidebarDrawer(props: {
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay drawer-overlay" data-testid="drawer-backdrop" />
+        <Dialog.Overlay className="overlay drawer-overlay" data-testid="drawer-backdrop" />
         <Dialog.Content
-          className="drawer-content"
+          className="drawer"
           data-testid="sidebar-drawer"
           aria-describedby={undefined}
           onCloseAutoFocus={(event) => {

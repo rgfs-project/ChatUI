@@ -1,44 +1,38 @@
 import {
   ArrowLeft,
   Brain,
+  ChevronRight,
   CircleUserRound,
   ClipboardList,
   Cpu,
   Database,
-  FolderClosed,
+  Gauge,
+  PanelLeft,
   ScrollText,
   Server,
   Settings,
-  Settings2,
+  SlidersHorizontal,
   Users,
   Wrench,
 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, useRouteLoaderData, useSearchParams } from "react-router";
-import { isTheme, type Theme } from "@shared/theme";
-import { ConfirmDialog, PasswordDialog } from "../components/Dialogs";
-import { Spinner } from "../components/Spinner";
-import { AttachmentSettings } from "../components/AttachmentSettings";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router";
+import { GeneralSettings } from "../components/GeneralSettings";
 import { SkillsSettings } from "../components/SkillsSettings";
+import { Spinner } from "../components/Spinner";
+import type { AdminSectionId } from "../admin/sections";
 import { useAuth } from "../lib/auth-store";
 import { paths, type OverlayState } from "../lib/paths";
-import { apiJson, queryKeys } from "../lib/query";
-import { applyReasoningShown, applyTheme } from "../lib/theme";
-import { useSignOut } from "../lib/use-sign-out";
-import type { AdminSectionId } from "../admin/sections";
+import { NARROW_QUERY, useMediaQuery } from "../lib/use-media-query";
 import type { Route } from "./+types/settings";
 
-/** Settings → Memories: loaded when its section opens. */
+const AccountSettings = lazy(() => import("../components/AccountSettings"));
+const UsageSettings = lazy(() => import("../components/UsageSettings"));
 const MemorySettings = lazy(() => import("../components/MemorySettings"));
-/** Settings → Files: loaded when its section opens. */
-const ArtifactSettings = lazy(() => import("../components/ArtifactSettings"));
-/** Settings → Data: export and import, loaded when its section opens. */
 const DataSettings = lazy(() => import("../components/DataSettings"));
 /**
- * Administration: its own chunk, loaded only when an administrator opens (or
- * points at) one of its sections. The server authorizes every request
- * regardless; hiding the group is cosmetic.
+ * Administration: its own chunk, loaded only when an administrator opens one
+ * of its sections. The server authorizes every request regardless.
  */
 const loadAdmin = () => import("../admin/AdminPanel");
 const AdminSection = lazy(loadAdmin);
@@ -47,7 +41,7 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings · ChatUI" }];
 }
 
-const USER_SECTIONS = ["general", "account", "data", "skills", "memories", "files"] as const;
+const USER_SECTIONS = ["general", "account", "data", "usage", "skills", "memories"] as const;
 type UserSection = (typeof USER_SECTIONS)[number];
 const ADMIN_SECTIONS: readonly AdminSectionId[] = [
   "users",
@@ -55,7 +49,7 @@ const ADMIN_SECTIONS: readonly AdminSectionId[] = [
   "models",
   "instance",
   "maintenance",
-  "audit",
+  "logs",
 ];
 type Section = UserSection | AdminSectionId;
 
@@ -63,311 +57,193 @@ const isUserSection = (value: unknown): value is UserSection =>
   (USER_SECTIONS as readonly unknown[]).includes(value);
 const isAdminSection = (value: unknown): value is AdminSectionId =>
   (ADMIN_SECTIONS as readonly unknown[]).includes(value);
-/** The old Attachments section now lives in General. */
-const ALIASES: Record<string, Section> = { attachments: "general" };
+/** Older links keep working. */
+const ALIASES: Record<string, Section> = { attachments: "general", audit: "logs" };
 
 const ICON = 20;
+const SECTIONS: Record<Section, { label: string; icon: ReactNode; admin?: boolean }> = {
+  general: { label: "General", icon: <Settings size={ICON} aria-hidden /> },
+  account: { label: "Account", icon: <CircleUserRound size={ICON} aria-hidden /> },
+  data: { label: "Data", icon: <Database size={ICON} aria-hidden /> },
+  usage: { label: "Usage", icon: <Gauge size={ICON} aria-hidden /> },
+  skills: { label: "Skills", icon: <ScrollText size={ICON} aria-hidden /> },
+  memories: { label: "Memories", icon: <Brain size={ICON} aria-hidden /> },
+  users: { label: "Users", icon: <Users size={ICON} aria-hidden />, admin: true },
+  providers: { label: "Providers", icon: <Server size={ICON} aria-hidden />, admin: true },
+  models: { label: "Models", icon: <Cpu size={ICON} aria-hidden />, admin: true },
+  instance: { label: "Instance", icon: <SlidersHorizontal size={ICON} aria-hidden />, admin: true },
+  maintenance: { label: "Maintenance", icon: <Wrench size={ICON} aria-hidden />, admin: true },
+  logs: { label: "Logs", icon: <ClipboardList size={ICON} aria-hidden />, admin: true },
+};
 
 export default function SettingsPage() {
   return <SettingsPanel />;
 }
 
 /**
- * Settings, a page of its own: a section list where the conversation list
- * was (Back returns to the chat it was opened from) and the chosen section
- * in the reading column. Administrators get an Administration group; `/admin`
- * opens the same page on Users. Only implemented features appear.
+ * Settings, a page of its own. Wide screens: a section column where the chat
+ * list was (Back returns to the page it was opened from) and the chosen
+ * section in the reading column. Phones: a list of sections, then one section
+ * per screen. `/admin` opens the same page on Users.
  */
 export function SettingsPanel({ initial }: { initial?: Section }) {
   const user = useAuth().session?.user;
   const isAdmin = user?.role === "admin";
+  const narrow = useMediaQuery(NARROW_QUERY);
   const location = useLocation();
   const background = (location.state as OverlayState | null)?.background;
-  // `?section=` opens a section directly (e.g. the sidebar's Files).
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const raw = params.get("section") ?? initial;
   const requested = (raw && ALIASES[raw]) ?? raw;
-  const [section, setSection] = useState<Section>(
-    isUserSection(requested) || (isAdmin && isAdminSection(requested)) ? requested : "general",
-  );
-  const item = (id: Section, label: string, icon: ReactNode, intent?: () => void) => (
-    <button
-      type="button"
-      className="nav-row"
-      aria-current={section === id ? "true" : undefined}
-      onPointerEnter={intent}
-      onFocus={intent}
-      onClick={() => {
-        setSection(id);
-      }}
-    >
-      {icon}
-      {label}
-    </button>
-  );
+  // The old Settings → Files moved to its own page.
+  const toFiles = raw === "files";
+  const section: Section | null = isUserSection(requested)
+    ? requested
+    : isAdmin && isAdminSection(requested)
+      ? requested
+      : null;
+  const valid = section !== null;
+  // Phones show the section list until one is chosen (or named in the URL).
+  const listOnly = narrow && !valid;
+  const [railed, setRailed] = useState(false);
+  const back = background ?? paths.newChat();
+  // History state carried through section changes (Back keeps its target).
+  const keep = location.state as OverlayState | null;
+
+  if (toFiles) return <Navigate to={paths.files()} replace state={keep} />;
+
+  const open = (id: Section) => {
+    setParams({ section: id }, { state: keep, preventScrollReset: true });
+  };
   const preloadAdmin = () => void loadAdmin();
-  const loading = (label: string) => (
-    <section className="settings-body">
-      <Spinner label={label} />
-    </section>
-  );
-  return (
-    <div className="settings-page" data-testid="settings">
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <Link to={background ?? paths.newChat()} className="nav-row" data-testid="settings-back">
-            <ArrowLeft size={ICON} aria-hidden />
-            Back
-          </Link>
-        </div>
-        <nav className="settings-nav" aria-label="Settings sections">
-          {item("general", "General", <Settings size={ICON} aria-hidden />)}
-          {item("account", "Account", <CircleUserRound size={ICON} aria-hidden />)}
-          {item("data", "Data", <Database size={ICON} aria-hidden />)}
-          {item("skills", "Skills", <ScrollText size={ICON} aria-hidden />)}
-          {item("memories", "Memories", <Brain size={ICON} aria-hidden />)}
-          {item("files", "Files", <FolderClosed size={ICON} aria-hidden />)}
-          {isAdmin ? (
-            <>
-              <p className="nav-group">Administration</p>
-              {item("users", "Users", <Users size={ICON} aria-hidden />, preloadAdmin)}
-              {item("providers", "Providers", <Server size={ICON} aria-hidden />, preloadAdmin)}
-              {item("models", "Models", <Cpu size={ICON} aria-hidden />, preloadAdmin)}
-              {item("instance", "Instance", <Settings2 size={ICON} aria-hidden />, preloadAdmin)}
-              {item("maintenance", "Maintenance", <Wrench size={ICON} aria-hidden />, preloadAdmin)}
-              {item("audit", "Logs", <ClipboardList size={ICON} aria-hidden />, preloadAdmin)}
-            </>
-          ) : null}
-        </nav>
-      </aside>
-      <main className="settings-main">
-        {isAdminSection(section) && isAdmin ? (
-          <Suspense fallback={loading("Loading administration…")}>
-            <AdminSection section={section} />
-          </Suspense>
-        ) : section === "data" && user ? (
-          <Suspense fallback={loading("Loading…")}>
-            <DataSettings userId={user.id} />
-          </Suspense>
-        ) : section === "skills" && user ? (
-          <SkillsSettings userId={user.id} />
-        ) : section === "memories" && user ? (
-          <Suspense fallback={loading("Loading memories…")}>
-            <MemorySettings userId={user.id} />
-          </Suspense>
-        ) : section === "files" && user ? (
-          <Suspense fallback={loading("Loading files…")}>
-            <ArtifactSettings userId={user.id} />
-          </Suspense>
-        ) : section === "account" && user ? (
-          <AccountSection username={user.username} isAdmin={isAdmin} />
-        ) : user ? (
-          <GeneralSection userId={user.id} />
-        ) : null}
-      </main>
-    </div>
-  );
-}
+  const ids = [...USER_SECTIONS, ...(isAdmin ? ADMIN_SECTIONS : [])];
 
-/** A titled card of rows ("Appearance", "Chat", …). */
-function Group({ title, children }: { title?: string; children: ReactNode }) {
-  return title ? (
-    <section className="settings-section">
-      <h2>{title}</h2>
-      <div className="group">{children}</div>
-    </section>
+  const shown: Section = section ?? "general";
+  const content = !user ? null : isAdminSection(shown) && isAdmin ? (
+    <Suspense fallback={<Spinner label="Loading administration…" />}>
+      <AdminSection section={shown} />
+    </Suspense>
+  ) : shown === "account" ? (
+    <Suspense fallback={<Spinner label="Loading…" />}>
+      <AccountSettings userId={user.id} />
+    </Suspense>
+  ) : shown === "data" ? (
+    <Suspense fallback={<Spinner label="Loading…" />}>
+      <DataSettings userId={user.id} />
+    </Suspense>
+  ) : shown === "usage" ? (
+    <Suspense fallback={<Spinner label="Loading usage…" />}>
+      <UsageSettings userId={user.id} />
+    </Suspense>
+  ) : shown === "skills" ? (
+    <SkillsSettings userId={user.id} />
+  ) : shown === "memories" ? (
+    <Suspense fallback={<Spinner label="Loading memories…" />}>
+      <MemorySettings userId={user.id} />
+    </Suspense>
   ) : (
-    <section className="group">{children}</section>
+    <GeneralSettings userId={user.id} />
   );
-}
 
-/** Settings → General: appearance, chat display and history. */
-function GeneralSection({ userId }: { userId: string }) {
-  return (
-    <div className="settings-body" aria-labelledby="settings-general">
-      <h1 id="settings-general">General</h1>
-      <Group title="Appearance">
-        <ThemeSetting />
-      </Group>
-      <Group title="Chat">
-        <ReasoningSetting />
-        <AttachmentSettings userId={userId} />
-      </Group>
-      <Group title="Chat history">
-        <ClearHistory userId={userId} />
-      </Group>
-    </div>
-  );
-}
+  if (narrow)
+    return (
+      <div className="settings-mobile" data-testid="settings">
+        <header className="mobile-head">
+          {listOnly ? (
+            <Link
+              to={back}
+              className="icon-btn"
+              aria-label="Back to chats"
+              data-testid="settings-back"
+            >
+              <ArrowLeft size={20} aria-hidden />
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Back to settings"
+              onClick={() => {
+                setParams({}, { state: keep });
+              }}
+            >
+              <ArrowLeft size={20} aria-hidden />
+            </button>
+          )}
+          <span className="title">Settings</span>
+        </header>
+        <div className="page-scroll">
+          <div className="page-body">
+            {listOnly ? (
+              <nav className="group nav-card" aria-label="Settings sections">
+                {ids.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="row"
+                    onPointerEnter={SECTIONS[id].admin ? preloadAdmin : undefined}
+                    onClick={() => {
+                      open(id);
+                    }}
+                  >
+                    {SECTIONS[id].icon}
+                    {SECTIONS[id].label}
+                    <ChevronRight size={16} className="chev" aria-hidden />
+                  </button>
+                ))}
+              </nav>
+            ) : (
+              content
+            )}
+          </div>
+        </div>
+      </div>
+    );
 
-/** Settings → Account: who is signed in, the password and signing out. */
-function AccountSection({ username, isAdmin }: { username: string; isAdmin: boolean }) {
-  const signOut = useSignOut();
-  const [changingPassword, setChangingPassword] = useState(false);
   return (
-    <div className="settings-body" id="account" aria-labelledby="settings-account">
-      <h1 id="settings-account">Account</h1>
-      <Group>
-        <div className="settings-row">
-          <span className="settings-value">
-            <span className="avatar large" aria-hidden>
-              {(username.at(0) ?? "?").toUpperCase()}
-            </span>
-            <span className="identity">
-              <span className="settings-label">{username}</span>
-              <span className="settings-hint">{isAdmin ? "Administrator" : "Member"}</span>
-            </span>
-          </span>
-        </div>
-        <div className="settings-row">
-          <span className="settings-label">Username</span>
-          <span className="settings-value">{username}</span>
-        </div>
-        <div className="settings-row">
-          <span className="settings-label">Password</span>
+    <div className="split" data-testid="settings">
+      <aside className={`sidebar settings-nav${railed ? " rail" : ""}`}>
+        <div className="sidebar-top">
           <button
             type="button"
-            className="btn small"
-            aria-haspopup="dialog"
+            className="icon-btn toggle-btn rail-toggle"
+            aria-label={railed ? "Open sidebar" : "Close sidebar"}
+            title={railed ? "Open sidebar" : "Close sidebar"}
             onClick={() => {
-              setChangingPassword(true);
+              setRailed((value) => !value);
             }}
           >
-            Change
+            <PanelLeft size={20} aria-hidden />
           </button>
         </div>
-      </Group>
-      <PasswordDialog
-        open={changingPassword}
-        onOpenChange={setChangingPassword}
-        // The change ended every session; leave the way signing out does.
-        onChanged={() => void signOut()}
-      />
-      <Group>
-        <div className="settings-row">
-          <div>
-            <p className="settings-label">Sign out</p>
-            <p className="settings-hint">Sign out of ChatUI on this device.</p>
-          </div>
-          <button type="button" className="btn small" onClick={() => void signOut()}>
-            Sign out
-          </button>
-        </div>
-      </Group>
-    </div>
-  );
-}
-
-/**
- * Theme: applies at once and is remembered for this browser (a presentation
- * hint, not an account preference).
- */
-function ThemeSetting() {
-  // What the server rendered (from the cookie): the same on server and client.
-  const root = useRouteLoaderData<{ theme?: Theme }>("root");
-  const [theme, setTheme] = useState<Theme>(root?.theme ?? "system");
-  return (
-    <div className="settings-row">
-      <label className="settings-label" htmlFor="theme-select">
-        Theme
-      </label>
-      <select
-        id="theme-select"
-        className="text-input"
-        value={theme}
-        onChange={(event) => {
-          const next = event.target.value;
-          if (!isTheme(next)) return;
-          applyTheme(next);
-          setTheme(next);
-        }}
-      >
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </div>
-  );
-}
-
-/** Show thought process: the model's reasoning above replies (display only). */
-function ReasoningSetting() {
-  const root = useRouteLoaderData<{ reasoningShown?: boolean }>("root");
-  const [shown, setShown] = useState(root?.reasoningShown ?? true);
-  return (
-    <div className="settings-row">
-      <label className="settings-label" htmlFor="reasoning-toggle">
-        Show thought process
-      </label>
-      <input
-        id="reasoning-toggle"
-        type="checkbox"
-        className="toggle"
-        // Takes effect at once: a switch, not a form checkbox.
-        role="switch"
-        checked={shown}
-        onChange={(event) => {
-          applyReasoningShown(event.target.checked);
-          setShown(event.target.checked);
-        }}
-      />
-    </div>
-  );
-}
-
-/**
- * Delete all chats: every conversation with its attachments, memory
- * suggestions and pin. Preferences, skills, approved memories and files stay.
- */
-function ClearHistory({ userId }: { userId: string }) {
-  const client = useQueryClient();
-  const navigate = useNavigate();
-  const [confirming, setConfirming] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const clear = useMutation({
-    mutationFn: () => apiJson<{ deleted: number }>("/api/conversations", { method: "DELETE" }),
-    onSuccess: async ({ deleted }) => {
-      setResult(`${String(deleted)} chat${deleted === 1 ? "" : "s"} deleted.`);
-      client.removeQueries({ queryKey: ["user", userId, "conversation"] });
-      client.removeQueries({ queryKey: ["user", userId, "search"] });
-      await client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
-      // Back would otherwise return to a chat that no longer exists.
-      await navigate(paths.settings(), { replace: true, state: { background: paths.newChat() } });
-    },
-    onError: () => {
-      setResult("The chats couldn’t be deleted. Try again.");
-    },
-  });
-  return (
-    <div className="settings-row">
-      <div>
-        <p className="settings-label">Delete all chats</p>
-        {result ? (
-          <p className="settings-hint" role="status">
-            {result}
-          </p>
-        ) : null}
-      </div>
-      <button
-        type="button"
-        className="btn small danger"
-        disabled={clear.isPending}
-        onClick={() => {
-          setConfirming(true);
-        }}
-      >
-        Delete all
-      </button>
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title="Delete all chats?"
-        description="This permanently deletes every chat in your history. You can’t undo this."
-        confirmLabel="Delete all"
-        onConfirm={() => {
-          clear.mutate();
-        }}
-      />
+        <Link to={back} className="nav-row back-row" data-testid="settings-back" aria-label="Back">
+          <ArrowLeft size={ICON} aria-hidden />
+          <span className="label">Back</span>
+        </Link>
+        <nav className="nav-list" aria-label="Settings sections">
+          {ids.map((id, index) => (
+            <div key={id} className={index === USER_SECTIONS.length ? "nav-gap" : undefined}>
+              <button
+                type="button"
+                className="nav-row"
+                aria-current={shown === id ? "page" : undefined}
+                aria-label={SECTIONS[id].label}
+                onPointerEnter={SECTIONS[id].admin ? preloadAdmin : undefined}
+                onFocus={SECTIONS[id].admin ? preloadAdmin : undefined}
+                onClick={() => {
+                  open(id);
+                }}
+              >
+                {SECTIONS[id].icon}
+                <span className="label">{SECTIONS[id].label}</span>
+              </button>
+            </div>
+          ))}
+        </nav>
+      </aside>
+      <main className="page-scroll">
+        <div className="page-body">{content}</div>
+      </main>
     </div>
   );
 }

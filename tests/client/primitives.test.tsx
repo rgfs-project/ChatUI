@@ -95,7 +95,7 @@ describe("INV-47: menus (Radix DropdownMenu)", () => {
     // could straddle the chunk arriving).
     fireEvent.click(placeholder);
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getAllByRole("menuitem")).toHaveLength(3);
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(5);
   });
 
   it("opens from the keyboard, moves with arrows, closes on Escape and restores focus", async () => {
@@ -107,7 +107,13 @@ describe("INV-47: menus (Radix DropdownMenu)", () => {
     const menu = await screen.findByRole("menu");
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     const items = within(menu).getAllByRole("menuitem");
-    expect(items.map((i) => i.textContent.trim())).toEqual(["Rename", "Pin", "Delete"]);
+    expect(items.map((i) => i.textContent.trim())).toEqual([
+      "Rename",
+      "Pin",
+      "Archive",
+      "Delete",
+      "Move to project",
+    ]);
     // Portal layering: rendered outside the clipping ancestor.
     expect(screen.getByTestId("clipping-ancestor").contains(menu)).toBe(false);
     await user.keyboard("{ArrowDown}");

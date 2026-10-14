@@ -1,0 +1,167 @@
+/* The Files page: loaded with it. */
+
+.files-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.files-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.files-tools .grow {
+  flex: 1 1 240px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  line-height: 18px;
+}
+
+.chip:hover {
+  background: var(--fill);
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--canvas);
+}
+
+.files-table {
+  padding: 0 8px;
+}
+
+.files-head,
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.files-head {
+  height: 40px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 16px;
+}
+
+.file-row {
+  min-height: 60px;
+  padding: 0 0 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.file-row:last-child {
+  border-bottom: 0;
+}
+
+.col-icon {
+  flex: none;
+  width: 36px;
+}
+
+.col-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.col-chat {
+  flex: none;
+  width: 220px;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-date {
+  flex: none;
+  width: 80px;
+  font-size: var(--text-sm);
+  line-height: 18px;
+}
+
+.col-menu {
+  flex: none;
+  width: 36px;
+}
+
+.chat-link {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.chat-link:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.files-none {
+  padding-left: 8px;
+}
+
+.files-foot {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 16px;
+  text-align: center;
+}
+
+.file-pick {
+  cursor: pointer;
+}
+
+.file-pick.busy {
+  opacity: 0.6;
+}
+
+.file-pick:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Phones: name and date only; the chat moves under the name. */
+@media (max-width: 767px) {
+  .files-head .col-chat,
+  .file-row .col-chat {
+    display: none;
+  }
+
+  .col-date {
+    width: auto;
+  }
+}
+
+.project-row {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.project-row:hover .row-label {
+  text-decoration: underline;
+}

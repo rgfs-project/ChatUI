@@ -1,29 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ScrollText, Search } from "lucide-react";
-import "./skills.css";
+import { ArrowLeft, Plus, ScrollText, Search } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import { SKILL_LIMITS, type SkillDto } from "@shared/skills";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
+import { ConfirmDialog } from "./Dialogs";
+import "./skills.css";
 
 /**
- * Settings → Customize → Skills (user request, Phase 10): the user's named
- * instruction sets. An enabled skill appears in the composer's "/" list;
- * starting a message with "/name" applies it to that message.
+ * Settings → Skills: named instruction sets. An enabled skill is in the
+ * composer's "/" list, and starting a message with "/name" applies it.
  */
 export function SkillsSettings({ userId }: { userId: string }) {
   const skills = useQuery(queries.skills(userId));
-  const [view, setView] = useState<{ kind: "list" } | { kind: "edit"; id: string | null }>({
-    kind: "list",
-  });
-  if (view.kind === "edit") {
-    const skill = view.id ? skills.data?.find((s) => s.id === view.id) : undefined;
+  const [editing, setEditing] = useState<{ id: string | null } | null>(null);
+  if (editing) {
+    const skill = editing.id ? skills.data?.find((s) => s.id === editing.id) : undefined;
     return (
       <SkillEditor
-        key={view.id ?? "new"}
+        key={editing.id ?? "new"}
         userId={userId}
         skill={skill}
         onDone={() => {
-          setView({ kind: "list" });
+          setEditing(null);
         }}
       />
     );
@@ -36,7 +34,7 @@ export function SkillsSettings({ userId }: { userId: string }) {
       error={skills.isError && !skills.data}
       onRetry={() => void skills.refetch()}
       onOpen={(id) => {
-        setView({ kind: "edit", id });
+        setEditing({ id });
       }}
     />
   );
@@ -53,10 +51,7 @@ function useSkillMutations(userId: string) {
               method: "PATCH",
               body: JSON.stringify(input.body),
             })
-          : apiJson<SkillDto>("/api/skills", {
-              method: "POST",
-              body: JSON.stringify(input.body),
-            }),
+          : apiJson<SkillDto>("/api/skills", { method: "POST", body: JSON.stringify(input.body) }),
       onSettled: settle,
     }),
     remove: useMutation({
@@ -65,29 +60,6 @@ function useSkillMutations(userId: string) {
       onSettled: settle,
     }),
   };
-}
-
-function Switch(props: {
-  checked: boolean;
-  label: string;
-  disabled?: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={props.checked}
-      aria-label={props.label}
-      className="switch"
-      disabled={props.disabled}
-      onClick={() => {
-        props.onChange(!props.checked);
-      }}
-    >
-      <span className="switch-thumb" aria-hidden />
-    </button>
-  );
 }
 
 function SkillList(props: {
@@ -104,95 +76,105 @@ function SkillList(props: {
   const shown = (props.skills ?? []).filter(
     (s) => q === "" || s.name.includes(q) || s.description.toLowerCase().includes(q),
   );
+  const any = (props.skills?.length ?? 0) > 0;
   return (
-    <section className="settings-body" aria-labelledby="settings-skills">
-      <div className="skills-head">
-        <h2 id="settings-skills">Skills</h2>
-        <label className="skills-search">
-          <Search size={16} aria-hidden />
-          <span className="visually-hidden">Search skills</span>
-          <input
-            type="search"
-            placeholder="Search skills"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.currentTarget.value);
-            }}
-          />
-        </label>
-      </div>
-      {props.loading ? (
-        <p className="settings-hint">Loading skills…</p>
-      ) : props.error ? (
-        <p className="settings-hint" role="alert">
-          Skills couldn’t be loaded.{" "}
-          <button type="button" className="link-button" onClick={props.onRetry}>
-            Try again
-          </button>
-        </p>
-      ) : props.skills?.length === 0 ? (
-        <div className="skills-empty" data-testid="skills-empty">
-          <h3>Add your first skill</h3>
-          <p>
-            Skills are instructions you can apply to any message. Type <kbd>/</kbd> in the message
-            box and pick one, or start a message with <code>/name</code>.
-          </p>
+    <>
+      <div className="page-head">
+        <h1 className="page-title">Skills</h1>
+        {any ? (
           <button
-            className="btn small"
             type="button"
+            className="btn sm primary"
             onClick={() => {
               props.onOpen(null);
             }}
           >
-            Create a skill
+            <Plus size={16} aria-hidden /> Add a skill
+          </button>
+        ) : null}
+      </div>
+      {props.loading ? (
+        <p className="hint">Loading skills…</p>
+      ) : props.error ? (
+        <div className="alert danger" role="alert">
+          <span className="alert-text">Skills couldn’t be loaded.</span>
+          <button type="button" className="btn" onClick={props.onRetry}>
+            Try again
           </button>
         </div>
+      ) : !any ? (
+        <section className="group" data-testid="skills-empty">
+          <div className="row">
+            <div className="row-text">
+              <h2 className="row-label">Add your first skill</h2>
+              <p className="row-hint">
+                Instructions you can apply to any message. Type <kbd>/</kbd> in the message box and
+                pick one.
+              </p>
+            </div>
+            <button
+              className="btn sm"
+              type="button"
+              onClick={() => {
+                props.onOpen(null);
+              }}
+            >
+              Create a skill
+            </button>
+          </div>
+        </section>
       ) : (
-        <>
-          <ul className="skills-list" aria-label="Your skills">
+        <section className="section">
+          <label className="search-field">
+            <Search size={16} aria-hidden />
+            <span className="visually-hidden">Search skills</span>
+            <input
+              type="search"
+              placeholder="Search skills"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.currentTarget.value);
+              }}
+            />
+          </label>
+          <ul className="group" aria-label="Your skills">
             {shown.map((skill) => (
-              <li key={skill.id}>
+              <li key={skill.id} className="row skill-row">
                 <button
                   type="button"
-                  className="skill-row"
+                  className="skill-open"
                   onClick={() => {
                     props.onOpen(skill.id);
                   }}
                 >
-                  <span className="skill-icon" aria-hidden>
+                  <span className="file-icon" aria-hidden>
                     <ScrollText size={18} />
                   </span>
-                  <span className="skill-text">
-                    <span className="skill-name">/{skill.name}</span>
-                    <span className="skill-description">
+                  <span className="row-text">
+                    <span className="row-label skill-name">/{skill.name}</span>
+                    <span className="row-hint skill-description">
                       {skill.description || skill.instructions}
                     </span>
                   </span>
                 </button>
-                <Switch
+                <input
+                  type="checkbox"
+                  role="switch"
+                  className="switch"
+                  aria-label={`Enable ${skill.name}`}
                   checked={skill.enabled}
-                  label={`Enable ${skill.name}`}
                   disabled={save.isPending}
-                  onChange={(enabled) => {
-                    save.mutate({ id: skill.id, body: { enabled } });
+                  onChange={(event) => {
+                    save.mutate({ id: skill.id, body: { enabled: event.currentTarget.checked } });
                   }}
                 />
               </li>
             ))}
-            {shown.length === 0 ? <li className="settings-hint">No skills match.</li> : null}
+            {shown.length === 0 ? <li className="row row-hint">No skills match.</li> : null}
           </ul>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              props.onOpen(null);
-            }}
-          >
-            Add a skill
-          </button>
-        </>
+        </section>
       )}
-    </section>
+    </>
   );
 }
 
@@ -230,49 +212,69 @@ function SkillEditor(props: { userId: string; skill: SkillDto | undefined; onDon
   }
 
   return (
-    <section className="settings-body" aria-labelledby="skill-editor-title">
-      <button type="button" className="link-back" onClick={props.onDone}>
-        <ArrowLeft size={16} aria-hidden /> Your skills
+    <>
+      <button type="button" className="back-link" onClick={props.onDone}>
+        <ArrowLeft size={16} aria-hidden /> Skills
       </button>
-      <h2 id="skill-editor-title">{skill ? `/${skill.name}` : "New skill"}</h2>
-      <form className="skill-form" onSubmit={submit}>
-        <label htmlFor="skill-name">Name</label>
-        <div className="skill-name-field">
-          <span aria-hidden>/</span>
+      <h1 className="page-title">{skill ? `/${skill.name}` : "New skill"}</h1>
+      <form className="section skill-form" onSubmit={submit}>
+        <div className="field">
+          <label className="field-label" htmlFor="skill-name">
+            Name
+          </label>
+          <div className="input prefixed">
+            <span aria-hidden>/</span>
+            <input
+              id="skill-name"
+              name="name"
+              required
+              maxLength={SKILL_LIMITS.nameLength}
+              pattern="[a-z0-9][a-z0-9\-]*"
+              defaultValue={skill?.name ?? ""}
+              aria-describedby="skill-name-hint"
+              autoComplete="off"
+            />
+          </div>
+          <p className="hint field-hint" id="skill-name-hint">
+            Lowercase letters, digits and hyphens.
+          </p>
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="skill-description">
+            Description
+          </label>
           <input
-            id="skill-name"
-            name="name"
-            required
-            maxLength={SKILL_LIMITS.nameLength}
-            pattern="[a-z0-9][a-z0-9\-]*"
-            defaultValue={skill?.name ?? ""}
-            aria-describedby="skill-name-hint"
-            autoComplete="off"
+            id="skill-description"
+            name="description"
+            className="input"
+            maxLength={SKILL_LIMITS.descriptionLength}
+            defaultValue={skill?.description ?? ""}
+            placeholder="Shown in the / list"
           />
         </div>
-        <p className="settings-hint" id="skill-name-hint">
-          Lowercase letters, digits and hyphens. You’ll type it as <code>/name</code>.
-        </p>
-        <label htmlFor="skill-description">Description</label>
-        <input
-          id="skill-description"
-          name="description"
-          maxLength={SKILL_LIMITS.descriptionLength}
-          defaultValue={skill?.description ?? ""}
-          placeholder="Shown in the / list"
-        />
-        <label htmlFor="skill-instructions">Instructions</label>
-        <textarea
-          id="skill-instructions"
-          name="instructions"
-          required
-          rows={10}
-          maxLength={SKILL_LIMITS.instructionsLength}
-          defaultValue={skill?.instructions ?? ""}
-          placeholder="What the model should do when you use this skill"
-        />
-        <label className="skill-enabled">
-          <input type="checkbox" name="enabled" defaultChecked={skill?.enabled ?? true} />
+        <div className="field">
+          <label className="field-label" htmlFor="skill-instructions">
+            Instructions
+          </label>
+          <textarea
+            id="skill-instructions"
+            name="instructions"
+            className="textarea"
+            required
+            rows={10}
+            maxLength={SKILL_LIMITS.instructionsLength}
+            defaultValue={skill?.instructions ?? ""}
+            placeholder="What the model should do when you use this skill"
+          />
+        </div>
+        <label className="check-line">
+          <input
+            type="checkbox"
+            role="switch"
+            className="switch"
+            name="enabled"
+            defaultChecked={skill?.enabled ?? true}
+          />
           Show in the <kbd>/</kbd> list
         </label>
         {error ? (
@@ -280,30 +282,17 @@ function SkillEditor(props: { userId: string; skill: SkillDto | undefined; onDon
             {error}
           </p>
         ) : null}
-        <div className="dialog-actions">
+        <div className="form-actions">
           {skill ? (
-            confirming ? (
-              <button
-                type="button"
-                className="btn danger"
-                disabled={remove.isPending}
-                onClick={() => {
-                  remove.mutate(skill.id, { onSuccess: props.onDone });
-                }}
-              >
-                Confirm delete
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn ghost danger"
-                onClick={() => {
-                  setConfirming(true);
-                }}
-              >
-                Delete
-              </button>
-            )
+            <button
+              type="button"
+              className="btn danger"
+              onClick={() => {
+                setConfirming(true);
+              }}
+            >
+              Delete
+            </button>
           ) : null}
           <span className="spacer" />
           <button type="button" className="btn" onClick={props.onDone}>
@@ -314,6 +303,18 @@ function SkillEditor(props: { userId: string; skill: SkillDto | undefined; onDon
           </button>
         </div>
       </form>
-    </section>
+      {skill ? (
+        <ConfirmDialog
+          open={confirming}
+          onOpenChange={setConfirming}
+          title={`Delete /${skill.name}?`}
+          description="It’s removed from the / list. Messages that used it keep their text."
+          confirmLabel="Delete"
+          onConfirm={() => {
+            remove.mutate(skill.id, { onSuccess: props.onDone });
+          }}
+        />
+      ) : null}
+    </>
   );
 }

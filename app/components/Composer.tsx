@@ -1,5 +1,5 @@
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { ArrowUp, Plus, Square } from "lucide-react";
+import { ArrowUp, Maximize2, Minimize2, Plus, Square } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from "react";
 import { acceptAttribute } from "@shared/attachment-media";
 import type { ModelListDto } from "@shared/generations";
@@ -18,34 +18,29 @@ import {
 } from "./CommandMenu";
 import { ModelTrigger } from "./ModelTrigger";
 
-// The model menu is Radix (Phase 9: menus load on demand); a same-looking
-// button stands in until it is first wanted.
+// Radix menus load on demand; a same-looking button stands in until wanted.
 const loadMenus = () => import("./Menus");
 const ModelMenu = lazy(() => loadMenus().then((m) => ({ default: m.ModelMenu })));
-
-// The tray loads with the first attachment (Phase 12): not in the critical chunk.
+// The tray arrives with the first attachment.
 const AttachmentTray = lazy(() =>
   import("./AttachmentTray").then((m) => ({ default: m.AttachmentTray })),
 );
 
-/** Files from a paste or drop (images, audio and text files; the server decides). */
 function filesOf(list: FileList | null | undefined): File[] {
   return list ? Array.from(list) : [];
 }
 
 /**
- * An Enter that belongs to an input method (IME) composition, which must never
- * send. Safari reports the Enter that commits a composition with
- * `isComposing: false` but the legacy keyCode 229, so both are checked.
+ * An Enter that commits an input-method composition must never send. Safari
+ * reports it with `isComposing: false` but the legacy keyCode 229.
  */
 function composing(event: KeyboardEvent): boolean {
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- the only Safari signal
   return event.isComposing || event.keyCode === 229;
 }
 
-/** Past this many characters on one line the composer takes two rows. */
+/** Past this many characters on one line, the composer takes two rows. */
 const LONG_LINE = 60;
-/** The textarea grows to this many lines, then scrolls. */
 const MAX_LINES = 8;
 const LINE_HEIGHT = 26;
 
@@ -53,18 +48,18 @@ function isExpanded(value: string): boolean {
   return value.includes("\n") || value.length > LONG_LINE;
 }
 
-/** Grows the textarea with its content, up to MAX_LINES. */
-function fitHeight(el: HTMLTextAreaElement) {
+/** Grows the box with its text, up to MAX_LINES (unbounded in the tall editor). */
+function fitHeight(el: HTMLTextAreaElement, full = false) {
   el.style.height = "auto";
-  el.style.height = `${String(Math.min(el.scrollHeight, MAX_LINES * LINE_HEIGHT + 10))}px`;
+  el.style.height = full
+    ? ""
+    : `${String(Math.min(el.scrollHeight, MAX_LINES * LINE_HEIGHT + 10))}px`;
 }
 
-/** A `(providerId, modelId)` pair; the server validates it on every send. */
+/** A `[providerId, modelId]` pair; the server validates it on every send. */
 export type ModelChoice = [string, string];
 
-function pairKey(pair: ModelChoice): string {
-  return JSON.stringify(pair);
-}
+const pairKey = (pair: ModelChoice) => JSON.stringify(pair);
 
 type ModelsState =
   | { kind: "loading" }
@@ -80,9 +75,9 @@ function modelsState(models: UseQueryResult<ModelListDto>): ModelsState {
   const groups = data.providers;
   const down = (g: (typeof groups)[number]) =>
     g.provider.status === "unavailable" || g.provider.status === "invalid";
-  const count = groups.reduce((n, g) => n + g.models.length, 0);
+  const total = groups.reduce((n, g) => n + g.models.length, 0);
   if (groups.length === 0) return { kind: "none-configured" };
-  if (count === 0) return groups.every(down) ? { kind: "all-unavailable" } : { kind: "no-models" };
+  if (total === 0) return groups.every(down) ? { kind: "all-unavailable" } : { kind: "no-models" };
   return { kind: "ready", degraded: groups.every(down) };
 }
 
@@ -94,12 +89,12 @@ const EMPTY_MESSAGE: Record<Exclude<ModelsState["kind"], "ready" | "loading">, s
 };
 
 /**
- * The composer: a native uncontrolled textarea (survives hydration; contracts
- * §13) in a pill with Attach, the model selector and Send/Stop. A second line
- * moves the text above the controls. Sending needs a
- * hydrated page and a server-known model; nothing secondary gates it. The
- * parent decides whether a submission is sent now or queued (while a reply
- * runs). A message that is exactly "/filter" opens the command list instead.
+ * The pill composer: + | message | model | send. A second line (or a long
+ * first one) moves the message above the controls; the expand button then
+ * offers a taller editor. The textarea is native and uncontrolled, so typing
+ * before hydration survives. Sending needs a hydrated page and a model the
+ * server knows; the parent decides whether a send goes now or waits in the
+ * queue. A message that is exactly "/filter" opens the command list.
  */
 export function Composer({
   userId,
@@ -136,21 +131,19 @@ export function Composer({
   commands: readonly Command[];
   onSubmit: (content: string, choice: ModelChoice) => void;
   onCommand: (name: string) => void;
-  /** The user started a "/" command (load anything the list needs). */
+  /** A "/" command was started: load what the list needs. */
   onCommandIntent?: () => void;
   onCancel: () => void;
-  /** The draft's attachments (Phase 12). */
   attachments?: readonly DraftAttachment[];
-  /** Why files were refused before upload (e.g. too many). */
+  /** Why files were refused before upload. */
   attachNotice?: string | null;
   onAttach?: (files: File[]) => void;
   onRemoveAttachment?: (localId: string) => void;
-  /** Settings → Models, offered in the model menu to administrators. */
+  /** Settings → Models, offered to administrators. */
   manageModelsHref?: string;
 }) {
   const shell = useShell();
   const client = useQueryClient();
-  // The model menu: mounted (its chunk loaded) once first wanted, then kept.
   const [modelMenu, setModelMenu] = useState<MenuRequest | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -158,11 +151,11 @@ export function Composer({
   const [selected, setSelected] = useState<string | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
-  // A second line (or a long first one) moves the text above the controls.
   const [expanded, setExpanded] = useState(false);
-  // "/" commands: the typed filter (null: closed) and the highlighted option.
+  const [full, setFull] = useState(false);
   const [slash, setSlash] = useState<string | null>(null);
   const [activeCommand, setActiveCommand] = useState(0);
+
   const state = modelsState(models);
   const groups = models.data?.providers ?? [];
   const allModels = groups.flatMap((g) => g.models);
@@ -179,7 +172,8 @@ export function Composer({
   const selectedValue =
     selected ?? (preferred ? pairKey([preferred.providerId, preferred.id]) : "");
   const ready = hydrated && state.kind === "ready" && !inert;
-  // Attachments: sending waits for uploads; a model must read each modality (INV-44).
+
+  // Attachments: sending waits for uploads, and the model must read each kind (INV-44).
   const live = attachments.filter((a) => a.status !== "error");
   const uploading = live.some((a) => a.status === "uploading");
   const hasReady = live.some((a) => a.status === "ready");
@@ -228,11 +222,10 @@ export function Composer({
   const activeIndex = Math.min(activeCommand, shown.length - 1);
   const active = shown[activeIndex];
 
-  // Send controls are usable (hydrated, a server-known model): ComposerTTI ends.
-  const interactive = hydrated && state.kind === "ready" && !inert;
+  // The send controls work (hydrated, a known model): ComposerTTI ends here.
   useEffect(() => {
-    if (interactive) markOnce("chatui:composer-interactive");
-  }, [interactive]);
+    if (ready) markOnce("chatui:composer-interactive");
+  }, [ready]);
 
   function refreshModels() {
     setRefreshing(true);
@@ -254,6 +247,7 @@ export function Composer({
       fitHeight(el);
     }
     setExpanded(false);
+    setFull(false);
     shell.clearDraft(draftKey);
     setHasDraft(false);
     setSlash(null);
@@ -278,7 +272,7 @@ export function Composer({
 
   function runCommand(command: Command) {
     if (command.kind === "skill") {
-      // A skill applies to the message: insert "/name " and keep typing.
+      // A skill applies to the message: "/name " goes into the box.
       const el = textareaRef.current;
       if (el) {
         el.value = `/${command.name} `;
@@ -293,7 +287,6 @@ export function Composer({
       onCommand(command.name);
       return;
     }
-    // "/model" opens the model menu with its current model focused.
     setModelMenu((request) => request ?? "keyboard");
     setModelOpen(true);
   }
@@ -318,31 +311,36 @@ export function Composer({
 
   const attachable = hydrated && !inert && onAttach !== undefined;
   const placeholder = running ? "Queue another message" : "Ask anything";
+
   return (
     <>
-      {notice ? (
-        <div className="notice composer-notice" role="status" data-testid="models-notice">
-          <span>{notice}</span>
-          <button
-            type="button"
-            className="btn small"
-            onClick={refreshModels}
-            disabled={!hydrated || refreshing}
-          >
-            {refreshing ? "Checking…" : "Retry"}
-          </button>
-        </div>
-      ) : null}
-      {capabilityWarning ? (
-        <div className="notice error composer-notice" role="alert" data-testid="capability-warning">
-          <span>{capabilityWarning}</span>
+      {notice || capabilityWarning ? (
+        <div className="composer-notices">
+          {notice ? (
+            <div className="alert" role="status" data-testid="models-notice">
+              <span className="alert-text">{notice}</span>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={refreshModels}
+                disabled={!hydrated || refreshing}
+              >
+                {refreshing ? "Checking…" : "Retry"}
+              </button>
+            </div>
+          ) : null}
+          {capabilityWarning ? (
+            <div className="alert danger" role="alert" data-testid="capability-warning">
+              <span className="alert-text">{capabilityWarning}</span>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <p className="visually-hidden" role="status" aria-live="polite" data-testid="status">
         {status ?? attachNotice ?? ""}
       </p>
       <form
-        className={`composer${expanded ? " expanded" : ""}${dragging ? " dragging" : ""}`}
+        className={`composer${expanded || full ? " expanded" : ""}${full ? " full" : ""}${dragging ? " dragging" : ""}`}
         onSubmit={(event) => {
           event.preventDefault();
           submit();
@@ -386,7 +384,7 @@ export function Composer({
           aria-label="Attach files"
           title="Attach images, audio or text files"
           disabled={!attachable}
-          // The picker opens only from this genuine user activation.
+          // The file picker opens only from this genuine user activation.
           onClick={() => fileRef.current?.click()}
         >
           <Plus size={20} aria-hidden />
@@ -414,7 +412,6 @@ export function Composer({
           className="composer-input"
           ref={textareaRef}
           rows={1}
-          // Right-to-left scripts type right to left.
           dir="auto"
           placeholder={placeholder}
           aria-autocomplete="list"
@@ -425,7 +422,8 @@ export function Composer({
             shell.setDraft(draftKey, value);
             setHasDraft(value.trim() !== "");
             setExpanded(isExpanded(value));
-            fitHeight(event.currentTarget);
+            if (value === "") setFull(false);
+            fitHeight(event.currentTarget, full);
             const query = commandQuery(value);
             if (query !== null) onCommandIntent?.();
             if (query !== slash) setActiveCommand(0);
@@ -434,7 +432,7 @@ export function Composer({
           onPaste={(event) => {
             const files = filesOf(event.clipboardData.files);
             if (!attachable || files.length === 0) return;
-            // Pasted files attach; pasted text (if any) still goes into the box.
+            // Files attach; pasted text (if any) still goes into the box.
             if (!event.clipboardData.types.includes("text/plain")) event.preventDefault();
             onAttach(files);
           }}
@@ -464,6 +462,26 @@ export function Composer({
             }
           }}
         />
+        {expanded || full ? (
+          <button
+            type="button"
+            className="icon-btn expand-btn"
+            aria-label={full ? "Shrink composer" : "Expand composer"}
+            aria-pressed={full}
+            title={full ? "Shrink" : "Expand"}
+            onClick={() => {
+              const next = !full;
+              setFull(next);
+              const el = textareaRef.current;
+              if (el) {
+                fitHeight(el, next);
+                el.focus();
+              }
+            }}
+          >
+            {full ? <Minimize2 size={16} aria-hidden /> : <Maximize2 size={16} aria-hidden />}
+          </button>
+        ) : null}
         <span className="model-slot">
           {modelMenu === null ? (
             <ModelTrigger
@@ -471,7 +489,6 @@ export function Composer({
               disabled={modelDisabled}
               aria-haspopup="menu"
               aria-expanded={false}
-              // Warm the menu chunk on intent; the click mounts and opens it.
               onPointerEnter={() => void loadMenus()}
               onFocus={() => void loadMenus()}
               onClick={(event) => {

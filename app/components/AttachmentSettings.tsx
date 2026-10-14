@@ -6,10 +6,9 @@ import { apiJson, queries, queryKeys, type PreferencesDto } from "../lib/query";
 const EDGES = [1024, 1536, 2048, 3072, 4096];
 
 /**
- * Settings → General → Chat: the two attachment
- * preferences (rows of the Chat card). `historyImages` decides whether earlier images and audio are
- * sent to the model again; `imageMaxEdge` shrinks large images in the browser
- * before upload (unset: the default edge; 0: never).
+ * Two rows of Settings → General → Chat. "Earlier images and audio" decides
+ * whether earlier files go to the model again with each message; "Shrink large
+ * images" resizes photos in the browser before upload (default edge, or never).
  */
 export function AttachmentSettings({ userId }: { userId: string }) {
   const client = useQueryClient();
@@ -17,10 +16,7 @@ export function AttachmentSettings({ userId }: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const save = useMutation({
     mutationFn: (patch: Partial<PreferencesDto>) =>
-      apiJson<PreferencesDto>("/api/preferences", {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      }),
+      apiJson<PreferencesDto>("/api/preferences", { method: "PATCH", body: JSON.stringify(patch) }),
     onSuccess: (data) => {
       setError(null);
       client.setQueryData(queryKeys.preferences(userId), data);
@@ -33,20 +29,15 @@ export function AttachmentSettings({ userId }: { userId: string }) {
   const disabled = !prefs || save.isPending;
   return (
     <>
-      <div className="settings-row">
-        <div>
-          <label className="settings-label" htmlFor="history-images">
-            Earlier images and audio
-          </label>
-          <p className="settings-hint">
-            Send the images and audio of earlier messages to the model again with each new message.
-            Omitting them saves context and time; the files stay in the conversation.
-          </p>
-        </div>
+      <div className="row">
+        <label className="row-label" htmlFor="history-images">
+          Earlier images and audio
+        </label>
         <select
           id="history-images"
-          className="text-input"
+          className="select"
           disabled={disabled}
+          title="Send earlier messages’ images and audio to the model again"
           value={prefs?.historyImages ?? "include"}
           onChange={(event) => {
             save.mutate({ historyImages: event.currentTarget.value as "include" | "omit" });
@@ -56,19 +47,15 @@ export function AttachmentSettings({ userId }: { userId: string }) {
           <option value="omit">Omit</option>
         </select>
       </div>
-      <div className="settings-row">
-        <div>
-          <label className="settings-label" htmlFor="image-max-edge">
-            Shrink large images
-          </label>
-          <p className="settings-hint">
-            Before uploading, larger photos are resized in your browser so their longest side fits.
-          </p>
-        </div>
+      <div className="row">
+        <label className="row-label" htmlFor="image-max-edge">
+          Shrink large images
+        </label>
         <select
           id="image-max-edge"
-          className="text-input"
+          className="select"
           disabled={disabled}
+          title="Resize photos before upload so their longest side fits"
           value={String(prefs?.imageMaxEdge ?? "")}
           onChange={(event) => {
             const value = event.currentTarget.value;
@@ -81,11 +68,11 @@ export function AttachmentSettings({ userId }: { userId: string }) {
               {edge} px
             </option>
           ))}
-          <option value="0">Never shrink</option>
+          <option value="0">Never</option>
         </select>
       </div>
       {error || preferences.isError ? (
-        <p className="error" role="alert">
+        <p className="row form-error" role="alert">
           {error ?? "Your settings couldn’t be loaded."}
         </p>
       ) : null}

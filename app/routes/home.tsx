@@ -58,22 +58,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <main className="page">
-      <div className="page-card wide">
-        <h1 className="page-brand">ChatUI</h1>
+    <main className="auth-page">
+      <div className="auth-card wide">
+        <h1 className="auth-brand">ChatUI</h1>
         <p className="lede">Self-hosted AI chat.</p>
-        {/* The page's purpose for a person: get to the chats. Status is secondary. */}
-        {loaderData.signedIn ? (
-          <a href="/chat" className="btn primary large">
-            Open your chats
-          </a>
-        ) : (
-          <a href="/login" className="btn primary large">
-            Sign in
-          </a>
-        )}
-        <h2>Server status</h2>
-        <dl className="status">
+        {/* For a person, this page is the way into the chats; status comes second. */}
+        <a href={loaderData.signedIn ? "/chat" : "/login"} className="btn lg primary block">
+          {loaderData.signedIn ? "Open your chats" : "Sign in"}
+        </a>
+        <h2 className="section-title">Server status</h2>
+        <dl className="status-list">
           <dt>Server</dt>
           <dd data-testid="health-status">{health.status.toUpperCase()}</dd>
           <dt>Version</dt>
@@ -83,14 +77,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             {hydrated ? "Interactive" : "Server-rendered (JavaScript not yet active)"}
           </dd>
         </dl>
-        <p className="page-foot">
+        <p className="auth-foot">
           <button
             type="button"
-            className="btn small"
+            className="btn sm"
             onClick={() => void recheck()}
             disabled={!hydrated || check.kind === "checking"}
           >
-            {check.kind === "checking" ? "Checking…" : "Check status again"}
+            {check.kind === "checking" ? "Checking…" : "Check again"}
           </button>{" "}
           <span role="status" aria-live="polite" data-testid="check-result">
             {check.kind === "failed" ? "The server could not be reached." : ""}

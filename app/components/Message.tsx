@@ -1,19 +1,31 @@
-import { ChevronRight, FileCode, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import { lazy, memo, Suspense, useEffect, type ReactNode } from "react";
+import {
+  ChevronRight,
+  Ellipsis,
+  FileCode,
+  Pencil,
+  RefreshCw,
+  Square,
+  Trash2,
+  Volume2,
+} from "lucide-react";
+import { lazy, memo, Suspense, useEffect, useState, type ReactNode } from "react";
 import type { MessageAttachmentDto } from "@shared/attachments";
+import type { MessageArtifactDto } from "@shared/artifacts";
 import type { MessageDto } from "@shared/conversations";
 import type { ProposalDto } from "@shared/memories";
-import type { MessageArtifactDto } from "@shared/artifacts";
-import { MessageAttachments } from "./MessageAttachments";
-import { count } from "../lib/render-counters";
 import { formatBytes } from "../lib/format";
+import { menuRequest, type MenuRequest } from "../lib/menu-request";
+import { count } from "../lib/render-counters";
+import { toggleSpeaking, useSpeaking, useSpeechSupported } from "../lib/speech";
 import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
+import { MessageAttachments } from "./MessageAttachments";
 
 export { CopyButton };
 
-/** Memory suggestion cards (Phase 13b): loaded only for replies that have some. */
+/** Memory suggestion cards: loaded only for replies that have some. */
 const MemorySuggestions = lazy(() => import("./MemorySuggestions"));
+const ReplyMenu = lazy(() => import("./Menus").then((m) => ({ default: m.ReplyMenu })));
 
 const STATUS_LABEL: Record<NonNullable<MessageDto["status"]>, string> = {
   complete: "",
@@ -23,7 +35,7 @@ const STATUS_LABEL: Record<NonNullable<MessageDto["status"]>, string> = {
   interrupted: "Interrupted",
 };
 
-/** Reasoning: collapsed by default, visually distinct from the answer. */
+/** The model's reasoning: folded by default, quieter than the answer. */
 export function Reasoning({
   text,
   done,
@@ -37,14 +49,17 @@ export function Reasoning({
     <details className="reasoning" data-testid={testId}>
       <summary>
         {done ? "Thought process" : "Thinking…"}
-        <ChevronRight size={16} className="chevron" aria-hidden />
+        <ChevronRight size={16} aria-hidden />
       </summary>
       <div className="reasoning-body">{text}</div>
     </details>
   );
 }
 
-/** A per-message operation (Phase 13a); ConversationView decides what it means. */
+/**
+ * What can be done to a message; the conversation decides what each means.
+ * On a reply, "edit" and "delete" act on the prompt it answers.
+ */
 export type MessageAction = "edit" | "delete" | "regenerate";
 
 export interface MessageViewProps {
@@ -53,33 +68,29 @@ export interface MessageViewProps {
   reasoning: string | null;
   status: MessageDto["status"];
   testId?: string;
-  /** The stored message id: an anchor for search navigation (`#m-<id>`). */
+  /** The stored id: the anchor search results scroll to (`#m-<id>`). */
   messageId?: string;
-  /** User messages: their attachments (Phase 12). */
   attachments?: readonly MessageAttachmentDto[];
   onOpenImage?: (
     items: readonly MessageAttachmentDto[],
     index: number,
     trigger: HTMLElement,
   ) => void;
-  /** Operations offered on this message; a stable callback keeps the memo effective. */
+  /** Offered operations; a stable callback keeps the memo effective. */
   actions?: readonly MessageAction[];
-  /** Operations are temporarily unavailable (a reply is running). */
+  /** Unavailable for now (a reply is running). */
   actionsDisabled?: boolean;
   onAction?: (action: MessageAction, messageId: string, trigger: HTMLElement) => void;
-  /** Rendered instead of the bubble while this message is being edited. */
+  /** Rendered in place of the bubble while editing. */
   editor?: ReactNode;
-  /** Assistant only: memory suggestions made with this reply (Phase 13b). */
   suggestions?: readonly ProposalDto[] | undefined;
-  /** Owner and conversation of the suggestions (primitives keep the memo effective). */
   userId?: string;
   conversationId?: string;
-  /** Assistant only: source files captured from this reply (Phase 13c). */
   artifacts?: readonly MessageArtifactDto[] | undefined;
   onOpenArtifact?: (artifact: MessageArtifactDto, trigger: HTMLElement) => void;
 }
 
-/** A captured file under its reply: opens the lazy source panel. */
+/** Files a reply produced: each opens the source panel. */
 function ArtifactCards({
   artifacts,
   onOpen,
@@ -93,16 +104,20 @@ function ArtifactCards({
         <li key={artifact.id}>
           <button
             type="button"
-            className="artifact-card"
+            className="file-card"
             data-testid="artifact-card"
             onClick={(event) => {
               onOpen(artifact, event.currentTarget);
             }}
           >
-            <FileCode size={18} aria-hidden />
-            <span className="artifact-card-name">{artifact.name}</span>
-            <span className="artifact-card-meta">
-              {artifact.language ?? "file"} · {formatBytes(artifact.size)}
+            <span className="file-icon">
+              <FileCode size={18} aria-hidden />
+            </span>
+            <span className="file-text">
+              <span className="file-name">{artifact.name}</span>
+              <span className="file-meta">
+                {artifact.language ?? "file"} · {formatBytes(artifact.size)}
+              </span>
             </span>
             <span className="visually-hidden">, view source</span>
           </button>
@@ -112,52 +127,162 @@ function ArtifactCards({
   );
 }
 
-const ACTION_LABEL: Record<MessageAction, string> = {
+const USER_LABEL: Record<MessageAction, string> = {
   edit: "Edit message",
   delete: "Delete message and reply",
-  regenerate: "Regenerate reply",
+  regenerate: "Get a reply",
 };
 
-function ActionButtons({
-  messageId,
-  actions,
-  disabled,
-  onAction,
-  regenerateLabel,
-}: {
-  messageId: string;
+/** A user message's buttons: copy, then edit / get a reply / delete. */
+function UserActions(props: {
+  messageId: string | undefined;
+  content: string;
   actions: readonly MessageAction[];
   disabled: boolean;
-  onAction: NonNullable<MessageViewProps["onAction"]>;
-  regenerateLabel: string;
+  onAction: MessageViewProps["onAction"];
 }) {
-  return actions.map((action) => (
+  return (
+    <div className="turn-actions">
+      {props.content ? <CopyButton text={props.content} label="Copy message" /> : null}
+      {props.messageId && props.onAction
+        ? props.actions.map((action) => (
+            <button
+              key={action}
+              type="button"
+              className="icon-btn"
+              aria-label={USER_LABEL[action]}
+              title={props.disabled ? "Stop the reply first" : USER_LABEL[action]}
+              disabled={props.disabled}
+              onClick={(event) => {
+                if (props.messageId) props.onAction?.(action, props.messageId, event.currentTarget);
+              }}
+            >
+              {action === "edit" ? (
+                <Pencil size={18} aria-hidden />
+              ) : action === "delete" ? (
+                <Trash2 size={18} aria-hidden />
+              ) : (
+                <RefreshCw size={18} aria-hidden />
+              )}
+            </button>
+          ))
+        : null}
+    </div>
+  );
+}
+
+function ReadAloud({ id, text }: { id: string; text: string }) {
+  const speaking = useSpeaking(id);
+  const supported = useSpeechSupported();
+  if (!supported) return null;
+  const label = speaking ? "Stop reading" : "Read aloud";
+  return (
     <button
-      key={action}
       type="button"
       className="icon-btn"
-      aria-label={action === "regenerate" ? regenerateLabel : ACTION_LABEL[action]}
-      title={
-        disabled
-          ? "Stop the reply first"
-          : action === "regenerate"
-            ? regenerateLabel
-            : ACTION_LABEL[action]
-      }
-      disabled={disabled}
-      onClick={(event) => {
-        onAction(action, messageId, event.currentTarget);
+      aria-label={label}
+      aria-pressed={speaking}
+      title={label}
+      onClick={() => {
+        toggleSpeaking(id, text);
       }}
     >
-      {action === "edit" ? (
-        <Pencil size={18} aria-hidden />
-      ) : action === "delete" ? (
-        <Trash2 size={18} aria-hidden />
-      ) : (
-        <RefreshCw size={18} aria-hidden />
-      )}
+      {speaking ? <Square size={16} aria-hidden /> : <Volume2 size={18} aria-hidden />}
     </button>
-  ));
+  );
+}
+
+/** A reply's buttons: copy, read aloud, regenerate, and "…" for the rest. */
+function ReplyActions(props: {
+  messageId: string | undefined;
+  content: string;
+  actions: readonly MessageAction[];
+  disabled: boolean;
+  onAction: MessageViewProps["onAction"];
+}) {
+  const [menu, setMenu] = useState<MenuRequest>(false);
+  const { messageId, onAction } = props;
+  const can = (action: MessageAction) =>
+    messageId !== undefined && onAction !== undefined && props.actions.includes(action);
+  const more = (["edit", "delete"] as const).filter(can);
+  const fire = (action: MessageAction, trigger: HTMLElement) => {
+    if (messageId) onAction?.(action, messageId, trigger);
+  };
+  return (
+    <div className="turn-actions">
+      {props.content ? <CopyButton text={props.content} label="Copy reply" /> : null}
+      {props.content && messageId ? <ReadAloud id={messageId} text={props.content} /> : null}
+      {can("regenerate") ? (
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Regenerate reply"
+          title={props.disabled ? "Stop the reply first" : "Regenerate reply"}
+          disabled={props.disabled}
+          onClick={(event) => {
+            fire("regenerate", event.currentTarget);
+          }}
+        >
+          <RefreshCw size={18} aria-hidden />
+        </button>
+      ) : null}
+      {more.length > 0 ? (
+        menu === false ? (
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="More actions"
+            title="More actions"
+            disabled={props.disabled}
+            onClick={(event) => {
+              setMenu(menuRequest(event));
+            }}
+          >
+            <Ellipsis size={18} aria-hidden />
+          </button>
+        ) : (
+          <Suspense
+            fallback={
+              <button type="button" className="icon-btn" aria-label="More actions" disabled>
+                <Ellipsis size={18} aria-hidden />
+              </button>
+            }
+          >
+            <ReplyMenu
+              defaultOpen={menu}
+              items={[
+                ...(more.includes("edit")
+                  ? [
+                      {
+                        label: "Edit prompt",
+                        icon: <Pencil size={20} aria-hidden />,
+                        disabled: props.disabled,
+                        onSelect: () => {
+                          fire("edit", document.activeElement as HTMLElement);
+                        },
+                      },
+                    ]
+                  : []),
+                ...(more.includes("delete")
+                  ? [
+                      {
+                        label: "Delete",
+                        icon: <Trash2 size={20} aria-hidden />,
+                        danger: true,
+                        disabled: props.disabled,
+                        onSelect: () => {
+                          fire("delete", document.activeElement as HTMLElement);
+                        },
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </Suspense>
+        )
+      ) : null}
+    </div>
+  );
 }
 
 function MessageImpl({
@@ -183,23 +308,11 @@ function MessageImpl({
   useEffect(() => {
     count("messageMounts");
   }, []);
-  const label = role === "user" ? "You" : role === "assistant" ? "Assistant" : "System";
-  const statusLabel = status ? STATUS_LABEL[status] : "";
   const anchor = messageId ? `m-${messageId}` : undefined;
-  const buttons =
-    messageId && onAction && actions.length > 0 ? (
-      <ActionButtons
-        messageId={messageId}
-        actions={actions}
-        disabled={actionsDisabled}
-        onAction={onAction}
-        regenerateLabel={role === "user" ? "Get a reply" : ACTION_LABEL.regenerate}
-      />
-    ) : null;
   if (role === "user")
     return (
       <li id={anchor} className="turn turn-user" data-testid={testId ?? "message-user"}>
-        <span className="visually-hidden">{label}</span>
+        <span className="visually-hidden">You</span>
         {attachments?.length ? (
           <MessageAttachments items={attachments} onOpenImage={onOpenImage} />
         ) : null}
@@ -212,27 +325,36 @@ function MessageImpl({
             </div>
           ) : null)}
         {editor ? null : (
-          <div className="turn-actions">
-            {content ? <CopyButton text={content} label="Copy message" /> : null}
-            {buttons}
-          </div>
+          <UserActions
+            messageId={messageId}
+            content={content}
+            actions={actions}
+            disabled={actionsDisabled}
+            onAction={onAction}
+          />
         )}
       </li>
     );
+  const statusLabel = status ? STATUS_LABEL[status] : "";
   return (
     <li id={anchor} className={`turn turn-${role}`} data-testid={testId ?? `message-${role}`}>
-      <span className="visually-hidden">{label}</span>
-      {statusLabel ? <span className={`badge status-${status ?? ""}`}>{statusLabel}</span> : null}
+      <span className="visually-hidden">{role === "assistant" ? "Assistant" : "System"}</span>
+      {statusLabel ? (
+        <span className={`badge${status === "cancelled" ? "" : " danger"}`}>{statusLabel}</span>
+      ) : null}
       {reasoning ? <Reasoning text={reasoning} done /> : null}
       {role === "assistant" ? <Markdown text={content} /> : <p className="plain-text">{content}</p>}
       {role === "assistant" && artifacts?.length && onOpenArtifact ? (
         <ArtifactCards artifacts={artifacts} onOpen={onOpenArtifact} />
       ) : null}
-      {role === "assistant" && (content || buttons) ? (
-        <div className="turn-actions">
-          {content ? <CopyButton text={content} label="Copy reply" /> : null}
-          {buttons}
-        </div>
+      {role === "assistant" && (content || actions.length > 0) ? (
+        <ReplyActions
+          messageId={messageId}
+          content={content}
+          actions={actions}
+          disabled={actionsDisabled}
+          onAction={onAction}
+        />
       ) : null}
       {role === "assistant" && suggestions?.length && userId && conversationId ? (
         <Suspense fallback={null}>
@@ -256,5 +378,5 @@ function MessageImpl({
   );
 }
 
-/** Memoized: unrelated messages never re-render while another one streams. */
+/** Memoized: other messages never re-render while one streams. */
 export const Message = memo(MessageImpl);

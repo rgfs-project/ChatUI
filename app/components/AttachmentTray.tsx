@@ -1,13 +1,13 @@
 import { AlertCircle, FileText, Music, X } from "lucide-react";
 import { attachmentContentUrl } from "@shared/attachment-media";
 import type { DraftAttachment } from "../lib/attachments";
-import { formatBytes } from "./MessageAttachments";
+import { formatBytes } from "../lib/format";
 import "./attachments.css";
 
 /**
- * The composer's attachments before sending (Phase 12, loaded on the first
- * attach): square image previews and file/audio chips with name, size,
- * upload progress, errors and a remove button.
+ * Files on the composer before sending (loaded with the first attachment):
+ * square image previews and file cards with name, size, upload progress,
+ * errors and a remove button.
  */
 export function AttachmentTray({
   items,
@@ -17,7 +17,7 @@ export function AttachmentTray({
   onRemove: (localId: string) => void;
 }) {
   return (
-    <ul className="attachment-tray" aria-label="Attachments" data-testid="attachment-tray">
+    <ul className="tray" aria-label="Attachments" data-testid="attachment-tray">
       {items.map((item) => {
         const preview =
           item.kind === "image"
@@ -32,14 +32,14 @@ export function AttachmentTray({
         return (
           <li
             key={item.localId}
-            className={`tray-item${preview ? " tray-image" : " tray-file"} ${item.status}`}
+            className={`tray-item ${preview ? "image" : "file"} ${item.status}`}
             data-testid="attachment-chip"
             data-status={item.status}
           >
             {preview ? (
               <img src={preview} alt="" className="tray-preview" />
             ) : (
-              <span className="tray-icon" aria-hidden>
+              <span className="file-icon" aria-hidden>
                 {item.status === "error" ? (
                   <AlertCircle size={18} />
                 ) : item.kind === "audio" ? (
@@ -49,9 +49,9 @@ export function AttachmentTray({
                 )}
               </span>
             )}
-            <span className={preview ? "visually-hidden" : "tray-label"}>
-              <span className="tray-name">{item.name}</span>
-              <span className="tray-meta">
+            <span className={preview ? "visually-hidden" : "file-text"}>
+              <span className="file-name">{item.name}</span>
+              <span className="file-meta">
                 {item.status === "error" ? item.error : formatBytes(item.size)}
               </span>
             </span>
@@ -84,9 +84,7 @@ export function AttachmentTray({
                 onRemove(item.localId);
               }}
             >
-              <span className="tray-x" aria-hidden>
-                <X size={14} />
-              </span>
+              <X size={14} aria-hidden />
             </button>
           </li>
         );

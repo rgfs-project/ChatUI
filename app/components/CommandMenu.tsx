@@ -6,13 +6,13 @@ export interface Command {
   kind?: "command" | "skill";
 }
 
-/** The "/filter" typed so far, or null when the message is not a command. */
+/** The "/filter" typed so far, or null when the message isn't a command. */
 export function commandQuery(value: string): string | null {
   const match = /^\/([^\s/]*)$/.exec(value);
   return match ? (match[1] ?? "") : null;
 }
 
-/** Prefix matches first, then other matches, in declaration order. */
+/** Prefix matches first, then the rest, in declaration order. */
 export function filterCommands(commands: readonly Command[], query: string): Command[] {
   const q = query.toLowerCase();
   const prefix = commands.filter((c) => c.name.startsWith(q));
@@ -24,8 +24,8 @@ export const COMMAND_MENU_ID = "command-menu";
 export const commandOptionId = (name: string) => `command-${name}`;
 
 /**
- * The listbox under the "/" prefix. The message box keeps focus (it points
- * here with aria-controls/aria-activedescendant); pointer picks do not steal it.
+ * The listbox above the composer. The message box keeps focus (it points here
+ * with aria-activedescendant), and pointer picks don't take focus away.
  */
 export function CommandMenu(props: {
   commands: readonly Command[];

@@ -13,6 +13,8 @@ export default [
     route("chat", "routes/chat-index.tsx"),
     route("chat/new", "routes/chat-new.tsx"),
     route("chat/:conversationId", "routes/chat-conversation.tsx"),
+    route("files", "routes/files.tsx"),
+    route("library/:projectId?", "routes/library.tsx"),
     route("settings", "routes/settings.tsx"),
     route("admin", "routes/admin.tsx"),
     route("*", "routes/not-found.tsx"),

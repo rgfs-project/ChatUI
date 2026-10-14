@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { useRouteLoaderData } from "react-router";
-import type { SessionDto } from "@shared/auth";
+import type { SessionDto, SessionProfile } from "@shared/auth";
 
 /**
  * Browser authentication state (contracts §5, §12). Explicitly
@@ -82,6 +82,25 @@ export const authStore = {
       status: "unauthenticated",
       session: state.session ? { ...state.session, user: null, csrfToken: null } : null,
       expired: { userId: user.id, username: user.username },
+    });
+  },
+
+  /** The user changed their own profile (same account: no epoch change). */
+  updateProfile(profile: SessionProfile & { username: string }): void {
+    const user = state.session?.user;
+    if (!state.session || !user) return;
+    set({
+      ...state,
+      session: {
+        ...state.session,
+        user: {
+          ...user,
+          username: profile.username,
+          displayName: profile.displayName ?? null,
+          ...(profile.avatarColor ? { avatarColor: profile.avatarColor } : {}),
+          photoVersion: profile.photoVersion ?? null,
+        },
+      },
     });
   },
 

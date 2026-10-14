@@ -1,10 +1,10 @@
-/* Math (Phase 14): Temml's MathML styles plus the ChatUI wrappers. Loaded
-   only with the math renderer, as a first-party stylesheet. */
+/* Math: Temml's MathML styles plus ChatUI's wrappers, loaded only with the
+   math renderer as a first-party stylesheet. */
 @import "./temml.css";
 
-/* A first-party OpenType MATH font (STIX Two Math, OFL) for systems without
-   one: stretchy delimiters, large operators and radicals need its MATH table.
-   Fonts already on the system come first, so it downloads only when needed. */
+/* STIX Two Math (OFL) for systems without an OpenType MATH font: stretchy
+   delimiters, big operators and radicals need its MATH table. Local fonts
+   come first, so it downloads only when needed. */
 @font-face {
   font-family: "ChatUI Math";
   src:
@@ -27,20 +27,24 @@ math {
   margin: 0 0 14px;
 }
 
+span.math-block,
+span.math-scroll {
+  display: block;
+}
+
 .math-scroll {
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 6px 36px 6px 0;
+  padding: 6px 40px 6px 0;
 }
 
 .math-scroll:focus-visible {
+  border-radius: var(--radius-sm);
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
-/* Centered; an equation wider than the column starts at its left edge and
-   scrolls (auto margins collapse to zero), never clipped on the left. */
+/* Centred; wider than the column, it starts at the left edge and scrolls. */
 .math-block math {
   width: max-content;
   margin-inline: auto;
@@ -54,8 +58,8 @@ math {
 }
 
 .math-actions .icon-btn {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   opacity: 0;
 }
 
@@ -64,14 +68,8 @@ math {
   opacity: 1;
 }
 
-/* Touch screens have no hover: the copy action stays visible. */
 @media (hover: none) {
   .math-actions .icon-btn {
     opacity: 1;
   }
-}
-
-span.math-block,
-span.math-scroll {
-  display: block;
 }

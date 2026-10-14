@@ -1,69 +1,83 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import type { MenuRequest } from "../lib/menu-request";
 import {
   Check,
-  Download,
+  ChevronRight,
   Ellipsis,
   LogOut,
   Moon,
-  Pencil,
-  Pin,
-  PinOff,
   Settings,
   Shield,
   SlidersHorizontal,
   Sun,
-  Trash2,
 } from "lucide-react";
 import { useState, type ReactNode, type Ref } from "react";
 import { Link } from "react-router";
+import type { MenuRequest } from "../lib/menu-request";
 import { paths } from "../lib/paths";
 import { applyTheme, currentTheme } from "../lib/theme";
-import { AccountLabel } from "./AccountLabel";
+import { AccountLabel, type ProfileUser } from "./AccountLabel";
 import { ModelTrigger } from "./ModelTrigger";
 
 /**
- * The app's dropdown menus (Radix DropdownMenu, non-modal). This module is
- * loaded on demand: each call site renders a plain, same-looking trigger
- * until it arrives, and a click on that placeholder opens the menu once it
- * has (`defaultOpen`). Radix stays out of the critical chat bundle.
+ * Every dropdown in the app (Radix DropdownMenu, non-modal). This module is
+ * loaded on demand: each call site renders a same-looking placeholder trigger
+ * until it arrives, and a click on that placeholder opens the menu once it has
+ * (`defaultOpen`).
  */
 
-interface MenuItemSpec {
+export interface MenuEntry {
   label: string;
   icon?: ReactNode;
   danger?: boolean;
-  onSelect: () => void;
+  disabled?: boolean;
+  onSelect?: () => void;
+  /** A nested menu ("Move to project ›"). */
+  submenu?: MenuItems;
 }
+export type MenuItems = readonly (MenuEntry | "separator")[];
 
-function Items({ items }: { items: (MenuItemSpec | "separator")[] }) {
-  return items.map((item, n) =>
-    item === "separator" ? (
-      <Menu.Separator key={`separator-${String(n)}`} className="menu-separator" />
-    ) : (
+function Items({ items }: { items: MenuItems }) {
+  return items.map((item, n) => {
+    if (item === "separator")
+      return <Menu.Separator key={`separator-${String(n)}`} className="menu-separator" />;
+    if (item.submenu)
+      return (
+        <Menu.Sub key={item.label}>
+          <Menu.SubTrigger className="menu-item" disabled={item.disabled}>
+            {item.icon}
+            <span className="grow">{item.label}</span>
+            <ChevronRight size={16} className="trail" aria-hidden />
+          </Menu.SubTrigger>
+          <Menu.Portal>
+            <Menu.SubContent className="menu" sideOffset={8} alignOffset={-7} collisionPadding={8}>
+              <Items items={item.submenu} />
+            </Menu.SubContent>
+          </Menu.Portal>
+        </Menu.Sub>
+      );
+    return (
       <Menu.Item
         key={item.label}
         className={`menu-item${item.danger ? " danger" : ""}`}
+        disabled={item.disabled}
         onSelect={item.onSelect}
       >
         {item.icon}
         {item.label}
       </Menu.Item>
-    ),
-  );
+    );
+  });
 }
 
 /**
- * Radix focuses a menu's first item only when it saw the key press itself;
- * the press that opened a lazy menu reached its placeholder instead. A
- * keyboard request therefore focuses the first item here, once, on mount.
+ * Radix focuses the first item only when it saw the opening key press; a lazy
+ * menu's press reached its placeholder. A keyboard request focuses it here.
  */
 function focusFirstItem(request: MenuRequest) {
   return (content: HTMLElement | null) => {
     if (!content || request !== "keyboard") return;
     requestAnimationFrame(() => {
       if (content.contains(document.activeElement) && document.activeElement !== content) return;
-      // The checked radio item if there is one (model menu), else the first item.
       (
         content.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]') ??
         content.querySelector<HTMLElement>(
@@ -74,65 +88,19 @@ function focusFirstItem(request: MenuRequest) {
   };
 }
 
-/** The conversation actions shared by the sidebar row and the header menu. */
-function conversationItems(props: {
-  malformed?: boolean;
-  pinned: boolean;
-  onRename: () => void;
-  onTogglePin: () => void;
-  onExport?: () => void;
-  onDelete: () => void;
-}): (MenuItemSpec | "separator")[] {
-  return [
-    ...(props.malformed
-      ? []
-      : [{ label: "Rename", icon: <Pencil size={18} aria-hidden />, onSelect: props.onRename }]),
-    {
-      label: props.pinned ? "Unpin" : "Pin",
-      icon: props.pinned ? <PinOff size={18} aria-hidden /> : <Pin size={18} aria-hidden />,
-      onSelect: props.onTogglePin,
-    },
-    ...(props.onExport
-      ? [
-          {
-            label: "Export as Markdown",
-            icon: <Download size={18} aria-hidden />,
-            onSelect: props.onExport,
-          },
-        ]
-      : []),
-    "separator",
-    {
-      label: "Delete",
-      icon: <Trash2 size={18} aria-hidden />,
-      danger: true,
-      onSelect: props.onDelete,
-    },
-  ];
-}
-
-/** The "…" menu on a sidebar row. */
+/** The "…" on a sidebar row. */
 export function RowMenu(props: {
   title: string;
-  malformed: boolean;
-  pinned: boolean;
-  onTogglePin: () => void;
-  /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
+  items: MenuItems;
   defaultOpen: MenuRequest;
   onTriggerFocus: (element: HTMLElement) => void;
-  onOpen: () => void;
   onOpenChange?: (open: boolean) => void;
-  onRename: () => void;
-  onDelete: () => void;
 }) {
   return (
     <Menu.Root
       modal={false}
       defaultOpen={props.defaultOpen !== false}
-      onOpenChange={(open) => {
-        if (open) props.onOpen();
-        props.onOpenChange?.(open);
-      }}
+      onOpenChange={props.onOpenChange}
     >
       <Menu.Trigger asChild>
         <button
@@ -156,92 +124,74 @@ export function RowMenu(props: {
           sideOffset={8}
           collisionPadding={8}
         >
-          <Items items={conversationItems(props)} />
+          <Items items={props.items} />
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>
   );
 }
 
-/** Whether the page is dark now: an explicit theme, else the system's. */
-function isDark(): boolean {
-  const theme = currentTheme();
-  if (theme !== "system") return theme === "dark";
-  return (
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-  );
-}
-
-/** The sidebar's account row: Settings, the theme, Administration (admins) and Sign out. */
-export function AccountMenu(props: {
-  username: string;
-  isAdmin: boolean;
-  /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
+/** The header's "…": the open chat's actions, then help. */
+export function HeaderMenu({
+  label,
+  items,
+  defaultOpen,
+  triggerRef,
+  onOpen,
+}: {
+  label: string;
+  items: MenuItems;
   defaultOpen: MenuRequest;
-  /** Settings keeps the current conversation to come back to. */
-  settingsState: { background: string };
-  onNavigate: () => void;
-  onSignOut: () => void;
+  triggerRef: Ref<HTMLButtonElement>;
+  onOpen?: () => void;
 }) {
-  const [dark, setDark] = useState(false);
-  // Real links: the router prefetches their routes while the menu is open.
-  const linkItem = (to: string, label: string, icon: ReactNode) => (
-    <Menu.Item asChild className="menu-item">
-      <Link to={to} state={props.settingsState} prefetch="render" onClick={props.onNavigate}>
-        {icon}
-        {label}
-      </Link>
-    </Menu.Item>
-  );
   return (
     <Menu.Root
       modal={false}
-      defaultOpen={props.defaultOpen !== false}
+      defaultOpen={defaultOpen !== false}
       onOpenChange={(open) => {
-        if (open) setDark(isDark());
+        if (open) onOpen?.();
       }}
     >
       <Menu.Trigger
-        className="nav-row account-btn"
-        aria-label={`Account (${props.username})`}
-        ref={(element) => {
-          // Opened on mount: read the theme the first open didn't report.
-          if (element && props.defaultOpen !== false) setDark(isDark());
-        }}
+        ref={triggerRef}
+        className="icon-btn title-trigger"
+        aria-label={label}
+        title="More options"
       >
-        <AccountLabel username={props.username} />
+        <Ellipsis size={20} aria-hidden />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content
+          ref={focusFirstItem(defaultOpen)}
+          className="menu wide"
+          align="end"
+          sideOffset={6}
+          collisionPadding={8}
+        >
+          <Items items={items} />
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
+/** A reply's "…" (More actions). */
+export function ReplyMenu(props: { items: MenuItems; defaultOpen: MenuRequest }) {
+  return (
+    <Menu.Root modal={false} defaultOpen={props.defaultOpen !== false}>
+      <Menu.Trigger className="icon-btn" aria-label="More actions" title="More actions">
+        <Ellipsis size={18} aria-hidden />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
           ref={focusFirstItem(props.defaultOpen)}
-          className="menu account-menu"
-          side="top"
+          className="menu"
           align="start"
-          sideOffset={8}
+          sideOffset={4}
           collisionPadding={8}
         >
-          {linkItem(paths.settings(), "Settings", <Settings size={20} aria-hidden />)}
-          {props.isAdmin
-            ? linkItem(paths.admin(), "Administration", <Shield size={20} aria-hidden />)
-            : null}
-          <Items
-            items={[
-              {
-                label: dark ? "Light mode" : "Dark mode",
-                icon: dark ? <Sun size={20} aria-hidden /> : <Moon size={20} aria-hidden />,
-                onSelect: () => {
-                  applyTheme(dark ? "light" : "dark");
-                },
-              },
-              "separator",
-              {
-                label: "Sign out",
-                icon: <LogOut size={20} aria-hidden />,
-                onSelect: props.onSignOut,
-              },
-            ]}
-          />
+          <Items items={props.items} />
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>
@@ -249,10 +199,10 @@ export function AccountMenu(props: {
 }
 
 export interface ModelOption {
-  /** The JSON (providerId, modelId) pair, as the composer stores it. */
+  /** The JSON [providerId, modelId] pair, as the composer stores it. */
   value: string;
   label: string;
-  /** A muted second line, e.g. "Not loaded". */
+  /** A muted second line ("Not loaded"). */
   detail?: string;
 }
 
@@ -264,10 +214,9 @@ export interface ModelGroup {
 }
 
 /**
- * The composer's model picker: the current model's name with a chevron,
- * opening a card of models (name over a muted detail, a check on the chosen
- * one) and, for administrators, "Manage models". Controlled by the composer,
- * which also opens it for "/model".
+ * The composer's model picker: the current model with a chevron, opening a
+ * card of models (name over a muted detail, a check on the chosen one) and,
+ * for administrators, "Manage models". Controlled: "/model" opens it too.
  */
 export function ModelMenu(props: {
   label: string;
@@ -276,10 +225,8 @@ export function ModelMenu(props: {
   disabled: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** How it was opened before this chunk arrived ("keyboard" focuses an item). */
   request: MenuRequest;
   onChange: (value: string) => void;
-  /** Settings → Models, shown to administrators. */
   manageHref?: string;
 }) {
   const groups = props.groups.filter((g) => g.options.length > 0);
@@ -313,7 +260,7 @@ export function ModelMenu(props: {
                       <span className="name">{option.label}</span>
                       {option.detail ? <span className="desc">{option.detail}</span> : null}
                     </span>
-                    <Menu.ItemIndicator className="trail">
+                    <Menu.ItemIndicator className="check">
                       <Check size={18} aria-hidden />
                     </Menu.ItemIndicator>
                   </Menu.RadioItem>
@@ -326,7 +273,7 @@ export function ModelMenu(props: {
               <Menu.Separator className="menu-separator" />
               <Menu.Item asChild className="menu-item">
                 <Link to={props.manageHref}>
-                  <SlidersHorizontal size={18} aria-hidden />
+                  <SlidersHorizontal size={18} className="muted-icon" aria-hidden />
                   Manage models
                 </Link>
               </Menu.Item>
@@ -338,55 +285,83 @@ export function ModelMenu(props: {
   );
 }
 
-/** The header's "…" menu for the open conversation: Rename, Pin, Export, Delete. */
-export function TitleMenu({
-  title,
-  defaultOpen,
-  triggerRef,
-  onOpen,
-  onRename,
-  onDelete,
-  pinned,
-  onTogglePin,
-  onExport,
-}: {
-  title: string;
-  pinned: boolean;
-  onTogglePin: () => void;
-  /** Downloads the chat's exact Markdown. */
-  onExport?: () => void;
-  /** Open on mount (a placeholder was activated); "keyboard" also focuses the first item. */
+/** Whether the page is dark right now: an explicit theme, else the system's. */
+function isDark(): boolean {
+  const theme = currentTheme();
+  if (theme !== "system") return theme === "dark";
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+}
+
+/** The account row at the bottom of the sidebar. */
+export function AccountMenu(props: {
+  user: ProfileUser;
+  isAdmin: boolean;
   defaultOpen: MenuRequest;
-  triggerRef: Ref<HTMLButtonElement>;
-  onOpen: () => void;
-  onRename: () => void;
-  onDelete: () => void;
+  /** Settings keeps the current conversation to come back to. */
+  settingsState: { background: string };
+  onNavigate: () => void;
+  onSignOut: () => void;
 }) {
+  const [dark, setDark] = useState(false);
+  const link = (to: string, label: string, icon: ReactNode) => (
+    <Menu.Item asChild className="menu-item">
+      <Link to={to} state={props.settingsState} prefetch="render" onClick={props.onNavigate}>
+        {icon}
+        {label}
+      </Link>
+    </Menu.Item>
+  );
   return (
     <Menu.Root
       modal={false}
-      defaultOpen={defaultOpen !== false}
+      defaultOpen={props.defaultOpen !== false}
       onOpenChange={(open) => {
-        if (open) onOpen();
+        if (open) setDark(isDark());
       }}
     >
       <Menu.Trigger
-        ref={triggerRef}
-        className="icon-btn title-trigger"
-        aria-label={`Actions for ${title}`}
-        title="More options"
+        className="nav-row account-row"
+        aria-label={`Account (${props.user.username})`}
+        ref={(element) => {
+          // Opened on mount: the first open never reported through onOpenChange.
+          if (element && props.defaultOpen !== false) setDark(isDark());
+        }}
       >
-        <Ellipsis size={20} aria-hidden />
+        <AccountLabel user={props.user} />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
-          ref={focusFirstItem(defaultOpen)}
+          ref={focusFirstItem(props.defaultOpen)}
           className="menu"
-          align="end"
-          sideOffset={6}
+          side="top"
+          align="start"
+          sideOffset={8}
           collisionPadding={8}
         >
-          <Items items={conversationItems({ pinned, onRename, onTogglePin, onExport, onDelete })} />
+          {link(paths.settings(), "Settings", <Settings size={20} aria-hidden />)}
+          {props.isAdmin
+            ? link(paths.admin(), "Administration", <Shield size={20} aria-hidden />)
+            : null}
+          <Items
+            items={[
+              {
+                label: dark ? "Light mode" : "Dark mode",
+                icon: dark ? <Sun size={20} aria-hidden /> : <Moon size={20} aria-hidden />,
+                onSelect: () => {
+                  applyTheme(dark ? "light" : "dark");
+                },
+              },
+              "separator",
+              {
+                label: "Sign out",
+                icon: <LogOut size={20} aria-hidden />,
+                onSelect: props.onSignOut,
+              },
+            ]}
+          />
         </Menu.Content>
       </Menu.Portal>
     </Menu.Root>

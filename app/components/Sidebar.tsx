@@ -1,12 +1,21 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Archive,
   ChevronRight,
   Ellipsis,
   FolderClosed,
+  FolderInput,
+  FolderMinus,
+  FolderPlus,
+  Library,
   PanelLeft,
+  Pencil,
+  Pin,
+  PinOff,
   Search,
   SquarePen,
+  Trash2,
 } from "lucide-react";
 import type { ConversationSummary } from "@shared/conversations";
 import { lazy, memo, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
@@ -18,35 +27,32 @@ import { queries } from "../lib/query";
 import { count } from "../lib/render-counters";
 import { useCollapsedSections } from "../lib/sidebar-sections";
 import { useSignOut } from "../lib/use-sign-out";
-import { AccountLabel } from "./AccountLabel";
-import { preloadDialogs, useConversationActions } from "./ConversationActions";
+import { AccountLabel, type ProfileUser } from "./AccountLabel";
+import { preloadDialogs, useChatActions } from "./ChatActions";
+import type { MenuItems } from "./Menus";
 
-// The row menu loads on demand; a same-looking placeholder stands in.
 const loadMenus = () => import("./Menus");
 const RowMenu = lazy(() => loadMenus().then((m) => ({ default: m.RowMenu })));
 const AccountMenu = lazy(() => loadMenus().then((m) => ({ default: m.AccountMenu })));
-// Search loads when opened.
 const SearchDialog = lazy(() =>
   import("./SearchDialog").then((m) => ({ default: m.SearchDialog })),
 );
 
-export interface SidebarUser {
-  id: string;
-  username: string;
+export interface SidebarUser extends ProfileUser {
   role: string;
 }
 
 interface SidebarProps {
   user: SidebarUser;
-  /** Wide screens: folded to an icon rail (the toggle reopens it). */
+  /** Wide screens: folded to the icon rail. */
   collapsed: boolean;
-  /** Rendered inside the narrow-screen drawer. */
+  /** Rendered inside the phone drawer. */
   drawer: boolean;
-  /** The drawer instance needs its own id. */
+  /** The drawer copy needs its own ids. */
   navId?: string;
   /** Folds the rail, or closes the drawer. */
   onToggle: () => void;
-  /** Called after choosing a destination (closes the drawer). */
+  /** After choosing a destination (closes the drawer). */
   onNavigate: () => void;
 }
 
@@ -62,15 +68,15 @@ function SidebarImpl({
   useEffect(() => {
     count("sidebarMounts");
   }, []);
+  const location = useLocation();
   const [searching, setSearching] = useState(false);
   const searchTrigger = useRef<HTMLElement | null>(null);
-  const location = useLocation();
-  // Settings keeps the current conversation to come back to.
-  const settingsState = { background: location.pathname };
   const rail = collapsed && !drawer;
-  const toggleLabel = drawer ? "Close sidebar" : rail ? "Open sidebar" : "Close sidebar";
+  const toggleLabel = rail ? "Open sidebar" : "Close sidebar";
+  // Settings, Files and Library keep the page you came from to go back to.
+  const background = { background: location.pathname };
 
-  // Ctrl/⌘+K opens search (the in-page sidebar owns the shortcut, not the drawer copy).
+  // Ctrl/⌘+K opens search (the in-page sidebar owns it, not the drawer copy).
   useEffect(() => {
     if (drawer) return;
     const onKey = (event: KeyboardEvent) => {
@@ -122,15 +128,15 @@ function SidebarImpl({
         <button
           type="button"
           className="icon-btn toggle-btn"
-          aria-label={toggleLabel}
-          aria-expanded={drawer ? undefined : !rail}
+          aria-label={drawer ? "Close sidebar" : toggleLabel}
           aria-controls={drawer ? undefined : `${navId}-lists`}
-          title={toggleLabel}
+          title={drawer ? "Close sidebar" : toggleLabel}
           onClick={onToggle}
         >
           <PanelLeft size={20} aria-hidden />
         </button>
       </div>
+
       <div className="sidebar-nav">
         <Link to={paths.newChat()} className="nav-row" aria-label="New chat" onClick={onNavigate}>
           <SquarePen size={20} aria-hidden />
@@ -150,25 +156,35 @@ function SidebarImpl({
           </button>
         )}
         <Link
-          to={paths.settings("files")}
-          state={settingsState}
+          to={paths.library()}
+          state={background}
+          className="nav-row"
+          aria-label="Library"
+          aria-current={location.pathname.startsWith("/library") ? "page" : undefined}
+          onClick={onNavigate}
+        >
+          <Library size={20} aria-hidden />
+          <span className="label">Library</span>
+        </Link>
+        <Link
+          to={paths.files()}
+          state={background}
           className="nav-row"
           aria-label="Files"
+          aria-current={location.pathname === "/files" ? "page" : undefined}
           onClick={onNavigate}
         >
           <FolderClosed size={20} aria-hidden />
           <span className="label">Files</span>
         </Link>
       </div>
-      <ConversationLists
-        user={user}
-        listId={`${navId}-lists`}
-        hidden={rail}
-        onNavigate={onNavigate}
-      />
+
+      <ChatLists user={user} listId={`${navId}-lists`} hidden={rail} onNavigate={onNavigate} />
+
       <div className="sidebar-foot">
-        <Account user={user} settingsState={settingsState} onNavigate={onNavigate} />
+        <Account user={user} settingsState={background} onNavigate={onNavigate} />
       </div>
+
       {searching ? (
         <Suspense fallback={null}>
           <SearchDialog
@@ -185,8 +201,8 @@ function SidebarImpl({
   );
 }
 
-/** Pinned and Recents: the one scrolling region of the sidebar. */
-function ConversationLists({
+/** Pinned and Recents: the sidebar's one scrolling region. */
+function ChatLists({
   user,
   listId,
   hidden,
@@ -199,47 +215,122 @@ function ConversationLists({
 }) {
   const { conversationId } = useParams();
   const client = useQueryClient();
-  // Secondary data: loaded after hydration, never gating the composer.
+  // Secondary data: loaded after hydration, never in the way of the composer.
   const list = useQuery(queries.conversations(user.id));
-  const conversations = list.data ?? [];
-  const actions = useConversationActions(user.id);
-  // The row menu trigger last used: dialogs return focus there.
+  const chats = list.data ?? [];
+  const actions = useChatActions(user.id);
+  // The row "…" used last: dialogs give focus back to it.
   const menuTrigger = useRef<HTMLElement | null>(null);
-  // A placeholder trigger clicked before the menu chunk arrived opens it then.
+  // A placeholder clicked before the menu chunk arrived opens the menu then.
   const [openRequest, setOpenRequest] = useState<{ id: string; mode: MenuRequest } | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useCollapsedSections();
-  const pinned = conversations
+  // Projects are needed only for "Move to project": loaded once a row menu opens.
+  const [wantProjects, setWantProjects] = useState(false);
+  const projects = useQuery({ ...queries.projects(user.id), enabled: wantProjects });
+  const visible = chats.filter((c) => c.archived !== true);
+  const pinned = visible
     .filter((c) => typeof c.pinnedRank === "number")
     .sort((a, b) => (a.pinnedRank ?? 0) - (b.pinnedRank ?? 0));
-  const others = conversations.filter((c) => typeof c.pinnedRank !== "number");
+  const recents = visible.filter((c) => typeof c.pinnedRank !== "number");
 
-  const row = (item: ConversationSummary) => {
-    const current = item.id === conversationId;
-    const isPinned = typeof item.pinnedRank === "number";
+  const rowItems = (chat: ConversationSummary): MenuItems => {
+    const isPinned = typeof chat.pinnedRank === "number";
+    const others = (projects.data ?? []).filter((p) => p.id !== chat.projectId);
+    return [
+      ...(chat.malformed
+        ? []
+        : [
+            {
+              label: "Rename",
+              icon: <Pencil size={20} aria-hidden />,
+              onSelect: () => {
+                actions.rename(chat, menuTrigger.current);
+              },
+            },
+          ]),
+      {
+        label: isPinned ? "Unpin" : "Pin",
+        icon: isPinned ? <PinOff size={20} aria-hidden /> : <Pin size={20} aria-hidden />,
+        onSelect: () => {
+          actions.togglePin({ ...chat, pinned: isPinned });
+        },
+      },
+      "separator",
+      {
+        label: "Archive",
+        icon: <Archive size={20} aria-hidden />,
+        onSelect: () => {
+          actions.setArchived(chat, true);
+        },
+      },
+      {
+        label: "Delete",
+        icon: <Trash2 size={20} aria-hidden />,
+        onSelect: () => {
+          actions.remove(chat, menuTrigger.current);
+        },
+      },
+      "separator",
+      {
+        label: "Move to project",
+        icon: <FolderInput size={20} aria-hidden />,
+        submenu: [
+          ...others.map((project) => ({
+            label: project.name,
+            icon: <FolderClosed size={20} aria-hidden />,
+            onSelect: () => {
+              actions.moveTo(chat, project.id);
+            },
+          })),
+          ...(chat.projectId
+            ? [
+                {
+                  label: "Remove from project",
+                  icon: <FolderMinus size={20} aria-hidden />,
+                  onSelect: () => {
+                    actions.moveTo(chat, null);
+                  },
+                },
+              ]
+            : []),
+          ...(others.length > 0 || chat.projectId ? (["separator"] as const) : []),
+          {
+            label: "New project",
+            icon: <FolderPlus size={20} aria-hidden />,
+            onSelect: () => {
+              actions.moveToNewProject(chat, menuTrigger.current);
+            },
+          },
+        ],
+      },
+    ];
+  };
+
+  const row = (chat: ConversationSummary) => {
+    const current = chat.id === conversationId;
     return (
       <li
-        key={item.id}
-        className={`conversation-row${current ? " current" : ""}${menuOpenId === item.id ? " menu-open" : ""}`}
+        key={chat.id}
+        className={`chat-row${current ? " current" : ""}${menuOpenId === chat.id ? " menu-open" : ""}`}
       >
         <Link
-          to={paths.chat(item.id)}
+          to={paths.chat(chat.id)}
           aria-current={current ? "page" : undefined}
           onClick={onNavigate}
-          // Route chunk on intent; the data through the shared query cache.
           prefetch="intent"
           onPointerEnter={(event) => {
-            if (event.pointerType === "mouse") prefetchIntent(client, user.id, item.id);
+            if (event.pointerType === "mouse") prefetchIntent(client, user.id, chat.id);
           }}
           onPointerLeave={endIntent}
           onFocus={() => {
-            prefetchIntent(client, user.id, item.id, 0);
+            prefetchIntent(client, user.id, chat.id, 0);
           }}
           onBlur={endIntent}
         >
-          {item.malformed ? <AlertTriangle size={14} aria-label="Unreadable" /> : null}
+          {chat.malformed ? <AlertTriangle size={14} aria-label="Unreadable" /> : null}
           <span className="row-title">
-            {item.malformed ? `${item.title} (unreadable)` : item.title}
+            {chat.malformed ? `${chat.title} (unreadable)` : chat.title}
           </span>
         </Link>
         <Suspense
@@ -247,10 +338,12 @@ function ConversationLists({
             <button
               type="button"
               className="icon-btn row-menu-btn"
-              aria-label={`Actions for ${item.title}`}
+              aria-label={`Actions for ${chat.title}`}
               title="More"
               onClick={(event) => {
-                setOpenRequest({ id: item.id, mode: menuRequest(event) });
+                void preloadDialogs();
+                setWantProjects(true);
+                setOpenRequest({ id: chat.id, mode: menuRequest(event) });
               }}
             >
               <Ellipsis size={18} aria-hidden />
@@ -258,28 +351,18 @@ function ConversationLists({
           }
         >
           <RowMenu
-            title={item.title}
-            malformed={item.malformed}
-            pinned={isPinned}
-            onTogglePin={() => {
-              actions.togglePin({ ...item, pinned: isPinned });
-            }}
-            defaultOpen={openRequest?.id === item.id ? openRequest.mode : false}
+            title={chat.title}
+            items={rowItems(chat)}
+            defaultOpen={openRequest?.id === chat.id ? openRequest.mode : false}
             onTriggerFocus={(element) => {
               menuTrigger.current = element;
             }}
-            onOpen={() => {
-              // Intent: fetch the dialog chunk before it is needed.
-              void preloadDialogs();
-            }}
             onOpenChange={(open) => {
-              setMenuOpenId(open ? item.id : null);
-            }}
-            onRename={() => {
-              actions.rename(item, menuTrigger.current);
-            }}
-            onDelete={() => {
-              actions.remove(item, menuTrigger.current);
+              if (open) {
+                void preloadDialogs();
+                setWantProjects(true);
+              }
+              setMenuOpenId(open ? chat.id : null);
             }}
           />
         </Suspense>
@@ -308,7 +391,7 @@ function ConversationLists({
           />
           <ul
             id={`${listId}-pinned-list`}
-            className="conversation-list"
+            className="chat-list"
             aria-labelledby={`${listId}-pinned`}
             data-testid="pinned-list"
             hidden={collapsed.pinned}
@@ -328,7 +411,7 @@ function ConversationLists({
       />
       <div id={`${listId}-recents-list`} hidden={collapsed.recents}>
         {list.isPending ? (
-          // Rows the size of real ones, so the list doesn't shift when it arrives.
+          // Rows the size of real ones: nothing shifts when the list arrives.
           <div aria-busy="true" data-testid="conversations-loading">
             <span className="visually-hidden">Loading conversations…</span>
             {[0, 1, 2, 3].map((i) => (
@@ -342,13 +425,13 @@ function ConversationLists({
               Try again
             </button>
           </div>
-        ) : conversations.length === 0 ? (
+        ) : visible.length === 0 ? (
           <p className="sidebar-empty" data-testid="conversations-empty">
             No conversations yet.
           </p>
         ) : null}
-        <ul className="conversation-list" data-testid="conversation-list">
-          {others.map(row)}
+        <ul className="chat-list" data-testid="conversation-list">
+          {recents.map(row)}
         </ul>
       </div>
       {actions.dialogs}
@@ -356,7 +439,6 @@ function ConversationLists({
   );
 }
 
-/** A section header that shows or hides its list ("Pinned ›", "Recents ›"). */
 function SectionToggle(props: {
   id: string;
   controls: string;
@@ -381,7 +463,7 @@ function SectionToggle(props: {
   );
 }
 
-/** Avatar and name at the bottom, opening Settings, the theme, Administration and Sign out. */
+/** The avatar and name at the bottom, opening the account menu. */
 function Account({
   user,
   settingsState,
@@ -398,18 +480,18 @@ function Account({
       fallback={
         <button
           type="button"
-          className="nav-row account-btn"
+          className="nav-row account-row"
           aria-label={`Account (${user.username})`}
           onClick={(event) => {
             setOpenRequest(menuRequest(event));
           }}
         >
-          <AccountLabel username={user.username} />
+          <AccountLabel user={user} />
         </button>
       }
     >
       <AccountMenu
-        username={user.username}
+        user={user}
         isAdmin={user.role === "admin"}
         defaultOpen={openRequest}
         settingsState={settingsState}

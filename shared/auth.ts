@@ -1,8 +1,16 @@
 import { z } from "zod";
 
 /** Browser-safe session bootstrap (contracts §5): never the cookie or its hash. */
+/** How the signed-in user appears (the sidebar's account row). */
+export interface SessionProfile {
+  displayName?: string | null;
+  avatarColor?: string;
+  /** Null without a photo; changes whenever the photo does. */
+  photoVersion?: string | null;
+}
+
 export interface SessionDto {
-  user: { id: string; username: string; role: "user" | "admin" } | null;
+  user: ({ id: string; username: string; role: "user" | "admin" } & SessionProfile) | null;
   /** Synchronizer token for X-CSRF-Token; null when signed out. */
   csrfToken: string | null;
   registrationOpen: boolean;
@@ -10,7 +18,14 @@ export interface SessionDto {
 
 export const sessionDtoSchema = z.strictObject({
   user: z
-    .strictObject({ id: z.uuid(), username: z.string(), role: z.enum(["user", "admin"]) })
+    .strictObject({
+      id: z.uuid(),
+      username: z.string(),
+      role: z.enum(["user", "admin"]),
+      displayName: z.string().nullable().optional(),
+      avatarColor: z.string().optional(),
+      photoVersion: z.string().nullable().optional(),
+    })
     .nullable(),
   csrfToken: z.string().nullable(),
   registrationOpen: z.boolean(),

@@ -98,3 +98,41 @@ export const auditEntrySchema = z.strictObject({
   fields: z.array(z.string()).optional(),
 });
 export type AuditEntryDto = z.infer<typeof auditEntrySchema>;
+
+/**
+ * Logs (Settings → Logs): what happened on this server, for administrators.
+ * Sign-ins, provider problems, admin changes, failed replies and problem
+ * reports. Entries carry identifiers and short messages, never passwords,
+ * keys or message content (a problem report's text is the user's own words,
+ * shown to administrators by design).
+ */
+export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+export const LOG_SOURCES = [
+  "auth",
+  "providers",
+  "admin",
+  "generations",
+  "reports",
+  "system",
+] as const;
+export type LogSource = (typeof LOG_SOURCES)[number];
+export const LOG_RETENTION_DAYS = [7, 30, 90, 365] as const;
+
+export const logEntrySchema = z.strictObject({
+  id: z.string(),
+  time: z.string(),
+  level: z.enum(LOG_LEVELS),
+  source: z.enum(LOG_SOURCES),
+  message: z.string(),
+  user: z.strictObject({ id: z.string(), username: z.string() }).nullable(),
+  requestId: z.string().nullable(),
+  details: z.string().nullable(),
+});
+export type LogEntryDto = z.infer<typeof logEntrySchema>;
+
+export const logSettingsSchema = z.strictObject({
+  level: z.enum(LOG_LEVELS),
+  retentionDays: z.union(LOG_RETENTION_DAYS.map((d) => z.literal(d))),
+});
+export type LogSettingsDto = z.infer<typeof logSettingsSchema>;

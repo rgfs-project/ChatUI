@@ -40,49 +40,49 @@ export default function Register() {
   }
 
   return (
-    <main className="page">
-      <div className="page-card">
-        <p className="page-brand">ChatUI</p>
-        <h1>Create account</h1>
-        <form className="auth-form" onSubmit={(event) => void submit(event)}>
+    <main className="auth-page">
+      <div className="auth-card">
+        <p className="auth-brand">ChatUI</p>
+        <h1>Create an account</h1>
+        <form onSubmit={(event) => void submit(event)}>
           <label htmlFor="username" className="visually-hidden">
-            Username (3-32: a-z 0-9 _ . -)
+            Username
           </label>
           <input
             id="username"
             name="username"
-            className="text-input"
+            className="input"
             placeholder="Username"
             aria-describedby="username-hint"
             autoComplete="username"
             required
           />
-          <p className="hint" id="username-hint">
-            3 to 32 characters: a–z, 0–9, _ . -
+          <p className="hint field-hint" id="username-hint">
+            3–32 characters: a–z, 0–9, _ . -
           </p>
           <label htmlFor="password" className="visually-hidden">
-            Password (at least 10 characters)
+            Password
           </label>
           <input
             id="password"
             name="password"
             type="password"
-            className="text-input"
-            placeholder="Password (at least 10 characters)"
+            className="input"
+            placeholder="Password (10+ characters)"
             autoComplete="new-password"
             minLength={10}
             required
           />
-          <button type="submit" className="btn primary large">
+          <button type="submit" className="btn lg primary block">
             Create account
           </button>
           {error ? (
-            <p className="error" role="alert">
+            <p className="form-error" role="alert">
               {error}
             </p>
           ) : null}
         </form>
-        <p className="page-foot">
+        <p className="auth-foot">
           Have an account? <a href="/login">Sign in</a>
         </p>
       </div>

@@ -6,6 +6,10 @@ import type { ModelListDto } from "@shared/generations";
 import type { AttachmentLimitsDto } from "@shared/attachments";
 import type { MemoryList } from "@shared/memories";
 import type { ArtifactList } from "@shared/artifacts";
+import type { AccountDto } from "@shared/account";
+import type { ProjectDto } from "@shared/library";
+import type { UsageDto } from "@shared/usage";
+import type { FileList as UserFileList } from "@shared/files";
 import { apiFetch } from "./api";
 
 /**
@@ -30,6 +34,14 @@ export const queryKeys = {
   artifactSource: (userId: string, id: string) => ["user", userId, "artifact-source", id] as const,
   /** Attachment limits and the user's used bytes (Phase 12); read when attaching. */
   attachmentLimits: (userId: string) => ["user", userId, "attachment-limits"] as const,
+  /** The signed-in user's profile (Settings → Account). */
+  account: (userId: string) => ["user", userId, "account"] as const,
+  /** Counts and storage (Settings → Usage). */
+  usage: (userId: string) => ["user", userId, "usage"] as const,
+  /** Projects (Library, "Move to project"). */
+  projects: (userId: string) => ["user", userId, "projects"] as const,
+  /** Every file: uploads and reply files (the Files page). */
+  files: (userId: string) => ["user", userId, "files"] as const,
   /** Mutation key for sends (optimistic messages are read from its state). */
   sends: (userId: string) => ["user", userId, "send"] as const,
   /** Mutation key for uploads and pending-attachment deletes (Phase 12). */
@@ -178,6 +190,11 @@ export const fetchers = {
     apiJson<AttachmentLimitsDto>("/api/attachments/limits", signal ? { signal } : {}),
   models: (refresh = false, signal?: AbortSignal) =>
     apiJson<ModelListDto>(`/api/models${refresh ? "?refresh=1" : ""}`, signal ? { signal } : {}),
+  account: (signal?: AbortSignal) => apiJson<AccountDto>("/api/account", signal ? { signal } : {}),
+  usage: (signal?: AbortSignal) => apiJson<UsageDto>("/api/usage", signal ? { signal } : {}),
+  projects: async (signal?: AbortSignal) =>
+    (await apiJson<{ projects: ProjectDto[] }>("/api/projects", signal ? { signal } : {})).projects,
+  files: (signal?: AbortSignal) => apiJson<UserFileList>("/api/files", signal ? { signal } : {}),
 };
 
 /** Not worth retrying: the server answered with a definite client error. */
@@ -252,6 +269,30 @@ export const queries = {
     queryOptions({
       queryKey: queryKeys.conversation(userId, id),
       queryFn: ({ signal }) => fetchers.conversation(id, signal),
+      retry: retryable,
+    }),
+  account: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.account(userId),
+      queryFn: ({ signal }) => fetchers.account(signal),
+      retry: retryable,
+    }),
+  usage: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.usage(userId),
+      queryFn: ({ signal }) => fetchers.usage(signal),
+      retry: retryable,
+    }),
+  projects: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.projects(userId),
+      queryFn: ({ signal }) => fetchers.projects(signal),
+      retry: retryable,
+    }),
+  files: (userId: string) =>
+    queryOptions({
+      queryKey: queryKeys.files(userId),
+      queryFn: ({ signal }) => fetchers.files(signal),
       retry: retryable,
     }),
   // Re-read when the tab regains focus (at most every 30 s), so models loaded
