@@ -2,21 +2,20 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import {
   Check,
+  CircleUserRound,
   ChevronRight,
   Ellipsis,
   LogOut,
-  Moon,
   Settings,
   Shield,
+  Sparkles,
   SlidersHorizontal,
-  Sun,
   X,
 } from "lucide-react";
-import { useState, type ReactNode, type Ref } from "react";
+import { type ReactNode, type Ref } from "react";
 import { Link } from "react-router";
 import type { MenuRequest } from "../lib/menu-request";
 import { paths } from "../lib/paths";
-import { applyTheme, currentTheme } from "../lib/theme";
 import { NARROW_QUERY, useMediaQuery } from "../lib/use-media-query";
 import { AccountLabel, type ProfileUser } from "./AccountLabel";
 import { ModelTrigger } from "./ModelTrigger";
@@ -363,16 +362,6 @@ function ModelSheet(props: {
   );
 }
 
-/** Whether the page is dark right now: an explicit theme, else the system's. */
-function isDark(): boolean {
-  const theme = currentTheme();
-  if (theme !== "system") return theme === "dark";
-  return (
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-  );
-}
-
 /** The account row at the bottom of the sidebar. */
 export function AccountMenu(props: {
   user: ProfileUser;
@@ -383,7 +372,6 @@ export function AccountMenu(props: {
   onNavigate: () => void;
   onSignOut: () => void;
 }) {
-  const [dark, setDark] = useState(false);
   const link = (to: string, label: string, icon: ReactNode) => (
     <Menu.Item asChild className="menu-item">
       <Link to={to} state={props.settingsState} prefetch="render" onClick={props.onNavigate}>
@@ -392,49 +380,37 @@ export function AccountMenu(props: {
       </Link>
     </Menu.Item>
   );
+  // As ChatGPT's profile menu: who you are, then Personalization, Profile,
+  // Settings, and Log out under a separator.
   return (
-    <Menu.Root
-      modal={false}
-      defaultOpen={props.defaultOpen !== false}
-      onOpenChange={(open) => {
-        if (open) setDark(isDark());
-      }}
-    >
-      <Menu.Trigger
-        className="nav-row account-row"
-        aria-label={`Account (${props.user.username})`}
-        ref={(element) => {
-          // Opened on mount: the first open never reported through onOpenChange.
-          if (element && props.defaultOpen !== false) setDark(isDark());
-        }}
-      >
+    <Menu.Root modal={false} defaultOpen={props.defaultOpen !== false}>
+      <Menu.Trigger className="nav-row account-row" aria-label={`Account (${props.user.username})`}>
         <AccountLabel user={props.user} />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
           ref={focusFirstItem(props.defaultOpen)}
-          className="menu"
+          className="menu account-menu"
           side="top"
           align="start"
           sideOffset={8}
           collisionPadding={8}
         >
+          <div className="menu-profile">
+            <AccountLabel user={props.user} />
+          </div>
+          <Menu.Separator className="menu-separator" />
+          {link(paths.settings("memories"), "Personalization", <Sparkles size={20} aria-hidden />)}
+          {link(paths.settings("account"), "Profile", <CircleUserRound size={20} aria-hidden />)}
           {link(paths.settings(), "Settings", <Settings size={20} aria-hidden />)}
           {props.isAdmin
             ? link(paths.admin(), "Administration", <Shield size={20} aria-hidden />)
             : null}
           <Items
             items={[
-              {
-                label: dark ? "Light mode" : "Dark mode",
-                icon: dark ? <Sun size={20} aria-hidden /> : <Moon size={20} aria-hidden />,
-                onSelect: () => {
-                  applyTheme(dark ? "light" : "dark");
-                },
-              },
               "separator",
               {
-                label: "Sign out",
+                label: "Log out",
                 icon: <LogOut size={20} aria-hidden />,
                 onSelect: props.onSignOut,
               },

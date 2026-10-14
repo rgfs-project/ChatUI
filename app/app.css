@@ -703,6 +703,22 @@ svg {
   color: var(--muted);
 }
 
+/* The profile menu opens with who you are (avatar and name), as ChatGPT. */
+.menu-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 10px;
+  color: var(--fg);
+  font-size: var(--text-md);
+  line-height: 20px;
+}
+
+.account-menu {
+  min-width: 248px;
+}
+
 .menu-separator {
   height: 1px;
   margin: 6px 12px;
