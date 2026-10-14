@@ -54,11 +54,18 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta charSet="utf-8" />
         {/* resizes-content: the on-screen keyboard shrinks the layout viewport (and so
             100dvh), keeping the composer visible; viewport-fit=cover enables the
-            safe-area insets used in app.css. */}
+            safe-area insets used in app.css. maximum-scale/user-scalable disable
+            pinch and focus zoom so the app behaves like a native one on mobile. */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
         />
+        {/* iPhone home-screen web app: launch full screen without Safari UI. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="ChatUI" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="color-scheme" content={theme === "system" ? "light dark" : theme} />
         <Meta />
         {/* Stylesheets need no nonce (style-src 'self'). An explicit empty nonce keeps
