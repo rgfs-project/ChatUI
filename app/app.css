@@ -3161,3 +3161,50 @@ textarea,
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* Settings sidebar: a search box and "Personal" / "Administration" headings,
+   as ChatGPT's. */
+.settings-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin: 4px 0 8px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  color: var(--muted);
+}
+
+.settings-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--text-md);
+  line-height: 18px;
+}
+
+.settings-search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.sidebar.rail .settings-search,
+.sidebar.rail .settings-group {
+  display: none;
+}
+
+.settings-group {
+  margin: 0;
+  padding: 8px 10px 4px;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 20px;
+}
+
+.nav-list > div + div > .settings-group {
+  margin-top: 16px;
+}

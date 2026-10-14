@@ -29,7 +29,7 @@ async function sendMessage(page: Page, text: string) {
 async function openData(page: Page) {
   await page.goto(`${base()}/settings`);
   await hydrated(page);
-  await page.getByRole("button", { name: "Data" }).click();
+  await page.getByRole("button", { name: "Data controls" }).click();
   await expect(page.getByRole("heading", { name: "Data", level: 2 })).toBeVisible();
 }
 

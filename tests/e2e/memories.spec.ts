@@ -26,7 +26,7 @@ async function sendWithTools(page: Page, text: string) {
 async function openMemories(page: Page) {
   await page.goto(`${base()}/settings`);
   await hydrated(page);
-  await page.getByRole("button", { name: "Memories" }).click();
+  await page.getByRole("button", { name: "Personalization" }).click();
   await expect(page.getByRole("heading", { name: "Memories", level: 2 })).toBeVisible();
 }
 

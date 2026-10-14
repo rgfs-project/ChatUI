@@ -8,6 +8,7 @@ import {
   Database,
   Gauge,
   PanelLeft,
+  Search,
   ScrollText,
   Server,
   Settings,
@@ -64,10 +65,10 @@ const ICON = 20;
 const SECTIONS: Record<Section, { label: string; icon: ReactNode; admin?: boolean }> = {
   general: { label: "General", icon: <Settings size={ICON} aria-hidden /> },
   account: { label: "Account", icon: <CircleUserRound size={ICON} aria-hidden /> },
-  data: { label: "Data", icon: <Database size={ICON} aria-hidden /> },
+  data: { label: "Data controls", icon: <Database size={ICON} aria-hidden /> },
   usage: { label: "Usage", icon: <Gauge size={ICON} aria-hidden /> },
   skills: { label: "Skills", icon: <ScrollText size={ICON} aria-hidden /> },
-  memories: { label: "Memories", icon: <Brain size={ICON} aria-hidden /> },
+  memories: { label: "Personalization", icon: <Brain size={ICON} aria-hidden /> },
   users: { label: "Users", icon: <Users size={ICON} aria-hidden />, admin: true },
   providers: { label: "Providers", icon: <Server size={ICON} aria-hidden />, admin: true },
   models: { label: "Models", icon: <Cpu size={ICON} aria-hidden />, admin: true },
@@ -106,6 +107,8 @@ export function SettingsPanel({ initial }: { initial?: Section }) {
   // Phones show the section list until one is chosen (or named in the URL).
   const listOnly = narrow && !valid;
   const [railed, setRailed] = useState(false);
+  // Filters the section list, as ChatGPT's settings search.
+  const [filter, setFilter] = useState("");
   const back = background ?? paths.newChat();
   // History state carried through section changes (Back keeps its target).
   const keep = location.state as OverlayState | null;
@@ -117,6 +120,8 @@ export function SettingsPanel({ initial }: { initial?: Section }) {
   };
   const preloadAdmin = () => void loadAdmin();
   const ids = [...USER_SECTIONS, ...(isAdmin ? ADMIN_SECTIONS : [])];
+  const needle = filter.trim().toLowerCase();
+  const visible = ids.filter((id) => SECTIONS[id].label.toLowerCase().includes(needle));
 
   const shown: Section = section ?? "general";
   const content = !user ? null : isAdminSection(shown) && isAdmin ? (
@@ -216,13 +221,35 @@ export function SettingsPanel({ initial }: { initial?: Section }) {
             <PanelLeft size={20} aria-hidden />
           </button>
         </div>
-        <Link to={back} className="nav-row back-row" data-testid="settings-back" aria-label="Back">
+        <Link
+          to={back}
+          className="nav-row back-row"
+          data-testid="settings-back"
+          aria-label="Back to app"
+        >
           <ArrowLeft size={ICON} aria-hidden />
-          <span className="label">Back</span>
+          <span className="label">Back to app</span>
         </Link>
+        <label className="settings-search">
+          <Search size={16} aria-hidden />
+          <span className="visually-hidden">Search settings</span>
+          <input
+            type="search"
+            placeholder="Search"
+            value={filter}
+            onChange={(event) => {
+              setFilter(event.currentTarget.value);
+            }}
+          />
+        </label>
         <nav className="nav-list" aria-label="Settings sections">
-          {ids.map((id, index) => (
-            <div key={id} className={index === USER_SECTIONS.length ? "nav-gap" : undefined}>
+          {visible.map((id, index) => (
+            <div key={id}>
+              {index === 0 || SECTIONS[id].admin !== SECTIONS[visible[index - 1] ?? id].admin ? (
+                <p className="settings-group">
+                  {SECTIONS[id].admin ? "Administration" : "Personal"}
+                </p>
+              ) : null}
               <button
                 type="button"
                 className="nav-row"
