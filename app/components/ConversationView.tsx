@@ -154,7 +154,12 @@ const STATE_LABEL: Record<GenerationState, string> = {
 type SendMutation = Mutation<StartGenerationResponse, Error, SendVariables>;
 
 /** This view's optimistic user messages, read from the send mutations. */
-function usePendingSends(userId: string, draftKey: string, conversationId: string | undefined) {
+function usePendingSends(
+  userId: string,
+  draftKey: string,
+  conversationId: string | undefined,
+  sentHere: ReadonlySet<string>,
+) {
   return useMutationState({
     filters: { mutationKey: queryKeys.sends(userId) },
     select: (mutation) => {
@@ -166,9 +171,13 @@ function usePendingSends(userId: string, draftKey: string, conversationId: strin
     if (!vars) return false;
     // A rejected send rolls back: its text goes back into the composer.
     if (state.status === "error" && !(state.error instanceof SendUnknownError)) return false;
-    // Once accepted, a send belongs to the conversation the server named.
+    // Once accepted, a send belongs to the conversation the server named. A
+    // draft keeps showing its own first send until the route switches to that
+    // conversation, so the transcript never blanks during the navigation.
     if (state.data)
-      return conversationId !== undefined && state.data.conversationId === conversationId;
+      return conversationId === undefined
+        ? sentHere.has(vars.tempId)
+        : state.data.conversationId === conversationId;
     return vars.conversationKey === draftKey;
   });
 }
@@ -410,7 +419,9 @@ export function ConversationView(props: {
       void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
     },
   });
-  const pending = usePendingSends(userId, draftKey, conversationId);
+  // Sends made by this view instance (a draft's first send, see usePendingSends).
+  const [sentHere] = useState(() => new Set<string>());
+  const pending = usePendingSends(userId, draftKey, conversationId, sentHere);
 
   const visibleId = props.inert ? undefined : conversation?.id;
   useEffect(() => {
@@ -512,6 +523,7 @@ export function ConversationView(props: {
       content,
       ...(attachments.length > 0 ? { attachments } : {}),
     });
+    sentHere.add(vars.tempId);
     setAttachNotice(null);
     if (fromBox) {
       if (textareaRef.current) setBox(textareaRef.current, "");
