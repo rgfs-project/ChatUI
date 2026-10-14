@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type { HealthDto } from "@shared/api";
 import { RELEASE_NOTES } from "@shared/release-notes";
@@ -71,7 +72,7 @@ function About() {
   });
   return (
     <>
-      <div className="group">
+      <div className="group help-body">
         <div className="row">
           <span>Version</span>
           <span className="row-value">{health.data?.version ?? "…"}</span>
@@ -91,10 +92,13 @@ function About() {
 function Faq() {
   return (
     <>
-      <div className="help-list">
+      <div className="group help-body help-scroll">
         {FAQ.map((item) => (
           <details key={item.q} className="help-item">
-            <summary>{item.q}</summary>
+            <summary className="row">
+              <span className="row-label">{item.q}</span>
+              <ChevronDown size={16} className="help-chev" aria-hidden />
+            </summary>
             <p>{item.a}</p>
           </details>
         ))}
@@ -107,7 +111,7 @@ function Faq() {
 function Shortcuts() {
   return (
     <>
-      <dl className="group shortcut-list">
+      <dl className="group help-body help-scroll shortcut-list">
         {SHORTCUTS.map((item) => (
           <div key={item.keys} className="row">
             <dt>{item.does}</dt>
@@ -125,11 +129,14 @@ function Shortcuts() {
 function Releases() {
   return (
     <>
-      <div className="help-list">
+      <div className="group help-body help-scroll">
         {RELEASE_NOTES.map((note) => (
           <section key={note.date} className="release">
-            <h3>
-              {note.title} <time dateTime={note.date}>{note.date}</time>
+            <h3 className="row">
+              <span className="row-label">{note.title}</span>
+              <time className="row-value" dateTime={note.date}>
+                {note.date}
+              </time>
             </h3>
             <ul>
               {note.changes.map((change) => (

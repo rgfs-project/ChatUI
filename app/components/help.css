@@ -1,11 +1,11 @@
-/* The help dialogs: loaded with them. */
+/* The help dialogs: loaded with them. Every body is a settings card of rows. */
 
-.help-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: min(60dvh, 480px);
+.help-body {
   margin-top: 8px;
+}
+
+.help-scroll {
+  max-height: min(60dvh, 480px);
   overflow-y: auto;
 }
 
@@ -13,41 +13,55 @@
   border-bottom: 1px solid var(--line);
 }
 
-.help-item summary {
-  padding: 12px 0;
-  font-size: var(--text-md);
-  line-height: 20px;
+.help-item:last-child {
+  border-bottom: 0;
+}
+
+.help-item > summary.row {
+  border-bottom: 0;
+  list-style: none;
   cursor: pointer;
 }
 
+.help-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-chev {
+  flex: none;
+  color: var(--muted);
+  transition: transform 150ms ease;
+}
+
+.help-item[open] .help-chev {
+  transform: rotate(180deg);
+}
+
 .help-item p {
-  padding-bottom: 12px;
+  padding-bottom: 16px;
   color: var(--muted);
   font-size: var(--text-md);
   line-height: 20px;
-}
-
-.shortcut-list {
-  margin-top: 8px;
 }
 
 .shortcut-list dd {
   flex: none;
 }
 
-.release h3 {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: var(--text-md);
+.release {
+  border-bottom: 1px solid var(--line);
+}
+
+.release:last-child {
+  border-bottom: 0;
+}
+
+.release h3.row {
+  border-bottom: 0;
   font-weight: var(--weight-semibold);
 }
 
-.release time {
-  color: var(--muted);
-  font-size: var(--text-xs);
+.release h3 .row-value {
   font-weight: 400;
 }
 
@@ -55,7 +69,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-left: 18px;
+  padding: 0 0 16px 18px;
   list-style: disc;
   color: var(--fg-2);
   font-size: var(--text-md);
