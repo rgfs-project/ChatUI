@@ -18,6 +18,40 @@
   flex: 1 1 240px;
 }
 
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--field);
+  color: var(--muted);
+}
+
+.search-field:focus-within {
+  border-color: var(--field-focus);
+}
+
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--text-md);
+}
+
+.search-field input::placeholder {
+  color: var(--muted);
+}
+
+.search-field input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

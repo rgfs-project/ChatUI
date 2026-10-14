@@ -215,6 +215,14 @@ function sourceOf(obj: Record<string, unknown>, message: string): LogSource {
   return "system";
 }
 
+const RENAMED: Record<string, string> = { login: "Signed in" };
+
+/** Server log messages are terse and lowercase; the Logs page shows them as sentences. */
+function readable(message: string): string {
+  const renamed = RENAMED[message] ?? message;
+  return renamed.charAt(0).toUpperCase() + renamed.slice(1);
+}
+
 /**
  * The server logger, also feeding the event log: what the server already
  * logs (without secrets or content) shows in Settings → Logs too.
@@ -242,7 +250,7 @@ export function teeLogger(base: Logger, events: EventLog): Logger {
           void events.record({
             level,
             source: sourceOf(obj, message),
-            message,
+            message: readable(message),
             details: detailsOf(obj),
           });
         return (value as (...a: unknown[]) => unknown).apply(target, args);
