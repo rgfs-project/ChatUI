@@ -2425,7 +2425,7 @@ a.row {
   }
 
   .transcript {
-    padding: 16px;
+    padding: 16px 16px 56px;
   }
 
   .transcript-inner {
