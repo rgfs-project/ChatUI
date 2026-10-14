@@ -186,7 +186,7 @@
 }
 
 /* Phones (the MobileFiles artboard): search, then name over date in 64px rows. */
-@media (max-width: 767px) {
+@media (max-width: 767px) and (hover: none) and (pointer: coarse) {
   .files-page .page-body.wide {
     gap: 16px;
     padding: 8px 16px 24px;

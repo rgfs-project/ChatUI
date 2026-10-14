@@ -1,7 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 
 /** Narrow screens get the sidebar as an overlay drawer. */
-export const NARROW_QUERY = "(max-width: 767.98px)";
+export const NARROW_QUERY = "(max-width: 767.98px) and (hover: none) and (pointer: coarse)";
 
 /** `matchMedia` where the environment has it (not in every test DOM or old browser). */
 function mediaList(query: string): MediaQueryList | null {

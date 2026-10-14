@@ -100,12 +100,12 @@ export default function ReauthDialog({
             <div className="dialog-actions">
               <Link
                 to={paths.login(location.pathname)}
-                className="btn dialog"
+                className="btn dialog-btn"
                 data-testid="reauth-login-page"
               >
                 Sign-in page
               </Link>
-              <button type="submit" className="btn dialog primary" disabled={busy}>
+              <button type="submit" className="btn dialog-btn primary" disabled={busy}>
                 {busy ? "Signing in…" : "Sign in"}
               </button>
             </div>

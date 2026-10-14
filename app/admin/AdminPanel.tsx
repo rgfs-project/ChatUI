@@ -119,11 +119,11 @@ function FormActions(props: { submit: string; busy: boolean }) {
   return (
     <div className="dialog-actions">
       <DialogClose asChild>
-        <button type="button" className="btn dialog">
+        <button type="button" className="btn dialog-btn">
           Cancel
         </button>
       </DialogClose>
-      <button type="submit" className="btn dialog primary" disabled={props.busy}>
+      <button type="submit" className="btn dialog-btn primary" disabled={props.busy}>
         {props.submit}
       </button>
     </div>

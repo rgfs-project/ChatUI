@@ -55,7 +55,7 @@ function Done() {
   return (
     <div className="dialog-actions">
       <DialogClose asChild>
-        <button type="button" className="btn dialog primary">
+        <button type="button" className="btn dialog-btn primary">
           Done
         </button>
       </DialogClose>
@@ -200,13 +200,13 @@ function Report({ onSent }: { onSent: () => void }) {
       ) : null}
       <div className="dialog-actions">
         <DialogClose asChild>
-          <button type="button" className="btn dialog">
+          <button type="button" className="btn dialog-btn">
             Cancel
           </button>
         </DialogClose>
         <button
           type="submit"
-          className="btn dialog primary"
+          className="btn dialog-btn primary"
           disabled={send.isPending || text.trim() === ""}
         >
           Send report

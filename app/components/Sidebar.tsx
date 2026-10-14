@@ -115,18 +115,6 @@ function SidebarImpl({
         </Link>
         <button
           type="button"
-          className="icon-btn search-btn label"
-          aria-label="Search chats"
-          aria-haspopup="dialog"
-          title="Search chats (Ctrl+K)"
-          tabIndex={rail ? -1 : 0}
-          aria-hidden={rail ? true : undefined}
-          onClick={openSearch}
-        >
-          <Search size={20} aria-hidden />
-        </button>
-        <button
-          type="button"
           className="icon-btn toggle-btn"
           aria-label={drawer ? "Close sidebar" : toggleLabel}
           aria-controls={drawer ? undefined : `${navId}-lists`}
@@ -142,19 +130,17 @@ function SidebarImpl({
           <SquarePen size={20} aria-hidden />
           <span className="label">New chat</span>
         </Link>
-        {drawer ? null : (
-          <button
-            type="button"
-            className="nav-row rail-only"
-            aria-label="Search chats"
-            aria-haspopup="dialog"
-            tabIndex={rail ? 0 : -1}
-            aria-hidden={rail ? undefined : true}
-            onClick={openSearch}
-          >
-            <Search size={20} aria-hidden />
-          </button>
-        )}
+        <button
+          type="button"
+          className="nav-row"
+          aria-label="Search chats"
+          aria-haspopup="dialog"
+          title="Search chats (Ctrl+K)"
+          onClick={openSearch}
+        >
+          <Search size={20} aria-hidden />
+          <span className="label">Search</span>
+        </button>
         <Link
           to={paths.library()}
           state={background}

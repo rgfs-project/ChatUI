@@ -253,7 +253,7 @@ svg {
   font-weight: var(--weight-medium);
 }
 
-.btn.dialog {
+.btn.dialog-btn {
   height: 40px;
   padding: 0 18px;
   font-weight: var(--weight-medium);
@@ -910,26 +910,6 @@ svg {
   pointer-events: none;
 }
 
-/* Rows that exist only on the rail (search moves out of the header). */
-.sidebar .rail-only {
-  max-height: 0;
-  margin-top: -4px;
-  padding-top: 0;
-  padding-bottom: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition:
-    max-height 280ms var(--ease),
-    margin-top 280ms var(--ease),
-    opacity 180ms ease;
-}
-
-.sidebar.rail .rail-only {
-  max-height: 36px;
-  margin-top: 0;
-  opacity: 1;
-}
-
 .sidebar-top {
   position: relative;
   flex: none;
@@ -946,12 +926,6 @@ svg {
   line-height: 26px;
   text-decoration: none;
   white-space: nowrap;
-}
-
-.sidebar-top .search-btn {
-  position: absolute;
-  top: 2px;
-  right: 40px;
 }
 
 .sidebar-top .toggle-btn {
@@ -1177,11 +1151,6 @@ svg {
   font-size: var(--text-lg);
 }
 
-.drawer .sidebar-top .search-btn {
-  top: 8px;
-  right: 42px;
-}
-
 .drawer .sidebar-top .toggle-btn {
   top: 8px;
   right: 2px;
@@ -1266,7 +1235,7 @@ svg {
 }
 
 /* Wide screens show the title in the sidebar: the header holds actions only. */
-@media (min-width: 768px) {
+@media not all and (max-width: 767px) and (hover: none) and (pointer: coarse) {
   .header-title {
     visibility: hidden;
   }
@@ -1894,8 +1863,8 @@ svg {
   top: 200px;
   width: min(720px, calc(100vw - 32px));
   max-height: min(457px, calc(100dvh - 232px));
-  padding: 8px 16px 16px;
-  gap: 0;
+  padding: 16px;
+  gap: 8px;
   border-radius: var(--radius-menu);
   transform: translateX(-50%);
 }
@@ -1905,8 +1874,8 @@ svg {
   flex: none;
   align-items: center;
   gap: 8px;
-  height: 64px;
-  padding: 0 8px;
+  height: 40px;
+  padding-left: 16px;
 }
 
 .search-head input {
@@ -2328,7 +2297,7 @@ a.row {
 
 /* ---- Narrow screens (the phone artboards) ---------------------------------------- */
 
-@media (max-width: 767px) {
+@media (max-width: 767px) and (hover: none) and (pointer: coarse) {
   /* The docked list gives way to the drawer (opened from the header). */
   .app-shell > .sidebar {
     display: none;
@@ -2356,6 +2325,21 @@ a.row {
 
   .app-header .icon-btn {
     color: var(--fg);
+  }
+
+  /* Equal-width sides keep the title centred whatever each side holds. */
+  .header-nav,
+  .header-actions {
+    flex: 1 1 0;
+    min-width: max-content;
+  }
+
+  .header-actions {
+    justify-content: flex-end;
+  }
+
+  .header-title {
+    flex: 0 1 auto;
   }
 
   .transcript {

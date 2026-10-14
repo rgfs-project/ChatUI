@@ -38,8 +38,44 @@ export function speakableText(markdown: string): string {
     .trim();
 }
 
+/**
+ * Chrome stops an utterance after about 15 seconds, so a reply is spoken in
+ * sentence-sized chunks of at most this many characters.
+ */
+const CHUNK = 200;
+
+/** Sentences, packed into chunks no longer than CHUNK (a longer sentence splits at spaces). */
+export function speechChunks(text: string): string[] {
+  const chunks: string[] = [];
+  let current = "";
+  const push = (piece: string) => {
+    if (current && current.length + 1 + piece.length > CHUNK) {
+      chunks.push(current);
+      current = piece;
+    } else current = current ? `${current} ${piece}` : piece;
+  };
+  for (const sentence of text.match(/[^.!?]+(?:[.!?]+|$)/g) ?? []) {
+    const trimmed = sentence.trim();
+    if (!trimmed) continue;
+    if (trimmed.length <= CHUNK) push(trimmed);
+    else for (const word of trimmed.split(" ")) push(word);
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+/**
+ * The utterances being spoken, held so Chrome cannot garbage-collect one
+ * mid-sentence (which cuts it off), and a run number so a stopped run's late
+ * callbacks are ignored.
+ */
+let queue: SpeechSynthesisUtterance[] = [];
+let run = 0;
+
 export function stopSpeaking(): void {
   if (!speechSupported()) return;
+  run += 1;
+  queue = [];
   window.speechSynthesis.cancel();
   set(null);
 }
@@ -48,18 +84,34 @@ export function toggleSpeaking(id: string, markdown: string): void {
   if (!speechSupported()) return;
   const synth = window.speechSynthesis;
   const wasThis = speaking === id;
-  synth.cancel();
-  if (wasThis) {
-    set(null);
-    return;
-  }
-  const utterance = new SpeechSynthesisUtterance(speakableText(markdown));
-  utterance.onend = () => {
-    if (speaking === id) set(null);
-  };
-  utterance.onerror = utterance.onend;
+  const busy = synth.speaking || synth.pending;
+  stopSpeaking();
+  if (wasThis) return;
+  const mine = run;
+  queue = speechChunks(speakableText(markdown)).map((text, n, all) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    if (n === all.length - 1) {
+      utterance.onend = () => {
+        if (run === mine) stopSpeaking();
+      };
+    }
+    utterance.onerror = (event) => {
+      // "interrupted"/"canceled" come from our own cancel().
+      if (run === mine && event.error !== "interrupted" && event.error !== "canceled")
+        stopSpeaking();
+    };
+    return utterance;
+  });
+  if (queue.length === 0) return;
   set(id);
-  synth.speak(utterance);
+  const start = () => {
+    if (run !== mine) return;
+    for (const utterance of queue) synth.speak(utterance);
+  };
+  // speak() straight after cancel() drops the start of the new speech in
+  // Chrome and Safari: let the cancel settle first.
+  if (busy) setTimeout(start, 100);
+  else start();
 }
 
 const noopSubscribe = () => () => undefined;

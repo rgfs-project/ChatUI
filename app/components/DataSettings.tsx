@@ -433,11 +433,11 @@ export default function DataSettings({ userId }: { userId: string }) {
               </label>
             ) : null}
             <div className="dialog-actions">
-              <button type="button" className="btn dialog" onClick={() => void cancel()}>
+              <button type="button" className="btn dialog-btn" onClick={() => void cancel()}>
                 Cancel
               </button>
               <button
-                className="btn dialog primary"
+                className="btn dialog-btn primary"
                 type="button"
                 disabled={commit.isPending || (preview.previousImport !== null && !again)}
                 onClick={() => {

@@ -47,7 +47,7 @@ export const DialogClose = Dialog.Close;
 function CancelButton() {
   return (
     <Dialog.Close asChild>
-      <button type="button" className="btn dialog">
+      <button type="button" className="btn dialog-btn">
         Cancel
       </button>
     </Dialog.Close>
@@ -78,7 +78,7 @@ export function ConfirmDialog(props: {
         <CancelButton />
         <button
           type="button"
-          className={`btn dialog ${props.tone === "primary" ? "primary" : "danger"}`}
+          className={`btn dialog-btn ${props.tone === "primary" ? "primary" : "danger"}`}
           onClick={() => {
             props.onConfirm();
             props.onOpenChange(false);
@@ -143,7 +143,7 @@ export function TextDialog(props: {
         />
         <div className="dialog-actions">
           <CancelButton />
-          <button type="submit" className="btn dialog primary">
+          <button type="submit" className="btn dialog-btn primary">
             {props.submitLabel}
           </button>
         </div>
@@ -252,7 +252,7 @@ export function PasswordDialog(props: {
         ) : null}
         <div className="dialog-actions">
           <CancelButton />
-          <button type="submit" className="btn dialog primary" disabled={busy}>
+          <button type="submit" className="btn dialog-btn primary" disabled={busy}>
             Change
           </button>
         </div>

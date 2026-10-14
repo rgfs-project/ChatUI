@@ -276,7 +276,9 @@ test.describe("phone 390x844", () => {
   });
 });
 
-test.describe("breakpoint 768 ±1", () => {
+test.describe("breakpoint 768 ±1 (touch)", () => {
+  // The phone layout needs a touch screen as well as a narrow viewport.
+  test.use({ isMobile: true, hasTouch: true });
   for (const [width, drawer] of [
     [767, true],
     [768, false],
@@ -297,6 +299,12 @@ test.describe("breakpoint 768 ±1", () => {
       expect(g.overflowRight).toBeLessThanOrEqual(0);
     });
   }
+});
+
+test("767px with a mouse keeps the desktop layout", async ({ page }) => {
+  await page.setViewportSize({ width: 767, height: 1024 });
+  await open(page, `/chat/${WIDE_CONVERSATION}`);
+  await expect(page.locator("#sidebar")).toBeVisible();
 });
 
 test.describe("tablet 820x1180", () => {
