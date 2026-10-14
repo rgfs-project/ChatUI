@@ -36,6 +36,25 @@ export function useScrollPin<T extends HTMLElement>(
   // A smooth scroll in flight: size changes don't snap it to the end.
   const gliding = useRef(false);
   const lastGlide = useRef(glideVersion);
+  // After a send, the newest user message sits at the top: a spacer after
+  // the transcript reserves the room its reply will grow into.
+  const spacer = useRef<HTMLDivElement>(null);
+  const anchored = useRef(false);
+  const fitSpacer = useCallback(() => {
+    const el = ref.current;
+    const space = spacer.current;
+    if (!el || !space) return;
+    let height = 0;
+    const turns = anchored.current ? el.querySelectorAll<HTMLElement>(".turn-user") : [];
+    const anchor = turns[turns.length - 1];
+    if (anchor) {
+      const style = getComputedStyle(el);
+      const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const below = space.getBoundingClientRect().top - anchor.getBoundingClientRect().top;
+      height = Math.max(0, Math.floor(el.clientHeight - padding - below));
+    }
+    if (space.style.height !== `${String(height)}px`) space.style.height = `${String(height)}px`;
+  }, []);
   // Unpinned and well away from the bottom: offer "jump to latest", whether
   // or not anything new has arrived (owner's request, after ChatGPT).
   const [away, setAway] = useState(false);
@@ -95,22 +114,34 @@ export function useScrollPin<T extends HTMLElement>(
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
-      if (!pinned.current || gliding.current) return;
-      el.scrollTop = el.scrollHeight;
-      lastTop.current = el.scrollTop;
+      fitSpacer();
+      if (pinned.current && !gliding.current) {
+        el.scrollTop = el.scrollHeight;
+        lastTop.current = el.scrollTop;
+      }
+      // A size change without a scroll (a reply swapped for its stored copy)
+      // must not leave "jump to latest" showing at the bottom.
+      updateAway();
     });
     observer.observe(el);
-    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    for (const child of el.children) if (child !== spacer.current) observer.observe(child);
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [fitSpacer, updateAway]);
 
   // Content changed: follow it if pinned, otherwise re-check "jump to latest".
   // A layout effect, so the new content is never painted before we follow it.
   useLayoutEffect(() => {
-    const glide = lastGlide.current !== glideVersion;
+    // A new send (not the optimistic copy being replaced by the stored one).
+    const glide = lastGlide.current !== glideVersion && glideVersion !== "";
     lastGlide.current = glideVersion;
+    if (glide) {
+      // A send: anchor its message at the top, from wherever the view was.
+      anchored.current = true;
+      pinned.current = true;
+    }
+    fitSpacer();
     if (!pinned.current) {
       updateAway();
       return;
@@ -132,7 +163,7 @@ export function useScrollPin<T extends HTMLElement>(
     el.addEventListener("scrollend", done);
     setTimeout(done, 600);
     scrollToBottom("smooth");
-  }, [contentVersion, glideVersion, scrollToBottom, updateAway]);
+  }, [contentVersion, glideVersion, fitSpacer, scrollToBottom, updateAway]);
 
   return {
     ref,
@@ -141,10 +172,21 @@ export function useScrollPin<T extends HTMLElement>(
     showJump: away,
     /** Back to the newest message, pinned again (no animation under reduced motion). */
     jumpToLatest: () => {
+      const el = ref.current;
       const reduced =
         typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
       scrollToBottom(reduced ? "auto" : "smooth");
+      // Content that grew during the glide is caught up when it ends.
+      el?.addEventListener(
+        "scrollend",
+        () => {
+          if (pinned.current) scrollToBottom();
+        },
+        { once: true },
+      );
     },
+    /** The element after the transcript that keeps a sent message at the top. */
+    spacerRef: spacer,
     isPinned: () => pinned.current,
     /** Leaves the bottom to show one element (search result navigation). */
     reveal: (element: HTMLElement) => {

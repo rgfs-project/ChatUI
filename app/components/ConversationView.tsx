@@ -463,6 +463,7 @@ export function ConversationView(props: {
     showJump,
     jumpToLatest,
     reveal,
+    spacerRef,
   } = useScrollPin<HTMLDivElement>(
     contentVersion,
     optimistic.map(({ state }) => state.variables?.tempId ?? "").join(","),
@@ -1128,6 +1129,7 @@ export function ConversationView(props: {
             </li>
           ) : null}
         </ol>
+        <div ref={spacerRef} className="transcript-spacer" aria-hidden />
         {loading ? (
           <Spinner label="Loading conversation…" testId="transcript-loading" />
         ) : fetchError ? (

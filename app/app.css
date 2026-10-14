@@ -1007,8 +1007,8 @@ svg {
   white-space: nowrap;
 }
 
+/* No hover box (after ChatGPT): only the label darkens. */
 .section-toggle:hover {
-  background: var(--hover);
   color: var(--fg);
 }
 
