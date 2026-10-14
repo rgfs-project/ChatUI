@@ -159,7 +159,7 @@ describe("message operations (Phase 13a)", () => {
     });
     // The edit is followed by a new reply.
     await waitFor(() => {
-      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/regenerate"))).toBe(true);
+      expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/regenerate"))).toBe(true);
     });
   });
 });

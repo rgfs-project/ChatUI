@@ -337,15 +337,18 @@ export function ConversationView(props: {
     (items: readonly MessageAttachmentDto[], index: number, trigger: HTMLElement) => {
       setViewer({ items, index, trigger });
     },
-    [],
+    [setViewer],
   );
   const [openArtifact, setOpenArtifact] = useState<{
     artifact: MessageArtifactDto;
     trigger: HTMLElement;
   } | null>(null);
-  const onOpenArtifact = useCallback((artifact: MessageArtifactDto, trigger: HTMLElement) => {
-    setOpenArtifact({ artifact, trigger });
-  }, []);
+  const onOpenArtifact = useCallback(
+    (artifact: MessageArtifactDto, trigger: HTMLElement) => {
+      setOpenArtifact({ artifact, trigger });
+    },
+    [setOpenArtifact],
+  );
 
   const conversationQuery = useQuery({
     ...queries.conversation(userId, conversationId ?? ""),

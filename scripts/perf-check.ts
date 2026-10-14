@@ -132,7 +132,6 @@ export const LAZY_ONLY = [
   "MemorySuggestions",
   "MemorySettings",
   "ArtifactPanel",
-  "ArtifactSettings",
   "DataSettings",
   "MathView",
   "highlight",

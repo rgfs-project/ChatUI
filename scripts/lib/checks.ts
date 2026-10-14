@@ -50,7 +50,7 @@ export async function httpChecks(base: string): Promise<string[]> {
     "GET / is 200 text/html",
     doc.status === 200 && (doc.headers.get("content-type") ?? "").startsWith("text/html"),
   );
-  check("INV-54: server HTML contains the heading", html.includes("<h1>ChatUI</h1>"));
+  check("INV-54: server HTML contains the heading", /<h1[^>]*>ChatUI<\/h1>/.test(html));
   check(
     "INV-54: server HTML contains the server-rendered health result",
     html.includes('data-testid="health-status">OK<') &&
@@ -165,10 +165,10 @@ export async function browserChecks(base: string): Promise<void> {
     check(
       "hydrated page becomes interactive",
       (await page.getByTestId("hydration-state").textContent()) === "Interactive" &&
-        (await page.getByRole("button", { name: "Check status again" }).isEnabled()),
+        (await page.getByRole("button", { name: "Check again" }).isEnabled()),
     );
     const healthResponse = page.waitForResponse((r) => r.url().endsWith("/api/health"));
-    await page.getByRole("button", { name: "Check status again" }).click();
+    await page.getByRole("button", { name: "Check again" }).click();
     check("client fetch to /api/health allowed by CSP", (await healthResponse).status() === 200);
     check(
       "INV-56: no hydration mismatch, CSP violation or console warnings",
@@ -409,7 +409,7 @@ export async function chatChecks(
     const current = page.getByTestId("conversation-list").locator("li.current");
     await current.getByRole("button", { name: /Actions for/ }).click();
     await page.getByRole("menuitem", { name: "Rename" }).click();
-    await page.locator("#rename-title").fill("Renamed in verify");
+    await page.getByRole("dialog").getByRole("textbox").fill("Renamed in verify");
     await page.getByRole("dialog").getByRole("button", { name: "Rename" }).click();
     await page
       .getByTestId("conversation-list")
