@@ -97,6 +97,13 @@
   --shadow-sheet: 0 -8px 32px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.5));
 }
 
+/* A narrower desktop window gets a narrower sidebar (after ChatGPT: 340 → 260). */
+@media (max-width: 1279px) {
+  :root {
+    --sidebar-width: 260px;
+  }
+}
+
 :root[data-theme="light"] {
   color-scheme: light;
 }
