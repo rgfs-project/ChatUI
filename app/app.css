@@ -1278,7 +1278,7 @@ svg {
   min-height: 0;
   overflow-y: auto;
   overflow-anchor: none;
-  padding: 24px 20px;
+  padding: 24px 20px 80px;
 }
 
 .transcript-inner {
