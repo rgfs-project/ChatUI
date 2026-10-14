@@ -40,3 +40,134 @@
 .project-instructions-input {
   min-height: 220px;
 }
+
+/* ---- As ChatGPT's project page and Create project dialog ---- */
+
+.project-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-composer);
+  background: var(--surface);
+  box-shadow: var(--shadow-composer);
+  color: var(--muted);
+}
+
+.project-composer input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--text-lg);
+  line-height: 26px;
+}
+
+.project-composer .send-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--fg);
+  color: var(--canvas);
+}
+
+.project-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: -24px;
+}
+
+.project-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 48px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  text-align: center;
+}
+
+.project-empty-title {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+}
+
+.project-chat-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-chat {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.project-chat:hover {
+  border-radius: var(--radius-xl);
+  background: var(--hover);
+}
+
+.project-chat .title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-chat .when {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.project-name-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius-xl);
+  color: var(--muted);
+}
+
+.project-name-field .input {
+  flex: 1;
+  border: 0;
+  box-shadow: none;
+}
+
+.project-note {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius-xl);
+  background: var(--fill);
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 20px;
+}
+
+.project-note .lucide {
+  flex: none;
+  margin-top: 2px;
+}

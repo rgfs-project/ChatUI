@@ -400,7 +400,7 @@ function ChatLists({
       >
         <li className="chat-row">
           <Link
-            to={paths.projects()}
+            to={`${paths.projects()}?new=1`}
             state={{ background: location.pathname }}
             onClick={onNavigate}
           >

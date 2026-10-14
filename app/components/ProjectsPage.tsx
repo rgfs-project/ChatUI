@@ -1,12 +1,12 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
+  ArrowUp,
   ChevronRight,
   Ellipsis,
   FolderClosed,
   FolderPlus,
-  MessageCircle,
+  Lightbulb,
   PanelLeft,
   Pencil,
   Plus,
@@ -14,11 +14,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import type { ProjectChanges, ProjectDto } from "@shared/library";
 import { LIBRARY_LIMITS } from "@shared/library-limits";
 import { paths } from "../lib/paths";
+import { relativeDay } from "../lib/relative-day";
 import { ApiError, apiJson, queries, queryKeys } from "../lib/query";
+import { NEW_DRAFT, useShell } from "../lib/shell-context";
 import { useSidebar } from "../lib/sidebar-context";
 import { ConfirmDialog, DialogClose, DialogFrame } from "./Dialogs";
 import "./files.css";
@@ -101,6 +103,8 @@ function DetailsDialog(props: {
   submitLabel: string;
   initial: { name: string; description: string };
   onSubmit: (fields: { name: string; description: string }) => void;
+  /** ChatGPT's "Create project": a name only, with a note on what projects are. */
+  create?: boolean;
 }) {
   const [name, setName] = useState(props.initial.name);
   const [description, setDescription] = useState(props.initial.description);
@@ -110,6 +114,7 @@ function DetailsDialog(props: {
       onOpenChange={props.onOpenChange}
       title={props.title}
       description="Projects keep related chats, and the instructions they follow, in one place."
+      hideDescription={props.create}
     >
       <form
         className="dialog-body"
@@ -121,30 +126,43 @@ function DetailsDialog(props: {
         }}
       >
         <label className="field">
-          <span className="field-label">What are you working on?</span>
-          <input
-            className="input"
-            value={name}
-            required
-            maxLength={LIBRARY_LIMITS.projectName}
-            placeholder="Name your project"
-            onChange={(event) => {
-              setName(event.currentTarget.value);
-            }}
-          />
+          <span className="field-label">
+            {props.create ? "Project name" : "What are you working on?"}
+          </span>
+          <span className={props.create ? "project-name-field" : undefined}>
+            {props.create ? <FolderClosed size={16} aria-hidden /> : null}
+            <input
+              className="input"
+              value={name}
+              required
+              maxLength={LIBRARY_LIMITS.projectName}
+              placeholder={props.create ? "Copenhagen Trip" : "Name your project"}
+              onChange={(event) => {
+                setName(event.currentTarget.value);
+              }}
+            />
+          </span>
         </label>
-        <label className="field">
-          <span className="field-label">What are you trying to achieve?</span>
-          <textarea
-            className="textarea project-description-input"
-            value={description}
-            maxLength={LIBRARY_LIMITS.projectDescription}
-            placeholder="Describe your project, goals, subject, etc. (optional)"
-            onChange={(event) => {
-              setDescription(event.currentTarget.value);
-            }}
-          />
-        </label>
+        {props.create ? (
+          <p className="project-note">
+            <Lightbulb size={16} aria-hidden />
+            Projects keep chats, files, and custom instructions in one place. Use them for ongoing
+            work, or just to keep things tidy.
+          </p>
+        ) : (
+          <label className="field">
+            <span className="field-label">What are you trying to achieve?</span>
+            <textarea
+              className="textarea project-description-input"
+              value={description}
+              maxLength={LIBRARY_LIMITS.projectDescription}
+              placeholder="Describe your project, goals, subject, etc. (optional)"
+              onChange={(event) => {
+                setDescription(event.currentTarget.value);
+              }}
+            />
+          </label>
+        )}
         <div className="dialog-actions">
           <DialogClose asChild>
             <button type="button" className="btn dialog-btn">
@@ -231,7 +249,13 @@ function ProjectList({ userId }: { userId: string }) {
   const projects = useQuery(queries.projects(userId));
   const { create } = useProjectMutations(userId);
   const navigate = useNavigate();
-  const [creating, setCreating] = useState(false);
+  // The sidebar's "New project" opens this page with the dialog open.
+  const [params, setParams] = useSearchParams();
+  const [creating, setCreatingState] = useState(params.get("new") === "1");
+  const setCreating = (open: boolean) => {
+    setCreatingState(open);
+    if (!open && params.has("new")) setParams({}, { replace: true });
+  };
   const [error, setError] = useState<string | null>(null);
   const list = [...(projects.data ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return (
@@ -315,8 +339,9 @@ function ProjectList({ userId }: { userId: string }) {
         key={String(creating)}
         open={creating}
         onOpenChange={setCreating}
-        title="New project"
+        title="Create project"
         submitLabel="Create project"
+        create
         initial={{ name: "", description: "" }}
         onSubmit={(fields) => {
           setError(null);
@@ -341,6 +366,8 @@ function ProjectView({ userId, projectId }: { userId: string; projectId: string 
   const [instructing, setInstructing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"chats" | "instructions">("chats");
+  const shell = useShell();
   const project = projects.data?.find((p) => p.id === projectId);
   const inProject = (chats.data ?? [])
     .filter((c) => c.projectId === projectId)
@@ -361,9 +388,6 @@ function ProjectView({ userId, projectId }: { userId: string; projectId: string 
       <MobileHeader title={project?.name ?? "Project"} />
       <div className="page-scroll">
         <div className="page-body">
-          <Link to={paths.projects()} className="back-link">
-            <ArrowLeft size={16} aria-hidden /> All projects
-          </Link>
           {projects.isPending ? (
             <p className="hint">Loading…</p>
           ) : !project ? (
@@ -374,7 +398,10 @@ function ProjectView({ userId, projectId }: { userId: string; projectId: string 
             <>
               <div className="page-head">
                 <div className="project-head">
-                  <h1 className="page-title">{project.name}</h1>
+                  <h1 className="page-title project-title">
+                    <FolderClosed size={20} aria-hidden />
+                    {project.name}
+                  </h1>
                   {project.description ? (
                     <p className="project-description">{project.description}</p>
                   ) : null}
@@ -411,11 +438,55 @@ function ProjectView({ userId, projectId }: { userId: string; projectId: string 
                   {error}
                 </p>
               ) : null}
-              <Link to={paths.newChat(project.id)} className="btn primary project-new-chat">
-                <SquarePen size={16} aria-hidden /> New chat in this project
-              </Link>
-              <section className="section">
-                <h2 className="section-title">Instructions</h2>
+              {/* As ChatGPT's project page: a box that starts a chat in it. */}
+              <form
+                className="project-composer"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const input = event.currentTarget.elements.namedItem("message");
+                  const text = input instanceof HTMLInputElement ? input.value.trim() : "";
+                  if (text) shell.setDraft(NEW_DRAFT, text);
+                  void navigate(paths.newChat(project.id));
+                }}
+              >
+                <Plus size={20} aria-hidden />
+                <input
+                  name="message"
+                  aria-label={`New chat in ${project.name}`}
+                  placeholder={`New chat in ${project.name}`}
+                  autoComplete="off"
+                />
+                <button type="submit" className="icon-btn send-btn" aria-label="Start chat">
+                  <ArrowUp size={20} aria-hidden />
+                </button>
+              </form>
+              <div className="project-tabs" role="tablist" aria-label="Project">
+                <button
+                  type="button"
+                  role="tab"
+                  className="search-tab"
+                  aria-selected={tab === "chats"}
+                  aria-pressed={tab === "chats"}
+                  onClick={() => {
+                    setTab("chats");
+                  }}
+                >
+                  Chats
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  className="search-tab"
+                  aria-selected={tab === "instructions"}
+                  aria-pressed={tab === "instructions"}
+                  onClick={() => {
+                    setTab("instructions");
+                  }}
+                >
+                  Instructions
+                </button>
+              </div>
+              {tab === "instructions" ? (
                 <div className="group">
                   <div className="row">
                     <div className="row-text">
@@ -447,37 +518,28 @@ function ProjectView({ userId, projectId }: { userId: string; projectId: string 
                     </button>
                   </div>
                 </div>
-              </section>
-              <section className="section">
-                <h2 className="section-title">Chats</h2>
-                {inProject.length === 0 ? (
-                  <div className="group">
-                    <p className="row row-hint">
-                      No chats yet. Start one above, or use “Move to project” in a chat’s menu.
-                    </p>
-                  </div>
-                ) : (
-                  <ul className="group" aria-label={`Chats in ${project.name}`}>
-                    {inProject.map((chat) => (
-                      <li key={chat.id}>
-                        <Link to={paths.chat(chat.id)} className="row project-row">
-                          <span className="file-icon" aria-hidden>
-                            <MessageCircle size={18} />
-                          </span>
-                          <span className="row-text grow">
-                            <span className="row-label">{chat.title}</span>
-                            <span className="row-hint">
-                              {new Date(chat.updatedAt).toLocaleDateString()}
-                              {chat.archived ? " · Archived" : ""}
-                            </span>
-                          </span>
-                          <ChevronRight size={16} className="muted" aria-hidden />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
+              ) : inProject.length === 0 ? (
+                <div className="project-empty">
+                  <p className="project-empty-title">Chats in this project show up here</p>
+                  <p className="row-hint">
+                    Start one above, or use “Move to project” in a chat’s menu.
+                  </p>
+                </div>
+              ) : (
+                <ul className="project-chat-list" aria-label={`Chats in ${project.name}`}>
+                  {inProject.map((chat) => (
+                    <li key={chat.id}>
+                      <Link to={paths.chat(chat.id)} className="project-chat">
+                        <span className="title">{chat.title}</span>
+                        <span className="when">
+                          {relativeDay(chat.updatedAt)}
+                          {chat.archived ? " · Archived" : ""}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <DetailsDialog
                 key={`details:${String(editing)}`}
                 open={editing}
