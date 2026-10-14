@@ -240,11 +240,21 @@ export function ErrorBoundary() {
  * height", so only in that case the visual viewport height is exposed as
  * `--app-height` (the shell's height). Where the layout viewport already
  * resizes (Chromium), innerHeight shrinks with it and nothing is set.
+ * Only iOS needs it: elsewhere the visual viewport also changes while a
+ * dynamic toolbar slides (Firefox for Android), and following that resized
+ * the shell on every scroll, shaking a streaming reply.
  */
+function isIOS(): boolean {
+  const nav = window.navigator;
+  return (
+    /iP(hone|ad|od)/.test(nav.userAgent) || (nav.platform === "MacIntel" && nav.maxTouchPoints > 1)
+  );
+}
+
 function useVisualViewportHeight(): void {
   useEffect(() => {
     const viewport = window.visualViewport;
-    if (!viewport) return;
+    if (!viewport || !isIOS()) return;
     const root = document.documentElement;
     const update = () => {
       if (viewport.height < window.innerHeight - 1)
