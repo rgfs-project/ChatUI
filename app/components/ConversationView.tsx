@@ -53,7 +53,8 @@ import {
   takeReady,
   useTray,
 } from "../lib/attachments";
-import { authStore } from "../lib/auth-store";
+import { authStore, useAuth } from "../lib/auth-store";
+import { displayNameOf } from "./AccountLabel";
 import { menuRequest, type MenuRequest } from "../lib/menu-request";
 import { paths, type OverlayState } from "../lib/paths";
 import { markAccepted, markGeneration, markOnce } from "../lib/perf";
@@ -298,6 +299,10 @@ export function ConversationView(props: {
   const actions = useChatActions(userId);
   const help = useHelp(userId);
   const draftKey = conversationId ?? NEW_DRAFT;
+  // "How can I help, Matt?" (first name), as ChatGPT.
+  const me = useAuth().session?.user;
+  const firstName = me ? displayNameOf(me).split(/\s+/)[0] : "";
+  const greeting = firstName ? `How can I help, ${firstName}?` : "How can I help?";
   const projects = useQuery({ ...queries.projects(userId), enabled: Boolean(props.projectId) });
   const draftProject = conversationId
     ? undefined
@@ -1009,7 +1014,7 @@ export function ConversationView(props: {
       >
         {empty ? (
           conversation ? (
-            <h2 className="greeting">Hello! How can I help?</h2>
+            <h2 className="greeting">{greeting}</h2>
           ) : (
             <>
               {draftProject ? (
@@ -1017,7 +1022,7 @@ export function ConversationView(props: {
                   <FolderClosed size={16} aria-hidden /> {draftProject.name}
                 </Link>
               ) : null}
-              <h1 className="greeting">Hello! How can I help?</h1>
+              <h1 className="greeting">{greeting}</h1>
             </>
           )
         ) : null}
