@@ -59,6 +59,16 @@ import {
   rejectProposalRoute,
   updateMemoryRoute,
 } from "./memories.ts";
+import {
+  archiveAllRoute,
+  archiveChatRoute,
+  createProjectRoute,
+  deleteProjectRoute,
+  listProjectsRoute,
+  moveChatRoute,
+  renameProjectRoute,
+  unarchiveChatRoute,
+} from "./library.ts";
 import { getOperationRoute } from "./operations.ts";
 import { createSkillRoute, deleteSkillRoute, listSkillsRoute, updateSkillRoute } from "./skills.ts";
 import { listModelsRoute, listProvidersRoute } from "./models.ts";
@@ -112,6 +122,15 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(pinConversationRoute),
   erase(unpinConversationRoute),
   erase(searchRoute),
+  // Projects and the archive.
+  erase(listProjectsRoute),
+  erase(createProjectRoute),
+  erase(renameProjectRoute),
+  erase(deleteProjectRoute),
+  erase(moveChatRoute),
+  erase(archiveChatRoute),
+  erase(unarchiveChatRoute),
+  erase(archiveAllRoute),
   // Approved memories and proposals (Phase 13b).
   erase(listMemoriesRoute),
   erase(createMemoryRoute),

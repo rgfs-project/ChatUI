@@ -20,6 +20,7 @@ import { AppError } from "./errors.ts";
 import type { ModelCatalog } from "./generations/catalog.ts";
 import type { GenerationManager } from "./generations/manager.ts";
 import type { SseConnections, SseOptions } from "./generations/sse.ts";
+import type { LibraryStore } from "./storage/library.ts";
 import type { PreferencesStore } from "./storage/preferences.ts";
 import type { SkillsStore } from "./storage/skills.ts";
 import type { UserStore } from "./storage/users.ts";
@@ -53,6 +54,8 @@ export interface RouteServices {
   limits: RequestLimits;
   users: UserStore;
   preferences: PreferencesStore;
+  /** Projects, chat → project, the archive (library.json). */
+  library: LibraryStore;
   /** Edit, delete exchange, clear history, pins (Phase 13a). */
   mutations: ConversationMutations;
   /** Uploaded attachments (Phase 12). */

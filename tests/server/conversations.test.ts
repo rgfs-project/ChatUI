@@ -148,6 +148,8 @@ describe("conversations API", () => {
         messageCount: 0,
         malformed: false,
         pinnedRank: null,
+        projectId: null,
+        archived: false,
       },
     ]);
 

@@ -197,6 +197,11 @@ export class DataPaths {
     return this.inside(this.uuid(userId, "user id"), "preferences.json");
   }
 
+  /** Projects, chat → project and the archive (UI organisation, canonical). */
+  libraryFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "library.json");
+  }
+
   skillsFile(userId: string): string {
     return this.inside(this.uuid(userId, "user id"), "skills.json");
   }

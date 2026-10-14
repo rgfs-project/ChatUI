@@ -113,7 +113,10 @@ export const listConversationsRoute = defineRoute({
   handler: async (_input, ctx) => {
     const userId = userOf(ctx).userId;
     // Pins ride on the list (one request); canonical in preferences (INV-34).
+    // Projects and the archive likewise, from library.json.
     const pins = (await ctx.services.preferences.get(userId)).pins;
+    const library = await ctx.services.library.get(userId);
+    const archived = new Set(library.archived);
     return {
       conversations: ctx.services.conversations.list(userId).map((entry) =>
         conversationSummarySchema.parse({
@@ -124,6 +127,8 @@ export const listConversationsRoute = defineRoute({
           messageCount: entry.messageCount,
           malformed: entry.malformed,
           pinnedRank: pins.includes(entry.id) ? pins.indexOf(entry.id) : null,
+          projectId: library.assignments[entry.id] ?? null,
+          archived: archived.has(entry.id),
         }),
       ),
     };

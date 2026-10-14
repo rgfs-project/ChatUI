@@ -32,6 +32,7 @@ import { createSafeFetch, systemResolver, type Resolver } from "./providers/ssrf
 import { PasswordHasher } from "./auth/passwords.ts";
 import { AuthService, type AuthContext } from "./auth/service.ts";
 import { SessionStore } from "./auth/sessions.ts";
+import { LibraryStore } from "./storage/library.ts";
 import { PreferencesStore } from "./storage/preferences.ts";
 import { SkillsStore } from "./storage/skills.ts";
 import { UserStore } from "./storage/users.ts";
@@ -249,6 +250,7 @@ export function createApp(options: AppOptions): ChatUiApp {
       await proposalStore.delete(userId, id);
       await attachments.deleteForConversation(userId, id);
       await mutations.dropPin(userId, id);
+      await library.forget(userId, id);
     },
   });
   const proposals: ProposalService = new ProposalService({
@@ -273,6 +275,7 @@ export function createApp(options: AppOptions): ChatUiApp {
   });
   const audit = new AuditLog({ paths, locks, now });
   const preferences = new PreferencesStore(paths, locks, accountWrites);
+  const library = new LibraryStore({ paths, locks, writes: accountWrites, now });
   const mutations = new ConversationMutations({
     store: conversations,
     generations,
@@ -512,6 +515,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     limits: new RequestLimits({ ...DEFAULT_RATE_LIMITS, ...options.config.rateLimits }),
     users,
     preferences,
+    library,
     attachments,
     mutations,
     skills,
