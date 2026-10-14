@@ -1278,6 +1278,9 @@ svg {
   min-height: 0;
   overflow-y: auto;
   overflow-anchor: none;
+  /* The pinned scroll follows each streamed token: a bounce at the end must
+     not hand that scroll on to the page (it shook the view on iOS). */
+  overscroll-behavior: contain;
   padding: 24px 20px 80px;
 }
 
