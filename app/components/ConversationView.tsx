@@ -1104,12 +1104,11 @@ export function ConversationView(props: {
                 />
               ) : null}
               {/* Streaming Markdown block by block: unfinished fences and tables
-                  render stably, and finished blocks keep their DOM. Each block
-                  fades in once complete; the one still being written is held. */}
+                  render stably, and finished blocks keep their DOM. */}
               <div data-testid="content">
                 <Markdown text={live.content} live growing={!isTerminalState(live.state)} />
               </div>
-              {running ? (
+              {running && live.content === "" ? (
                 <span className="thinking" role="status" aria-label="Generating a reply">
                   <span className="breathe" aria-hidden />
                 </span>
@@ -1121,7 +1120,10 @@ export function ConversationView(props: {
                   </span>
                 </div>
               ) : null}
-              <p className="visually-hidden" data-testid="generation-status">
+              <p
+                className={running || live.error ? "visually-hidden" : "status-line"}
+                data-testid="generation-status"
+              >
                 {STATE_LABEL[live.state]}
                 {live.error ? ` — ${live.error.message}` : ""}
               </p>

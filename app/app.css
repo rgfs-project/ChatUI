@@ -3033,20 +3033,3 @@ textarea,
   -webkit-user-select: text;
   user-select: text;
 }
-
-/* A streaming reply appears a block (paragraph, list, code block…) at a
-   time: the block still being written is held back, and each one fades in
-   as it completes. */
-.turn.live .markdown > * {
-  transition: opacity 300ms ease;
-}
-
-.turn.live.streaming .markdown > :last-child {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .turn.live .markdown > * {
-    transition: none;
-  }
-}
