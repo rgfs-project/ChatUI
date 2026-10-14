@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { LOG_LEVELS, LOG_RETENTION_DAYS } from "@shared/admin";
 import type { Logger } from "../logger.ts";
 import { atomicWrite, ensureDir, readOrNull } from "../storage/fs.ts";
 import type { KeyedLocks } from "../storage/locks.ts";
@@ -81,6 +82,13 @@ export const instanceSettingsSchema = z.strictObject({
       maxPerMessage: z.number().int().min(1).max(10).optional(),
       quotaBytes: z.number().int().min(1_024).max(1_099_511_627_776).optional(),
       textInlineBytes: z.number().int().min(256).max(10_000_000).optional(),
+    })
+    .optional(),
+  /** Settings → Logs: what is recorded and for how long. */
+  logging: z
+    .strictObject({
+      level: z.enum(LOG_LEVELS).optional(),
+      retentionDays: z.union(LOG_RETENTION_DAYS.map((d) => z.literal(d))).optional(),
     })
     .optional(),
   models: z.array(modelSettingsSchema).max(2_000),

@@ -5,6 +5,10 @@ import {
   adminSettingsDtoSchema,
   adminUserDtoSchema,
   auditEntrySchema,
+  LOG_LEVELS,
+  LOG_RETENTION_DAYS,
+  logEntrySchema,
+  logSettingsSchema,
   modelRefSchema,
 } from "@shared/admin";
 import { ErrorCode } from "@shared/errors";
@@ -19,7 +23,7 @@ import {
   type AttachmentSettingKey,
 } from "../admin/settings.ts";
 import { AppError } from "../errors.ts";
-import { defineRoute, userOf, type RouteContext } from "../registry.ts";
+import { defineRawRoute, defineRoute, userOf, type RouteContext } from "../registry.ts";
 
 /**
  * Admin API (Phase 10). Every route uses the registry's `admin` policy
@@ -49,14 +53,26 @@ async function audited<T>(
       ...(code ? { code } : {}),
       ...(fields && fields.length > 0 ? { fields } : {}),
     });
+  const event = (ok: boolean, code?: string) =>
+    ctx.services.admin.events.record({
+      level: ok ? "info" : "warn",
+      source: "admin",
+      message: `${action}${target.label ? ` ${target.label}` : ""}${ok ? "" : ` failed (${code ?? "error"})`}`,
+      user: { id: actor.userId, username: actor.username },
+      details:
+        fields && fields.length > 0
+          ? JSON.stringify({ target, fields }, null, 2)
+          : JSON.stringify({ target }, null, 2),
+    });
   try {
     const result = await fn();
     await record("success");
+    await event(true);
     return result;
   } catch (error) {
-    await record("failure", error instanceof AppError ? error.code : ErrorCode.INTERNAL).catch(
-      () => undefined,
-    );
+    const code = error instanceof AppError ? error.code : ErrorCode.INTERNAL;
+    await record("failure", code).catch(() => undefined);
+    await event(false, code);
     throw error;
   }
 }
@@ -401,6 +417,12 @@ export const adminUpdateSettingsRoute = defineRoute({
           textInlineBytes: z.number().int().min(256).max(10_000_000).nullable().optional(),
         })
         .optional(),
+      logging: z
+        .strictObject({
+          level: z.enum(LOG_LEVELS).optional(),
+          retentionDays: z.union(LOG_RETENTION_DAYS.map((d) => z.literal(d))).optional(),
+        })
+        .optional(),
     }),
   },
   response: adminSettingsDtoSchema,
@@ -437,6 +459,7 @@ export const adminUpdateSettingsRoute = defineRoute({
             }
             next.attachments = merged;
           }
+          if (body.logging) next.logging = { ...next.logging, ...body.logging };
           return next;
         });
       } catch (error) {
@@ -481,5 +504,77 @@ export const adminAuditRoute = defineRoute({
   handler: async ({ query }, ctx) => ({
     entries: await ctx.services.admin.audit.recent(query.limit ?? 100),
   }),
+  fixture: {},
+});
+
+// ---- Settings → Logs -------------------------------------------------------------
+
+export const adminLogsRoute = defineRoute({
+  method: "get",
+  path: "/api/admin/logs",
+  auth: "admin",
+  csrf: "none",
+  request: {
+    query: z.strictObject({ limit: z.coerce.number().int().min(1).max(1000).optional() }),
+  },
+  response: z.strictObject({ entries: z.array(logEntrySchema), settings: logSettingsSchema }),
+  handler: async ({ query }, ctx) => ({
+    entries: await ctx.services.admin.events.recent(query.limit ?? 200),
+    settings: ctx.services.admin.events.current,
+  }),
+  fixture: {},
+});
+
+export const adminLogEntryRoute = defineRoute({
+  method: "get",
+  path: "/api/admin/logs/:id",
+  auth: "admin",
+  csrf: "none",
+  request: { params: z.strictObject({ id: z.string().max(64) }) },
+  response: logEntrySchema,
+  handler: async ({ params }, ctx) => {
+    const entry = await ctx.services.admin.events.get(params.id);
+    if (!entry) throw new AppError(ErrorCode.NOT_FOUND, "Log entry not found");
+    return entry;
+  },
+  fixture: { params: { id: "2000-01-01.0000000000000000" }, expectStatus: 404 },
+});
+
+/** Every kept entry as a JSON file, downloaded. */
+export const adminExportLogsRoute = defineRawRoute({
+  kind: "raw",
+  method: "get",
+  path: "/api/admin/logs/export",
+  auth: "admin",
+  csrf: "none",
+  request: { query: z.strictObject({}) },
+  handler: async (_input, ctx) => {
+    const entries = await ctx.services.admin.events.all();
+    const day = new Date().toISOString().slice(0, 10);
+    ctx.res
+      .status(200)
+      .set({
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="chatui-logs-${day}.json"`,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+      })
+      .end(`${JSON.stringify({ entries }, null, 2)}\n`);
+  },
+  fixture: {},
+});
+
+export const adminClearLogsRoute = defineRoute({
+  method: "delete",
+  path: "/api/admin/logs",
+  auth: "admin",
+  csrf: "token",
+  request: {},
+  response: z.strictObject({ ok: z.literal(true) }),
+  handler: (_input, ctx) =>
+    audited(ctx, "logs.clear", { type: "maintenance" }, undefined, async () => {
+      await ctx.services.admin.events.clear();
+      return { ok: true as const };
+    }),
   fixture: {},
 });

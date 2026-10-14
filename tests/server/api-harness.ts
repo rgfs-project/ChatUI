@@ -20,14 +20,19 @@ afterEach(async () => {
   }
 });
 
-export async function startApi() {
+export async function startApi(role: "user" | "admin" = "user") {
   const { chatui } = testApp({ config: { dataDir: tempDataDir(), storage: storageConfig() } });
   await chatui.ready;
   const server = createServer(chatui.handler);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   servers.push({ server, chatui });
   const base = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
-  const session: TestSession = await signIn(base, chatui);
+  const session: TestSession = await signIn(
+    base,
+    chatui,
+    role === "admin" ? "root" : "alice",
+    role,
+  );
   const api = async (method: string, url: string, body?: unknown) => {
     const res = await fetch(`${base}${url}`, {
       method,

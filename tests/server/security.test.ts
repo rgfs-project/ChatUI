@@ -107,6 +107,9 @@ describe("request budgets (RATE_LIMITED + Retry-After)", () => {
       "POST /api/conversations/:id/regenerate": "generation",
       "POST /api/attachments": "upload",
       "POST /api/imports": "upload",
+      "POST /api/files": "upload",
+      "PUT /api/account/photo": "upload",
+      "POST /api/reports": "upload",
     };
     for (const route of apiRoutes) {
       const bucket = rateBucketOf(route);

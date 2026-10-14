@@ -20,6 +20,7 @@ import { AppError } from "./errors.ts";
 import type { ModelCatalog } from "./generations/catalog.ts";
 import type { GenerationManager } from "./generations/manager.ts";
 import type { SseConnections, SseOptions } from "./generations/sse.ts";
+import type { EventLog } from "./admin/event-log.ts";
 import type { LibraryStore } from "./storage/library.ts";
 import type { ProfileStore } from "./storage/profiles.ts";
 import type { PreferencesStore } from "./storage/preferences.ts";
@@ -84,6 +85,8 @@ export interface RouteServices {
     providers: ProviderAdmin;
     settings: SettingsStore;
     audit: AuditLog;
+    /** Settings → Logs. */
+    events: EventLog;
     /** Rebuilds the derived conversation index of one user, or every user. */
     rebuildIndex: (userId?: string) => Promise<number>;
   };

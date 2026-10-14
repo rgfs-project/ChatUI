@@ -52,6 +52,8 @@ export const attachmentMetaSchema = z.strictObject({
   /** Images only: pixel size from the sniffed header (lets the UI reserve space). */
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
+  /** Uploaded on the Files page to keep: never garbage-collected as pending. */
+  kept: z.literal(true).optional(),
 });
 export type AttachmentMeta = z.infer<typeof attachmentMetaSchema>;
 
@@ -553,6 +555,33 @@ export class AttachmentStore {
     );
   }
 
+  /** Marks a fresh upload as kept in Files (exempt from pending GC). */
+  async keep(userId: string, id: string): Promise<AttachmentMeta> {
+    return this.writes.run(userId, () =>
+      this.locks.run(lockKey(userId, id), async () => {
+        const meta = await this.readMeta(userId, id);
+        if (!meta) throw new AppError(ErrorCode.NOT_FOUND, "Attachment not found");
+        const kept: AttachmentMeta = { ...meta, kept: true };
+        await this.writeMeta(userId, kept);
+        return kept;
+      }),
+    );
+  }
+
+  /**
+   * Deletes from the Files page, linked or not. A message that referenced it
+   * shows it as missing (contracts §7 tolerates that; the prompt skips it).
+   */
+  async deleteAny(userId: string, id: string): Promise<void> {
+    await this.writes.run(userId, () =>
+      this.locks.run(lockKey(userId, id), async () => {
+        if (!(await this.readMeta(userId, id)))
+          throw new AppError(ErrorCode.NOT_FOUND, "File not found");
+        await this.removeUnlocked(userId, id);
+      }),
+    );
+  }
+
   private async removeUnlocked(userId: string, id: string): Promise<void> {
     // meta.json first: a directory without it is an incomplete upload, never a valid attachment.
     await rm(this.paths.attachmentMeta(userId, id), { force: true });
@@ -664,7 +693,7 @@ export class AttachmentStore {
         }
         continue;
       }
-      if (meta.messageId === null) pending.push(meta);
+      if (meta.messageId === null && meta.kept !== true) pending.push(meta);
     }
     if (pending.length === 0) return report;
     const references = await this.references(userId);

@@ -56,6 +56,7 @@ import { toConversationDto } from "./routes/conversations.ts";
 import { securityHeaders, type CspMode } from "./csp.ts";
 import { AppError, apiErrorHandler, apiNotFound, sendError } from "./errors.ts";
 import type { Logger } from "./logger.ts";
+import { DEFAULT_LOG_SETTINGS, EventLog, teeLogger } from "./admin/event-log.ts";
 import { isLoopbackAddress } from "./loopback.ts";
 import { buildApiRouter, type AnyApiRoute, type RouteServices } from "./registry.ts";
 import { apiRoutes } from "./routes/index.ts";
@@ -139,13 +140,15 @@ export interface ChatUiApp {
  * /api and /assets can never fall through to the HTML document handler.
  */
 export function createApp(options: AppOptions): ChatUiApp {
-  const { logger } = options;
   const now = options.now ?? (() => new Date());
+  const paths = new DataPaths(options.config.dataDir);
+  // Settings → Logs: what the server logs (never secrets or content) is kept too.
+  const events = new EventLog({ paths, now });
+  const logger = teeLogger(options.logger, events);
   const providerConfig = options.config.provider;
   const storageConfig = options.config.storage;
   const authConfig = options.config.auth;
   const safeFetch = createSafeFetch(providerConfig.ssrf, options.resolver);
-  const paths = new DataPaths(options.config.dataDir);
   const checkpoints = new CheckpointStore(paths);
   const generations = new GenerationManager({
     checkpoints,
@@ -442,6 +445,8 @@ export function createApp(options: AppOptions): ChatUiApp {
     await users.rebuildIndex();
     await sessions.sweep();
     await settings.load();
+    events.useSettings(() => ({ ...DEFAULT_LOG_SETTINGS, ...settings.get().logging }));
+    void events.sweep().catch(() => undefined);
     // Providers: authoritative providers.json (bootstrapped once from LLAMA_*).
     await installProviders();
     // Discovery never blocks startup.
@@ -494,6 +499,7 @@ export function createApp(options: AppOptions): ChatUiApp {
   const retentionTimer = setInterval(() => {
     void (async () => {
       await sessions.sweep();
+      await events.sweep().catch(() => undefined);
       for (const userId of await accountIds(paths)) {
         await attachments.reconcile(userId, { startup: false, now: now() });
         await exportsService.sweep(userId, false);
@@ -565,6 +571,7 @@ export function createApp(options: AppOptions): ChatUiApp {
       providers: providerAdmin,
       settings,
       audit,
+      events,
       rebuildIndex: async (userId) => {
         const ids = userId ? [userId] : await accountIds(paths);
         let total = 0;
@@ -606,7 +613,8 @@ export function createApp(options: AppOptions): ChatUiApp {
 
   app.use(
     pinoHttp({
-      logger,
+      // The plain logger: request lines are not events for Settings → Logs.
+      logger: options.logger,
       genReqId: () => crypto.randomUUID(),
       // Never log query strings; they may carry user input.
       serializers: {

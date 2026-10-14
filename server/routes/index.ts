@@ -78,10 +78,16 @@ import {
   updateAccountRoute,
 } from "./account.ts";
 import { usageRoute } from "./usage.ts";
+import { createReportRoute } from "./reports.ts";
+import { deleteFileRoute, listFilesRoute, uploadFileRoute } from "./files.ts";
 import { createSkillRoute, deleteSkillRoute, listSkillsRoute, updateSkillRoute } from "./skills.ts";
 import { listModelsRoute, listProvidersRoute } from "./models.ts";
 import {
   adminAuditRoute,
+  adminClearLogsRoute,
+  adminExportLogsRoute,
+  adminLogEntryRoute,
+  adminLogsRoute,
   adminCreateProviderRoute,
   adminCreateUserRoute,
   adminDeleteProviderRoute,
@@ -167,6 +173,9 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(commitImportRoute),
   erase(cancelImportRoute),
   // Attachments (Phase 12). The literal /limits path is registered before /:id.
+  erase(listFilesRoute),
+  erase(uploadFileRoute),
+  erase(deleteFileRoute),
   erase(uploadAttachmentRoute),
   erase(attachmentLimitsRoute),
   erase(getAttachmentRoute),
@@ -195,4 +204,10 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(adminUpdateSettingsRoute),
   erase(adminRebuildIndexRoute),
   erase(adminAuditRoute),
+  erase(adminLogsRoute),
+  // Before /:id, which would otherwise take "export" as an id.
+  erase(adminExportLogsRoute),
+  erase(adminLogEntryRoute),
+  erase(adminClearLogsRoute),
+  erase(createReportRoute),
 ];
