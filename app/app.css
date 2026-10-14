@@ -995,7 +995,8 @@ svg {
   align-items: center;
   align-self: flex-start;
   gap: 4px;
-  margin: 24px 0 4px 6px;
+  /* 4 + 4 puts the label on the rows' 8px text inset. */
+  margin: 24px 0 4px 4px;
   padding: 2px 4px;
   border: 0;
   border-radius: var(--radius-sm);
@@ -1175,6 +1176,8 @@ svg {
 }
 
 .drawer .section-toggle {
+  /* The drawer's rows inset their text 10px. */
+  margin-left: 6px;
   font-size: var(--text-sm);
 }
 
