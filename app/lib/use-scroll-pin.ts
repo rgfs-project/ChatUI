@@ -25,10 +25,17 @@ const UP_KEYS = new Set(["ArrowUp", "PageUp", "Home"]);
  * and unpins. Reaching the bottom (within the threshold) re-pins. Nothing
  * depends on frame timing, so fast streams cannot swallow a user's scroll.
  */
-export function useScrollPin<T extends HTMLElement>(contentVersion: unknown) {
+export function useScrollPin<T extends HTMLElement>(
+  contentVersion: unknown,
+  /** Changes when a message is sent: the transcript glides up to it instead of jumping. */
+  glideVersion: unknown = null,
+) {
   const ref = useRef<T>(null);
   const pinned = useRef(true);
   const lastTop = useRef(0);
+  // A smooth scroll in flight: size changes don't snap it to the end.
+  const gliding = useRef(false);
+  const lastGlide = useRef(glideVersion);
   // Unpinned and well away from the bottom: offer "jump to latest", whether
   // or not anything new has arrived (owner's request, after ChatGPT).
   const [away, setAway] = useState(false);
@@ -88,7 +95,7 @@ export function useScrollPin<T extends HTMLElement>(contentVersion: unknown) {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
-      if (!pinned.current) return;
+      if (!pinned.current || gliding.current) return;
       el.scrollTop = el.scrollHeight;
       lastTop.current = el.scrollTop;
     });
@@ -102,9 +109,30 @@ export function useScrollPin<T extends HTMLElement>(contentVersion: unknown) {
   // Content changed: follow it if pinned, otherwise re-check "jump to latest".
   // A layout effect, so the new content is never painted before we follow it.
   useLayoutEffect(() => {
-    if (pinned.current) scrollToBottom();
-    else updateAway();
-  }, [contentVersion, scrollToBottom, updateAway]);
+    const glide = lastGlide.current !== glideVersion;
+    lastGlide.current = glideVersion;
+    if (!pinned.current) {
+      updateAway();
+      return;
+    }
+    const el = ref.current;
+    const reduced =
+      typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!glide || reduced || !el || el.scrollHeight <= el.clientHeight) {
+      if (!gliding.current) scrollToBottom();
+      return;
+    }
+    // A sent message pushes the conversation up (after ChatGPT and Gemini).
+    gliding.current = true;
+    const done = () => {
+      gliding.current = false;
+      el.removeEventListener("scrollend", done);
+      if (pinned.current) scrollToBottom();
+    };
+    el.addEventListener("scrollend", done);
+    setTimeout(done, 600);
+    scrollToBottom("smooth");
+  }, [contentVersion, glideVersion, scrollToBottom, updateAway]);
 
   return {
     ref,

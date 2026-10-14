@@ -463,7 +463,10 @@ export function ConversationView(props: {
     showJump,
     jumpToLatest,
     reveal,
-  } = useScrollPin<HTMLDivElement>(contentVersion);
+  } = useScrollPin<HTMLDivElement>(
+    contentVersion,
+    optimistic.map(({ state }) => state.variables?.tempId ?? "").join(","),
+  );
 
   // A search result opens `/chat/:id#m-<id>`: show and mark that message once.
   const revealed = useRef<string | null>(null);
@@ -760,6 +763,27 @@ export function ConversationView(props: {
   };
   useLayoutEffect(() => {
     actionHandler.current = handleAction;
+  });
+  // The first send glides the composer from the centred greeting down to its
+  // dock (FLIP): measured after every commit, animated when "empty" ends.
+  const dockRef = useRef<HTMLDivElement>(null);
+  const dockWas = useRef<{ empty: boolean; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) {
+      dockWas.current = null;
+      return;
+    }
+    const isEmpty = dock.closest(".chat-view")?.classList.contains("empty") ?? false;
+    const top = dock.getBoundingClientRect().top;
+    const was = dockWas.current;
+    dockWas.current = { empty: isEmpty, top };
+    if (!was?.empty || isEmpty || was.top === top) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    dock.animate([{ transform: `translateY(${String(was.top - top)}px)` }, { transform: "none" }], {
+      duration: 420,
+      easing: "cubic-bezier(0.2, 0, 0, 1)",
+    });
   });
 
   if (loadError?.code === "CONVERSATION_MALFORMED") {
@@ -1131,7 +1155,7 @@ export function ConversationView(props: {
           </div>
         ) : null}
       </div>
-      <div className="composer-dock">
+      <div className="composer-dock" ref={dockRef}>
         {queued.length > 0 ? (
           <QueueCard
             items={queued}
