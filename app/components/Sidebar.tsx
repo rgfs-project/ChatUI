@@ -6,7 +6,6 @@ import {
   Ellipsis,
   FolderClosed,
   FolderInput,
-  FolderKanban,
   FolderMinus,
   FolderPlus,
   PanelLeft,
@@ -14,6 +13,7 @@ import {
   Pin,
   PinOff,
   Search,
+  Shapes,
   SquarePen,
   Trash2,
 } from "lucide-react";
@@ -149,7 +149,7 @@ function SidebarImpl({
           aria-current={location.pathname.startsWith("/projects") ? "page" : undefined}
           onClick={onNavigate}
         >
-          <FolderKanban size={20} aria-hidden />
+          <Shapes size={20} aria-hidden />
           <span className="label">Projects</span>
         </Link>
         <Link
