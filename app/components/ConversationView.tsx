@@ -95,7 +95,7 @@ const ArtifactPanel = lazy(() => import("./ArtifactPanel"));
 
 const USER_ACTIONS: readonly MessageAction[] = ["edit", "delete"];
 const USER_UNANSWERED_ACTIONS: readonly MessageAction[] = ["edit", "regenerate", "delete"];
-const REPLY_ACTIONS: readonly MessageAction[] = ["regenerate", "edit", "delete"];
+const REPLY_ACTIONS: readonly MessageAction[] = ["regenerate", "branch", "edit", "delete"];
 const NO_ACTIONS: readonly MessageAction[] = [];
 
 /** An uploaded file shown in an optimistic or queued message. */
@@ -771,6 +771,20 @@ export function ConversationView(props: {
 
   const handleAction = (action: MessageAction, messageId: string, trigger: HTMLElement) => {
     if (opsDisabled) return;
+    if (action === "branch") {
+      // A new chat with a copy of this one up to this reply (as ChatGPT).
+      if (!conversationId) return;
+      void runOperation(async () => {
+        const branch = await apiJson<ConversationDto>(
+          `/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/branch`,
+          { method: "POST" },
+        );
+        client.setQueryData(queryKeys.conversation(userId, branch.id), branch);
+        void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
+        void navigate(paths.chat(branch.id));
+      });
+      return;
+    }
     // A reply's edit and delete act on the prompt it answers.
     const userMessageId = answers.get(messageId) ?? messageId;
     if (action === "edit") {

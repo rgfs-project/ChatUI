@@ -5,6 +5,7 @@ import {
   Pencil,
   RefreshCw,
   Square,
+  Split,
   Trash2,
   Volume2,
 } from "lucide-react";
@@ -60,7 +61,7 @@ export function Reasoning({
  * What can be done to a message; the conversation decides what each means.
  * On a reply, "edit" and "delete" act on the prompt it answers.
  */
-export type MessageAction = "edit" | "delete" | "regenerate";
+export type MessageAction = "edit" | "delete" | "regenerate" | "branch";
 
 export interface MessageViewProps {
   role: MessageDto["role"];
@@ -131,6 +132,7 @@ const USER_LABEL: Record<MessageAction, string> = {
   edit: "Edit message",
   delete: "Delete message and reply",
   regenerate: "Get a reply",
+  branch: "Branch in new chat",
 };
 
 /** A user message's buttons: copy, then edit / get a reply / delete. */
@@ -204,7 +206,7 @@ function ReplyActions(props: {
   const { messageId, onAction } = props;
   const can = (action: MessageAction) =>
     messageId !== undefined && onAction !== undefined && props.actions.includes(action);
-  const more = (["edit", "delete"] as const).filter(can);
+  const more = (["branch", "edit", "delete"] as const).filter(can);
   const fire = (action: MessageAction, trigger: HTMLElement) => {
     if (messageId) onAction?.(action, messageId, trigger);
   };
@@ -251,6 +253,18 @@ function ReplyActions(props: {
             <ReplyMenu
               defaultOpen={menu}
               items={[
+                ...(more.includes("branch")
+                  ? [
+                      {
+                        label: "Branch in new chat",
+                        icon: <Split size={20} aria-hidden />,
+                        disabled: props.disabled,
+                        onSelect: () => {
+                          fire("branch", document.activeElement as HTMLElement);
+                        },
+                      },
+                    ]
+                  : []),
                 ...(more.includes("edit")
                   ? [
                       {

@@ -186,6 +186,35 @@ export class ConversationStore {
     });
   }
 
+  /**
+   * Branch: a new conversation holding a copy of this one up to and including
+   * the reply `messageId` (as ChatGPT's "Branch in new chat"). Attachments are
+   * linked to their own conversation, so the copy keeps the text only.
+   */
+  async branch(userId: string, id: string, messageId: string): Promise<LoadedConversation> {
+    const source = await this.get(userId, id);
+    const end = source.model.blocks.findIndex(
+      (block) => block.type === "assistant" && block.id === messageId,
+    );
+    if (end === -1) throw new StorageError("not_found", "Message not found");
+    const blocks = source.model.blocks.slice(0, end + 1).map((block) => {
+      if (block.type !== "user" || !block.attachments) return block;
+      const { attachments: _dropped, ...rest } = block;
+      return rest;
+    });
+    const title = Array.from(`Branch · ${source.model.title}`).slice(0, 200).join("");
+    const branchId = randomUUID();
+    return this.withLock(userId, branchId, () => {
+      const now = this.timestamp();
+      return this.writeUnlocked(userId, branchId, {
+        title,
+        createdAt: now,
+        updatedAt: now,
+        blocks,
+      });
+    });
+  }
+
   async rename(
     userId: string,
     id: string,

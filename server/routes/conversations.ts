@@ -238,6 +238,26 @@ export const editMessageRoute = defineRoute({
   },
 });
 
+export const branchConversationRoute = defineRoute({
+  method: "post",
+  path: "/api/conversations/:id/messages/:messageId/branch",
+  auth: "user",
+  csrf: "token",
+  request: { params: messageParams },
+  response: conversationDtoSchema,
+  status: 201,
+  handler: ({ params }, ctx) =>
+    mapStorage(async () => {
+      const userId = userOf(ctx).userId;
+      return toConversationDto(
+        await ctx.services.conversations.branch(userId, params.id, params.messageId),
+        ctx.services,
+        userId,
+      );
+    }),
+  fixture: { params: unknownMessage, expectStatus: 404 },
+});
+
 export const deleteExchangeRoute = defineRoute({
   method: "delete",
   path: "/api/conversations/:id/messages/:messageId",

@@ -449,6 +449,52 @@ describe("edit and delete exchange", () => {
   });
 });
 
+describe("branch in new chat", () => {
+  it("copies the conversation up to the chosen reply into a new chat; the source is unchanged", async () => {
+    const s = await serve();
+    const alice = await signIn(s.base, s.chatui);
+    const { conversationId, conv } = await threeTurns(s, alice);
+    const replies = conv.messages.filter((m) => m.role === "assistant");
+    const res = await api(
+      s.base,
+      alice,
+      "POST",
+      `/api/conversations/${conversationId}/messages/${replies[1]?.id ?? ""}/branch`,
+    );
+    expect(res.status).toBe(201);
+    const branch = res.body as unknown as ConversationDto;
+    expect(branch.id).not.toBe(conversationId);
+    expect(branch.title).toBe(`Branch · ${conv.title}`);
+    expect(branch.messages.map((m) => m.content)).toEqual(
+      conv.messages.slice(0, 4).map((m) => m.content),
+    );
+    expect((await dto(s, alice, conversationId)).revision).toBe(conv.revision);
+    // Only a reply can be branched from; another user's chat is not found.
+    const users = conv.messages.filter((m) => m.role === "user");
+    expect(
+      (
+        await api(
+          s.base,
+          alice,
+          "POST",
+          `/api/conversations/${conversationId}/messages/${users[0]?.id ?? ""}/branch`,
+        )
+      ).status,
+    ).toBe(404);
+    const bob = await signIn(s.base, s.chatui, "bob");
+    expect(
+      (
+        await api(
+          s.base,
+          bob,
+          "POST",
+          `/api/conversations/${conversationId}/messages/${replies[0]?.id ?? ""}/branch`,
+        )
+      ).status,
+    ).toBe(404);
+  });
+});
+
 describe("regenerate (contracts §4.1, §4.2)", () => {
   it("INV-35: fresh generation and assistant ids, no duplicate user block, downstream removed", async () => {
     const s = await serve();
