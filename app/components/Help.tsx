@@ -28,7 +28,7 @@ const FAQ: readonly { q: string; a: string }[] = [
   },
   {
     q: "How do projects work?",
-    a: "Use “Move to project” in a chat’s menu to group it. Library lists your projects and the chats in each.",
+    a: "A project keeps related chats together with instructions every chat in it follows. Start a chat from a project’s page, or use “Move to project” in a chat’s menu. Find them under Projects in the sidebar.",
   },
   {
     q: "What does archiving do?",

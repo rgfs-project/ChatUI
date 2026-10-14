@@ -12,6 +12,7 @@ import {
   Download,
   Ellipsis,
   FileText,
+  FolderClosed,
   GripVertical,
   Lightbulb,
   PanelLeft,
@@ -272,6 +273,8 @@ function QueueCard(props: {
 export function ConversationView(props: {
   userId: string;
   conversationId?: string | undefined;
+  /** A new chat started from a project's page goes into that project. */
+  projectId?: string | undefined;
   inert?: boolean;
   /** A server-side load error, so missing/malformed states render before JS. */
   initialError?: { status: number; code: string } | null;
@@ -286,6 +289,10 @@ export function ConversationView(props: {
   const actions = useChatActions(userId);
   const help = useHelp(userId);
   const draftKey = conversationId ?? NEW_DRAFT;
+  const projects = useQuery({ ...queries.projects(userId), enabled: Boolean(props.projectId) });
+  const draftProject = conversationId
+    ? undefined
+    : projects.data?.find((p) => p.id === props.projectId);
   const queued = useQueue(draftKey);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const headerTriggerRef = useRef<HTMLButtonElement>(null);
@@ -491,7 +498,11 @@ export function ConversationView(props: {
     const vars = newSendVariables({
       userId,
       conversationKey: draftKey,
-      ...(conversationId ? { conversationId } : {}),
+      ...(conversationId
+        ? { conversationId }
+        : props.projectId
+          ? { projectId: props.projectId }
+          : {}),
       providerId: choice[0],
       model: choice[1],
       content,
@@ -960,7 +971,14 @@ export function ConversationView(props: {
           conversation ? (
             <h2 className="greeting">Hello! How can I help?</h2>
           ) : (
-            <h1 className="greeting">Hello! How can I help?</h1>
+            <>
+              {draftProject ? (
+                <Link to={paths.projects(draftProject.id)} className="draft-project">
+                  <FolderClosed size={16} aria-hidden /> {draftProject.name}
+                </Link>
+              ) : null}
+              <h1 className="greeting">Hello! How can I help?</h1>
+            </>
           )
         ) : null}
         <ol className="transcript-inner" aria-label="Messages" hidden={empty}>

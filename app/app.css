@@ -1541,6 +1541,26 @@ svg {
   text-align: center;
 }
 
+/* A new chat started from a project names it above the greeting. */
+.draft-project {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  gap: 6px;
+  margin: 0 auto 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--fill);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 18px;
+  text-decoration: none;
+}
+
+.draft-project:hover {
+  color: var(--fg);
+}
+
 .chat-view.empty .composer-dock {
   margin: 0;
   padding: 0 20px;

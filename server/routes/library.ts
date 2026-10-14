@@ -6,7 +6,7 @@ import {
   moveChatSchema,
   projectDtoSchema,
   projectListSchema,
-  renameProjectSchema,
+  updateProjectSchema,
   type ProjectDto,
 } from "@shared/library";
 import { AppError } from "../errors.ts";
@@ -14,7 +14,7 @@ import { defineRoute, userOf, type RouteContext } from "../registry.ts";
 import type { Library, Project } from "../storage/library.ts";
 
 /**
- * Projects and the archive (the Library page, "Move to project", Archive).
+ * Projects and the archive (the Projects page, "Move to project", Archive).
  * Each user's own: ownership is the session's user id (INV-14).
  */
 
@@ -66,22 +66,22 @@ export const createProjectRoute = defineRoute({
   response: projectDtoSchema,
   status: 201,
   handler: async ({ body }, ctx) => ({
-    ...(await ctx.services.library.createProject(userOf(ctx).userId, body.name)),
+    ...(await ctx.services.library.createProject(userOf(ctx).userId, body)),
     chatCount: 0,
   }),
   fixture: { body: { name: "Fixture" } },
 });
 
-export const renameProjectRoute = defineRoute({
+export const updateProjectRoute = defineRoute({
   method: "patch",
   path: "/api/projects/:id",
   auth: "user",
   csrf: "token",
-  request: { params: idParams, body: renameProjectSchema },
+  request: { params: idParams, body: updateProjectSchema },
   response: projectDtoSchema,
   handler: async ({ params, body }, ctx) => {
     const userId = userOf(ctx).userId;
-    const project = await ctx.services.library.renameProject(userId, params.id, body.name);
+    const project = await ctx.services.library.updateProject(userId, params.id, body);
     const library = await ctx.services.library.get(userId);
     return (
       toDtos(library, existingChats(ctx, userId)).find((p) => p.id === project.id) ?? {

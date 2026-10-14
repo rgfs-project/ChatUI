@@ -12,6 +12,9 @@ import { isUuid, type DataPaths } from "./paths.ts";
 export interface Project {
   id: string;
   name: string;
+  description: string;
+  /** Added to the system prompt of every chat in the project. */
+  instructions: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,6 +55,9 @@ function sanitize(raw: unknown): Library {
         .map((p) => ({
           id: p.id,
           name: p.name.slice(0, LIBRARY_LIMITS.projectName),
+          // Both arrived after projects did: older files lack them.
+          description: textOr(p.description).slice(0, LIBRARY_LIMITS.projectDescription),
+          instructions: textOr(p.instructions).slice(0, LIBRARY_LIMITS.projectInstructions),
           createdAt: p.createdAt,
           updatedAt: p.updatedAt,
         }))
@@ -68,6 +74,10 @@ function sanitize(raw: unknown): Library {
       ].slice(0, MAX_ARCHIVED)
     : [];
   return { version: 1, projects, assignments, archived };
+}
+
+function textOr(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function withoutChat(assignments: Record<string, string>, chatId: string) {
@@ -114,7 +124,10 @@ export class LibraryStore {
     return this.writes ? this.writes.run(userId, write) : write();
   }
 
-  async createProject(userId: string, name: string): Promise<Project> {
+  async createProject(
+    userId: string,
+    fields: { name: string; description?: string | undefined; instructions?: string | undefined },
+  ): Promise<Project> {
     return this.modify(userId, (library) => {
       if (library.projects.length >= LIBRARY_LIMITS.maxProjects)
         throw new AppError(
@@ -122,17 +135,34 @@ export class LibraryStore {
           `At most ${String(LIBRARY_LIMITS.maxProjects)} projects`,
         );
       const time = this.now().toISOString();
-      const project = { id: randomUUID(), name, createdAt: time, updatedAt: time };
+      const project = {
+        id: randomUUID(),
+        name: fields.name,
+        description: fields.description ?? "",
+        instructions: fields.instructions ?? "",
+        createdAt: time,
+        updatedAt: time,
+      };
       library.projects.push(project);
       return project;
     });
   }
 
-  async renameProject(userId: string, id: string, name: string): Promise<Project> {
+  async updateProject(
+    userId: string,
+    id: string,
+    changes: {
+      name?: string | undefined;
+      description?: string | undefined;
+      instructions?: string | undefined;
+    },
+  ): Promise<Project> {
     return this.modify(userId, (library) => {
       const project = library.projects.find((p) => p.id === id);
       if (!project) throw new AppError(ErrorCode.NOT_FOUND, "Project not found");
-      project.name = name;
+      if (changes.name !== undefined) project.name = changes.name;
+      if (changes.description !== undefined) project.description = changes.description;
+      if (changes.instructions !== undefined) project.instructions = changes.instructions;
       project.updatedAt = this.now().toISOString();
       return { ...project };
     });
@@ -148,6 +178,13 @@ export class LibraryStore {
         Object.entries(library.assignments).filter(([, project]) => project !== id),
       );
     });
+  }
+
+  /** The project a chat is in, if any. */
+  async projectOf(userId: string, chatId: string): Promise<Project | null> {
+    const library = await this.get(userId);
+    const id = library.assignments[chatId];
+    return library.projects.find((p) => p.id === id) ?? null;
   }
 
   /** The caller has checked the chat exists. */

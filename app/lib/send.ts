@@ -23,6 +23,8 @@ export interface SendVariables {
   /** The conversation id, or the draft key for /chat/new. */
   conversationKey: string;
   conversationId?: string;
+  /** A new chat starts inside this project. */
+  projectId?: string;
   providerId: string;
   model: string;
   content: string;
@@ -98,6 +100,7 @@ export async function sendWithRetries(vars: SendVariables): Promise<StartGenerat
     operationKey: vars.operationKey,
     operationIssuedAt: vars.operationIssuedAt,
     ...(vars.attachments?.length ? { attachmentIds: vars.attachments.map((a) => a.id) } : {}),
+    ...(vars.projectId && !vars.conversationId ? { projectId: vars.projectId } : {}),
   });
   return acceptWithRetries("/api/generations", body, vars);
 }

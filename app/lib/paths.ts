@@ -3,7 +3,9 @@
  * encoded; the URL is the authoritative active-conversation identity.
  */
 export const paths = {
-  newChat: () => "/chat/new",
+  /** A draft; `projectId` starts it inside that project. */
+  newChat: (projectId?: string) =>
+    projectId ? `/chat/new?project=${encodeURIComponent(projectId)}` : "/chat/new",
   chat: (conversationId: string) => `/chat/${encodeURIComponent(conversationId)}`,
   /** Settings; `section` opens a tab directly (e.g. "data" for import and export). */
   settings: (section?: string) =>
@@ -11,9 +13,9 @@ export const paths = {
   admin: () => "/admin",
   /** Every file you uploaded or a reply produced. */
   files: () => "/files",
-  /** Projects and the chats in them. */
-  library: (projectId?: string) =>
-    projectId ? `/library/${encodeURIComponent(projectId)}` : "/library",
+  /** Projects, or one project: its instructions and chats. */
+  projects: (projectId?: string) =>
+    projectId ? `/projects/${encodeURIComponent(projectId)}` : "/projects",
   account: () => "/account",
   login: (returnTo?: string) =>
     returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login",

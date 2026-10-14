@@ -1,0 +1,42 @@
+/* The Projects pages: loaded with them. */
+
+.project-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.project-description {
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.project-new-chat {
+  align-self: flex-start;
+}
+
+.project-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.project-instructions {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.project-description-input {
+  min-height: 88px;
+}
+
+.project-instructions-input {
+  min-height: 220px;
+}

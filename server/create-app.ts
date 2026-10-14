@@ -309,6 +309,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     proposals,
     memoryConfig,
     artifacts,
+    library,
     ...options.send,
   });
   const exportsService = new ExportService({

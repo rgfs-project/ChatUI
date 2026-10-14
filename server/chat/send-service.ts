@@ -48,6 +48,7 @@ import type { ToolSession } from "../generations/manager.ts";
 import type { ProposalRecord } from "../storage/proposals.ts";
 import { continuationCost, type ProposalService } from "./proposals.ts";
 import { MEMORY_TOOLS } from "./memory-tools.ts";
+import type { LibraryStore, Project } from "../storage/library.ts";
 import { captureSources, type StagedCapture } from "../artifacts/capture.ts";
 import type { ArtifactStore } from "../storage/artifacts.ts";
 
@@ -105,6 +106,8 @@ export interface SendServiceOptions {
   memoryConfig?: MemoryConfig;
   /** Generated source artifacts (Phase 13c), captured from complete replies. */
   artifacts?: ArtifactStore;
+  /** Projects: a chat's project instructions join its system prompt. */
+  library?: LibraryStore;
 }
 
 /** The approved notes a prompt includes and the whole set's revision (contracts §4.1 step 2). */
@@ -158,7 +161,7 @@ export class SendService {
   static payloadHash(
     request: Pick<
       StartGenerationRequest,
-      "conversationId" | "providerId" | "model" | "content" | "attachmentIds"
+      "conversationId" | "providerId" | "model" | "content" | "attachmentIds" | "projectId"
     >,
   ): string {
     return sha256Hex(
@@ -169,6 +172,7 @@ export class SendService {
         content: normalizeBody(request.content),
         // Only present when sent, so earlier records keep their hashes.
         ...(request.attachmentIds?.length ? { attachmentIds: request.attachmentIds } : {}),
+        ...(request.projectId ? { projectId: request.projectId } : {}),
       }),
     );
   }
@@ -266,6 +270,8 @@ export class SendService {
         );
       this.assertCapable(await store.requirePending(userId, attachmentIds), model);
     }
+    // A new chat may start inside a project; an existing one keeps its own.
+    const project = await this.projectFor(userId, request.conversationId, request.projectId);
     // Prompt-relevant settings are a revision too (contracts §4.1).
     const settingsFor = () =>
       this.o.settings?.resolve(model.providerId, model.id, {
@@ -295,6 +301,7 @@ export class SendService {
         skills,
         await this.expansion(userId, snapshot?.model ?? null, attachmentIds, model, mediaPolicy),
         memory,
+        project,
       );
       await this.o.hooks?.beforeRecheck?.();
 
@@ -343,6 +350,8 @@ export class SendService {
       if (outcome !== "changed") {
         // Completion work (network I/O) starts only after the lock is released.
         outcome.launch?.();
+        if (!request.conversationId && project)
+          await this.o.library?.assign(userId, conversationId, project.id);
         return outcome.response;
       }
     }
@@ -462,6 +471,7 @@ export class SendService {
         skills,
         await this.expansion(userId, truncated, [], model, mediaPolicy),
         memory,
+        await this.projectFor(userId, conversationId, undefined),
       );
       await this.o.hooks?.beforeRecheck?.();
 
@@ -718,6 +728,24 @@ export class SendService {
     };
   }
 
+  /**
+   * The project whose instructions a prompt includes: an existing chat's own,
+   * else the one a new chat is started in (which must exist).
+   */
+  private async projectFor(
+    userId: string,
+    conversationId: string | undefined,
+    projectId: string | undefined,
+  ): Promise<Project | null> {
+    const library = this.o.library;
+    if (!library) return null;
+    if (conversationId) return library.projectOf(userId, conversationId);
+    if (!projectId) return null;
+    const project = (await library.get(userId)).projects.find((p) => p.id === projectId);
+    if (!project) throw new AppError(ErrorCode.NOT_FOUND, "Project not found");
+    return project;
+  }
+
   /** Step 2 (no locks held): prompt assembly and budget for a model ending in its newest user message. */
   private async preflight(
     withUser: ConversationModel,
@@ -727,6 +755,7 @@ export class SendService {
     skills: ReadonlyMap<string, SkillDto>,
     attachmentsOf: ((ids: readonly string[], newest: boolean) => UserAttachments) | undefined,
     memory: MemoryContext,
+    project: Project | null = null,
   ): Promise<Preflight> {
     const { providerId, id: model, contextTokens } = target;
     const counter = this.o.counterFor
@@ -745,10 +774,13 @@ export class SendService {
         (this.o.memoryConfig?.continuationTokenReserve ?? 0)
       : 0;
     const budget = Math.max(0, contextTokens - this.maxOutputTokens() - toolReserve);
-    // Approved memories follow the per-model system prompt; no template
-    // expansion happens inside them (contracts §4 item 3).
+    // Project instructions, then approved memories, follow the per-model
+    // system prompt; no template expansion happens inside them (contracts §4 item 3).
+    const projectSection = project?.instructions
+      ? `Project instructions (${project.name}):\n${project.instructions}`
+      : undefined;
     const instructions =
-      [resolved?.instructions, memory.section]
+      [resolved?.instructions, projectSection, memory.section]
         .filter((t) => t !== undefined && t !== "")
         .join("\n\n") || undefined;
     try {

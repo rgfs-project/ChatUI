@@ -79,6 +79,8 @@ export const startGenerationRequestSchema = z
     /** Client-minted idempotency key for this send (INV-58). */
     operationKey: z.uuid(),
     operationIssuedAt: z.iso.datetime({ offset: false }),
+    /** A new chat (no conversationId) starts inside this project. */
+    projectId: canonicalUuid.optional(),
     /** Owned, pending attachments to link to the new user message (Phase 12, contracts §7). */
     attachmentIds: z
       .array(canonicalUuid)

@@ -6,9 +6,9 @@ import {
   Ellipsis,
   FolderClosed,
   FolderInput,
+  FolderKanban,
   FolderMinus,
   FolderPlus,
-  Library,
   PanelLeft,
   Pencil,
   Pin,
@@ -73,7 +73,7 @@ function SidebarImpl({
   const searchTrigger = useRef<HTMLElement | null>(null);
   const rail = collapsed && !drawer;
   const toggleLabel = rail ? "Open sidebar" : "Close sidebar";
-  // Settings, Files and Library keep the page you came from to go back to.
+  // Settings, Files and Projects keep the page you came from to go back to.
   const background = { background: location.pathname };
 
   // Ctrl/⌘+K opens search (the in-page sidebar owns it, not the drawer copy).
@@ -142,15 +142,15 @@ function SidebarImpl({
           <span className="label">Search</span>
         </button>
         <Link
-          to={paths.library()}
+          to={paths.projects()}
           state={background}
           className="nav-row"
-          aria-label="Library"
-          aria-current={location.pathname.startsWith("/library") ? "page" : undefined}
+          aria-label="Projects"
+          aria-current={location.pathname.startsWith("/projects") ? "page" : undefined}
           onClick={onNavigate}
         >
-          <Library size={20} aria-hidden />
-          <span className="label">Library</span>
+          <FolderKanban size={20} aria-hidden />
+          <span className="label">Projects</span>
         </Link>
         <Link
           to={paths.files()}

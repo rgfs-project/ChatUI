@@ -66,7 +66,7 @@ import {
   deleteProjectRoute,
   listProjectsRoute,
   moveChatRoute,
-  renameProjectRoute,
+  updateProjectRoute,
   unarchiveChatRoute,
 } from "./library.ts";
 import { getOperationRoute } from "./operations.ts";
@@ -145,7 +145,7 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   // Projects and the archive.
   erase(listProjectsRoute),
   erase(createProjectRoute),
-  erase(renameProjectRoute),
+  erase(updateProjectRoute),
   erase(deleteProjectRoute),
   erase(moveChatRoute),
   erase(archiveChatRoute),
