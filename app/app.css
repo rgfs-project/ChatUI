@@ -97,10 +97,12 @@
   --shadow-sheet: 0 -8px 32px light-dark(rgb(0 0 0 / 0.12), rgb(0 0 0 / 0.5));
 }
 
-/* A narrower desktop window gets a narrower sidebar (after ChatGPT: 340 → 260). */
+/* A narrower desktop window gets a narrower sidebar and column (after
+   ChatGPT: 340 → 260, 768 → 640). */
 @media (max-width: 1279px) {
   :root {
     --sidebar-width: 260px;
+    --column: 640px;
   }
 }
 
@@ -1676,7 +1678,8 @@ svg {
   column-gap: 8px;
   width: 100%;
   max-width: var(--column);
-  padding: 8px;
+  /* 52px tall with its 36px buttons, as ChatGPT's. */
+  padding: 7px;
   border: 1px solid var(--line);
   border-radius: var(--radius-composer);
   background: var(--surface);
