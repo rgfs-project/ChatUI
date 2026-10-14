@@ -3016,3 +3016,20 @@ kbd {
 *::-webkit-scrollbar {
   display: none;
 }
+
+/* Keep UI chrome out of text selection (e.g. Cmd+A) so only message
+   content, form fields and dialogs stay selectable. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.bubble,
+.markdown,
+.dialog,
+input,
+textarea,
+[contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
