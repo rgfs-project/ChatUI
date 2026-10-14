@@ -4,10 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { createMemoryRouter, MemoryRouter, RouterProvider, useParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ArtifactList, MessageArtifactDto } from "@shared/artifacts";
+import type { MessageArtifactDto } from "@shared/artifacts";
 import type { ConversationDto } from "@shared/conversations";
-import ArtifactSettings from "../../app/components/ArtifactSettings";
+import type { FileList } from "@shared/files";
 import { ConversationView } from "../../app/components/ConversationView";
+import { FilesPage } from "../../app/components/FilesPage";
 import { authStore } from "../../app/lib/auth-store";
 import { createQueryClient, queryKeys } from "../../app/lib/query";
 import { useAccountBoundary } from "../../app/lib/use-account-boundary";
@@ -24,7 +25,7 @@ import {
   USER,
 } from "./support";
 
-/** Phase 13c: file cards, the inert source panel, Settings → Files. */
+/** Phase 13c: file cards, the inert source panel, the Files page. */
 
 let fetchMock: ReturnType<typeof vi.fn<(url: string, init?: RequestInit) => Promise<Response>>>;
 
@@ -140,62 +141,93 @@ describe("file cards and the source panel (INV-41)", () => {
   });
 });
 
-describe("Settings → Files", () => {
-  const LIST: ArtifactList = {
-    artifacts: [
+describe("Files page", () => {
+  const LIST: FileList = {
+    files: [
       {
         id: ART,
+        origin: "reply",
         name: "page.html",
-        language: "html",
+        mediaType: "text/html",
+        kindLabel: "HTML",
+        category: "code",
         size: 2048,
-        sha256: "a".repeat(64),
         createdAt: "2026-01-02T00:00:00.000Z",
         conversationId: CONV,
-        assistantMessageId: REPLY_ID,
-        captureIndex: 0,
-        backlinkAvailable: true,
+        conversationTitle: "Make a page",
+        messageId: REPLY_ID,
+        downloadUrl: `/api/artifacts/${ART}/source?download=1`,
       },
       {
         id: "77777777-7777-4777-8777-000000000002",
+        origin: "reply",
         name: "old.py",
-        language: "python",
+        mediaType: "text/x-python",
+        kindLabel: "Python",
+        category: "code",
         size: 10,
-        sha256: "b".repeat(64),
         createdAt: "2026-01-01T00:00:00.000Z",
         conversationId: "88888888-8888-4888-8888-000000000001",
-        assistantMessageId: null,
-        captureIndex: 0,
-        backlinkAvailable: false,
+        conversationTitle: null,
+        messageId: null,
+        downloadUrl: "/api/artifacts/77777777-7777-4777-8777-000000000002/source?download=1",
+      },
+      {
+        id: "77777777-7777-4777-8777-000000000003",
+        origin: "upload",
+        name: "notes.md",
+        mediaType: "text/markdown",
+        kindLabel: "Markdown",
+        category: "document",
+        size: 5,
+        createdAt: "2025-12-01T00:00:00.000Z",
+        conversationId: null,
+        conversationTitle: null,
+        messageId: null,
+        downloadUrl: "/api/attachments/77777777-7777-4777-8777-000000000003/content?download=1",
       },
     ],
-    usedBytes: 2058,
+    usedBytes: 2063,
     quotaBytes: 100 * 1024 * 1024,
   };
 
-  it("lists files with live and dead backlinks and download links", async () => {
+  function renderFiles() {
     fetchMock.mockImplementation((url: string) =>
-      Promise.resolve(url === "/api/artifacts" ? json(200, LIST) : json(404, {})),
+      Promise.resolve(url === "/api/files" ? json(200, LIST) : json(404, {})),
     );
     render(
       <QueryClientProvider client={createQueryClient()}>
         <MemoryRouter>
-          <ArtifactSettings userId={USER} />
+          <FilesPage userId={USER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    const rows = await screen.findAllByTestId("artifact-row");
-    expect(rows).toHaveLength(2);
+  }
+
+  it("lists files with live and dead chat links", async () => {
+    renderFiles();
+    const rows = await screen.findAllByTestId("file-row");
+    expect(rows).toHaveLength(3);
     expect(
       within(rows[0] as HTMLElement)
-        .getByRole("link", { name: "Open chat" })
+        .getByRole("link", { name: "Make a page" })
         .getAttribute("href"),
     ).toBe(`/chat/${CONV}#m-${REPLY_ID}`);
     expect(rows[1]?.textContent).toContain("Chat deleted");
-    expect(
-      within(rows[1] as HTMLElement)
-        .getByRole("link", { name: "Download old.py" })
-        .getAttribute("href"),
-    ).toBe("/api/artifacts/77777777-7777-4777-8777-000000000002/source?download=1");
+    expect(rows[2]?.textContent).toContain("Uploaded here");
+  });
+
+  it("filters by kind and searches by name", async () => {
+    const user = userEvent.setup();
+    renderFiles();
+    await screen.findAllByTestId("file-row");
+    await user.click(screen.getByRole("button", { name: "Documents" }));
+    expect(screen.getAllByTestId("file-row").map((r) => r.textContent)).toEqual([
+      expect.stringContaining("notes.md"),
+    ]);
+    await user.click(screen.getByRole("button", { name: "All" }));
+    await user.type(screen.getByRole("searchbox"), "old");
+    expect(screen.getAllByTestId("file-row")).toHaveLength(1);
   });
 });
 
