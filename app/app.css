@@ -3005,3 +3005,12 @@ kbd {
     0 0 0 2px var(--raised),
     0 0 0 4px var(--fg);
 }
+
+/* Hide scrollbars everywhere while keeping elements scrollable. */
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
