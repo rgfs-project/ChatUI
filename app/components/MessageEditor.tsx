@@ -1,9 +1,8 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Editing a sent message in place (loaded on first use). "Send" saves and gets
- * a new reply; "Save" only edits, leaving the turn unanswered. Escape cancels,
- * Ctrl/⌘+Enter sends.
+ * Editing a sent message in place (loaded on first use). "Send" saves it and
+ * gets a new reply. Escape cancels, Ctrl/⌘+Enter sends.
  */
 export function MessageEditor({
   initial,
@@ -14,7 +13,7 @@ export function MessageEditor({
   initial: string;
   busy: boolean;
   onCancel: () => void;
-  onSave: (content: string, regenerate: boolean) => void;
+  onSave: (content: string) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -23,9 +22,9 @@ export function MessageEditor({
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }, []);
-  const submit = (regenerate: boolean) => {
+  const submit = () => {
     const value = ref.current?.value.trim() ?? "";
-    if (value !== "") onSave(value, regenerate);
+    if (value !== "") onSave(value);
   };
   return (
     <form
@@ -33,7 +32,7 @@ export function MessageEditor({
       aria-label="Edit message"
       onSubmit={(event) => {
         event.preventDefault();
-        submit(true);
+        submit();
       }}
     >
       <label htmlFor="edit-message" className="visually-hidden">
@@ -50,25 +49,13 @@ export function MessageEditor({
             onCancel();
           } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
             event.preventDefault();
-            submit(true);
+            submit();
           }
         }}
       />
       <div className="message-editor-actions">
-        <p className="message-editor-note">Later messages in this chat will be removed.</p>
         <button type="button" className="btn sm" onClick={onCancel} disabled={busy}>
           Cancel
-        </button>
-        <button
-          type="button"
-          className="btn sm"
-          onClick={() => {
-            submit(false);
-          }}
-          disabled={busy}
-          title="Save the edit without a new reply"
-        >
-          Save
         </button>
         <button
           className="btn sm primary"

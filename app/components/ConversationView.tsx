@@ -714,7 +714,7 @@ export function ConversationView(props: {
     }
   }
 
-  async function saveEdit(messageId: string, content: string, andRegenerate: boolean) {
+  async function saveEdit(messageId: string, content: string) {
     if (!conversation || !conversationId) return;
     await runOperation(async () => {
       const dto = await apiJson<ConversationDto>(
@@ -727,7 +727,7 @@ export function ConversationView(props: {
       client.setQueryData(queryKeys.conversation(userId, conversationId), dto);
       setEditingId(null);
       // Edit and resubmit = edit, then regenerate on the returned revision (§4.2).
-      if (andRegenerate) await regenerate(messageId, dto.revision);
+      await regenerate(messageId, dto.revision);
     });
     void client.invalidateQueries({ queryKey: queryKeys.conversations(userId) });
   }
@@ -1045,9 +1045,7 @@ export function ConversationView(props: {
                         onCancel={() => {
                           setEditingId(null);
                         }}
-                        onSave={(content, andRegenerate) =>
-                          void saveEdit(message.id, content, andRegenerate)
-                        }
+                        onSave={(content) => void saveEdit(message.id, content)}
                       />
                     </Suspense>
                   ) : undefined

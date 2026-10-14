@@ -115,7 +115,7 @@ describe("message operations (Phase 13a)", () => {
     );
   });
 
-  it("the inline editor: Escape cancels, Save edits without a new reply", async () => {
+  it("the inline editor: Escape cancels, Send edits and asks for a new reply", async () => {
     const user = userEvent.setup();
     const conv = exchange();
     fetchMock.mockImplementation((_url: string, init?: RequestInit) =>
@@ -144,7 +144,8 @@ describe("message operations (Phase 13a)", () => {
     const field = within(editor).getByRole("textbox");
     await user.clear(field);
     await user.type(field, "hello!");
-    await user.click(within(editor).getByRole("button", { name: "Save" }));
+    expect(within(editor).queryByRole("button", { name: "Save" })).toBeNull();
+    await user.click(within(editor).getByRole("button", { name: "Send" }));
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         `/api/conversations/${CONV}/messages/${message(1, "user", "").id}`,
@@ -156,8 +157,10 @@ describe("message operations (Phase 13a)", () => {
       content: "hello!",
       expectedRevision: conv.revision,
     });
-    // Save alone never regenerates.
-    expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/regenerate"))).toBe(false);
+    // The edit is followed by a new reply.
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/regenerate"))).toBe(true);
+    });
   });
 });
 

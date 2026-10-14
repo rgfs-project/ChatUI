@@ -1550,12 +1550,6 @@ svg {
   gap: 8px;
 }
 
-.message-editor-note {
-  margin-right: auto;
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
 /* ---- Home (an empty chat) --------------------------------------------------------- */
 
 /* The same tree as a conversation, so the composer never remounts: the greeting
