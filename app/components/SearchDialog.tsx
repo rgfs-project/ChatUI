@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
-import { MessageCircle, Plus, X } from "lucide-react";
+import { FolderClosed, MessageCircle, Plus, Search, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { SEARCH_LIMITS, type SearchResult } from "@shared/conversations";
@@ -26,6 +26,31 @@ interface Option {
   icon: ReactNode;
   title: string;
   snippet?: ReactNode;
+  /** When it last changed, shown on the right ("Today", "Yesterday", a date). */
+  when?: string;
+}
+
+const TABS = [
+  { id: "all", label: "All" },
+  { id: "chats", label: "Chats" },
+  { id: "projects", label: "Projects" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
+
+/** "Today", "Yesterday", a weekday within the week, else a short date. */
+export function relativeDay(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((start(now) - start(date)) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return date.toLocaleDateString(undefined, { weekday: "long" });
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
 }
 
 /**
@@ -48,6 +73,7 @@ export function SearchDialog({
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [tab, setTab] = useState<Tab>("all");
   useEffect(() => {
     const timer = setTimeout(() => {
       setQuery(text.trim());
@@ -60,7 +86,16 @@ export function SearchDialog({
   const search = useQuery({ ...queries.search(userId, query), enabled: query !== "" });
   // The sidebar loaded the list already: read the cache, never refetch here.
   const recents = useQuery({ ...queries.conversations(userId), enabled: false });
-  const results = query === "" ? [] : (search.data?.results ?? []);
+  const projects = useQuery({ ...queries.projects(userId), enabled: query !== "" });
+  const results = query === "" || tab === "projects" ? [] : (search.data?.results ?? []);
+  const needle = query.toLowerCase();
+  const projectMatches =
+    query === "" || tab === "chats"
+      ? []
+      : (projects.data ?? []).filter((p) => p.name.toLowerCase().includes(needle));
+  const pending =
+    query !== "" &&
+    ((tab !== "projects" && search.isPending) || (tab !== "chats" && projects.isPending));
 
   const options: Option[] =
     query === ""
@@ -78,24 +113,34 @@ export function SearchDialog({
             title: c.title,
           })),
         ]
-      : results.map((result) => ({
-          key: `${result.conversationId}:${result.messageId ?? "title"}`,
-          href: resultHref(result),
-          icon: <MessageCircle size={20} aria-hidden />,
-          title: result.title,
-          snippet: (
-            <>
-              {result.role ? (
-                <span className="visually-hidden">
-                  {result.role === "user" ? "You: " : "Assistant: "}
-                </span>
-              ) : null}
-              {result.snippet.before}
-              <mark>{result.snippet.match}</mark>
-              {result.snippet.after}
-            </>
-          ),
-        }));
+      : [
+          ...projectMatches.map((project) => ({
+            key: `project:${project.id}`,
+            href: paths.projects(project.id),
+            icon: <FolderClosed size={20} aria-hidden />,
+            title: project.name,
+            when: project.updatedAt,
+          })),
+          ...results.map((result) => ({
+            key: `${result.conversationId}:${result.messageId ?? "title"}`,
+            href: resultHref(result),
+            icon: <MessageCircle size={20} aria-hidden />,
+            title: result.title,
+            snippet: (
+              <>
+                {result.role ? (
+                  <span className="visually-hidden">
+                    {result.role === "user" ? "You: " : "Assistant: "}
+                  </span>
+                ) : null}
+                {result.snippet.before}
+                <mark>{result.snippet.match}</mark>
+                {result.snippet.after}
+              </>
+            ),
+            when: result.updatedAt,
+          })),
+        ];
   const current = Math.min(active, options.length - 1);
 
   const open = (option: Option) => {
@@ -107,14 +152,14 @@ export function SearchDialog({
   const status =
     query === ""
       ? "Search your chat titles and messages."
-      : search.isPending
+      : pending
         ? "Searching…"
-        : search.isError
+        : search.isError && tab !== "projects"
           ? "Search failed. Try again."
-          : results.length === 0
-            ? "No matches."
-            : `${String(results.length)}${search.data.truncated ? "+" : ""} result${results.length === 1 ? "" : "s"}${
-                search.data.skippedMalformed
+          : options.length === 0
+            ? "No results."
+            : `${String(options.length)}${search.data?.truncated && tab !== "projects" ? "+" : ""} result${options.length === 1 ? "" : "s"}${
+                search.data?.skippedMalformed && tab !== "projects"
                   ? ` (${String(search.data.skippedMalformed)} unreadable chat${search.data.skippedMalformed === 1 ? "" : "s"} skipped)`
                   : ""
               }`;
@@ -147,7 +192,7 @@ export function SearchDialog({
               aria-controls="search-results"
               aria-autocomplete="list"
               aria-activedescendant={options.length > 0 ? optionId(current) : undefined}
-              placeholder="Search…"
+              placeholder="Search chats…"
               maxLength={SEARCH_LIMITS.maxQuery}
               value={text}
               autoFocus
@@ -167,12 +212,47 @@ export function SearchDialog({
                 }
               }}
             />
+            {text !== "" ? (
+              <>
+                <button
+                  type="button"
+                  className="search-clear"
+                  onClick={(event) => {
+                    setText("");
+                    setQuery("");
+                    setActive(0);
+                    event.currentTarget.parentElement?.querySelector("input")?.focus();
+                  }}
+                >
+                  Clear
+                </button>
+                <span className="search-divider" aria-hidden />
+              </>
+            ) : null}
             <Dialog.Close asChild>
               <button type="button" className="icon-btn" aria-label="Close" title="Close">
                 <X size={20} aria-hidden />
               </button>
             </Dialog.Close>
           </div>
+          {query !== "" ? (
+            <div className="search-tabs" role="group" aria-label="Show">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="search-tab"
+                  aria-pressed={tab === t.id}
+                  onClick={() => {
+                    setTab(t.id);
+                    setActive(0);
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <p className="visually-hidden" role="status" aria-live="polite">
             {status}
           </p>
@@ -196,12 +276,26 @@ export function SearchDialog({
                   <span className="title">{option.title}</span>
                   {option.snippet ? <span className="snippet">{option.snippet}</span> : null}
                 </span>
+                {option.when ? <span className="when">{relativeDay(option.when)}</span> : null}
               </li>
             ))}
           </ul>
-          {query !== "" && !search.isPending && results.length === 0 ? (
+          {pending && options.length === 0 ? (
+            <div className="search-skeleton" aria-hidden>
+              {[0, 1, 2, 3].map((row) => (
+                <div key={row} className="skeleton-row">
+                  <span className="skeleton-icon" />
+                  <span className="skeleton-lines">
+                    <span />
+                    <span />
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : query !== "" && options.length === 0 ? (
             <p className="search-empty">
-              {search.isError ? "Search failed. Try again." : "No matches."}
+              <Search size={20} aria-hidden />
+              {search.isError && tab !== "projects" ? "Search failed. Try again." : "No results"}
             </p>
           ) : null}
         </Dialog.Content>
