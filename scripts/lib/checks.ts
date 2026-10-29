@@ -309,6 +309,20 @@ export async function chatChecks(
     "/chat/new Send is disabled until hydration (no fake no-JS send)",
     /<button type="submit"[^>]*aria-label="Send"[^>]*disabled=""/.test(html),
   );
+  // Optional renderers stay out of the critical chat bundle (contracts §9.3, Phase 14).
+  const critical = [...html.matchAll(/(?:href|src)="(\/assets\/[^"]+\.js)"/g)].map(
+    (m) => m[1] ?? "",
+  );
+  const heavy: string[] = [];
+  for (const asset of new Set(critical)) {
+    const code = await (await fetch(`${base}${asset}`)).text();
+    if (/KaTeX parse error|registerLanguage\(|highlightAuto/.test(code)) heavy.push(asset);
+  }
+  check(
+    "Phase 14: KaTeX and highlight.js are not in the chat page's initial JavaScript",
+    critical.length > 0 && heavy.length === 0,
+    heavy.join(", "),
+  );
   check(
     "INV-55: the document dehydrates the session and models into the query cache",
     html.includes("csrfToken") && html.includes(models.chat) && !html.includes("passwordHash"),

@@ -132,8 +132,108 @@
 }
 
 .table-wrap {
-  margin: 0 0 16px;
   overflow-x: auto;
+}
+
+.table-block {
+  position: relative;
+  margin: 0 0 16px;
+}
+
+.table-tools {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  display: none;
+  gap: 4px;
+}
+
+.table-block:hover .table-tools,
+.table-block:focus-within .table-tools,
+html[data-phone] .table-tools {
+  display: flex;
+}
+
+html[data-phone] .table-block {
+  margin-top: 44px;
+}
+
+.table-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--pill-border);
+  border-radius: var(--radius-pill);
+  background: var(--pill-bg);
+  color: var(--text-secondary);
+}
+
+.table-tool:hover {
+  color: var(--text);
+}
+
+.table-dialog {
+  width: min(1100px, calc(100vw - 32px));
+}
+
+/* Syntax highlighting (highlight.js classes) */
+.hljs-comment,
+.hljs-quote {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-variable,
+.hljs-built_in,
+.hljs-literal,
+.hljs-selector-tag,
+.hljs-type {
+  color: var(--syntax-keyword);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-attr {
+  color: var(--syntax-function);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-symbol {
+  color: var(--syntax-string);
+}
+
+.hljs-number,
+.hljs-meta {
+  color: var(--syntax-number);
+}
+
+/* Math: native MathML from KaTeX */
+.math-display {
+  position: relative;
+  margin: 0 0 16px;
+  padding: 8px 44px 8px 0;
+  overflow-x: auto;
+}
+
+.math-display math {
+  font-size: 1.1em;
+}
+
+.math-copy {
+  position: absolute;
+  top: 4px;
+  right: 0;
+}
+
+.math-source {
+  font-family: var(--font-mono);
+  font-size: var(--text-inline-code);
 }
 
 .markdown table {

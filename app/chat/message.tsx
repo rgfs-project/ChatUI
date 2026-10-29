@@ -1,4 +1,4 @@
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Square, Volume2 } from "lucide-react";
 import { memo, useState } from "react";
 import type { MessageDto } from "@shared/conversations";
 import type { GenerationState } from "@shared/generations";
@@ -6,6 +6,7 @@ import { useRenderProbe } from "../lib/render-probe";
 import { IconButton } from "../ui/icon-button";
 import { copyText } from "./copy";
 import { Markdown } from "./markdown";
+import { speak, speakableText, stopSpeaking, useSpeaking, useSpeechSupported } from "./read-aloud";
 
 export const STATUS_LABEL: Record<NonNullable<MessageDto["status"]>, string> = {
   complete: "",
@@ -41,6 +42,25 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       }}
     >
       {copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
+    </IconButton>
+  );
+}
+
+function ReadAloudButton({ id, text }: { id: string; text: string }) {
+  const supported = useSpeechSupported();
+  const speaking = useSpeaking(id);
+  if (!supported) return null;
+  return (
+    <IconButton
+      label={speaking ? "Stop reading" : "Read aloud"}
+      className="msg-action"
+      aria-pressed={speaking}
+      onClick={() => {
+        if (speaking) stopSpeaking();
+        else speak(id, speakableText(text));
+      }}
+    >
+      {speaking ? <Square size={14} aria-hidden /> : <Volume2 size={16} aria-hidden />}
     </IconButton>
   );
 }
@@ -114,6 +134,7 @@ export const Message = memo(function Message({ message }: { message: MessageDto 
       {message.content ? (
         <div className="msg-actions">
           <CopyButton text={message.content} label="Copy reply" />
+          <ReadAloudButton id={message.id} text={message.content} />
         </div>
       ) : null}
     </div>

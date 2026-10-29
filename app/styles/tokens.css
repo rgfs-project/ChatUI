@@ -94,6 +94,12 @@
   --inline-code-bg: #ececec;
   --code-text: #1f1f1f;
   --danger: #e02e2a;
+  /* Syntax highlighting (plan §7) */
+  --syntax-comment: #6e6e6e;
+  --syntax-keyword: #6b4fd3;
+  --syntax-function: #7c5fd6;
+  --syntax-string: #2e7d47;
+  --syntax-number: #c2410c;
   --avatar: #8e63a6;
   --focus: #f26b1d;
   --tooltip-bg: #0d0d0d;

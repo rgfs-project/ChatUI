@@ -2,6 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 
 /** Within this distance of the bottom the reader counts as pinned. */
 export const PIN_THRESHOLD_PX = 32;
+/** A scroll this soon after wheel/touch/pointer/scroll-key input is the reader's. */
+const USER_INPUT_WINDOW_MS = 800;
+const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
 
 export interface ScrollMetrics {
   scrollTop: number;
@@ -92,15 +95,33 @@ export function useScrollIntent(resetKey: string): {
     const onScroll = () => {
       const top = Math.round(el.scrollTop);
       const i = expected.current.findIndex((t) => Math.abs(t - top) <= 1);
-      const programmatic = i !== -1;
-      if (programmatic) expected.current.splice(0, i + 1);
+      const ours = i !== -1;
+      if (ours) expected.current.splice(0, i + 1);
       else expected.current = [];
-      const next = scrollIntent.onScroll(stateRef.current, el, programmatic);
+      // Only a scroll right after real input is the reader's intent. Scroll
+      // anchoring, late-loading renderers and layout changes are not (Phase 14).
+      const fromUser = !ours && performance.now() - lastInput <= USER_INPUT_WINDOW_MS;
+      const next = scrollIntent.onScroll(stateRef.current, el, !fromUser);
       if (next !== stateRef.current) setState(next);
     };
+    let lastInput = -Infinity;
+    const onInput = () => {
+      lastInput = performance.now();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (SCROLL_KEYS.has(event.key)) onInput();
+    };
     el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("wheel", onInput, { passive: true });
+    el.addEventListener("touchmove", onInput, { passive: true });
+    el.addEventListener("pointerdown", onInput, { passive: true });
+    window.addEventListener("keydown", onKey);
     return () => {
       el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("wheel", onInput);
+      el.removeEventListener("touchmove", onInput);
+      el.removeEventListener("pointerdown", onInput);
+      window.removeEventListener("keydown", onKey);
     };
   }, [setState]);
 

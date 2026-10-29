@@ -1,8 +1,10 @@
-import { Check, Copy } from "lucide-react";
-import { memo, useState, type ComponentProps, type ReactNode } from "react";
+import { memo, type ComponentProps, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { copyText } from "./copy";
+import remarkMath from "remark-math";
+import { CodeBlock } from "./render/code";
+import { DisplayMath, InlineMath, normalizeMath } from "./render/math";
+import { TableBlock } from "./render/table";
 
 /**
  * Untrusted model output → React elements (INV-22). Raw HTML is never
@@ -28,47 +30,20 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
-function CodeBlock({ language, children }: { language: string | null; children: ReactNode }) {
-  const [copied, setCopied] = useState(false);
-  const source = textOf(children).replace(/\n$/, "");
-  return (
-    <div className="code-block">
-      <div className="code-head">
-        <span className="code-lang">{language ?? "text"}</span>
-        <button
-          type="button"
-          className="code-copy"
-          aria-label={copied ? "Copied" : "Copy code"}
-          onClick={() => {
-            void copyText(source).then((ok) => {
-              if (!ok) return;
-              setCopied(true);
-              setTimeout(() => {
-                setCopied(false);
-              }, 1_500);
-            });
-          }}
-        >
-          {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-          <span>{copied ? "Copied" : "Copy"}</span>
-        </button>
-      </div>
-      <pre className="selectable">
-        <code>{source}</code>
-      </pre>
-    </div>
-  );
-}
-
 const components: Components = {
   pre({ children }) {
-    // Block code: <pre><code class="language-x">…</code></pre>.
+    // Block code: <pre><code class="language-x">…</code></pre>; display math
+    // (remark-math): <pre><code class="language-math math-display">.
     const child: unknown = Array.isArray(children) ? (children as unknown[])[0] : children;
     const props = (child as { props?: { className?: string; children?: ReactNode } } | null)?.props;
-    const language = /language-([\w+#.-]+)/.exec(props?.className ?? "")?.[1] ?? null;
-    return <CodeBlock language={language}>{props?.children ?? children}</CodeBlock>;
+    const className = props?.className ?? "";
+    const source = textOf(props?.children ?? children).replace(/\n$/, "");
+    if (className.includes("math-display")) return <DisplayMath tex={source} />;
+    const language = /language-([\w+#.-]+)/.exec(className)?.[1] ?? null;
+    return <CodeBlock language={language} source={source} />;
   },
   code({ children, className }) {
+    if (className?.includes("math-inline")) return <InlineMath tex={textOf(children)} />;
     return <code className={`inline-code${className ? ` ${className}` : ""}`}>{children}</code>;
   },
   a({ href, children }) {
@@ -93,13 +68,13 @@ const components: Components = {
     );
   },
   table({ children }) {
-    return (
-      <div className="table-wrap">
-        <table>{children}</table>
-      </div>
-    );
+    return <TableBlock>{children}</TableBlock>;
   },
 };
+
+const REMARK_PLUGINS = [remarkGfm, [remarkMath, { singleDollarTextMath: true }]] as NonNullable<
+  ComponentProps<typeof ReactMarkdown>["remarkPlugins"]
+>;
 
 type MarkdownProps = Pick<ComponentProps<typeof ReactMarkdown>, "children">;
 
@@ -107,8 +82,8 @@ type MarkdownProps = Pick<ComponentProps<typeof ReactMarkdown>, "children">;
 export const Markdown = memo(function Markdown({ children }: MarkdownProps) {
   return (
     <div className="markdown selectable">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} urlTransform={safeUrl}>
-        {children}
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components} urlTransform={safeUrl}>
+        {typeof children === "string" ? normalizeMath(children) : children}
       </ReactMarkdown>
     </div>
   );

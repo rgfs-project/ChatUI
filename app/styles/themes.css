@@ -31,6 +31,11 @@
   --danger: #f87171;
   --tooltip-bg: #f3f3f3;
   --tooltip-text: #0d0d0d;
+  --syntax-comment: #a8a8a8;
+  --syntax-keyword: #b7a6e8;
+  --syntax-function: #a99bdc;
+  --syntax-string: #9fcdab;
+  --syntax-number: #e8a49a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -59,6 +64,11 @@
     --danger: #f87171;
     --tooltip-bg: #f3f3f3;
     --tooltip-text: #0d0d0d;
+    --syntax-comment: #a8a8a8;
+    --syntax-keyword: #b7a6e8;
+    --syntax-function: #a99bdc;
+    --syntax-string: #9fcdab;
+    --syntax-number: #e8a49a;
   }
 }
 
