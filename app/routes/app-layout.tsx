@@ -15,6 +15,7 @@ import type { ConversationResult } from "@shared/conversations";
 import type { ProviderModelsDto } from "@shared/generations";
 import { ChatProvider } from "../chat/chat-context";
 import { ChatView } from "../chat/chat-view";
+import { Drawer } from "../chat/drawer";
 import { ReauthDialog } from "../chat/reauth";
 import { RenameDialog } from "../chat/rename-dialog";
 import { Sidebar } from "../chat/sidebar";
@@ -264,15 +265,7 @@ function Shell() {
         >
           <Sidebar />
         </AreaBoundary>
-        {narrowOpen ? (
-          <div
-            className="narrow-backdrop"
-            aria-hidden
-            onClick={() => {
-              closeNarrow();
-            }}
-          />
-        ) : null}
+        <Drawer />
         <main className="main">{kind === "page" ? <Outlet /> : <ChatView />}</main>
       </div>
       {kind === "overlay" ? <Outlet /> : null}

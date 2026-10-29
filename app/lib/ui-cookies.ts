@@ -13,6 +13,8 @@ import { APPEARANCE_COOKIE, parseAppearance, type Appearance } from "./appearanc
 
 export interface UiHints {
   appearance: Appearance;
+  /** Phone layout: decided by device on the server, before paint (Phase 11). */
+  phone: boolean;
   sidebarCollapsed: boolean;
   timeZone: string;
   locale: string;
@@ -60,10 +62,24 @@ function acceptLanguage(header: string | null): string | null {
   return null;
 }
 
+/**
+ * A phone, not a tablet or a narrow desktop window: the Client Hint
+ * `Sec-CH-UA-Mobile: ?1` (Chromium) or a phone user agent. Width alone never
+ * decides it, so a sideways phone keeps the phone layout and a narrow desktop
+ * window keeps the desktop one.
+ */
+export function isPhone(headers: Headers): boolean {
+  if (headers.get("sec-ch-ua-mobile") === "?1") return true;
+  const ua = headers.get("user-agent") ?? "";
+  if (/iPad|Tablet/i.test(ua)) return false;
+  return /iPhone|iPod|Android.*Mobile|Mobile.*Firefox|Windows Phone/i.test(ua);
+}
+
 export function readUiHints(request: Request): UiHints {
   const cookies = parseCookies(request.headers.get("cookie"));
   return {
     appearance: parseAppearance(cookies[APPEARANCE_COOKIE]),
+    phone: isPhone(request.headers),
     sidebarCollapsed: cookies[UI_COOKIES.sidebar] === "collapsed",
     timeZone: validTimeZone(cookies[UI_COOKIES.timeZone]) ?? "UTC",
     locale:

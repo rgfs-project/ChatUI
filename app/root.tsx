@@ -57,10 +57,18 @@ export function Layout({ children }: { children: ReactNode }) {
   const data = useRouteLoaderData<typeof loader>("root");
   const appearance = data?.hints.appearance ?? DEFAULT_APPEARANCE;
   return (
-    <html lang="en" {...htmlAttributes(appearance)}>
+    <html
+      lang="en"
+      {...htmlAttributes(appearance)}
+      {...(data?.hints.phone ? { "data-phone": "" } : {})}
+    >
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* The on-screen keyboard resizes the layout, so 100dvh keeps the composer visible. */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+        />
         <meta name="color-scheme" content="light dark" />
         <Meta />
         {/* Stylesheets need no nonce (style-src 'self'). An explicit empty nonce keeps

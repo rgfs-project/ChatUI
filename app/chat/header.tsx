@@ -20,7 +20,7 @@ export const Header = memo(function Header() {
     rename,
     remove,
   } = useChat();
-  const { sidebarCollapsed, setSidebarOpen } = useUi();
+  const { setSidebarOpen } = useUi();
   const navigate = useNavigate();
   const conversation = result?.ok ? result.conversation : null;
 
@@ -37,9 +37,11 @@ export const Header = memo(function Header() {
         >
           <PanelLeftOpen size={20} aria-hidden />
         </IconButton>
-        {sidebarCollapsed && conversationId !== null ? (
+        {/* Shown when the sidebar isn't (collapsed, phone, narrow); never on the draft itself. */}
+        {conversationId !== null ? (
           <IconButton
             label="New chat"
+            className="header-new-chat"
             onClick={() => {
               void navigate(paths.newChat());
             }}

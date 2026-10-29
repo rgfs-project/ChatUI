@@ -1,0 +1,42 @@
+## Phase 11 report
+
+Run order follows `docs/ROADMAP.md` (Phase 11 moved up after Phase 8).
+
+- **Scope completed (files/features):**
+  - Server-side phone detection and `html[data-phone]` (`app/lib/ui-cookies.ts`, `app/root.tsx`).
+  - Viewport meta with `interactive-widget=resizes-content` and `viewport-fit=cover`.
+  - Phone stylesheet (`app/styles/phone.css`).
+  - Modal sidebar drawer for phones and narrow windows (`app/chat/drawer.tsx`).
+  - Header controls for drawer layouts.
+  - Scroll intent survives viewport resizes (`app/chat/scroll-intent.ts`).
+  - The demo refreshes its provider address on each start.
+- **Checks** (`tests/e2e/mobile.spec.ts`; Playwright device emulation):
+  - **Phone (390×844, Android UA, touch):**
+    - the server marks the phone; sidebar inline hidden; no title; two-row composer
+    - no horizontal page scroll with a wide code line, which scrolls inside its block
+    - drawer focus trap, Escape, backdrop, focus return, closes on navigation
+    - 44 × 44 tap targets (header, composer, drawer)
+    - a shorter viewport (keyboard) keeps the composer visible and the reader pinned
+    - menus stay within the screen
+  - **Sideways phone (844×390):** keeps the phone layout.
+  - **Tablet (820×1180, iPad UA):** desktop layout with the sidebar inline.
+  - **Narrow desktop:** at 767 px the drawer, at 768 px the inline sidebar, never the phone layout.
+  - **Wide desktop (1440×900):** inline sidebar and the title in the header.
+- **Screenshots** (`docs/phase-reports/phase-11/`):
+  - `phone-390x844-{new-chat,drawer,chat}.png`
+  - `tablet-820x1180-{new-chat,chat}.png`
+  - `desktop-1440x900-{new-chat,chat}.png`
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (399)
+  - `build`: PASS
+  - `verify`: PASS (77/77)
+  - `test:e2e`: PASS (40/40)
+  - `npm audit`: 0
+  - `verify:compose`: CI
+- **Deviations / limitations / unverified items:**
+  - Rows on phones are 44 px tall (the plan measured 35 px) to meet the package's 44 × 44 touch-target rule.
+  - Emulation only: no real phone browser or on-screen keyboard was used. The shorter-viewport test stands in for the keyboard.
+  - A phone not identified by its user agent or Client Hint gets the desktop layout, which still works at its width.
+  - The phase package's width-breakpoint checks were rewritten around the device rule (rebuild plan §1 #3).
+- **Commit/tag:** `feat(phase-11): responsive layout and mobile interaction model`, tag `phase-11` (local), pushed to `main`.

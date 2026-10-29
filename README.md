@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 8 (loading and resilience).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, appearance: theme, accent, text sizes, reduced motion; account; shortcuts) as a searchable overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md); admin, uploads and the rest come later.
+> **Status: Phase 11 (phones).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, appearance: theme, accent, text sizes, reduced motion; account; shortcuts) as a searchable overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md); admin, uploads and the rest come later.
 
 ## Prerequisites
 

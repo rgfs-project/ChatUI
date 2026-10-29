@@ -123,6 +123,23 @@ export function useScrollIntent(resetKey: string): {
     };
   }, [scrollToBottom, setState]);
 
+  // The viewport (on-screen keyboard, rotation, window resize) changing size is
+  // not the reader scrolling: a pinned reader stays at the latest message.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let lastHeight = el.clientHeight;
+    const observer = new ResizeObserver(() => {
+      if (el.clientHeight === lastHeight) return;
+      lastHeight = el.clientHeight;
+      if (stateRef.current.pinned) scrollToBottom();
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, [scrollToBottom]);
+
   const jumpToLatest = useCallback(() => {
     setState(scrollIntent.onJump());
     scrollToBottom();

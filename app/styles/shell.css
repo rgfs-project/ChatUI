@@ -309,30 +309,45 @@
   line-height: var(--lh-greeting);
 }
 
-/* Narrow windows keep working: the sidebar overlays the chat (Phase 11 owns phones). */
+.header-new-chat {
+  display: none;
+}
+
+.sidebar-collapsed .header-new-chat {
+  display: inline-flex;
+}
+
+/* The drawer (phones and narrow windows) holds the same sidebar. */
+.drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 41;
+  display: flex;
+  width: min(var(--sidebar-width), 85vw);
+  background: var(--bg);
+  box-shadow: var(--dialog-shadow);
+}
+
+.drawer .sidebar {
+  display: flex;
+  width: 100%;
+  box-shadow: none;
+}
+
+/* Narrow desktop windows: width rules keep the layout usable (not the phone layout). */
 @media (max-width: 767px) {
-  .sidebar,
-  .sidebar-collapsed .sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 20;
+  .app > .sidebar,
+  .app > .area-error.sidebar {
     display: none;
-    width: min(var(--sidebar-width), 85vw);
   }
 
-  .narrow-open .sidebar {
-    display: flex;
-  }
-
-  .narrow-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 19;
-    background: var(--backdrop);
-  }
-
+  /* Same specificity as the desktop rule that hides it, and later. */
   .app:not(.sidebar-collapsed) .sidebar-open,
-  .app.sidebar-collapsed .sidebar-open {
+  .app:not(.sidebar-collapsed) .header-new-chat {
     display: inline-flex;
+  }
+
+  .header-title {
+    display: none;
   }
 }

@@ -90,7 +90,9 @@ function seedLongConversation(dataDir: string, userId: string): string {
   blocks.push(
     `<!-- cc:user id=${randomUUID()} -->\nShow formatting`,
     `<!-- cc:assistant id=${randomUUID()} status=complete -->\n` +
-      "Use `inline code` here.\n\n```ts\nconst answer = 42;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |",
+      "Use `inline code` here.\n\n```ts\nconst answer = 42; // " +
+      "a very long line that must scroll inside the block ".repeat(8).trim() +
+      "\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |",
   );
   const file = [
     "---",

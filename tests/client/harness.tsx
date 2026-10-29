@@ -101,6 +101,7 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
       <UiProvider
         hints={{
           appearance: DEFAULT_APPEARANCE,
+          phone: false,
           sidebarCollapsed: false,
           timeZone: "UTC",
           locale: "en-US",

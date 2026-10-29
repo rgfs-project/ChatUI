@@ -308,6 +308,30 @@ app-layout (protected: one auth guard for every child, catch-all included)
 - `app/styles/tokens.css` holds the measured values from the rebuild plan (§5–7): the system font stack, the type scale, the layout sizes and the light/dark colours. Components use only these custom properties. The accent is the plan's **orange** option (`#f26b1d` light, `#c85512` dark), with the user bubble mixed from it by the plan's formula.
 - `tests/e2e/measurements.spec.ts` compares computed sizes and colours of the shell, transcript, composer, suggestions, menus, dialogs, code blocks and tables at 1920×1080 against `tests/e2e/measurements.json`, in light and dark. Later phases keep it green; a changed value needs a reason in that phase's report.
 
+### Mobile (Phase 11)
+
+- **Device, not width.** The root loader marks phones (`isPhone`: `Sec-CH-UA-Mobile: ?1` or a phone user agent; iPads and tablets excluded) and `root.tsx` renders `<html data-phone>`, so the phone layout is decided before paint. A sideways phone keeps it; a narrow desktop window doesn't get it.
+- **Phone layout** (`app/styles/phone.css`), following plan §6:
+  - The sidebar becomes a 260 px drawer.
+  - The header is solid and has no title: menu button left, New chat next to it (never on the draft).
+  - The thread has 16 px gutters.
+  - The composer always has two rows (text above; `+` and send below).
+  - On the new-chat screen the greeting is centred and the suggestions sit above the composer.
+  - Dialogs are bottom sheets; Settings is full screen with 20 px gutters.
+  - `env(safe-area-inset-*)` is honoured.
+- **Narrow desktop windows** (≤ 767 px): the same drawer, the title hidden; otherwise the desktop layout.
+- **Drawer** (`app/chat/drawer.tsx`): a Radix Dialog holding the sidebar, with:
+  - a focus trap and an inert background
+  - Escape and backdrop dismissal
+  - focus returned to the menu button
+  - closing on navigation
+- **Keyboard and viewport.** The viewport meta has `interactive-widget=resizes-content` and `viewport-fit=cover`, and the shell is `100dvh`, so the on-screen keyboard shrinks the layout and the composer stays visible with no JavaScript measuring. A `ResizeObserver` on the transcript keeps a pinned reader at the bottom through resizes, which never count as user scrolling.
+- **Touch.**
+  - Controls are 44 × 44 to the finger: rows and menu items are 44 px tall on phones. Icon buttons keep their 36 px look with a 44 px hit area (`::after`), spaced 8 px apart so the areas don't overlap.
+  - Row menus are always visible (no hover).
+  - Tooltips never show on phones.
+  - Wide code and tables scroll inside themselves; the page never scrolls sideways.
+
 ### Loading and resilience (Phase 8)
 
 - **Startup dependency graph.** All of these start concurrently in the document request (a unit test asserts that every load starts before the first one ends):

@@ -1,0 +1,162 @@
+/*
+ * Phone layout (Phase 11): chosen by device on the server (html[data-phone]),
+ * so a sideways phone keeps it and a narrow desktop window does not get it.
+ * Sizes follow the reference measurements (plan §6) at 390 × 850.
+ */
+html[data-phone] .app {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+
+html[data-phone] .app > .sidebar,
+html[data-phone] .app > .area-error.sidebar {
+  display: none;
+}
+
+html[data-phone] .drawer {
+  width: 260px;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Solid bar with no chat title; menu button left, new chat right. */
+html[data-phone] .chat-header {
+  position: relative;
+  flex: none;
+}
+
+html[data-phone] .header-title {
+  display: none;
+}
+
+/* 36 px buttons 8 px apart: their 44 px tap areas meet without overlapping. */
+html[data-phone] .header-start,
+html[data-phone] .header-end {
+  gap: 8px;
+}
+
+html[data-phone] .app:not(.sidebar-collapsed) .sidebar-open,
+html[data-phone] .app:not(.sidebar-collapsed) .header-new-chat {
+  display: inline-flex;
+}
+
+html[data-phone] .thread {
+  padding-top: 8px;
+}
+
+/* The composer is always two rows: text above; + and send below. */
+html[data-phone] .composer {
+  display: grid;
+  grid-template-areas:
+    "text text"
+    "start actions";
+  grid-template-columns: 1fr auto;
+}
+
+html[data-phone] .composer textarea {
+  grid-area: text;
+  padding: 11px 6px 5px;
+}
+
+html[data-phone] .composer-start {
+  grid-area: start;
+}
+
+html[data-phone] .composer-actions {
+  grid-area: actions;
+}
+
+html[data-phone] .dock {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+/* New chat: greeting centred; suggestions above the composer. */
+html[data-phone] .chat-area.is-empty .dock {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+/* Order in the dock: greeting (centred), suggestions, then the composer. */
+html[data-phone] .suggestions {
+  order: 1;
+  margin: 0 0 8px;
+}
+
+html[data-phone] .dock > .composer {
+  order: 2;
+}
+
+/* Tooltips are for pointers with hover; never on a phone. */
+html[data-phone] .tooltip {
+  display: none;
+}
+
+html[data-phone] .chat-area.is-empty .greeting {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* Touch: every control is at least 44 × 44 to the finger (the visual size stays). */
+html[data-phone] .icon-button,
+html[data-phone] .send-button,
+html[data-phone] .code-copy {
+  position: relative;
+}
+
+html[data-phone] .icon-button::after,
+html[data-phone] .send-button::after,
+html[data-phone] .code-copy::after {
+  position: absolute;
+  inset: min(0px, calc((100% - 44px) / 2));
+  content: "";
+}
+
+html[data-phone] .side-row,
+html[data-phone] .chat-row,
+html[data-phone] .menu-item {
+  min-height: 44px;
+}
+
+html[data-phone] .row-menu {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+}
+
+html[data-phone] .msg-user .msg-actions {
+  opacity: 1;
+}
+
+/* Dialogs become full-screen sheets; Settings uses 20 px gutters. */
+html[data-phone] .dialog {
+  inset: auto 0 0;
+  width: 100%;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 16px);
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
+  transform: none;
+}
+
+html[data-phone] .settings-dialog {
+  top: 0;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  padding: calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 0;
+}
+
+html[data-phone] .settings {
+  flex-direction: column;
+}
+
+html[data-phone] .settings-nav {
+  flex-direction: row;
+  width: auto;
+  overflow-x: auto;
+}
+
+html[data-phone] .settings-row {
+  flex-wrap: wrap;
+}
+
+html[data-phone] .menu {
+  max-width: calc(100vw - 16px);
+}

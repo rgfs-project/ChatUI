@@ -15,6 +15,13 @@ import { UI_COOKIES, writeUiCookie, type UiHints } from "./ui-cookies";
 /** Below this width the sidebar overlays the chat instead of sitting beside it. */
 export const NARROW_QUERY = "(max-width: 767px)";
 
+/** Phones (decided by device, `html[data-phone]`) and narrow windows use the drawer. */
+export function usesDrawer(): boolean {
+  return (
+    document.documentElement.hasAttribute("data-phone") || window.matchMedia(NARROW_QUERY).matches
+  );
+}
+
 interface UiState {
   appearance: Appearance;
   setAppearance: (next: Appearance) => void;
@@ -75,7 +82,7 @@ export function UiProvider({
 
   const [narrowOpen, setNarrowOpen] = useState(false);
   const setSidebarOpen = useCallback((open: boolean) => {
-    if (window.matchMedia(NARROW_QUERY).matches) {
+    if (usesDrawer()) {
       setNarrowOpen(open);
       return;
     }
