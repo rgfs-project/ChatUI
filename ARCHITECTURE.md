@@ -308,6 +308,15 @@ app-layout (protected: one auth guard for every child, catch-all included)
 - `app/styles/tokens.css` holds the measured values from the rebuild plan (§5–7): the system font stack, the type scale, the layout sizes and the light/dark colours. Components use only these custom properties. The accent is the plan's **orange** option (`#f26b1d` light, `#c85512` dark), with the user bubble mixed from it by the plan's formula.
 - `tests/e2e/measurements.spec.ts` compares computed sizes and colours of the shell, transcript, composer, suggestions, menus, dialogs, code blocks and tables at 1920×1080 against `tests/e2e/measurements.json`, in light and dark. Later phases keep it green; a changed value needs a reason in that phase's report.
 
+### Appearance and settings (Phase 7b)
+
+- **Appearance** (`app/lib/appearance.ts`): theme (light by default, dark, system), accent (six options, orange by default), interface text size 12–18 (14 reference), code text size 11–16 (12 default) and reduce motion. One validated cookie, `chatui_appearance` (`theme.accent.ui.code.motion`), is read by the root loader. `root.tsx` renders it as `<html data-theme data-accent data-ui-size data-code-size data-motion>`, so the first paint is right without a bootstrap script. Changes apply immediately by setting those attributes and the cookie; invalid values fall back field by field.
+- **Tokens:** `app/styles/themes.css` swaps the token values per attribute. Accent bubbles follow the plan formula. The interface size zooms the body (CSS `zoom`); the shell height compensates. Code sizes set `--text-code`/`--lh-code`. `data-motion="reduce"` removes transitions in addition to `prefers-reduced-motion`.
+- **Settings registry** (`app/settings/`): each section is data (`SettingsSection` of `SettingsRow`s with label and keywords), so later phases add sections in one place. The Settings overlay searches rows across all sections. Sections: General, Appearance, Account, Keyboard shortcuts. Value pickers with a fixed short list use native `<select>`, radio groups and a `role="switch"` checkbox (added to the decision record).
+- **Layout** follows the owner's reference screenshot: conversation title in the header (the model menu shows only on the draft), the model choice in the composer's `+` menu (Phase 12 adds attachments there), the disclaimer above the composer, and the profile row with the name only.
+- **Pages:** sign-in and sign-up (registration closed → "Ask an admin to create one"), the status page and the root error document share one centred card style.
+- **Demo:** `npm run demo` (`scripts/demo.ts`) builds if needed, seeds `./demo-data` once (accounts `demo` admin and `demo2`, sample chats as canonical Markdown), starts the mock model limited to friendly models and serves the production build on port 3000.
+
 ### E2E suite
 
 `npm run test:e2e` seeds two accounts and a 200-message conversation (written as canonical Markdown before the server starts) and signs in once, reusing the session (logins are rate-limited per address). Suites:
@@ -528,7 +537,6 @@ All runtime JS/CSS/icons are built into `build/client` and served from the ChatU
 
 ## Later sections
 
-- Settings appearance, redesigned sign-in/status/error pages, demo instance: Phase 7b.
 - Loading resilience: N/A until Phase 8.
 - Performance budgets and instrumentation: N/A until Phase 9.
 - Admin, mobile, uploads, continuity, rendering, component audit, security hardening, reliability, polish: N/A until Phases 10–18.

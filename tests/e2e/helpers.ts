@@ -30,9 +30,9 @@ export async function signInWithForm(
   await hydrated(page);
 }
 
-/** Picks a model in the header model menu by id. */
+/** Picks a model in the composer's + menu by id. */
 export async function chooseModel(page: Page, modelId: string): Promise<void> {
-  await page.getByTestId("model-picker").first().click();
+  await page.getByTestId("composer-menu").click();
   const escaped = modelId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // Items may carry a detail ("Not loaded") after the id.
   await page.getByRole("menuitemradio", { name: new RegExp(`^${escaped}(\\s|$)`) }).click();

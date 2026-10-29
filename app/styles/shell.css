@@ -1,7 +1,8 @@
 /* The fixed shell: sidebar, main column and header. The document never scrolls. */
 .app {
   display: flex;
-  height: 100dvh;
+  /* The UI size setting zooms the body; the shell still fills the viewport. */
+  height: calc(100dvh / var(--ui-zoom));
   overflow: hidden;
   font-size: var(--text-ui);
   line-height: var(--lh-ui);
@@ -49,7 +50,7 @@
 .sidebar-scroll {
   flex: 1;
   min-height: 0;
-  padding: 0 6px;
+  padding: 7px 6px 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -85,7 +86,7 @@
   display: flex;
   align-items: center;
   height: 36px;
-  margin: 4px 6px 0;
+  margin: 22px 6px 4px;
   padding: 0 10px;
   border-radius: var(--radius-label);
   color: var(--text-secondary);
@@ -193,7 +194,7 @@
   gap: 8px;
   min-width: 0;
   height: 48px;
-  padding: 0 8px;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-row);
   background: transparent;
@@ -219,24 +220,12 @@
   font-weight: var(--weight-semibold);
 }
 
-.profile-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .profile-name {
   overflow: hidden;
   font-size: 14px;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.profile-sub {
-  color: var(--text-secondary);
-  font-size: var(--text-sub);
-  line-height: var(--lh-sub);
 }
 
 /* ── Header ── */
@@ -282,6 +271,18 @@
 .model-trigger:hover,
 .model-trigger[data-state="open"] {
   background: var(--hover);
+}
+
+.header-title {
+  min-width: 0;
+  margin: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: var(--text-brand);
+  font-weight: var(--weight-regular);
+  line-height: var(--lh-brand);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .model-name {

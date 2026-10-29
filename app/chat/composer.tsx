@@ -1,8 +1,10 @@
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, Plus, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useHydrated } from "../lib/hydrated";
 import { useRenderProbe } from "../lib/render-probe";
+import { MenuLabel } from "../ui/menu";
 import { useChat } from "./chat-context";
+import { ModelMenu } from "./model-picker";
 import { draftKey, draftStore } from "./drafts";
 
 /** Single-row height of the textarea (26px line + 10px padding). */
@@ -24,6 +26,10 @@ export function Composer() {
     cancel,
     running,
     selectedPair,
+    selectModel,
+    groups,
+    modelsState,
+    refreshModels,
     setHasDraft,
   } = useChat();
   const hydrated = useHydrated();
@@ -98,6 +104,33 @@ export function Composer() {
         void submit();
       }}
     >
+      <div className="composer-start">
+        <ModelMenu
+          label="Composer options"
+          side="top"
+          groups={groups}
+          selected={selectedPair}
+          loading={modelsState === "loading"}
+          onSelect={(pair) => {
+            if (pair) selectModel(pair);
+            composerRef.current?.focus();
+          }}
+          onRefresh={() => {
+            void refreshModels();
+          }}
+          before={<MenuLabel>Model</MenuLabel>}
+          trigger={
+            <button
+              type="button"
+              className="icon-button composer-plus"
+              aria-label="Composer options"
+              data-testid="composer-menu"
+            >
+              <Plus size={20} aria-hidden />
+            </button>
+          }
+        />
+      </div>
       <textarea
         id="message"
         name="message"

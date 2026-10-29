@@ -368,7 +368,7 @@ export async function chatChecks(
       problems.push("a browser dialog opened (confirmations must be in-app)");
     });
     const pick = async (model: string) => {
-      await page.getByTestId("model-picker").click();
+      await page.getByTestId("composer-menu").click();
       await page.getByRole("menuitemradio", { name: new RegExp(`^${model}(\\s|$)`) }).click();
     };
 

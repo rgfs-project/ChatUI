@@ -12,6 +12,7 @@ export default defineConfig(
     ".react-router/",
     "node_modules/",
     "data/",
+    "demo-data/",
     "test-results/",
     "playwright-report/",
   ]),

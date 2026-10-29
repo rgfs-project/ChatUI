@@ -42,27 +42,51 @@ export default function Register() {
   }
 
   return (
-    <main className="page">
-      <h1>Create account</h1>
-      <form className="auth-form" onSubmit={(event) => void submit(event)}>
-        <label htmlFor="username">Username (3-32: a-z 0-9 _ . -)</label>
-        <input id="username" name="username" autoComplete="username" required />
-        <label htmlFor="password">Password (at least 10 characters)</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          minLength={10}
-          required
-        />
-        <button type="submit">Create account</button>
-        {error ? (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </form>
+    <main className="auth">
+      <div className="auth-card">
+        <p className="auth-brand">ChatUI</p>
+        <h1>Create your account</h1>
+        <form className="auth-form" onSubmit={(event) => void submit(event)}>
+          <label htmlFor="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            className="text-field"
+            autoComplete="username"
+            autoCapitalize="none"
+            aria-describedby="username-hint"
+            required
+          />
+          <span id="username-hint" className="field-hint">
+            3–32 characters: a–z, 0–9, _ . -
+          </span>
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className="text-field"
+            autoComplete="new-password"
+            aria-describedby="password-hint"
+            minLength={10}
+            required
+          />
+          <span id="password-hint" className="field-hint">
+            At least 10 characters
+          </span>
+          {error ? (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" className="pill-button pill-primary auth-submit">
+            Create account
+          </button>
+        </form>
+        <p className="auth-note">
+          Already have an account? <a href={paths.login()}>Sign in</a>
+        </p>
+      </div>
     </main>
   );
 }

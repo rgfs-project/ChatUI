@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 7a (core chat interface).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, account, shortcuts) as an overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md); appearance settings and redesigned sign-in pages come in 7b, admin, uploads and the rest later.
+> **Status: Phase 7b (settings and pages).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, appearance: theme, accent, text sizes, reduced motion; account; shortcuts) as a searchable overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md); admin, uploads and the rest come later.
 
 ## Prerequisites
 
@@ -67,6 +67,14 @@ docker compose exec chatui node server/cli.ts user:create --username admin --adm
 ```
 
 Then open the URL in `PUBLIC_ORIGIN` (default `http://localhost:3000`) and sign in. `REGISTRATION_MODE=open` lets people create their own accounts at `/register`. Changing your password (Settings → Account) signs you out everywhere.
+
+## Demo
+
+```bash
+npm run demo
+```
+
+Starts a self-contained instance on http://localhost:3000 with a mock model (no LLM needed), two accounts (`demo` / `demo password 1234`, an admin, and `demo2` with the same password) and sample chats in `./demo-data`. Delete that folder to start over. It never touches `./data`.
 
 ## Chatting (development)
 

@@ -73,7 +73,12 @@ test.use({ viewport: { width: 1920, height: 1080 } });
 
 for (const scheme of ["light", "dark"] as const) {
   test(`measurement audit (${scheme})`, async ({ page }) => {
-    await page.emulateMedia({ colorScheme: scheme });
+    // The theme is an explicit appearance choice (cookie), light by default.
+    await page
+      .context()
+      .addCookies([
+        { name: "chatui_appearance", value: `${scheme}.orange.14.12.system`, url: base() },
+      ]);
     await signIn(page);
     const problems: string[] = [];
     // Draft screen.
@@ -86,7 +91,7 @@ for (const scheme of ["light", "dark"] as const) {
     problems.push(...(await colours(page, scheme)));
     const font = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
     if (!font.startsWith(spec.fontStackStartsWith)) problems.push(`font stack "${font}"`);
-    await page.getByTestId("model-picker").click();
+    await page.getByTestId("composer-menu").click();
     problems.push(...(await measure(page, spec.menu)));
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Chat options" }).click();

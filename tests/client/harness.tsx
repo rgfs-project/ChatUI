@@ -6,6 +6,7 @@ import type { ProviderModelsDto } from "@shared/generations";
 import { ChatProvider } from "../../app/chat/chat-context";
 import { ChatView } from "../../app/chat/chat-view";
 import { Sidebar } from "../../app/chat/sidebar";
+import { DEFAULT_APPEARANCE } from "../../app/lib/appearance";
 import { makeQueryClient } from "../../app/lib/query/client";
 import { qk } from "../../app/lib/query/keys";
 import { UiProvider } from "../../app/lib/ui-context";
@@ -98,7 +99,12 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
   return (
     <QueryClientProvider client={client}>
       <UiProvider
-        hints={{ sidebarCollapsed: false, timeZone: "UTC", locale: "en-US" }}
+        hints={{
+          appearance: DEFAULT_APPEARANCE,
+          sidebarCollapsed: false,
+          timeZone: "UTC",
+          locale: "en-US",
+        }}
         renderedAt="2026-10-29T12:00:00.000Z"
       >
         <TooltipProvider>

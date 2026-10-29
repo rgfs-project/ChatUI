@@ -13,3 +13,4 @@ data/*
 .DS_Store
 .claude/
 playwright/.auth/
+demo-data/

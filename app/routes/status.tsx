@@ -58,38 +58,43 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <main className="page">
-      <h1>ChatUI</h1>
-      <p className="lede">Self-hosted AI chat. This page reports the server status.</p>
-      <dl className="status">
-        <dt>Server</dt>
-        <dd data-testid="health-status">{health.status.toUpperCase()}</dd>
-        <dt>Version</dt>
-        <dd data-testid="health-version">{health.version}</dd>
-        <dt>Page</dt>
-        <dd data-testid="hydration-state">
-          {hydrated ? "Interactive" : "Server-rendered (JavaScript not yet active)"}
-        </dd>
-      </dl>
-      <p>
-        <button
-          type="button"
-          onClick={() => void recheck()}
-          disabled={!hydrated || check.kind === "checking"}
-        >
-          {check.kind === "checking" ? "Checking…" : "Check again"}
-        </button>{" "}
-        <span role="status" aria-live="polite" data-testid="check-result">
+    <main className="auth">
+      <div className="auth-card status-card">
+        <h1>ChatUI</h1>
+        <p className="auth-note">Self-hosted AI chat. This page reports the server status.</p>
+        <dl className="status">
+          <dt>Server</dt>
+          <dd data-testid="health-status">{health.status.toUpperCase()}</dd>
+          <dt>Version</dt>
+          <dd data-testid="health-version">{health.version}</dd>
+          <dt>Page</dt>
+          <dd data-testid="hydration-state">
+            {hydrated ? "Interactive" : "Server-rendered (JavaScript not yet active)"}
+          </dd>
+        </dl>
+        <div className="status-actions">
+          <button
+            type="button"
+            className="pill-button"
+            onClick={() => void recheck()}
+            disabled={!hydrated || check.kind === "checking"}
+          >
+            {check.kind === "checking" ? "Checking…" : "Check again"}
+          </button>
+          {loaderData.signedIn ? (
+            <a className="pill-button pill-primary" href="/chat/new">
+              Open your chats
+            </a>
+          ) : (
+            <a className="pill-button pill-primary" href="/login">
+              Sign in
+            </a>
+          )}
+        </div>
+        <p role="status" aria-live="polite" className="form-error" data-testid="check-result">
           {check.kind === "failed" ? "The server could not be reached." : ""}
-        </span>
-      </p>
-      <p>
-        {loaderData.signedIn ? (
-          <a href="/chat/new">Open your chats</a>
-        ) : (
-          <a href="/login">Sign in</a>
-        )}
-      </p>
+        </p>
+      </div>
     </main>
   );
 }

@@ -55,6 +55,8 @@ export interface MockLlamaOptions {
   /** Bytes per chunk and chunk count for mock-flood. */
   floodChunkBytes?: number;
   floodChunks?: number;
+  /** Limits the advertised model list (the demo shows only friendly models). */
+  listed?: string[];
   /** Paragraphs and per-chunk delay for mock-long. */
   longParagraphs?: number;
   longChunkDelayMs?: number;
@@ -165,17 +167,19 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
       if (req.method === "GET" && url.pathname === "/v1/models") {
         json(res, 200, {
           object: "list",
-          data: Object.values(MOCK_MODELS).map((id, index) => ({
-            id,
-            object: "model",
-            owned_by: "llamacpp",
-            created: 1_790_000_000,
-            status: {
-              value: index === 0 ? "loaded" : "unloaded",
-              args: ["/app/llama-server", "--model", `/secret/path/${id}.gguf`],
-            },
-            ...(index === 0 ? { meta: { n_ctx: 32_768, n_params: 123 } } : {}),
-          })),
+          data: Object.values(MOCK_MODELS)
+            .filter((id) => !options.listed || options.listed.includes(id))
+            .map((id, index) => ({
+              id,
+              object: "model",
+              owned_by: "llamacpp",
+              created: 1_790_000_000,
+              status: {
+                value: index === 0 ? "loaded" : "unloaded",
+                args: ["/app/llama-server", "--model", `/secret/path/${id}.gguf`],
+              },
+              ...(index === 0 ? { meta: { n_ctx: 32_768, n_params: 123 } } : {}),
+            })),
         });
         return;
       }

@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { applyAppearance, type Appearance } from "./appearance";
 import type { TimeFormat } from "./time";
 import { UI_COOKIES, writeUiCookie, type UiHints } from "./ui-cookies";
 
@@ -15,6 +16,8 @@ import { UI_COOKIES, writeUiCookie, type UiHints } from "./ui-cookies";
 export const NARROW_QUERY = "(max-width: 767px)";
 
 interface UiState {
+  appearance: Appearance;
+  setAppearance: (next: Appearance) => void;
   /** Desktop preference, remembered in a cookie and rendered by the server. */
   sidebarCollapsed: boolean;
   /** Narrow windows: the overlay sidebar is open (never persisted). */
@@ -48,6 +51,11 @@ export function UiProvider({
   children: ReactNode;
 }) {
   const [sidebarCollapsed, setCollapsed] = useState(hints.sidebarCollapsed);
+  const [appearance, setAppearanceState] = useState(hints.appearance);
+  const setAppearance = useCallback((next: Appearance) => {
+    setAppearanceState(next);
+    applyAppearance(next);
+  }, []);
   // Hydration renders with the server's values; the browser's own apply right after.
   const zoneKey = useSyncExternalStore(
     noopSubscribe,
@@ -80,13 +88,24 @@ export function UiProvider({
 
   const value = useMemo(
     () => ({
+      appearance,
+      setAppearance,
       sidebarCollapsed,
       narrowOpen,
       setSidebarOpen,
       closeNarrow,
       timeFormat: { ...zone, now: renderedAt },
     }),
-    [sidebarCollapsed, narrowOpen, setSidebarOpen, closeNarrow, zone, renderedAt],
+    [
+      appearance,
+      setAppearance,
+      sidebarCollapsed,
+      narrowOpen,
+      setSidebarOpen,
+      closeNarrow,
+      zone,
+      renderedAt,
+    ],
   );
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }

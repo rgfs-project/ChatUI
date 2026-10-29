@@ -1,5 +1,6 @@
 import { ChevronDown, RefreshCw } from "lucide-react";
 import type { ProviderModelsDto } from "@shared/generations";
+import type React from "react";
 import {
   Menu,
   MenuGroup,
@@ -27,6 +28,9 @@ export function ModelMenu({
   label,
   extraOption,
   triggerClassName = "model-trigger",
+  trigger,
+  before,
+  side = "bottom",
 }: {
   groups: ProviderModelsDto[];
   selected: ModelPair | null;
@@ -37,6 +41,11 @@ export function ModelMenu({
   /** An extra first choice, e.g. "No default". Selecting it passes null. */
   extraOption?: string;
   triggerClassName?: string;
+  /** Replaces the default "current model" trigger (e.g. the composer's + button). */
+  trigger?: React.ReactElement;
+  /** Items shown above the model list (e.g. attachments, Phase 12). */
+  before?: React.ReactNode;
+  side?: "top" | "bottom";
 }) {
   const value = selected ? pairKey(selected) : "";
   const count = groups.reduce((n, g) => n + g.models.length, 0);
@@ -47,19 +56,23 @@ export function ModelMenu({
     <Menu
       label={label}
       align="start"
+      side={side}
       contentClassName="model-menu"
       trigger={
-        <button
-          type="button"
-          className={triggerClassName}
-          data-testid="model-picker"
-          aria-label={`${label}: ${current}`}
-        >
-          <span className="model-name">{current}</span>
-          <ChevronDown size={16} aria-hidden />
-        </button>
+        trigger ?? (
+          <button
+            type="button"
+            className={triggerClassName}
+            data-testid="model-picker"
+            aria-label={`${label}: ${current}`}
+          >
+            <span className="model-name">{current}</span>
+            <ChevronDown size={16} aria-hidden />
+          </button>
+        )
       }
     >
+      {before}
       {extraOption ? (
         <MenuRadioGroup
           value={value}

@@ -5,6 +5,7 @@ import type { SessionDto } from "@shared/auth";
 import { appContext } from "../context";
 import { applySession } from "../lib/session";
 import { safeReturnTo } from "../lib/api";
+import { paths } from "../lib/paths";
 import type { Route } from "./+types/login";
 
 export function meta(): Route.MetaDescriptors {
@@ -51,33 +52,46 @@ export default function Login({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <main className="page">
-      <h1>Sign in</h1>
-      <form className="auth-form" method="post" onSubmit={(event) => void submit(event)}>
-        <label htmlFor="username">Username</label>
-        <input id="username" name="username" autoComplete="username" required />
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-        />
-        <button type="submit" disabled={busy}>
-          Sign in
-        </button>
-        {error ? (
-          <p className="error" role="alert">
-            {error}
+    <main className="auth">
+      <div className="auth-card">
+        <p className="auth-brand">ChatUI</p>
+        <h1>Welcome back</h1>
+        <form className="auth-form" method="post" onSubmit={(event) => void submit(event)}>
+          <label htmlFor="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            className="text-field"
+            autoComplete="username"
+            autoCapitalize="none"
+            required
+          />
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className="text-field"
+            autoComplete="current-password"
+            required
+          />
+          {error ? (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button type="submit" className="pill-button pill-primary auth-submit" disabled={busy}>
+            Sign in
+          </button>
+        </form>
+        {loaderData.registrationOpen ? (
+          <p className="auth-note">
+            Don&apos;t have an account? <a href={paths.register()}>Sign up</a>
           </p>
-        ) : null}
-      </form>
-      {loaderData.registrationOpen ? (
-        <p>
-          New here? <a href="/register">Create an account</a>
-        </p>
-      ) : null}
+        ) : (
+          <p className="auth-note">Don&apos;t have an account? Ask an admin to create one.</p>
+        )}
+      </div>
     </main>
   );
 }

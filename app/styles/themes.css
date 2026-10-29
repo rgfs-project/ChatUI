@@ -1,0 +1,251 @@
+/*
+ * Appearance choices (Settings → Appearance), applied by the server as
+ * attributes on <html> from validated cookies, so the first paint is right.
+ * Accent bubbles follow the plan's formula: light = accent 11% on white,
+ * text = dark accent 38% on black (blue uses its measured values); dark
+ * bubble = dark accent 60% on black.
+ */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --text: #f3f3f3;
+  --text-secondary: #afafaf;
+  --text-tertiary: #8f8f8f;
+  --divider: #242424;
+  --hover: #181818;
+  --active: #191919;
+  --composer-bg: #1a1a1a;
+  --composer-border: #262626;
+  --composer-shadow: none;
+  --menu-bg: #2f2f2f;
+  --menu-hover: #3b3b3b;
+  --menu-border: #3a3a3a;
+  --dialog-bg: #202020;
+  --pill-bg: #202020;
+  --pill-border: #2a2a2a;
+  --code-bg: #191919;
+  --code-border: #262626;
+  --inline-code-bg: #1d1d1d;
+  --code-text: #d4d4d4;
+  --danger: #f87171;
+  --tooltip-bg: #f3f3f3;
+  --tooltip-text: #0d0d0d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    color-scheme: dark;
+    --bg: #000000;
+    --text: #f3f3f3;
+    --text-secondary: #afafaf;
+    --text-tertiary: #8f8f8f;
+    --divider: #242424;
+    --hover: #181818;
+    --active: #191919;
+    --composer-bg: #1a1a1a;
+    --composer-border: #262626;
+    --composer-shadow: none;
+    --menu-bg: #2f2f2f;
+    --menu-hover: #3b3b3b;
+    --menu-border: #3a3a3a;
+    --dialog-bg: #202020;
+    --pill-bg: #202020;
+    --pill-border: #2a2a2a;
+    --code-bg: #191919;
+    --code-border: #262626;
+    --inline-code-bg: #1d1d1d;
+    --code-text: #d4d4d4;
+    --danger: #f87171;
+    --tooltip-bg: #f3f3f3;
+    --tooltip-text: #0d0d0d;
+  }
+}
+
+:root[data-accent="blue"] {
+  --accent: #3a83f7;
+  --focus: #3a83f7;
+  --bubble-bg: #e8f3fe;
+  --bubble-text: #0c274a;
+}
+
+:root[data-accent="green"] {
+  --accent: #10a37f;
+  --focus: #10a37f;
+  --bubble-bg: #e5f5f1;
+  --bubble-text: #053429;
+}
+
+:root[data-accent="yellow"] {
+  --accent: #e5a50a;
+  --focus: #e5a50a;
+  --bubble-bg: #fcf5e4;
+  --bubble-text: #463203;
+}
+
+:root[data-accent="pink"] {
+  --accent: #e4479a;
+  --focus: #e4479a;
+  --bubble-bg: #fcebf4;
+  --bubble-text: #4a1530;
+}
+
+:root[data-accent="orange"] {
+  --accent: #f26b1d;
+  --focus: #f26b1d;
+  --bubble-bg: #feefe6;
+  --bubble-text: #4c2007;
+}
+
+:root[data-accent="purple"] {
+  --accent: #8e55e9;
+  --focus: #8e55e9;
+  --bubble-bg: #f3ecfd;
+  --bubble-text: #2b184c;
+}
+
+:root[data-theme="dark"][data-accent="blue"] {
+  --accent: #2c67c5;
+  --bubble-bg: #1a3e76;
+  --bubble-text: #ffffff;
+}
+
+:root[data-theme="dark"][data-accent="green"] {
+  --accent: #0e8a6b;
+  --bubble-bg: #085340;
+  --bubble-text: #ffffff;
+}
+
+:root[data-theme="dark"][data-accent="yellow"] {
+  --accent: #b98407;
+  --bubble-bg: #6f4f04;
+  --bubble-text: #ffffff;
+}
+
+:root[data-theme="dark"][data-accent="pink"] {
+  --accent: #c2367f;
+  --bubble-bg: #74204c;
+  --bubble-text: #ffffff;
+}
+
+:root[data-theme="dark"][data-accent="orange"] {
+  --accent: #c85512;
+  --bubble-bg: #78330b;
+  --bubble-text: #ffffff;
+}
+
+:root[data-theme="dark"][data-accent="purple"] {
+  --accent: #7240c7;
+  --bubble-bg: #442677;
+  --bubble-text: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"][data-accent="blue"] {
+    --accent: #2c67c5;
+    --bubble-bg: #1a3e76;
+    --bubble-text: #ffffff;
+  }
+
+  :root[data-theme="system"][data-accent="green"] {
+    --accent: #0e8a6b;
+    --bubble-bg: #085340;
+    --bubble-text: #ffffff;
+  }
+
+  :root[data-theme="system"][data-accent="yellow"] {
+    --accent: #b98407;
+    --bubble-bg: #6f4f04;
+    --bubble-text: #ffffff;
+  }
+
+  :root[data-theme="system"][data-accent="pink"] {
+    --accent: #c2367f;
+    --bubble-bg: #74204c;
+    --bubble-text: #ffffff;
+  }
+
+  :root[data-theme="system"][data-accent="orange"] {
+    --accent: #c85512;
+    --bubble-bg: #78330b;
+    --bubble-text: #ffffff;
+  }
+
+  :root[data-theme="system"][data-accent="purple"] {
+    --accent: #7240c7;
+    --bubble-bg: #442677;
+    --bubble-text: #ffffff;
+  }
+}
+
+/* Interface size: 12–18 px, 14 is the reference (scales the whole UI). */
+:root {
+  --ui-zoom: 1;
+}
+
+:root[data-ui-size="12"] {
+  --ui-zoom: 0.857143;
+}
+
+:root[data-ui-size="13"] {
+  --ui-zoom: 0.928571;
+}
+
+:root[data-ui-size="15"] {
+  --ui-zoom: 1.071429;
+}
+
+:root[data-ui-size="16"] {
+  --ui-zoom: 1.142857;
+}
+
+:root[data-ui-size="17"] {
+  --ui-zoom: 1.214286;
+}
+
+:root[data-ui-size="18"] {
+  --ui-zoom: 1.285714;
+}
+
+body {
+  zoom: var(--ui-zoom);
+}
+
+/* Code font size: 11–16 px, 12 is the default. */
+:root[data-code-size="11"] {
+  --text-code: 11px;
+  --lh-code: 19px;
+}
+
+:root[data-code-size="13"] {
+  --text-code: 13px;
+  --lh-code: 21px;
+}
+
+:root[data-code-size="14"] {
+  --text-code: 14px;
+  --lh-code: 22px;
+}
+
+:root[data-code-size="15"] {
+  --text-code: 15px;
+  --lh-code: 23px;
+}
+
+:root[data-code-size="16"] {
+  --text-code: 16px;
+  --lh-code: 24px;
+}
+
+/* Reduce motion: explicit choice, in addition to the system setting. */
+:root[data-motion="reduce"] {
+  --motion: 0s;
+}
+
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  scroll-behavior: auto !important;
+}

@@ -12,11 +12,13 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
   type LinksFunction,
 } from "react-router";
 import type { Route } from "./+types/root";
 import { appContext } from "./context";
 import { setSession } from "./lib/api";
+import { DEFAULT_APPEARANCE, htmlAttributes } from "./lib/appearance";
 import { paths } from "./lib/paths";
 import { dehydrateAllowed, getBrowserQueryClient, makeQueryClient } from "./lib/query/client";
 import { qk } from "./lib/query/keys";
@@ -51,8 +53,11 @@ export function shouldRevalidate() {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
+  // Error documents may have no root data: they fall back to the defaults.
+  const data = useRouteLoaderData<typeof loader>("root");
+  const appearance = data?.hints.appearance ?? DEFAULT_APPEARANCE;
   return (
-    <html lang="en">
+    <html lang="en" {...htmlAttributes(appearance)}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -115,13 +120,18 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     ? "The page you requested does not exist."
     : "An unexpected error occurred. Please try again.";
   return (
-    <main className="page">
+    <main className="auth">
       <title>{`${title} · ChatUI`}</title>
-      <h1>{title}</h1>
-      <p>{message}</p>
-      <p>
-        <a href={paths.newChat()}>Go to ChatUI</a>
-      </p>
+      <div className="auth-card error-card">
+        <p className="error-code" aria-hidden>
+          {notFound ? "404" : "500"}
+        </p>
+        <h1>{title}</h1>
+        <p className="auth-note">{message}</p>
+        <a className="pill-button pill-primary" href={paths.newChat()}>
+          Go to ChatUI
+        </a>
+      </div>
     </main>
   );
 }

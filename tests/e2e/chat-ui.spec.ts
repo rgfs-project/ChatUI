@@ -92,8 +92,8 @@ test.describe("shell", () => {
 
   test("menus render in a portal and are never clipped", async ({ page }) => {
     await signIn(page, `/chat/${longChat()}`);
-    await page.getByTestId("model-picker").click();
-    const menu = page.getByRole("menu", { name: "Model" });
+    await page.getByTestId("composer-menu").click();
+    const menu = page.getByRole("menu", { name: "Composer options" });
     await expect(menu).toBeVisible();
     const box = await menu.boundingBox();
     const viewport = page.viewportSize();
@@ -119,10 +119,10 @@ test.describe("shell", () => {
 test.describe("INV-47: menus and dialogs", () => {
   test("the model menu works from the keyboard and returns focus", async ({ page }) => {
     await signIn(page, `/chat/${longChat()}`);
-    const trigger = page.getByTestId("model-picker");
+    const trigger = page.getByTestId("composer-menu");
     await trigger.focus();
     await page.keyboard.press("Enter");
-    const menu = page.getByRole("menu", { name: "Model" });
+    const menu = page.getByRole("menu", { name: "Composer options" });
     await expect(menu).toBeVisible();
     await expect(menu.getByRole("menuitemradio").first()).toBeFocused();
     await page.keyboard.press("ArrowDown");

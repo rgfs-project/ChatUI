@@ -1,6 +1,7 @@
 /*
  * Design tokens: values measured from the reference build (rebuild plan §5–7).
- * Components use only these semantic properties; themes swap values.
+ * Components use only these semantic properties; themes.css swaps values for
+ * the chosen theme, accent, sizes and motion (html data attributes).
  */
 :root {
   color-scheme: light;
@@ -74,7 +75,7 @@
   --composer-bg: #ffffff;
   --composer-border: #ececec;
   --composer-shadow: 0 2px 10px rgb(0 0 0 / 0.06);
-  /* Orange accent (plan §7 accent options). Bubble: accent 11% on white; text: dark accent 38% on black. */
+  /* Default accent: orange (plan §7 options; themes.css holds all six). */
   --accent: #f26b1d;
   --accent-text: #ffffff;
   --bubble-bg: #feefe6;
@@ -98,40 +99,6 @@
   --tooltip-bg: #0d0d0d;
   --tooltip-text: #ffffff;
   --motion: 0.2s;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #000000;
-    --text: #f3f3f3;
-    --text-secondary: #afafaf;
-    --text-tertiary: #8f8f8f;
-    --divider: #242424;
-    --hover: #181818;
-    --active: #191919;
-    --composer-bg: #1a1a1a;
-    --composer-border: #262626;
-    --composer-shadow: none;
-    --accent: #c85512;
-    /* dark accent 60% on black */
-    --bubble-bg: #78330b;
-    --bubble-text: #ffffff;
-    --menu-bg: #2f2f2f;
-    --menu-hover: #3b3b3b;
-    --menu-border: #3a3a3a;
-    --dialog-bg: #202020;
-    --pill-bg: #202020;
-    --pill-border: #2a2a2a;
-    --code-bg: #191919;
-    --code-border: #262626;
-    --inline-code-bg: #1d1d1d;
-    --code-text: #d4d4d4;
-    --danger: #f87171;
-    --focus: #f26b1d;
-    --tooltip-bg: #f3f3f3;
-    --tooltip-text: #0d0d0d;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

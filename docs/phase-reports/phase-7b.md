@@ -1,0 +1,41 @@
+## Phase 7b report
+
+- **Scope completed (files/features):**
+  - Appearance settings (`app/lib/appearance.ts`, `app/styles/themes.css`, `app/settings/appearance.tsx`):
+    - theme Light/Dark/System as tiles, six accent swatches, interface text size 12–18, code text size 11–16, reduce motion
+    - one validated cookie, applied by the server on `<html>` (no flash), applied live on change
+  - Settings registry (`app/settings/row.tsx`, `sections.tsx`) with search across all sections.
+  - Layout per the owner's reference screenshot: title in the header, model choice in the composer `+` menu, disclaimer above the composer, name-only profile row, sidebar spacing, time separator spacing.
+  - Pages: redesigned sign-in (with "Ask an admin to create one" when registration is closed), sign-up, status and the 404/500 error document.
+  - `npm run demo` (`scripts/demo.ts`): mock model, seeded `demo-data/` (two accounts, sample chats), production server.
+  - Sparkle favicon.
+- **Acceptance criteria with test evidence:**
+  - `tests/client/appearance.test.ts`: round trip, defaults, invalid fields fall back, server attributes.
+  - `tests/e2e/settings.spec.ts`:
+    - theme, accent, size and motion apply at once
+    - the next document carries them in `<html>`, and a reload keeps them
+    - settings search finds rows across sections
+    - the sign-in note when registration is closed
+    - the styled 404 document
+  - Measurement audit extended: the `+` button, header title, disclaimer padding, dock padding and separator spacing. Dark mode is now set by the appearance cookie (light is the default).
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (388)
+  - `build`: PASS
+  - `verify`: PASS (77/77)
+  - `test:e2e`: PASS (27/27)
+  - `npm audit`: 0 vulnerabilities (after the fix commit)
+  - `verify:compose`: no local Docker daemon. CI runs it, and it passed for 7a.
+- **Invariants:**
+  - INV-56: the appearance comes from the server, so hydration doesn't change it (`settings.spec.ts`; verify's development hydration check).
+  - INV-47: new pickers are native controls.
+- **Security, SSR, data and performance observations:**
+  - The cookie value is parsed into a closed set before it reaches markup.
+  - No inline style attributes (CSP `style-src-attr 'none'` holds). Sizes are discrete attribute values.
+- **Dependencies:** none new.
+- **Deviations / limitations / unverified items:**
+  - Light is the default theme (as in the old build), not System.
+  - Sidebar search, Library, Pinned, regenerate and read-aloud from the reference screenshot are not shown yet: they arrive with their features (Phases 13a, 12b, 14), so no button implies a missing backend.
+  - The demo is not exercised in CI.
+- **Commit/tag status:**
+  - Commit `feat(phase-7b): appearance settings, settings search, auth and status pages, demo instance`, tag `phase-7b` (local; the proxy refuses tag pushes), pushed to `main`.

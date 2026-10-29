@@ -91,7 +91,7 @@ const ConversationRow = memo(function ConversationRow({
 
 export const Sidebar = memo(function Sidebar() {
   useRenderProbe("Sidebar");
-  const { userId, username, role, conversationId, logout } = useChat();
+  const { userId, username, conversationId, logout } = useChat();
   const { setSidebarOpen } = useUi();
   const openOverlay = useOpenOverlay();
   const list = useQuery(conversationsQuery(userId));
@@ -143,11 +143,8 @@ export const Sidebar = memo(function Sidebar() {
               <span className="avatar" aria-hidden>
                 {initials(username)}
               </span>
-              <span className="profile-text">
-                <span className="profile-name" data-testid="signed-in-user">
-                  {username}
-                </span>
-                <span className="profile-sub">{role === "admin" ? "Admin" : "Member"}</span>
+              <span className="profile-name" data-testid="signed-in-user">
+                {username}
               </span>
             </button>
           }

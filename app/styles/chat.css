@@ -46,7 +46,7 @@
   flex: none;
   flex-direction: column;
   align-items: center;
-  padding: 0 16px 0;
+  padding: 0 16px 25px;
 }
 
 .greeting {
@@ -59,7 +59,7 @@
 
 .disclaimer {
   margin: 0;
-  padding: 10px 0 10px;
+  padding: 24px 0 10px;
   color: var(--text-secondary);
   font-size: var(--text-disclaimer);
   line-height: var(--lh-disclaimer);
@@ -170,7 +170,7 @@
 }
 
 .time-separator {
-  margin: 0;
+  margin: 28px 0 4px;
   color: var(--text-tertiary);
   font-size: var(--text-separator);
   line-height: var(--lh-separator);
@@ -230,13 +230,33 @@
   color: var(--text-secondary);
 }
 
+.composer-start {
+  display: flex;
+}
+
+.composer-plus {
+  color: var(--text);
+}
+
+/* Two rows: text above, + and send below. */
 .composer.is-multiline {
-  flex-direction: column;
-  align-items: stretch;
+  display: grid;
+  grid-template-areas:
+    "text text"
+    "start actions";
+  grid-template-columns: 1fr auto;
+}
+
+.composer.is-multiline textarea {
+  grid-area: text;
+}
+
+.composer.is-multiline .composer-start {
+  grid-area: start;
 }
 
 .composer.is-multiline .composer-actions {
-  justify-content: flex-end;
+  grid-area: actions;
 }
 
 .composer-actions {

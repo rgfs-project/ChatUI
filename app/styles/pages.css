@@ -1,69 +1,124 @@
-/* Standalone pages: status, sign-in, registration and errors (redesigned in 7b). */
-.page {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 3rem 1rem;
+/* Standalone pages: sign-in, registration, status and error documents. */
+.auth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px 16px;
+  user-select: text;
 }
 
-.lede {
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  width: min(380px, 100%);
+}
+
+.auth-card h1 {
+  margin: 0 0 24px;
+  font-size: 28px;
+  font-weight: var(--weight-semibold);
+  line-height: 36px;
+  text-align: center;
+}
+
+.auth-brand {
+  margin: 0 0 32px;
+  font-size: var(--text-brand);
+  font-weight: var(--weight-semibold);
+  line-height: var(--lh-brand);
+  text-align: center;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-form label {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: var(--weight-medium);
+}
+
+.auth-form .text-field {
+  height: 48px;
+  padding: 0 16px;
+  border-radius: 24px;
+  font-size: 16px;
+}
+
+.field-hint {
+  padding-left: 16px;
   color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.auth-submit {
+  height: 48px;
+  margin-top: 20px;
+  font-size: 16px;
+}
+
+.auth-note {
+  margin: 20px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: center;
+}
+
+.auth-note a {
+  color: var(--accent);
+}
+
+.status-card h1 {
+  margin-bottom: 8px;
 }
 
 .status {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 0.5rem 1.5rem;
-  padding: 1rem 1.25rem;
+  gap: 8px 24px;
+  margin: 24px 0 0;
+  padding: 16px 20px;
   border: 1px solid var(--divider);
-  border-radius: 0.5rem;
+  border-radius: 16px;
+  font-size: 14px;
 }
 
 .status dt {
-  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
 }
 
 .status dd {
   margin: 0;
 }
 
-.page button {
-  height: 36px;
-  padding: 0 16px;
-  border: 1px solid var(--text);
-  border-radius: var(--radius-pill);
-  background: var(--text);
-  color: var(--bg);
-  font-size: 14px;
-  font-weight: var(--weight-medium);
-}
-
-.page button:disabled {
-  opacity: 0.5;
-}
-
-.auth-form {
+.status-actions {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-width: 22rem;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
 }
 
-.auth-form input {
-  height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--pill-border);
-  border-radius: 10px;
-  background: var(--composer-bg);
+.error-card {
+  align-items: center;
+  text-align: center;
 }
 
-.error {
-  color: var(--danger);
+.error-card .error-code {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 56px;
+  font-weight: var(--weight-semibold);
+  line-height: 64px;
 }
 
-.link-button {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  text-decoration: underline;
+.error-card h1 {
+  margin-bottom: 0;
+}
+
+.error-card .pill-button {
+  margin-top: 24px;
 }

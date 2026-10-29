@@ -47,18 +47,24 @@ export const Header = memo(function Header() {
             <SquarePen size={20} aria-hidden />
           </IconButton>
         ) : null}
-        <ModelMenu
-          label="Model"
-          groups={groups}
-          selected={selectedPair}
-          loading={modelsState === "loading"}
-          onSelect={(pair) => {
-            if (pair) selectModel(pair);
-          }}
-          onRefresh={() => {
-            void refreshModels();
-          }}
-        />
+        {conversation ? (
+          <h1 className="header-title" title={conversation.title}>
+            {conversation.title}
+          </h1>
+        ) : (
+          <ModelMenu
+            label="Model"
+            groups={groups}
+            selected={selectedPair}
+            loading={modelsState === "loading"}
+            onSelect={(pair) => {
+              if (pair) selectModel(pair);
+            }}
+            onRefresh={() => {
+              void refreshModels();
+            }}
+          />
+        )}
       </div>
       <div className="header-end">
         {conversation ? (

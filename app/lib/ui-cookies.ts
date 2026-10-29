@@ -9,7 +9,10 @@ export const UI_COOKIES = {
   locale: "chatui_locale",
 } as const;
 
+import { APPEARANCE_COOKIE, parseAppearance, type Appearance } from "./appearance";
+
 export interface UiHints {
+  appearance: Appearance;
   sidebarCollapsed: boolean;
   timeZone: string;
   locale: string;
@@ -60,6 +63,7 @@ function acceptLanguage(header: string | null): string | null {
 export function readUiHints(request: Request): UiHints {
   const cookies = parseCookies(request.headers.get("cookie"));
   return {
+    appearance: parseAppearance(cookies[APPEARANCE_COOKIE]),
     sidebarCollapsed: cookies[UI_COOKIES.sidebar] === "collapsed",
     timeZone: validTimeZone(cookies[UI_COOKIES.timeZone]) ?? "UTC",
     locale:

@@ -133,11 +133,11 @@ export function ChatView() {
           </button>
         ) : null}
         {empty ? <h1 className="greeting">{greetingFor(timeFormat.now)}</h1> : null}
+        {!empty && !failure ? (
+          <p className="disclaimer">ChatUI can make mistakes. Check important info.</p>
+        ) : null}
         {failure ? null : <Composer />}
         {empty && !chat.hasDraft ? <Suggestions /> : null}
-        {!empty && !failure ? (
-          <p className="disclaimer">AI replies can be wrong. Check important information.</p>
-        ) : null}
       </div>
     </div>
   );
