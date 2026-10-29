@@ -155,6 +155,31 @@ describe("prompt assembly from canonical storage (contracts §4)", () => {
     }
   });
 
+  it("Phase 9: unless the window moves, each prompt extends the previous one (prefix reuse)", async () => {
+    const budget = 400;
+    const blocks: Block[] = [];
+    let previous = null as { start: number; messages: string[] } | null;
+    let reused = 0;
+    for (let turn = 0; turn < 25; turn++) {
+      blocks.push(user(`question ${String(turn)} `.padEnd(12, "?")));
+      const prompt = await assemblePrompt(model(blocks), {
+        budget,
+        trimStep: 100,
+        counter: charCounter,
+      });
+      const messages = prompt.messages.map((m) => JSON.stringify(m));
+      if (previous?.start === prompt.windowStart) {
+        // Everything the previous prompt sent is the start of this one: a local
+        // provider reprocesses only the new turn.
+        expect(messages.slice(0, previous.messages.length)).toEqual(previous.messages);
+        reused++;
+      }
+      previous = { start: prompt.windowStart, messages };
+      blocks.push(assistant(`answer ${String(turn)} `.padEnd(12, "!")));
+    }
+    expect(reused).toBeGreaterThan(15);
+  });
+
   it("anchors are the boundaries where cumulative history first reaches each multiple of K", () => {
     expect(anchorsFor([10, 10, 10, 10, 10, 10], 25)).toEqual([3, 5]);
     expect(anchorsFor([60, 1, 1], 25)).toEqual([1]);

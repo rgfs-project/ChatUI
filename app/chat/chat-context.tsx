@@ -13,11 +13,8 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import type { ConversationResult } from "@shared/conversations";
-import {
-  isTerminalState,
-  type ProviderModelsDto,
-  type StartGenerationResponse,
-} from "@shared/generations";
+import { isTerminalState } from "@shared/generation-state";
+import type { ProviderModelsDto, StartGenerationResponse } from "@shared/generations";
 import {
   AccountChangedError,
   ACCOUNT_CHANGED_EVENT,
@@ -27,6 +24,7 @@ import {
   currentSession,
 } from "../lib/api";
 import { paths } from "../lib/paths";
+import { mark } from "../lib/perf";
 import { qk } from "../lib/query/keys";
 import {
   conversationQuery,
@@ -241,6 +239,7 @@ export function ChatProvider({
           }
           if (response?.status === 202) {
             const accepted = (await response.json()) as StartGenerationResponse;
+            mark("chatui:generation-accepted", { generationId: accepted.generationId });
             const live: LiveGeneration = {
               generationId: accepted.generationId,
               assistantMessageId: accepted.assistantMessageId,

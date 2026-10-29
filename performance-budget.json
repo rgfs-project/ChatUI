@@ -1,0 +1,14 @@
+{
+  "compression": "gzip",
+  "tolerance": 0.1,
+  "routes": {
+    "chat": {
+      "js": 229979,
+      "css": 6773
+    },
+    "login": {
+      "js": 128195,
+      "css": 6773
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import { ArrowUp, Plus, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useHydrated } from "../lib/hydrated";
+import { mark } from "../lib/perf";
 import { useRenderProbe } from "../lib/render-probe";
 import { MenuLabel } from "../ui/menu";
 import { useChat } from "./chat-context";
@@ -94,6 +95,11 @@ export function Composer() {
   }
 
   const canSend = hydrated && hasText && selectedPair !== null && !running;
+  // Fully interactive: hydrated, and a server-valid model is known (send can work).
+  const interactive = hydrated && selectedPair !== null;
+  useEffect(() => {
+    if (interactive) mark("chatui:composer-interactive");
+  }, [interactive]);
 
   return (
     <form

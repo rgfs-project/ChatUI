@@ -72,12 +72,13 @@
     "lint": "react-router typegen && eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "npm run build && node scripts/verify.ts",
+    "verify": "npm run build && node scripts/perf-check.ts && node scripts/verify.ts",
     "verify:compose": "node scripts/verify-compose.ts",
     "index:rebuild": "node server/cli.ts index:rebuild",
     "user:create": "node server/cli.ts user:create",
     "test:e2e": "npm run build && playwright test",
-    "demo": "node scripts/demo.ts"
+    "demo": "node scripts/demo.ts",
+    "perf:check": "node scripts/perf-check.ts"
   },
   "overrides": {
     "micromark-extension-math": {

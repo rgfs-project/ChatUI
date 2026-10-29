@@ -13,6 +13,7 @@ import { memo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import type { ConversationSummary } from "@shared/conversations";
 import { paths, type OverlayState } from "../lib/paths";
+import { usePrefetcher } from "../lib/prefetch";
 import { conversationsQuery } from "../lib/query/queries";
 import { useRenderProbe } from "../lib/render-probe";
 import { useUi } from "../lib/ui-context";
@@ -38,11 +39,22 @@ export function useOpenOverlay(): (to: string) => void {
 const ConversationRow = memo(function ConversationRow({
   item,
   active,
+  prefetcher,
 }: {
   item: ConversationSummary;
   active: boolean;
+  prefetcher: ReturnType<typeof usePrefetcher>;
 }) {
   const { rename, remove } = useChat();
+  const warm =
+    item.malformed || active
+      ? undefined
+      : () => {
+          prefetcher.intent(item.id);
+        };
+  const cool = () => {
+    prefetcher.cancel(item.id);
+  };
   return (
     <li className={`chat-row${active ? " is-active" : ""}`}>
       <Link
@@ -50,6 +62,13 @@ const ConversationRow = memo(function ConversationRow({
         className="chat-link"
         aria-current={active ? "page" : undefined}
         title={item.title}
+        onPointerEnter={(event) => {
+          // Mouse hover only: touch never depends on (or triggers) hover prefetch.
+          if (event.pointerType === "mouse") warm?.();
+        }}
+        onPointerLeave={cool}
+        onFocus={warm}
+        onBlur={cool}
       >
         <span className="chat-title">
           <span className="chat-title-text">{item.title}</span>
@@ -95,6 +114,7 @@ export const Sidebar = memo(function Sidebar() {
   const { setSidebarOpen } = useUi();
   const openOverlay = useOpenOverlay();
   const list = useQuery(conversationsQuery(userId));
+  const prefetcher = usePrefetcher(userId);
 
   return (
     <nav className="sidebar" aria-label="Chats">
@@ -127,7 +147,12 @@ export const Sidebar = memo(function Sidebar() {
         ) : (
           <ul className="chat-list" data-testid="conversation-list">
             {list.data.map((item) => (
-              <ConversationRow key={item.id} item={item} active={item.id === conversationId} />
+              <ConversationRow
+                key={item.id}
+                item={item}
+                active={item.id === conversationId}
+                prefetcher={prefetcher}
+              />
             ))}
           </ul>
         )}

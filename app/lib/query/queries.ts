@@ -84,6 +84,8 @@ export function storeConversation(
   const key = qk.conversation(userId, conversation.id);
   const cached = client.getQueryData<ConversationResult>(key);
   if (cached?.ok && cached.conversation.updatedAt > conversation.updatedAt) return false;
+  // An in-flight (e.g. speculative) fetch started earlier must not land on top of this.
+  void client.cancelQueries({ queryKey: key });
   client.setQueryData(key, { ok: true, conversation } satisfies ConversationResult);
   return true;
 }

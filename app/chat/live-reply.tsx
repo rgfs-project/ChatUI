@@ -1,4 +1,4 @@
-import { isTerminalState } from "@shared/generations";
+import { isTerminalState } from "@shared/generation-state";
 import { useRenderProbe } from "../lib/render-probe";
 import { useLiveGeneration } from "./generation";
 import { LIVE_LABEL, Reasoning } from "./message";

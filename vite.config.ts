@@ -30,6 +30,8 @@ export default defineConfig({
   build: {
     // Every asset is a first-party hashed file; no data: URIs to widen the CSP.
     assetsInlineLimit: 0,
+    // build/client/.vite/manifest.json: perf:check reads the critical route from it.
+    manifest: true,
   },
   environments: {
     ssr: {

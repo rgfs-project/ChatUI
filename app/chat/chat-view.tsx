@@ -4,6 +4,7 @@ import { Link, useNavigation } from "react-router";
 import type { MessageDto } from "@shared/conversations";
 import { useHydrated } from "../lib/hydrated";
 import { useNonce } from "../lib/nonce";
+import { mark } from "../lib/perf";
 import { conversationIdOfPath, paths } from "../lib/paths";
 import { useRenderProbe } from "../lib/render-probe";
 import { useUi } from "../lib/ui-context";
@@ -90,6 +91,10 @@ export function ChatView() {
   const failure = result && !result.ok ? result.code : null;
   const { scrollerRef, contentRef, state, jumpToLatest } = useScrollIntent(conversationId ?? "new");
   const { jumpRef } = chat;
+  const visible = conversation !== null;
+  useEffect(() => {
+    if (visible) mark("chatui:conversation-visible");
+  }, [visible]);
   const switching = useDelayedSwitch();
   const modelCount = chat.groups.reduce((n, g) => n + g.models.length, 0);
   const allUnavailable =

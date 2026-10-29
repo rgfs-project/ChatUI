@@ -20,6 +20,7 @@ import { appContext } from "./context";
 import { setSession } from "./lib/api";
 import { DEFAULT_APPEARANCE, htmlAttributes } from "./lib/appearance";
 import { paths } from "./lib/paths";
+import { mark } from "./lib/perf";
 import { dehydrateAllowed, getBrowserQueryClient, makeQueryClient } from "./lib/query/client";
 import { qk } from "./lib/query/keys";
 import { sessionQuery } from "./lib/query/queries";
@@ -89,6 +90,7 @@ export function Layout({ children }: { children: ReactNode }) {
 function useHydrationMarker() {
   useEffect(() => {
     document.documentElement.dataset.hydrated = "true";
+    mark("chatui:hydration-complete");
   }, []);
 }
 

@@ -1,13 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+// Runtime helpers come from the schema-free module: browser code never bundles zod.
 import {
   isTerminalState,
-  type GenerationError,
-  type GenerationSnapshot,
   type GenerationState,
   type TerminalState,
-} from "@shared/generations";
+} from "@shared/generation-state";
+import type { GenerationError, GenerationSnapshot } from "@shared/generations";
 import { refreshSession, reportSessionExpired } from "../lib/api";
+import { mark } from "../lib/perf";
 import { qk } from "../lib/query/keys";
 
 /** The browser's view of one generation, kept under its query key. */
@@ -70,6 +71,7 @@ export function useGenerationObserver(userId: string, generationId: string | nul
       update((v) => ({ ...v, state }));
     });
     source.addEventListener("delta", (event: MessageEvent<string>) => {
+      mark("chatui:first-assistant-event", { generationId });
       const delta = JSON.parse(event.data) as { content?: string; reasoning?: string };
       update((v) => ({
         ...v,
@@ -84,6 +86,7 @@ export function useGenerationObserver(userId: string, generationId: string | nul
         error: GenerationError | null;
       };
       update((v) => ({ ...v, state: t.state, finishReason: t.finishReason, error: t.error }));
+      mark("chatui:generation-complete", { generationId });
       finish();
     });
     // A closed stream that did not end with a terminal event may mean the
