@@ -1,0 +1,98 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import type { TimeFormat } from "./time";
+import { UI_COOKIES, writeUiCookie, type UiHints } from "./ui-cookies";
+
+/** Below this width the sidebar overlays the chat instead of sitting beside it. */
+export const NARROW_QUERY = "(max-width: 767px)";
+
+interface UiState {
+  /** Desktop preference, remembered in a cookie and rendered by the server. */
+  sidebarCollapsed: boolean;
+  /** Narrow windows: the overlay sidebar is open (never persisted). */
+  narrowOpen: boolean;
+  /** Opens or closes the sidebar the way the current window width uses it. */
+  setSidebarOpen: (open: boolean) => void;
+  closeNarrow: () => void;
+  timeFormat: TimeFormat;
+}
+
+const UiContext = createContext<UiState | null>(null);
+
+const noopSubscribe = () => () => undefined;
+
+function browserZoneKey(): string {
+  const resolved = Intl.DateTimeFormat().resolvedOptions();
+  return `${navigator.language || resolved.locale}|${resolved.timeZone}`;
+}
+
+/**
+ * Presentation state from validated cookie hints: the server renders with it
+ * and hydration starts from the same values, so nothing changes on hydrate.
+ */
+export function UiProvider({
+  hints,
+  renderedAt,
+  children,
+}: {
+  hints: UiHints;
+  renderedAt: string;
+  children: ReactNode;
+}) {
+  const [sidebarCollapsed, setCollapsed] = useState(hints.sidebarCollapsed);
+  // Hydration renders with the server's values; the browser's own apply right after.
+  const zoneKey = useSyncExternalStore(
+    noopSubscribe,
+    browserZoneKey,
+    () => `${hints.locale}|${hints.timeZone}`,
+  );
+  const zone = useMemo(() => {
+    const [locale = hints.locale, timeZone = hints.timeZone] = zoneKey.split("|");
+    return { locale, timeZone };
+  }, [zoneKey, hints.locale, hints.timeZone]);
+
+  // Teach the server this browser's locale and time zone for the next document.
+  useEffect(() => {
+    if (zone.timeZone !== hints.timeZone) writeUiCookie(UI_COOKIES.timeZone, zone.timeZone);
+    if (zone.locale !== hints.locale) writeUiCookie(UI_COOKIES.locale, zone.locale);
+  }, [zone, hints.locale, hints.timeZone]);
+
+  const [narrowOpen, setNarrowOpen] = useState(false);
+  const setSidebarOpen = useCallback((open: boolean) => {
+    if (window.matchMedia(NARROW_QUERY).matches) {
+      setNarrowOpen(open);
+      return;
+    }
+    setCollapsed(!open);
+    writeUiCookie(UI_COOKIES.sidebar, open ? "open" : "collapsed");
+  }, []);
+  const closeNarrow = useCallback(() => {
+    setNarrowOpen(false);
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      sidebarCollapsed,
+      narrowOpen,
+      setSidebarOpen,
+      closeNarrow,
+      timeFormat: { ...zone, now: renderedAt },
+    }),
+    [sidebarCollapsed, narrowOpen, setSidebarOpen, closeNarrow, zone, renderedAt],
+  );
+  return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
+}
+
+export function useUi(): UiState {
+  const ui = useContext(UiContext);
+  if (!ui) throw new Error("useUi outside UiProvider");
+  return ui;
+}

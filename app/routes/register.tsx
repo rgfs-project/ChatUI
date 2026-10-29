@@ -1,8 +1,10 @@
 import { useState, type SyntheticEvent } from "react";
 import { data, redirect, useNavigate } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import type { SessionDto } from "@shared/auth";
 import { appContext } from "../context";
-import { setSession } from "../lib/api";
+import { applySession } from "../lib/session";
+import { paths } from "../lib/paths";
 import type { Route } from "./+types/register";
 
 export function meta(): Route.MetaDescriptors {
@@ -11,13 +13,14 @@ export function meta(): Route.MetaDescriptors {
 
 export function loader({ context }: Route.LoaderArgs) {
   const { auth, services } = context.get(appContext);
-  if (auth) throw redirect("/chat");
+  if (auth) throw redirect(paths.newChat());
   if (!services.auth.registrationOpen) throw data("Not found", { status: 404 });
   return null;
 }
 
 export default function Register() {
   const navigate = useNavigate();
+  const client = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
@@ -34,8 +37,8 @@ export default function Register() {
       setError(body.error?.message ?? "Registration failed");
       return;
     }
-    setSession(body);
-    await navigate("/chat", { replace: true });
+    applySession(client, body);
+    await navigate(paths.newChat(), { replace: true });
   }
 
   return (

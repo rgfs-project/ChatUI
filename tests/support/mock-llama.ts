@@ -18,7 +18,24 @@ export const MOCK_MODELS = {
   earlyEnd: "mock-early-end",
   flood: "mock-flood",
   length: "mock-length",
+  long: "mock-long",
 } as const;
+
+/**
+ * mock-long's reply: Markdown with a fence, a table and nested lists, so
+ * streaming renders unfinished structures (Phase 7 E2E).
+ */
+export function longReply(paragraphs: number): string {
+  const parts: string[] = [];
+  for (let i = 0; i < paragraphs; i++) {
+    parts.push(`Paragraph ${String(i)} explains one more detail of the answer in plain words.`);
+    if (i % 4 === 1)
+      parts.push("```ts\nconst value = " + String(i) + ";\nconsole.log(value);\n```");
+    if (i % 4 === 2) parts.push("| a | b |\n|---|---|\n| " + String(i) + " | done |");
+    if (i % 4 === 3) parts.push("- item\n  - nested " + String(i));
+  }
+  return parts.join("\n\n");
+}
 
 /** Upstream error text that must never reach a ChatUI client (INV-04). */
 export const UPSTREAM_SECRET = "UPSTREAM-SECRET-DETAIL-7f3a";
@@ -38,6 +55,9 @@ export interface MockLlamaOptions {
   /** Bytes per chunk and chunk count for mock-flood. */
   floodChunkBytes?: number;
   floodChunks?: number;
+  /** Paragraphs and per-chunk delay for mock-long. */
+  longParagraphs?: number;
+  longChunkDelayMs?: number;
   /** Delay between chunks for mock-chat (the browser demo streams visibly). */
   chatChunkDelayMs?: number;
 }
@@ -274,6 +294,15 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
           if (stream.closed) return;
           send(chunk(model, { content: `part${String(i)} ` }));
           await sleep(options.chunkDelayMs ?? 50);
+        }
+        finish();
+        return;
+      }
+      case MOCK_MODELS.long: {
+        const text = longReply(options.longParagraphs ?? 40);
+        for (let i = 0; i < text.length && !stream.closed; i += 24) {
+          send(chunk(model, { content: text.slice(i, i + 24) }));
+          await sleep(options.longChunkDelayMs ?? 20);
         }
         finish();
         return;

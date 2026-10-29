@@ -99,10 +99,56 @@ export async function refreshSession(apply = true): Promise<SessionDto | null> {
   }
 }
 
-/** Only same-origin in-app paths are allowed as a post-login destination. */
+/** A contract error from the API (contracts §5). */
+export class ApiError extends Error {
+  override name = "ApiError";
+  readonly code: string | null;
+  readonly status: number;
+
+  constructor(code: string | null, message: string, status: number) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
+
+/** Reads a contract error body; a body without one is reported as unknown. */
+export async function apiError(response: Response): Promise<ApiError> {
+  try {
+    const body = (await response.json()) as { error?: { code?: string; message?: string } };
+    return new ApiError(
+      body.error?.code ?? null,
+      body.error?.message ?? `Request failed (${String(response.status)})`,
+      response.status,
+    );
+  } catch {
+    return new ApiError(null, `Request failed (${String(response.status)})`, response.status);
+  }
+}
+
+/** JSON request through the shared adapter; non-2xx responses throw ApiError. */
+export async function apiJson<T>(
+  url: string,
+  init: RequestInit & { isCurrent?: () => boolean; json?: unknown } = {},
+): Promise<T> {
+  const { json, ...rest } = init;
+  const headers = new Headers(rest.headers);
+  headers.set("Accept", "application/json");
+  if (json !== undefined) headers.set("Content-Type", "application/json");
+  const response = await apiFetch(url, {
+    ...rest,
+    headers,
+    ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
+  });
+  if (!response.ok) throw await apiError(response);
+  return (await response.json()) as T;
+}
+
+const SAFE_RETURN_TO =
+  /^\/(chat\/new|chat\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|settings(\/[a-z-]{1,32})?|admin)$/;
+
+/** Only known same-origin in-app paths are allowed as a post-login destination. */
 export function safeReturnTo(value: string | null | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\"))
-    return "/chat";
-  if (!/^\/(chat|account)?(\?[A-Za-z0-9=&%_.-]*)?$/.test(value)) return "/chat";
+  if (!value || !SAFE_RETURN_TO.test(value)) return "/chat/new";
   return value;
 }

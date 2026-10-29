@@ -132,16 +132,18 @@ describe("INV-59: shared fetch wrapper", () => {
 
 describe("return-to validation", () => {
   it.each([
-    [
-      "/chat?c=0b7e7c2a-1111-4a1a-8a1a-111111111111",
-      "/chat?c=0b7e7c2a-1111-4a1a-8a1a-111111111111",
-    ],
-    ["/account", "/account"],
-    ["//evil.example/chat", "/chat"],
-    ["https://evil.example", "/chat"],
-    ["/\\evil.example", "/chat"],
-    ["/admin", "/chat"],
-    [null, "/chat"],
+    ["/chat/0b7e7c2a-1111-4a1a-8a1a-111111111111", "/chat/0b7e7c2a-1111-4a1a-8a1a-111111111111"],
+    ["/chat/new", "/chat/new"],
+    ["/settings", "/settings"],
+    ["/settings/account", "/settings/account"],
+    ["/admin", "/admin"],
+    ["/chat/not-a-uuid", "/chat/new"],
+    ["/chat?c=0b7e7c2a-1111-4a1a-8a1a-111111111111", "/chat/new"],
+    ["//evil.example/chat", "/chat/new"],
+    ["https://evil.example", "/chat/new"],
+    ["/\\evil.example", "/chat/new"],
+    ["/settings/../admin", "/chat/new"],
+    [null, "/chat/new"],
   ])("%s → %s", async (input, expected) => {
     const api = await load();
     expect(api.safeReturnTo(input)).toBe(expected);

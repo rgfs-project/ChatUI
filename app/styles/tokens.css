@@ -1,0 +1,141 @@
+/*
+ * Design tokens: values measured from the reference build (rebuild plan §5–7).
+ * Components use only these semantic properties; themes swap values.
+ */
+:root {
+  color-scheme: light;
+  --font-ui:
+    -apple-system-body, ui-sans-serif, -apple-system, system-ui, "Segoe UI", Helvetica,
+    "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono",
+    monospace;
+
+  /* Type scale: size / line height */
+  --text-body: 16px;
+  --lh-body: 24px;
+  --text-ui: 14px;
+  --lh-ui: 20px;
+  --text-message: 16px;
+  --lh-message: 26px;
+  --text-greeting: 24px;
+  --lh-greeting: 32px;
+  --text-brand: 18px;
+  --lh-brand: 24px;
+  --text-dialog-title: 18px;
+  --lh-dialog-title: 26px;
+  --text-dialog: 15px;
+  --lh-dialog: 22px;
+  --text-label: 14px;
+  --lh-label: 18px;
+  --text-sub: 12px;
+  --lh-sub: 14px;
+  --text-reasoning: 14px;
+  --lh-reasoning: 22px;
+  --text-separator: 13px;
+  --lh-separator: 18px;
+  --text-disclaimer: 12px;
+  --lh-disclaimer: 16px;
+  --text-code: 12px;
+  --lh-code: 20px;
+  --text-inline-code: 14px;
+  --lh-inline-code: 18px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Layout */
+  --sidebar-width: 340px;
+  --bar-height: 52px;
+  --thread-width: 768px;
+  --icon-button: 36px;
+  --action-button: 32px;
+  --row-height: 35px;
+  --radius-row: 8px;
+  --radius-label: 6px;
+  --radius-composer: 26px;
+  --radius-bubble: 18px;
+  --radius-code: 16px;
+  --radius-inline-code: 6px;
+  --radius-menu: 16px;
+  --radius-menu-item: 10px;
+  --radius-dialog: 20px;
+  --radius-suggestion: 16px;
+  --radius-pill: 999px;
+
+  /* Colour (light) */
+  --bg: #fcfcfc;
+  --text: #0d0d0d;
+  --text-secondary: #8f8f8f;
+  --text-tertiary: #8f8f8f;
+  --divider: #e3e3e3;
+  --hover: #eeeeee;
+  --active: #eeeeee;
+  --composer-bg: #ffffff;
+  --composer-border: #ececec;
+  --composer-shadow: 0 2px 10px rgb(0 0 0 / 0.06);
+  /* Orange accent (plan §7 accent options). Bubble: accent 11% on white; text: dark accent 38% on black. */
+  --accent: #f26b1d;
+  --accent-text: #ffffff;
+  --bubble-bg: #feefe6;
+  --bubble-text: #4c2007;
+  --menu-bg: #ffffff;
+  --menu-hover: #f3f3f3;
+  --menu-border: #e3e3e3;
+  --menu-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+  --dialog-bg: #ffffff;
+  --dialog-shadow: 0 16px 48px rgb(0 0 0 / 0.35);
+  --backdrop: rgb(0 0 0 / 0.4);
+  --pill-bg: #ffffff;
+  --pill-border: #d9d9d9;
+  --code-bg: #f9f9f9;
+  --code-border: #ececec;
+  --inline-code-bg: #ececec;
+  --code-text: #1f1f1f;
+  --danger: #e02e2a;
+  --avatar: #8e63a6;
+  --focus: #f26b1d;
+  --tooltip-bg: #0d0d0d;
+  --tooltip-text: #ffffff;
+  --motion: 0.2s;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #000000;
+    --text: #f3f3f3;
+    --text-secondary: #afafaf;
+    --text-tertiary: #8f8f8f;
+    --divider: #242424;
+    --hover: #181818;
+    --active: #191919;
+    --composer-bg: #1a1a1a;
+    --composer-border: #262626;
+    --composer-shadow: none;
+    --accent: #c85512;
+    /* dark accent 60% on black */
+    --bubble-bg: #78330b;
+    --bubble-text: #ffffff;
+    --menu-bg: #2f2f2f;
+    --menu-hover: #3b3b3b;
+    --menu-border: #3a3a3a;
+    --dialog-bg: #202020;
+    --pill-bg: #202020;
+    --pill-border: #2a2a2a;
+    --code-bg: #191919;
+    --code-border: #262626;
+    --inline-code-bg: #1d1d1d;
+    --code-text: #d4d4d4;
+    --danger: #f87171;
+    --focus: #f26b1d;
+    --tooltip-bg: #f3f3f3;
+    --tooltip-text: #0d0d0d;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion: 0s;
+  }
+}

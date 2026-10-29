@@ -1,0 +1,253 @@
+{
+  "$comment": "Reference measurements (rebuild plan §5–7), CSS px at 1920×1080; accent is the plan's orange option (user choice, Phase 7a). Every UI gate keeps this audit green; change a value only with a reason in the phase report.",
+  "boxes": [
+    { "name": "sidebar", "selector": "nav.sidebar", "width": 340 },
+    {
+      "name": "sidebar header",
+      "selector": ".sidebar-head",
+      "height": 52,
+      "css": { "padding": "0px 7px 0px 16px" }
+    },
+    {
+      "name": "sidebar icon button",
+      "selector": ".sidebar-head .icon-button",
+      "width": 36,
+      "height": 36,
+      "css": { "border-radius": "8px" }
+    },
+    {
+      "name": "new chat row",
+      "selector": ".side-row.new-chat",
+      "width": 328,
+      "height": 35,
+      "css": { "padding": "6px 10px", "border-radius": "8px", "gap": "8px" }
+    },
+    {
+      "name": "section label",
+      "selector": ".side-label",
+      "width": 316,
+      "height": 36,
+      "css": {
+        "padding": "0px 10px",
+        "border-radius": "6px",
+        "font-size": "14px",
+        "line-height": "18px",
+        "font-weight": "600"
+      }
+    },
+    { "name": "chat row", "selector": ".chat-row", "width": 328, "height": 35 },
+    {
+      "name": "sidebar footer",
+      "selector": ".sidebar-foot",
+      "height": 60,
+      "css": { "padding": "6px 14px", "gap": "12px" }
+    },
+    { "name": "profile row", "selector": ".profile-row", "width": 312, "height": 48 },
+    {
+      "name": "avatar",
+      "selector": ".avatar",
+      "width": 24,
+      "height": 24,
+      "css": { "font-size": "9px", "font-weight": "600", "background-color": "rgb(142, 99, 166)" }
+    },
+    {
+      "name": "profile name",
+      "selector": ".profile-name",
+      "css": { "font-size": "14px", "line-height": "18px" }
+    },
+    {
+      "name": "profile sub-line",
+      "selector": ".profile-sub",
+      "css": { "font-size": "12px", "line-height": "14px" }
+    },
+    {
+      "name": "brand",
+      "selector": ".brand",
+      "css": { "font-size": "18px", "line-height": "24px", "font-weight": "600" }
+    },
+    {
+      "name": "header",
+      "selector": ".chat-header",
+      "height": 52,
+      "css": { "padding": "0px 7px", "gap": "4px" }
+    },
+    {
+      "name": "header icon button",
+      "selector": ".header-end .icon-button",
+      "width": 36,
+      "height": 36,
+      "css": { "border-radius": "8px" }
+    },
+    { "name": "thread", "selector": ".thread", "width": 768, "css": { "padding-top": "52px" } },
+    {
+      "name": "composer",
+      "selector": ".composer",
+      "width": 768,
+      "height": 52,
+      "css": { "border-radius": "26px", "padding": "7px", "gap": "4px", "border-top-width": "1px" }
+    },
+    {
+      "name": "composer textarea",
+      "selector": ".composer textarea",
+      "css": { "font-size": "16px", "line-height": "26px", "padding": "5px 4px" }
+    },
+    {
+      "name": "send button",
+      "selector": ".send-button",
+      "width": 36,
+      "height": 36,
+      "css": { "border-radius": "50%" }
+    },
+    {
+      "name": "user bubble",
+      "selector": ".bubble",
+      "css": {
+        "padding": "10px 16px",
+        "border-radius": "18px",
+        "font-size": "16px",
+        "line-height": "26px"
+      }
+    },
+    {
+      "name": "message action",
+      "selector": ".msg-action",
+      "width": 32,
+      "height": 32,
+      "css": { "border-radius": "8px" }
+    },
+    {
+      "name": "reply text",
+      "selector": ".msg-assistant .markdown",
+      "css": { "font-size": "16px", "line-height": "26px" }
+    },
+    {
+      "name": "time separator",
+      "selector": ".time-separator",
+      "css": { "font-size": "13px", "line-height": "18px" }
+    },
+    {
+      "name": "code block",
+      "selector": ".code-block",
+      "css": { "border-radius": "16px", "border-top-width": "1px" }
+    },
+    {
+      "name": "code header",
+      "selector": ".code-head",
+      "height": 48,
+      "css": { "padding": "0px 8px 0px 20px" }
+    },
+    {
+      "name": "code text",
+      "selector": ".code-block pre",
+      "css": { "padding": "0px 20px 13px", "font-size": "12px", "line-height": "20px" }
+    },
+    {
+      "name": "inline code",
+      "selector": ".inline-code",
+      "css": {
+        "font-size": "14px",
+        "line-height": "18px",
+        "padding": "1px 4px",
+        "border-radius": "6px",
+        "font-weight": "500"
+      }
+    },
+    {
+      "name": "table cell",
+      "selector": ".markdown td",
+      "css": { "padding": "8px 16px 8px 0px", "font-size": "14px", "line-height": "20px" }
+    },
+    {
+      "name": "disclaimer",
+      "selector": ".disclaimer",
+      "css": { "font-size": "12px", "line-height": "16px" }
+    }
+  ],
+  "draftBoxes": [
+    {
+      "name": "greeting",
+      "selector": ".greeting",
+      "css": { "font-size": "24px", "line-height": "32px", "font-weight": "400" }
+    },
+    {
+      "name": "suggestion",
+      "selector": ".suggestion",
+      "width": 768,
+      "height": 52,
+      "css": { "padding": "0px 44px 0px 8px", "border-radius": "16px" }
+    },
+    {
+      "name": "suggestions",
+      "selector": ".suggestions",
+      "css": { "margin-top": "24px", "gap": "8px" }
+    }
+  ],
+  "menu": [
+    {
+      "name": "menu",
+      "selector": "[role=menu]",
+      "css": {
+        "min-width": "240px",
+        "padding": "6px",
+        "border-radius": "16px",
+        "box-shadow": "rgba(0, 0, 0, 0.3) 0px 8px 24px 0px"
+      }
+    },
+    {
+      "name": "menu item",
+      "selector": "[role=menu] [role=menuitemradio]",
+      "height": 36,
+      "css": { "padding": "0px 10px", "border-radius": "10px", "gap": "10px" }
+    }
+  ],
+  "dialog": [
+    {
+      "name": "dialog",
+      "selector": "[role=alertdialog]",
+      "width": 420,
+      "css": {
+        "border-radius": "20px",
+        "padding": "20px 20px 16px",
+        "box-shadow": "rgba(0, 0, 0, 0.35) 0px 16px 48px 0px"
+      }
+    },
+    {
+      "name": "dialog title",
+      "selector": ".dialog-title",
+      "css": { "font-size": "18px", "line-height": "26px", "font-weight": "600" }
+    },
+    {
+      "name": "dialog button",
+      "selector": ".dialog-actions .pill-button",
+      "height": 36,
+      "css": { "padding": "0px 16px", "font-size": "14px", "font-weight": "500" }
+    }
+  ],
+  "colors": {
+    "light": {
+      "body": { "background-color": "rgb(252, 252, 252)", "color": "rgb(13, 13, 13)" },
+      ".composer": {
+        "background-color": "rgb(255, 255, 255)",
+        "border-top-color": "rgb(236, 236, 236)",
+        "box-shadow": "rgba(0, 0, 0, 0.06) 0px 2px 10px 0px"
+      },
+      ".send-button": { "background-color": "rgb(242, 107, 29)" },
+      ".bubble": { "background-color": "rgb(254, 239, 230)", "color": "rgb(76, 32, 7)" },
+      ".side-label": { "color": "rgb(143, 143, 143)" },
+      ".time-separator": { "color": "rgb(143, 143, 143)" }
+    },
+    "dark": {
+      "body": { "background-color": "rgb(0, 0, 0)", "color": "rgb(243, 243, 243)" },
+      ".composer": {
+        "background-color": "rgb(26, 26, 26)",
+        "border-top-color": "rgb(38, 38, 38)",
+        "box-shadow": "none"
+      },
+      ".send-button": { "background-color": "rgb(200, 85, 18)" },
+      ".bubble": { "background-color": "rgb(120, 51, 11)", "color": "rgb(255, 255, 255)" },
+      ".side-label": { "color": "rgb(175, 175, 175)" },
+      ".time-separator": { "color": "rgb(143, 143, 143)" }
+    }
+  },
+  "fontStackStartsWith": "-apple-system-body, ui-sans-serif, -apple-system, system-ui"
+}

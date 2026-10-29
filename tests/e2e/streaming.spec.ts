@@ -1,39 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
-import { E2E_PASSWORD, E2E_USER } from "./global-setup.ts";
+import { chooseModel, hydrated, send, signIn, storedReplies } from "./helpers.ts";
 
-const base = () => process.env.E2E_BASE_URL ?? "";
-const SLOW = JSON.stringify(["local", "mock-slow"]);
 const EXPECTED = Array.from({ length: 30 }, (_, i) => `part${String(i)} `)
   .join("")
   .trimEnd();
 
-async function signIn(page: Page) {
-  await page.goto(`${base()}/login?returnTo=%2Fchat`);
-  await page.waitForSelector('html[data-hydrated="true"]');
-  await page.locator("#username").fill(E2E_USER);
-  await page.locator("#password").fill(E2E_PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/chat$/);
-  await page.waitForSelector('html[data-hydrated="true"]');
-}
-
 async function sendSlow(page: Page, text: string) {
-  await page.locator("#model").selectOption(SLOW);
-  await page.locator("#message").fill(text);
-  await page.getByRole("button", { name: "Send" }).click();
+  await chooseModel(page, "mock-slow");
+  await send(page, text);
   await page.getByTestId("content").filter({ hasText: "part2" }).waitFor();
 }
 
-const storedReply = (page: Page) => page.getByTestId("message-assistant").last();
+const lastReplyText = async (page: Page) =>
+  ((await storedReplies(page).last().locator(".markdown").textContent()) ?? "").trim();
 
 test("reloading mid-generation resumes the stream", async ({ page }) => {
   await signIn(page);
   await sendSlow(page, "reload me");
   await page.reload();
-  await page.waitForSelector('html[data-hydrated="true"]');
+  await hydrated(page);
   await expect(page.getByTestId("content")).toContainText("part");
-  await expect(storedReply(page)).toContainText("part29", { timeout: 20_000 });
-  expect((await storedReply(page).locator("p").last().textContent())?.trim()).toBe(EXPECTED);
+  await expect(storedReplies(page).last()).toContainText("part29", { timeout: 20_000 });
+  expect(await lastReplyText(page)).toBe(EXPECTED);
 });
 
 test("a network drop and reconnect resume with no duplicated or lost text", async ({
@@ -49,16 +37,32 @@ test("a network drop and reconnect resume with no duplicated or lost text", asyn
   await page.getByTestId("content").filter({ hasText: "part20" }).waitFor({ timeout: 20_000 });
   const live = (await page.getByTestId("content").textContent()) ?? "";
   expect(EXPECTED.startsWith(live.trim())).toBe(true);
-  await expect(storedReply(page)).toContainText("part29", { timeout: 20_000 });
-  expect((await storedReply(page).locator("p").last().textContent())?.trim()).toBe(EXPECTED);
+  await expect(storedReplies(page).last()).toContainText("part29", { timeout: 20_000 });
+  expect(await lastReplyText(page)).toBe(EXPECTED);
 });
 
 test("cancel from the UI stops the reply and stores it as stopped", async ({ page }) => {
   await signIn(page);
   await sendSlow(page, "stop me");
   await page.getByRole("button", { name: "Stop generating" }).click();
-  await expect(storedReply(page)).toContainText("Stopped", { timeout: 10_000 });
-  const text = (await storedReply(page).locator("p").last().textContent())?.trim() ?? "";
+  await expect(storedReplies(page).last().getByTestId("message-status")).toHaveText("Stopped", {
+    timeout: 10_000,
+  });
+  const text = await lastReplyText(page);
   expect(EXPECTED.startsWith(text)).toBe(true);
   expect(text.length).toBeLessThan(EXPECTED.length);
+});
+
+test("a reply stays in its own chat when another chat is opened (no leak into New chat)", async ({
+  page,
+}) => {
+  await signIn(page);
+  await sendSlow(page, "stay here");
+  const source = page.url();
+  await page.getByTestId("new-chat").click();
+  await page.waitForURL(/\/chat\/new$/);
+  await page.waitForTimeout(500);
+  await expect(page.getByTestId("live-reply")).toHaveCount(0);
+  await page.goto(source);
+  await expect(storedReplies(page).last()).toContainText("part29", { timeout: 20_000 });
 });

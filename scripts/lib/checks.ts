@@ -34,13 +34,22 @@ export async function httpChecks(base: string): Promise<string[]> {
     JSON.stringify(healthBody),
   );
 
+  // `/` opens the chat, which needs a session: signed out it goes to sign-in.
+  const root = await fetch(`${base}/`, { redirect: "manual" });
+  await root.arrayBuffer();
+  check(
+    "GET / signed out redirects to sign-in (the status page is /status)",
+    root.status === 302 && root.headers.get("location") === "/login",
+    `${String(root.status)} ${root.headers.get("location") ?? ""}`,
+  );
+
   // Server-rendered document, inspected WITHOUT executing JavaScript.
-  const doc = await fetch(`${base}/`);
+  const doc = await fetch(`${base}/status`);
   const html = await doc.text();
   const csp = doc.headers.get("content-security-policy");
   const nonce = nonceOf(csp);
   check(
-    "GET / is 200 text/html",
+    "GET /status is 200 text/html",
     doc.status === 200 && (doc.headers.get("content-type") ?? "").startsWith("text/html"),
   );
   check("INV-54: server HTML contains the heading", html.includes("<h1>ChatUI</h1>"));
@@ -70,7 +79,13 @@ export async function httpChecks(base: string): Promise<string[]> {
     scripts.filter((tag) => !tag.includes(`nonce="${nonce ?? "?"}"`)).join(" "),
   );
   check("no inline event handler attributes", !/\son[a-z]+="/i.test(html));
-  const second = nonceOf((await fetch(`${base}/`)).headers.get("content-security-policy"));
+  const styleSrc = csp?.split(";").find((d) => d.trim().startsWith("style-src ")) ?? "";
+  check(
+    "style-src admits only same-origin sheets and nonce-bearing <style>; style attributes blocked",
+    styleSrc.includes(`'nonce-${nonce ?? "?"}'`) && (csp ?? "").includes("style-src-attr 'none'"),
+    csp ?? "",
+  );
+  const second = nonceOf((await fetch(`${base}/status`)).headers.get("content-security-policy"));
   check("nonce differs between responses", Boolean(second) && second !== nonce);
 
   // Boundaries and statuses.
@@ -89,13 +104,19 @@ export async function httpChecks(base: string): Promise<string[]> {
     assetMissing.status === 404 &&
       !(assetMissing.headers.get("content-type") ?? "").includes("text/html"),
   );
-  const pageMissing = await fetch(`${base}/no/such/page`);
-  const pageMissingHtml = await pageMissing.text();
+  const pageMissing = await fetch(`${base}/no/such/page`, { redirect: "manual" });
+  await pageMissing.arrayBuffer();
   check(
-    "INV-57: unknown document route is an HTML 404 rendered by the framework",
-    pageMissing.status === 404 &&
-      (pageMissing.headers.get("content-type") ?? "").startsWith("text/html") &&
-      pageMissingHtml.includes("Page not found"),
+    "INV-53: signed out, an unknown document URL uses the shared auth guard (sign-in)",
+    pageMissing.status === 302 && (pageMissing.headers.get("location") ?? "").startsWith("/login"),
+  );
+  const closed = await fetch(`${base}/register`);
+  const closedHtml = await closed.text();
+  check(
+    "INV-57: a public document 404 (registration closed) is HTML rendered by the framework",
+    closed.status === 404 &&
+      (closed.headers.get("content-type") ?? "").startsWith("text/html") &&
+      closedHtml.includes("Page not found"),
   );
   const tooLarge = await fetch(`${base}/api/health`, {
     method: "POST",
@@ -129,7 +150,7 @@ export async function browserChecks(base: string): Promise<void> {
     // Without JavaScript: the server HTML alone is useful.
     const noJs = await browser.newContext({ javaScriptEnabled: false });
     const staticPage = await noJs.newPage();
-    await staticPage.goto(`${base}/`);
+    await staticPage.goto(`${base}/status`);
     check(
       "INV-54: without JS: heading visible",
       await staticPage.getByRole("heading", { name: "ChatUI" }).isVisible(),
@@ -150,7 +171,7 @@ export async function browserChecks(base: string): Promise<void> {
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
     page.on("requestfailed", (req) => problems.push(`requestfailed: ${req.url()}`));
-    await page.goto(`${base}/`);
+    await page.goto(`${base}/status`);
     await page.waitForSelector('html[data-hydrated="true"]', { timeout: 10_000 });
     check("hydration completes", true);
     check(
@@ -173,7 +194,7 @@ export async function browserChecks(base: string): Promise<void> {
 
     // The 404 document also hydrates cleanly.
     problems.length = 0;
-    const missingUrl = `${base}/missing-page`;
+    const missingUrl = `${base}/register`;
     // Chromium reports the document's own intended 404 status as a console error; ignore only that.
     page.removeAllListeners("console");
     page.on("console", (msg: ConsoleMessage) => {
@@ -272,16 +293,25 @@ export async function chatChecks(
   check("API sign-in with the CLI-created account", session !== undefined);
   if (!session) return;
   // Raw server HTML, no JavaScript executed.
-  const res = await fetch(`${base}/chat`, { headers: sessionHeaders(session) });
+  const res = await fetch(`${base}/chat/new`, { headers: sessionHeaders(session) });
   const html = await res.text();
   check(
-    "INV-54: /chat server HTML contains the native textarea",
-    res.status === 200 && /<textarea[^>]*id="message"/.test(html),
+    "INV-54: /chat/new server HTML contains the shell and the native textarea",
+    res.status === 200 &&
+      /<textarea[^>]*id="message"/.test(html) &&
+      html.includes('aria-label="Chats"'),
   );
-  check("/chat server HTML lists discovered models", html.includes(`&quot;${models.chat}&quot;`));
   check(
-    "/chat Send is disabled until hydration (no fake no-JS send)",
-    html.includes('<button type="submit" disabled=""'),
+    "/chat/new server HTML shows the selected discovered model",
+    html.includes(`<span class="model-name">${models.chat}</span>`),
+  );
+  check(
+    "/chat/new Send is disabled until hydration (no fake no-JS send)",
+    /<button type="submit"[^>]*aria-label="Send"[^>]*disabled=""/.test(html),
+  );
+  check(
+    "INV-55: the document dehydrates the session and models into the query cache",
+    html.includes("csrfToken") && html.includes(models.chat) && !html.includes("passwordHash"),
   );
 
   // API send over real HTTP + SSE, persisted canonically.
@@ -317,7 +347,7 @@ export async function chatChecks(
     const noJs = await browser.newContext({ javaScriptEnabled: false });
     await noJs.addCookies([cookie]);
     const staticPage = await noJs.newPage();
-    await staticPage.goto(`${base}/chat?c=${sent.conversationId}`);
+    await staticPage.goto(`${base}/chat/${sent.conversationId}`);
     check(
       "INV-54: without JS the transcript and textarea are server-rendered",
       (await staticPage.getByTestId("message-assistant").first().textContent())?.includes(
@@ -334,16 +364,22 @@ export async function chatChecks(
         problems.push(`${msg.type()}: ${msg.text()}`);
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
-    page.on("dialog", (dialog) => void dialog.accept());
+    page.on("dialog", () => {
+      problems.push("a browser dialog opened (confirmations must be in-app)");
+    });
+    const pick = async (model: string) => {
+      await page.getByTestId("model-picker").click();
+      await page.getByRole("menuitemradio", { name: new RegExp(`^${model}(\\s|$)`) }).click();
+    };
 
     // Sign in through the real login page (validated return-to).
-    await page.goto(`${base}/chat`);
-    await page.waitForURL(/\/login\?returnTo=%2Fchat$/);
+    await page.goto(`${base}/chat/new`);
+    await page.waitForURL(/\/login\?returnTo=%2Fchat%2Fnew$/);
     await page.waitForSelector('html[data-hydrated="true"]');
     await page.locator("#username").fill(account.username);
     await page.locator("#password").fill(account.password);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL(/\/chat$/);
+    await page.waitForURL(/\/chat\/new$/);
     check("browser sign-in redirects back to the protected page", true);
 
     // Hold back every script so the user types before hydration.
@@ -355,7 +391,7 @@ export async function chatChecks(
       await gate;
       await route.continue();
     });
-    await page.goto(`${base}/chat`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${base}/chat/new`, { waitUntil: "domcontentloaded" });
     await page.locator("#message").fill("typed before hydration");
     release();
     await page.waitForSelector('html[data-hydrated="true"]', { timeout: 15_000 });
@@ -372,7 +408,11 @@ export async function chatChecks(
       .filter({ hasText: "Echo: typed before hydration" })
       .waitFor({ timeout: 15_000 });
     check("browser send streams and stores the reply", true);
-    check("the URL identifies the new conversation", /\/chat\?c=[0-9a-f-]{36}$/.test(page.url()));
+    check(
+      "INV-53: the server-issued id replaces the draft URL",
+      /\/chat\/[0-9a-f-]{36}$/.test(page.url()),
+      page.url(),
+    );
     check(
       "the conversation is listed with its auto-title",
       (await page.getByTestId("conversation-list").textContent())?.includes(
@@ -381,7 +421,7 @@ export async function chatChecks(
     );
 
     // Reload mid-generation: it keeps running and is re-observed.
-    await page.locator("#model").selectOption(JSON.stringify(["local", models.slow]));
+    await pick(models.slow);
     await page.locator("#message").fill("slow one");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "part2" }).waitFor({ timeout: 15_000 });
@@ -394,7 +434,7 @@ export async function chatChecks(
     check("INV-06: reload does not stop the generation; the reply is stored", true);
 
     // Stop.
-    await page.locator("#model").selectOption(JSON.stringify(["local", models.slow]));
+    await pick(models.slow);
     await page.locator("#message").fill("cancel me");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByTestId("content").filter({ hasText: "part1" }).waitFor({ timeout: 15_000 });
@@ -405,16 +445,20 @@ export async function chatChecks(
       .waitFor({ timeout: 10_000 });
     check("Stop cancels and stores a cancelled reply", true);
 
-    // Rename and delete.
-    await page.locator("#title").fill("Renamed in verify");
-    await page.getByRole("button", { name: "Rename" }).click();
+    // Rename and delete (in-app dialogs).
+    await page.getByRole("button", { name: "Chat options" }).click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
+    await page.getByRole("textbox", { name: "Chat title" }).fill("Renamed in verify");
+    await page.getByRole("button", { name: "Save" }).click();
     await page
       .getByTestId("conversation-list")
       .filter({ hasText: "Renamed in verify" })
       .waitFor({ timeout: 5_000 });
     check("rename updates the title", true);
-    await page.getByRole("button", { name: "Delete" }).click();
-    await page.waitForURL(/\/chat$/);
+    await page.getByRole("button", { name: "Chat options" }).click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+    await page.waitForURL(/\/chat\/new$/);
     check(
       "delete removes the conversation",
       !((await page.getByTestId("conversation-list").textContent()) ?? "").includes(
@@ -434,12 +478,12 @@ export async function chatChecks(
 
 /** Container: private surfaces require a session (no pre-auth chat). */
 export async function chatDisabledChecks(base: string): Promise<void> {
-  const page = await fetch(`${base}/chat`, { redirect: "manual" });
+  const page = await fetch(`${base}/chat/new`, { redirect: "manual" });
   await page.arrayBuffer();
   const api = await fetch(`${base}/api/conversations`);
   await api.arrayBuffer();
   check(
-    "container: /chat redirects to sign-in and the API requires a session",
+    "container: /chat/new redirects to sign-in and the API requires a session",
     page.status === 302 &&
       (page.headers.get("location") ?? "").startsWith("/login") &&
       api.status === 401,

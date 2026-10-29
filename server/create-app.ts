@@ -35,6 +35,7 @@ import type { Logger } from "./logger.ts";
 import { isLoopbackAddress } from "./loopback.ts";
 import { buildApiRouter, type AnyApiRoute, type RouteServices } from "./registry.ts";
 import { apiRoutes } from "./routes/index.ts";
+import { conversationResult, conversationSummaries, preferencesDto } from "./services/bootstrap.ts";
 import { createHealthService } from "./services/health.ts";
 
 export const JSON_BODY_LIMIT = "256kb";
@@ -264,12 +265,18 @@ export function createApp(options: AppOptions): ChatUiApp {
   }, 3_600_000);
   retentionTimer.unref();
 
+  const preferences = new PreferencesStore(paths, locks);
   const services: RouteServices = {
     conversationDto: async (userId, id) =>
       toConversationDto(await conversations.get(userId, id), services, userId),
+    bootstrap: {
+      conversations: (userId) => conversationSummaries(services, userId),
+      conversation: (userId, id) => conversationResult(services, userId, id),
+      preferences: async (userId) => preferencesDto(await preferences.get(userId)),
+    },
     auth,
     users,
-    preferences: new PreferencesStore(paths, locks),
+    preferences,
     sseConnections,
     health: createHealthService(options.version),
     models,

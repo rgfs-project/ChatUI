@@ -136,12 +136,33 @@ async function developmentHydrationCheck(dataDir: string, llamaUrl: string): Pro
       }
     });
     page.on("pageerror", (err) => problems.push(`pageerror: ${err.message}`));
-    for (const path of ["/", "/login"]) {
-      await page.goto(`http://127.0.0.1:${String(port)}${path}`);
+    const devBase = `http://127.0.0.1:${String(port)}`;
+    for (const path of ["/status", "/login"]) {
+      await page.goto(`${devBase}${path}`);
       await page.waitForSelector('html[data-hydrated="true"]', { timeout: 30_000 });
     }
+    // Signed in: the chat shell, a stored conversation and the settings overlay.
+    const session = await apiLogin(devBase, "admin", PASSWORD);
+    const [name, value] = (session?.cookie ?? "=").split("=");
+    await page.context().addCookies([{ name: name ?? "", value: value ?? "", url: devBase }]);
+    const list = session
+      ? ((await (
+          await fetch(`${devBase}/api/conversations`, { headers: sessionHeaders(session) })
+        ).json()) as { conversations: { id: string }[] })
+      : { conversations: [] };
+    const chatPaths = ["/chat/new", "/settings/general"];
+    if (list.conversations[0]) chatPaths.push(`/chat/${list.conversations[0].id}`);
+    for (const path of chatPaths) {
+      await page.goto(`${devBase}${path}`);
+      try {
+        await page.waitForSelector('html[data-hydrated="true"]', { timeout: 30_000 });
+      } catch {
+        problems.push(`${path} did not hydrate`);
+      }
+      await page.waitForTimeout(300);
+    }
     check(
-      "INV-56: development build: / and /login hydrate without mismatch or console warnings",
+      "INV-56: development build: status, sign-in, chat and settings documents hydrate without mismatch or console warnings",
       problems.length === 0,
       problems.map((p) => p.slice(0, 300)).join(" | "),
     );
@@ -267,15 +288,15 @@ async function persistenceChecks(llamaUrl: string): Promise<void> {
  * logout and disabled accounts, on the production build.
  */
 async function authChecks(base: string, dataDir: string, admin: ApiSession): Promise<void> {
-  const anon = await fetch(`${base}/chat?c=00000000-0000-4000-8000-000000000000`, {
+  const anon = await fetch(`${base}/chat/00000000-0000-4000-8000-000000000000`, {
     redirect: "manual",
   });
   await anon.arrayBuffer();
   check(
-    "INV-54: signed out, /chat redirects to sign-in with a validated return-to",
+    "INV-54: signed out, a chat URL redirects to sign-in with a validated return-to",
     anon.status === 302 &&
       anon.headers.get("location") ===
-        "/login?returnTo=%2Fchat%3Fc%3D00000000-0000-4000-8000-000000000000",
+        "/login?returnTo=%2Fchat%2F00000000-0000-4000-8000-000000000000",
     `${String(anon.status)} ${anon.headers.get("location") ?? ""}`,
   );
   const anonApi = await fetch(`${base}/api/conversations`);
@@ -287,7 +308,7 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
   const bob = await apiLogin(base, "bob", PASSWORD);
   if (!bob) return;
   const secret = await sendAndWait(base, admin, MOCK_MODELS.chat, "admin-only secret");
-  const doc = await fetch(`${base}/chat?c=${secret.conversationId}`, {
+  const doc = await fetch(`${base}/chat/${secret.conversationId}`, {
     headers: sessionHeaders(admin),
   });
   const docHtml = await doc.text();
@@ -297,7 +318,7 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
       doc.headers.get("cache-control") === "private, no-store" &&
       docHtml.includes("admin-only secret"),
   );
-  const cross = await fetch(`${base}/chat?c=${secret.conversationId}`, {
+  const cross = await fetch(`${base}/chat/${secret.conversationId}`, {
     headers: sessionHeaders(bob),
   });
   const crossHtml = await cross.text();
@@ -307,7 +328,8 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
   await crossApi.arrayBuffer();
   check(
     "INV-15: another user's conversation looks like not-found (HTML and API)",
-    !crossHtml.includes("admin-only secret") &&
+    cross.status === 404 &&
+      !crossHtml.includes("admin-only secret") &&
       crossHtml.includes("does not exist") &&
       crossApi.status === 404,
   );
@@ -315,7 +337,7 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
   const mixed = await Promise.all(
     Array.from({ length: 20 }, (_, i) => {
       const who = i % 2 === 0 ? admin : bob;
-      return fetch(`${base}/chat`, { headers: sessionHeaders(who) }).then(async (r) => ({
+      return fetch(`${base}/chat/new`, { headers: sessionHeaders(who) }).then(async (r) => ({
         who,
         html: await r.text(),
       }));
@@ -339,8 +361,35 @@ async function authChecks(base: string, dataDir: string, admin: ApiSession): Pro
   await returnTo.arrayBuffer();
   check(
     "login return-to is validated (no open redirect)",
-    returnTo.status === 302 && returnTo.headers.get("location") === "/chat",
+    returnTo.status === 302 && returnTo.headers.get("location") === "/chat/new",
     returnTo.headers.get("location") ?? "",
+  );
+  const unknown = await fetch(`${base}/no/such/page`, { headers: sessionHeaders(bob) });
+  const unknownHtml = await unknown.text();
+  check(
+    "INV-57: signed in, an unknown URL is a real 404 inside the shell",
+    unknown.status === 404 &&
+      unknownHtml.includes("Page not found") &&
+      unknownHtml.includes('aria-label="Chats"'),
+  );
+  const [adminPage, bobAdmin] = await Promise.all([
+    fetch(`${base}/admin`, { headers: sessionHeaders(admin) }),
+    fetch(`${base}/admin`, { headers: sessionHeaders(bob) }),
+  ]);
+  await Promise.all([adminPage.arrayBuffer(), bobAdmin.arrayBuffer()]);
+  check(
+    "/admin is gated by the server-side role (admin 200, user 404)",
+    adminPage.status === 200 && bobAdmin.status === 404,
+    `${String(adminPage.status)} ${String(bobAdmin.status)}`,
+  );
+  const legacy = await fetch(`${base}/chat?c=${secret.conversationId}`, {
+    headers: sessionHeaders(admin),
+    redirect: "manual",
+  });
+  await legacy.arrayBuffer();
+  check(
+    "old /chat?c=<id> links redirect to /chat/<id>",
+    legacy.status === 301 && legacy.headers.get("location") === `/chat/${secret.conversationId}`,
   );
   const out = await fetch(`${base}/api/auth/logout`, {
     method: "POST",

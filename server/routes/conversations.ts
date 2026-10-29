@@ -3,7 +3,6 @@ import { canonicalUuid } from "@shared/ids";
 import {
   conversationDtoSchema,
   conversationListSchema,
-  conversationSummarySchema,
   createConversationSchema,
   renameConversationSchema,
   type ConversationDto,
@@ -12,6 +11,7 @@ import {
 import { ErrorCode } from "@shared/errors";
 import { AppError } from "../errors.ts";
 import { defineRoute, userOf, type RouteServices } from "../registry.ts";
+import { conversationSummaries } from "../services/bootstrap.ts";
 import { StorageError, type LoadedConversation } from "../storage/conversations.ts";
 
 const idParams = z.strictObject({ id: canonicalUuid });
@@ -85,16 +85,7 @@ export const listConversationsRoute = defineRoute({
   request: { query: z.strictObject({}) },
   response: conversationListSchema,
   handler: (_input, ctx) => ({
-    conversations: ctx.services.conversations.list(userOf(ctx).userId).map((entry) =>
-      conversationSummarySchema.parse({
-        id: entry.id,
-        title: entry.title,
-        createdAt: entry.createdAt,
-        updatedAt: entry.updatedAt,
-        messageCount: entry.messageCount,
-        malformed: entry.malformed,
-      }),
-    ),
+    conversations: conversationSummaries(ctx.services, userOf(ctx).userId),
   }),
   fixture: {},
 });

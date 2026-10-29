@@ -4,6 +4,7 @@ import { isbot } from "isbot";
 import { renderToPipeableStream, type RenderToPipeableStreamOptions } from "react-dom/server";
 import { ServerRouter, type EntryContext, type RouterContextProvider } from "react-router";
 import { appContext } from "./context";
+import { NonceContext } from "./lib/nonce";
 
 export const streamTimeout = 5_000;
 
@@ -37,7 +38,9 @@ export default function handleRequest(
     }, streamTimeout + 1000);
 
     const { pipe, abort } = renderToPipeableStream(
-      <ServerRouter context={routerContext} url={request.url} nonce={nonce} />,
+      <NonceContext.Provider value={nonce}>
+        <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
+      </NonceContext.Provider>,
       {
         nonce,
         [readyOption]() {

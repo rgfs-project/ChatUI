@@ -1,0 +1,158 @@
+.markdown {
+  overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p {
+  margin: 0 0 16px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 24px 0 8px;
+  font-weight: var(--weight-semibold);
+}
+
+.markdown h1 {
+  font-size: 24px;
+  line-height: 32px;
+}
+
+.markdown h2 {
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.markdown h3 {
+  font-size: 18px;
+  line-height: 28px;
+}
+
+.markdown h4 {
+  font-size: 16px;
+  line-height: 26px;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 4px 0 8px;
+  padding-left: 26px;
+}
+
+.markdown li {
+  padding-left: 6px;
+}
+
+.markdown blockquote {
+  margin: 0 0 16px;
+  padding-left: 16px;
+  border-left: 3px solid var(--divider);
+  color: var(--text-secondary);
+}
+
+.markdown hr {
+  margin: 24px 0;
+  border: 0;
+  border-top: 1px solid var(--divider);
+}
+
+.markdown a {
+  color: var(--accent);
+}
+
+.inline-code {
+  padding: 1px 4px;
+  border-radius: var(--radius-inline-code);
+  background: var(--inline-code-bg);
+  font-family: var(--font-mono);
+  font-size: var(--text-inline-code);
+  font-weight: var(--weight-medium);
+  line-height: var(--lh-inline-code);
+}
+
+.code-block {
+  margin: 0 0 16px;
+  overflow: hidden;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-code);
+  background: var(--code-bg);
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 8px 0 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 26px;
+}
+
+.code-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.code-copy:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 0 20px 13px;
+  overflow-x: auto;
+  color: var(--code-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  line-height: var(--lh-code);
+}
+
+.code-block pre code {
+  font: inherit;
+  white-space: pre;
+}
+
+.table-wrap {
+  margin: 0 0 16px;
+  overflow-x: auto;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.markdown th,
+.markdown td {
+  padding: 8px 16px 8px 0;
+  border-bottom: 1px solid var(--divider);
+  text-align: left;
+}
+
+.markdown th {
+  font-weight: var(--weight-semibold);
+}
+
+.link-removed {
+  text-decoration: line-through;
+}

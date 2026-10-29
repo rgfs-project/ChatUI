@@ -1,4 +1,10 @@
-import { useEffect, type ReactNode } from "react";
+import {
+  HydrationBoundary,
+  QueryClientProvider,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -11,6 +17,12 @@ import {
 import type { Route } from "./+types/root";
 import { appContext } from "./context";
 import { setSession } from "./lib/api";
+import { paths } from "./lib/paths";
+import { dehydrateAllowed, getBrowserQueryClient, makeQueryClient } from "./lib/query/client";
+import { qk } from "./lib/query/keys";
+import { sessionQuery } from "./lib/query/queries";
+import { UiProvider } from "./lib/ui-context";
+import { readUiHints } from "./lib/ui-cookies";
 import stylesheet from "./app.css?url";
 
 export const links: LinksFunction = () => [
@@ -18,10 +30,24 @@ export const links: LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
 ];
 
-/** Browser-safe session bootstrap, rendered into private no-store HTML (§5). */
-export function loader({ context }: Route.LoaderArgs) {
+/**
+ * Browser-safe session bootstrap, rendered into private no-store HTML (§5),
+ * seeded into a QueryClient created for this request only (INV-55).
+ */
+export function loader({ context, request }: Route.LoaderArgs) {
   const { services, auth } = context.get(appContext);
-  return { session: services.auth.sessionDto(auth) };
+  const client = makeQueryClient();
+  client.setQueryData(qk.session(), services.auth.sessionDto(auth));
+  return {
+    dehydrated: dehydrateAllowed(client),
+    hints: readUiHints(request),
+    renderedAt: new Date().toISOString(),
+  };
+}
+
+/** After hydration the session lives in the query cache; the root never refetches. */
+export function shouldRevalidate() {
+  return false;
 }
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -53,13 +79,32 @@ function useHydrationMarker() {
   }, []);
 }
 
+/** Keeps the shared fetch adapter's identity in step with the session query. */
+function SessionSync() {
+  const client = useQueryClient();
+  const { data } = useQuery({ ...sessionQuery(), enabled: false });
+  useEffect(() => {
+    if (data) setSession(data);
+  }, [client, data]);
+  return null;
+}
+
 export default function App({ loaderData }: Route.ComponentProps) {
   useHydrationMarker();
-  // Client-only: the shared fetch wrapper learns the session after hydration.
-  useEffect(() => {
-    setSession(loaderData.session);
-  }, [loaderData.session]);
-  return <Outlet />;
+  // The browser has one QueryClient; each server render gets a fresh one (INV-55).
+  const [client] = useState(() =>
+    typeof window === "undefined" ? makeQueryClient() : getBrowserQueryClient(),
+  );
+  return (
+    <QueryClientProvider client={client}>
+      <HydrationBoundary state={loaderData.dehydrated}>
+        <UiProvider hints={loaderData.hints} renderedAt={loaderData.renderedAt}>
+          <SessionSync />
+          <Outlet />
+        </UiProvider>
+      </HydrationBoundary>
+    </QueryClientProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -75,7 +120,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       <h1>{title}</h1>
       <p>{message}</p>
       <p>
-        <a href="/">Return to the status page</a>
+        <a href={paths.newChat()}>Go to ChatUI</a>
       </p>
     </main>
   );

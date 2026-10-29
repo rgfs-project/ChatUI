@@ -1,0 +1,158 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  /* Chrome is not selectable; content opts back in with .selectable. */
+  user-select: none;
+}
+
+.selectable,
+input,
+textarea,
+kbd,
+.page {
+  user-select: text;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.icon-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-button);
+  height: var(--icon-button);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-row);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.icon-button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.pill-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--pill-border);
+  border-radius: var(--radius-pill);
+  background: var(--pill-bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: var(--weight-medium);
+  line-height: 20px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pill-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.pill-primary {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+
+.pill-primary:hover:not(:disabled) {
+  background: var(--text);
+  opacity: 0.85;
+}
+
+.pill-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.pill-danger:hover:not(:disabled) {
+  background: var(--danger);
+  opacity: 0.85;
+}
+
+.pill-button:disabled {
+  opacity: 0.5;
+}
+
+.text-field {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--pill-border);
+  border-radius: 10px;
+  background: var(--composer-bg);
+  font-size: 15px;
+}
+
+.form-error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 14px;
+}
+
+kbd {
+  padding: 2px 8px;
+  border: 1px solid var(--pill-border);
+  border-radius: 6px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+}

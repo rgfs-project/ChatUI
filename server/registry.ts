@@ -1,7 +1,12 @@
 import { Router, type Request, type Response } from "express";
 import type { z } from "zod";
 import type { HealthDto } from "@shared/api";
-import type { ConversationDto } from "@shared/conversations";
+import type {
+  ConversationDto,
+  ConversationResult,
+  ConversationSummary,
+} from "@shared/conversations";
+import type { PreferencesDto } from "@shared/preferences";
 import { ErrorCode } from "@shared/errors";
 import type { AuthContext, AuthService } from "./auth/service.ts";
 import type { SendService } from "./chat/send-service.ts";
@@ -34,6 +39,12 @@ export interface RouteServices {
   send: SendService;
   /** Loads a conversation DTO owned by `userId` (SSR loaders and API). */
   conversationDto: (userId: string, id: string) => Promise<ConversationDto>;
+  /** API-identical DTOs for SSR document loaders (contracts §9.2a). */
+  bootstrap: {
+    conversations: (userId: string) => ConversationSummary[];
+    conversation: (userId: string, id: string) => Promise<ConversationResult>;
+    preferences: (userId: string) => Promise<PreferencesDto>;
+  };
   auth: AuthService;
   users: UserStore;
   preferences: PreferencesStore;

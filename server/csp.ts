@@ -28,7 +28,10 @@ export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
     "default-src": ["'self'"],
     "script-src": ["'self'", nonce],
     "script-src-attr": ["'none'"],
-    "style-src": ["'self'"],
+    // The nonce admits only the scroll-lock <style> element that modal dialogs
+    // insert (react-remove-scroll); style attributes stay blocked.
+    "style-src": ["'self'", nonce],
+    "style-src-attr": ["'none'"],
     "img-src": ["'self'"],
     "font-src": ["'self'"],
     "connect-src": ["'self'"],
@@ -42,6 +45,7 @@ export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
   };
   if (mode === "development") {
     directives["style-src"] = ["'self'", "'unsafe-inline'"];
+    directives["style-src-attr"] = ["'unsafe-inline'"];
     directives["connect-src"] = ["'self'", "ws://localhost:*", "ws://127.0.0.1:*"];
   }
   return directives;

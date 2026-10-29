@@ -1,0 +1,337 @@
+/* The fixed shell: sidebar, main column and header. The document never scrolls. */
+.app {
+  display: flex;
+  height: 100dvh;
+  overflow: hidden;
+  font-size: var(--text-ui);
+  line-height: var(--lh-ui);
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--sidebar-width);
+  min-height: 0;
+  background: var(--bg);
+  box-shadow: inset -1px 0 0 var(--divider);
+}
+
+.sidebar-collapsed .sidebar {
+  display: none;
+}
+
+.sidebar-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--bar-height);
+  padding: 0 7px 0 16px;
+}
+
+.brand {
+  font-size: var(--text-brand);
+  font-weight: var(--weight-semibold);
+  line-height: var(--lh-brand);
+  text-decoration: none;
+}
+
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 0 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.side-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--row-height);
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-row);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-ui);
+  line-height: var(--lh-ui);
+  text-align: left;
+  text-decoration: none;
+}
+
+.side-row:hover,
+.side-row.is-active {
+  background: var(--hover);
+}
+
+.side-label {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  margin: 4px 6px 0;
+  padding: 0 10px;
+  border-radius: var(--radius-label);
+  color: var(--text-secondary);
+  font-size: var(--text-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--lh-label);
+}
+
+.side-note {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--text-secondary);
+}
+
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+}
+
+.chat-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--row-height);
+  border-radius: var(--radius-row);
+}
+
+.chat-row:hover,
+.chat-row.is-active,
+.chat-row:focus-within {
+  background: var(--hover);
+}
+
+.chat-link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  padding: 6px 10px;
+  border-radius: var(--radius-row);
+  text-decoration: none;
+}
+
+.chat-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.chat-title-text {
+  display: inline-block;
+}
+
+.chat-flag {
+  flex: none;
+  color: var(--danger);
+  font-size: var(--text-sub);
+}
+
+.row-menu {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: var(--radius-label);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.chat-row:hover .row-menu,
+.chat-row:focus-within .row-menu,
+.chat-row.is-active .row-menu,
+.row-menu[data-state="open"] {
+  display: inline-flex;
+}
+
+.row-menu:hover {
+  color: var(--text);
+}
+
+.sidebar-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 60px;
+  padding: 6px 14px;
+}
+
+.profile-row {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 48px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-row);
+  background: transparent;
+  text-align: left;
+}
+
+.profile-row:hover,
+.profile-row[data-state="open"] {
+  background: var(--hover);
+}
+
+.avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--avatar);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: var(--weight-semibold);
+}
+
+.profile-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profile-name {
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-sub {
+  color: var(--text-secondary);
+  font-size: var(--text-sub);
+  line-height: var(--lh-sub);
+}
+
+/* ── Header ── */
+.chat-header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  height: var(--bar-height);
+  padding: 0 7px;
+  background: var(--bg);
+}
+
+.header-start,
+.header-end {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app:not(.sidebar-collapsed) .sidebar-open {
+  display: none;
+}
+
+.model-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: var(--icon-button);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-row);
+  background: transparent;
+  font-size: var(--text-brand);
+  line-height: var(--lh-brand);
+}
+
+.model-trigger:hover,
+.model-trigger[data-state="open"] {
+  background: var(--hover);
+}
+
+.model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-message {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.page-message h1 {
+  margin: 0;
+  font-size: var(--text-greeting);
+  font-weight: var(--weight-regular);
+  line-height: var(--lh-greeting);
+}
+
+/* Narrow windows keep working: the sidebar overlays the chat (Phase 11 owns phones). */
+@media (max-width: 767px) {
+  .sidebar,
+  .sidebar-collapsed .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 20;
+    display: none;
+    width: min(var(--sidebar-width), 85vw);
+  }
+
+  .narrow-open .sidebar {
+    display: flex;
+  }
+
+  .narrow-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    background: var(--backdrop);
+  }
+
+  .app:not(.sidebar-collapsed) .sidebar-open,
+  .app.sidebar-collapsed .sidebar-open {
+    display: inline-flex;
+  }
+}

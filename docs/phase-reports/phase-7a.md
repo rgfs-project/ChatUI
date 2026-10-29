@@ -1,0 +1,84 @@
+## Phase 7a report
+
+Scope: package Phase 7 (core UI) plus the old-build chat features assigned to 7a in `docs/ROADMAP.md`. Settings appearance, redesigned sign-in/status/error pages and the demo instance are 7b.
+
+- **Scope completed (files/features):**
+  - Routing (`app/routes.ts`, `app/routes/app-layout.tsx`, `app/lib/paths.ts`):
+    - protected layout with one auth guard for `/chat/new`, `/chat/:id`, `/settings/:section?`, `/admin` and the catch-all
+    - `/` redirects to the chat; status page moved to `/status`
+    - old `/chat?c=<id>` and `/account` links redirect
+  - Data layer (`app/lib/query/*`, `app/lib/session.ts`, `server/services/bootstrap.ts`):
+    - TanStack Query with a user-scoped key factory and a fresh QueryClient per request
+    - allowlisted dehydration; layout `clientLoader` after hydration
+    - account-switch purge
+    - API routes and loaders share the same DTO builders
+  - Chat surfaces (`app/chat/*`):
+    - shell: sidebar (Recents, row menu, profile menu) and header (model menu, chat options)
+    - pill composer that grows to two rows
+    - messages: orange-accent user bubbles, Markdown replies, reasoning, statuses, copy actions, time separators
+    - live reply, scroll intent with Jump to latest, greeting and "Write or edit" starters
+    - rename dialog, in-app delete confirmation, toasts
+    - selection allow-list and Ctrl+A, keyboard shortcuts, sidebar collapse remembered by cookie
+  - Primitives (`app/ui/*`): Radix DropdownMenu, Dialog, AlertDialog and Tooltip wrappers; native toasts; decision record in `ARCHITECTURE.md`.
+  - Settings overlay (`app/routes/settings.tsx`): General (default model), Account (password, log out), Keyboard shortcuts. `/admin` is a reserved, server role-gated overlay.
+  - Tokens and styles (`app/styles/*`): plan §5–7 values with the orange accent.
+  - CSP (`server/csp.ts`): `style-src` also carries the response nonce (only for the dialog scroll-lock `<style>`), and `style-src-attr 'none'` is new.
+  - Tests: mock model `mock-long`; E2E seed data (second account, 200-message chat); one shared E2E sign-in.
+- **Acceptance criteria with test evidence:**
+  - Component tests (`tests/client/`):
+    - scroll pin/unpin and jump (`scroll-intent.test.ts`)
+    - keyboard send, Shift+Enter, IME, no double send, malformed and missing states (`composer.test.tsx`)
+    - XSS payloads inert, unfinished fences/tables/lists (`markdown.test.tsx`)
+    - render and mount counts while streaming (`render-isolation.test.tsx`)
+    - per-request QueryClient with two concurrent users, dehydration allowlist, account purge (`query-ssr.test.ts`)
+    - model choice order and time separators
+  - Playwright:
+    - 200-message independent scroll, opening at the latest message, find-in-page, streaming Markdown while pinned and scrolled up, Jump to latest
+    - sidebar collapse rendered by the server, portal menus, Ctrl+A
+    - INV-47 keyboard/focus/ARIA snapshot, rename/delete
+    - INV-53: deep-link reload, draft URL replaced, Settings Back/Forward, direct overlay link, missing vs unmatched, signed-out return-to, account switch
+    - no duplicate initial fetch
+    - streaming reload, network drop, cancel, reply stays in its own chat
+    - measurement audit in light and dark
+  - CSRF retry through the shared adapter: existing `tests/client/api.test.ts`, plus `composer.test.tsx` (token and expected user on sends).
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (25 files, 384 tests)
+  - `build`: PASS
+  - `verify`: PASS (77/77)
+  - `test:e2e`: PASS (23/23)
+  - `verify:compose`: **NOT RUN locally**. This environment has the Docker client but no daemon, and no Podman. CI runs it on Docker and rootless Podman on push.
+  - `npm audit --omit=dev`: **FAIL, pre-existing.** Four advisories in packages locked since earlier phases, none added here: undici 8.11.2 (fixed in 8.12.3, including a TLS-options issue in `Agent`, which the SSRF client uses), zod 4.6.5 (fixed in 4.6.7), body-parser 2.3.0 and qs 6.16.0 via Express. Fixing them updates dependencies, which needs approval.
+  - Host Node here is 22.22.0; the project pins 24.21.0 and CI uses it.
+- **Invariants: ID → enforcement → test:**
+  - INV-22 → `markdown.tsx` → `markdown.test.tsx`
+  - INV-32 (7a portion) → delta subscription isolation → `render-isolation.test.tsx`
+  - INV-47 (Phase 7 portion) → `app/ui/*` → `chat-ui.spec.ts`
+  - INV-53 → protected layout, paths, drafts → `routing.spec.ts`, verify
+  - INV-55 → per-request clients, allowlist, user-scoped keys → `query-ssr.test.ts`, verify, `routing.spec.ts`
+  - INV-56 → uncontrolled composer, hydration boundary, stale time, `clientLoader` → verify (pre-hydration typing, dev hydration of chat and settings), `routing.spec.ts`
+  - INV-57 → 404/422 chat statuses, in-shell 404, CSP nonce → verify, `routing.spec.ts`
+- **Security, SSR, data and performance observations:**
+  - No new API routes or persistence. Loaders read through `services.bootstrap`, so a document can't expose fields the API wouldn't.
+  - Dehydrated HTML holds only allowlisted DTOs (verify checks there is no `passwordHash`).
+  - The browser sees the CSP nonce through `script.nonce`, as any page script can. Injected markup still can't run.
+  - Client JavaScript, all chunks: 781 KiB raw / 249 KiB gzip. The Markdown renderer and Radix load with the chat route. Phase 9 measures, splits and sets the budget.
+- **Dependencies and why approved:**
+  - `@tanstack/react-query` 5.104.2: the single server-state cache (Phase 7 contract).
+  - `react-markdown` 10.1.0 and `remark-gfm` 4.0.1: safe GFM rendering without raw HTML.
+  - `lucide-react` 1.57.0: icons.
+  - `@radix-ui/react-dropdown-menu` 2.2.1, `-dialog` 1.3.1, `-alert-dialog` 1.2.1, `-tooltip` 1.4.1: accessible primitives chosen in the decision record.
+  - Dev: `@testing-library/react` 16.3.3, `@testing-library/dom` 10.4.2, `@testing-library/user-event` 14.6.7 and `jsdom` 30.1.2 for component tests.
+  - All are pinned exactly. No existing locked version changed.
+- **Deviations / limitations / unverified items:**
+  - The phase is split into 7a and 7b per the roadmap.
+  - Tokens and the measurement audit came in early (plan §1 #4). The accent is orange at the owner's request; the package's "monochrome" wording is superseded.
+  - The narrow-window sidebar is an interim overlay; the device-based phone layout is Phase 11.
+  - Suggestions are static starters that only fill the composer.
+  - Screen-reader behaviour is checked by ARIA snapshots and roles only; no real screen reader was run.
+  - Optimistic sends, session-expiry re-authentication and loading states are Phase 8.
+- **Commit/tag status:**
+  - Commit `feat(phase-7a): core chat interface and conversation navigation`, tag `phase-7a`, pushed to `origin/main` (the owner's standing instruction).
+  - Tags `phase-1a` … `phase-6` were missing and were recreated on their original commits.
+- **Questions needing approval:**
+  - May I update undici to 8.12.3 and zod to 4.6.7 and refresh the lockfile for body-parser/qs, to clear the audit gate?

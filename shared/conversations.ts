@@ -68,3 +68,12 @@ export const operationResultSchema = z.strictObject({
   userMessageId: z.uuid(),
   assistantMessageId: z.uuid(),
 });
+
+/**
+ * A conversation read as a query result (Phase 7): a missing or malformed
+ * conversation is a displayable outcome, not a thrown error, so it can be
+ * server-rendered and dehydrated like any other result.
+ */
+export type ConversationResult =
+  | { ok: true; conversation: ConversationDto }
+  | { ok: false; code: "NOT_FOUND" | "CONVERSATION_MALFORMED" };

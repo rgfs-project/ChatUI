@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import type { HealthDto } from "@shared/api";
 import { appContext } from "../context";
-import type { Route } from "./+types/home";
+import type { Route } from "./+types/status";
 
 export function meta(): Route.MetaDescriptors {
   return [{ title: "ChatUI · Status" }, { name: "description", content: "ChatUI server status" }];
@@ -84,7 +84,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </span>
       </p>
       <p>
-        {loaderData.signedIn ? <a href="/chat">Open your chats</a> : <a href="/login">Sign in</a>}
+        {loaderData.signedIn ? (
+          <a href="/chat/new">Open your chats</a>
+        ) : (
+          <a href="/login">Sign in</a>
+        )}
       </p>
     </main>
   );

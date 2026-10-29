@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 6 (production streaming).** Signed-in chat with per-user canonical Markdown storage, several OpenAI-compatible providers, server-owned generations that survive disconnects (reconnect replays exactly what was missed) and are recovered after a restart (partial replies are stored as interrupted), plus browser E2E tests. Admin, the full UI and uploads arrive in later phases.
+> **Status: Phase 7a (core chat interface).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, account, shortcuts) as an overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md); appearance settings and redesigned sign-in pages come in 7b, admin, uploads and the rest later.
 
 ## Prerequisites
 
@@ -66,16 +66,16 @@ With Compose, run the same command inside the container:
 docker compose exec chatui node server/cli.ts user:create --username admin --admin
 ```
 
-Then open the URL in `PUBLIC_ORIGIN` (default `http://localhost:3000`) and sign in. `REGISTRATION_MODE=open` lets people create their own accounts at `/register`. Changing your password at `/account` signs you out everywhere.
+Then open the URL in `PUBLIC_ORIGIN` (default `http://localhost:3000`) and sign in. `REGISTRATION_MODE=open` lets people create their own accounts at `/register`. Changing your password (Settings → Account) signs you out everywhere.
 
 ## Chatting (development)
 
 ```bash
 LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
-# create an account (above), then open http://localhost:3000/chat
+# create an account (above), then open http://localhost:3000/
 ```
 
-The page renders the composer on the server (you can type before JavaScript loads). Replies stream with the model's reasoning shown separately. Reloading keeps watching the running reply, and Stop cancels it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
+`/` opens a new chat (`/chat/new`); each conversation has its own address (`/chat/<id>`), and the server status page is at `/status`. The page renders the composer on the server (you can type before JavaScript loads). Replies stream with the model's reasoning shown separately. Reloading keeps watching the running reply, and Stop cancels it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
 
 ## Providers (`providers.json`)
 
@@ -194,13 +194,17 @@ CI (`.github/workflows/ci.yml`) runs every gate on every push, plus `verify:comp
 
 ```text
 app/        React Router route modules, root layout, server/client entries
+app/chat/   Chat shell: sidebar, header, transcript, composer, generation observer
+app/ui/     Accessible primitives (Radix menu/dialog/tooltip wrappers, toasts)
+app/lib/    Paths, fetch adapter, TanStack Query keys/queries, UI hints
+app/styles/ Design tokens and stylesheets
 server/     Express app, config, logging, CSP, errors, validation, API registry
 shared/     Types and schemas shared by client and server (@shared/*)
-tests/      Vitest + Supertest tests
+tests/      Vitest + Supertest (server, storage, client components) and Playwright (e2e)
 scripts/    verify and dev orchestration
 public/     Static files copied into the client build
 data/       Persistent data (git-ignored): canonical Markdown, derived index, operation records
-docs/       Phase reports
+docs/       Roadmap and phase reports
 ```
 
 ## Architecture

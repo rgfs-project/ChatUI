@@ -1,8 +1,10 @@
 import { useState, type SyntheticEvent } from "react";
 import { redirect, useNavigate, useSearchParams } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import type { SessionDto } from "@shared/auth";
 import { appContext } from "../context";
-import { safeReturnTo, setSession } from "../lib/api";
+import { applySession } from "../lib/session";
+import { safeReturnTo } from "../lib/api";
 import type { Route } from "./+types/login";
 
 export function meta(): Route.MetaDescriptors {
@@ -18,6 +20,7 @@ export function loader({ context, request }: Route.LoaderArgs) {
 
 export default function Login({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
+  const client = useQueryClient();
   const [params] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,7 +41,7 @@ export default function Login({ loaderData }: Route.ComponentProps) {
         setError(body.error?.message ?? "Sign-in failed");
         return;
       }
-      setSession(body);
+      applySession(client, body);
       await navigate(safeReturnTo(params.get("returnTo")), { replace: true });
     } catch {
       setError("Could not reach ChatUI.");
