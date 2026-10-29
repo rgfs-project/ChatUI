@@ -1,5 +1,5 @@
-import { HydrationBoundary, useQuery } from "@tanstack/react-query";
-import { useEffect, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { HydrationBoundary, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   data,
   Outlet,
@@ -8,15 +8,18 @@ import {
   useMatches,
   useNavigate,
   useParams,
+  useRevalidator,
 } from "react-router";
 import type { SessionDto } from "@shared/auth";
 import type { ConversationResult } from "@shared/conversations";
 import type { ProviderModelsDto } from "@shared/generations";
 import { ChatProvider } from "../chat/chat-context";
 import { ChatView } from "../chat/chat-view";
+import { ReauthDialog } from "../chat/reauth";
 import { RenameDialog } from "../chat/rename-dialog";
 import { Sidebar } from "../chat/sidebar";
 import { appContext } from "../context";
+import { SESSION_EXPIRED_EVENT } from "../lib/api";
 import { conversationIdOfPath, overlayBackground, paths } from "../lib/paths";
 import { dehydrateAllowed, getBrowserQueryClient, makeQueryClient } from "../lib/query/client";
 import { qk } from "../lib/query/keys";
@@ -28,14 +31,22 @@ import {
   sessionQuery,
 } from "../lib/query/queries";
 import { useRenderProbe } from "../lib/render-probe";
+import { purgeUserCache } from "../lib/session";
 import { useUi } from "../lib/ui-context";
+import { ErrorBoundary as AreaBoundary } from "../ui/error-boundary";
 import { ConfirmProvider } from "../ui/dialog";
 import { ToastProvider } from "../ui/toast";
 import { TooltipProvider } from "../ui/tooltip";
 import type { Route } from "./+types/app-layout";
 
-/** SSR waits this long for model discovery, then renders without it. */
+/**
+ * Startup dependency graph (Phase 8). Critical, awaited concurrently: the
+ * session (root loader), the URL's conversation, preferences and models
+ * (bounded by the discovery budget). Secondary: the conversation list, which
+ * gets a short budget so it can never hold up the shell and composer.
+ */
 const MODEL_DISCOVERY_BUDGET_MS = 2_500;
+const SECONDARY_BUDGET_MS = 300;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 type RouteKind = "chat" | "overlay" | "page";
@@ -70,7 +81,12 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     client
       .query({
         queryKey: qk.conversations(userId),
-        queryFn: () => services.bootstrap.conversations(userId),
+        // Secondary (sidebar): never holds the document; the browser fetches it if late.
+        queryFn: () =>
+          withBudget(
+            Promise.resolve(services.bootstrap.conversations(userId)),
+            SECONDARY_BUDGET_MS,
+          ),
       })
       .catch(noop),
     client
@@ -174,6 +190,22 @@ function Shell() {
         ? (conversationIdOfPath(background) ?? null)
         : null;
 
+  // Session expired mid-use: the chat surfaces (and their queries) step aside
+  // for the re-authentication dialog; drafts stay in tab memory (contracts §12).
+  const client = useQueryClient();
+  const [expired, setExpired] = useState(false);
+  useEffect(() => {
+    const onExpired = (event: Event) => {
+      if ((event as CustomEvent<{ userId: string }>).detail.userId !== user?.id) return;
+      purgeUserCache(client);
+      setExpired(true);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    };
+  }, [client, user?.id]);
+
   // Picking something in the narrow overlay sidebar closes it.
   useEffect(() => {
     closeNarrow();
@@ -202,8 +234,20 @@ function Shell() {
     }
   }
 
-  // The guard resolved signed-out (logout, expiry, account change in progress).
+  // The guard resolved signed-out (logout, account change in progress).
   if (!user) return null;
+  if (expired) {
+    return (
+      <div className="app">
+        <ReauthDialog
+          user={user}
+          onRestored={() => {
+            setExpired(false);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <ChatProvider user={user} conversationId={conversationId}>
@@ -211,7 +255,15 @@ function Shell() {
         className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}${narrowOpen ? " narrow-open" : ""}`}
         onKeyDown={onKeyDown}
       >
-        <Sidebar />
+        <AreaBoundary
+          area="Sidebar"
+          className="sidebar"
+          onRetry={() => {
+            void client.invalidateQueries({ queryKey: qk.conversations(user.id) });
+          }}
+        >
+          <Sidebar />
+        </AreaBoundary>
         {narrowOpen ? (
           <div
             className="narrow-backdrop"
@@ -226,5 +278,28 @@ function Shell() {
       {kind === "overlay" ? <Outlet /> : null}
       <RenameDialog />
     </ChatProvider>
+  );
+}
+
+/** Shell-level failure: the protected layout itself could not load or render. */
+export function ErrorBoundary() {
+  const revalidator = useRevalidator();
+  return (
+    <main className="auth">
+      <title>Something went wrong · ChatUI</title>
+      <div className="auth-card error-card" role="alert">
+        <h1>Something went wrong</h1>
+        <p className="auth-note">ChatUI could not load this page.</p>
+        <button
+          type="button"
+          className="pill-button pill-primary"
+          onClick={() => {
+            void revalidator.revalidate();
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    </main>
   );
 }

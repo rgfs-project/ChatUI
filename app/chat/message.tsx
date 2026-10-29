@@ -54,16 +54,33 @@ export function Reasoning({ text }: { text: string }) {
   );
 }
 
-export function UserBubble({ content, pending }: { content: string; pending?: boolean }) {
+export function UserBubble({
+  content,
+  pending,
+  onCheck,
+}: {
+  content: string;
+  /** An optimistic message: still sending, or its outcome is unknown. */
+  pending?: "sending" | "unknown";
+  onCheck?: () => void;
+}) {
   return (
-    <div className={`msg msg-user${pending ? " is-pending" : ""}`} data-testid="message-user">
+    <div
+      className={`msg msg-user${pending ? ` is-pending is-${pending}` : ""}`}
+      data-testid="message-user"
+    >
       <div className="bubble selectable">{content}</div>
       <div className="msg-actions">
-        {pending ? (
-          <span className="msg-note">Sending…</span>
-        ) : (
-          <CopyButton text={content} label="Copy message" />
-        )}
+        {pending === "sending" ? <span className="msg-note">Sending…</span> : null}
+        {pending === "unknown" ? (
+          <span className="msg-note" role="status">
+            Not sure this was sent.{" "}
+            <button type="button" className="link-button" onClick={onCheck}>
+              Check the conversation
+            </button>
+          </span>
+        ) : null}
+        {pending ? null : <CopyButton text={content} label="Copy message" />}
       </div>
     </div>
   );

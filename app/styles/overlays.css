@@ -445,3 +445,7 @@
 .switch:checked::after {
   transform: translateX(16px);
 }
+
+.reauth-dialog .dialog-title {
+  margin-bottom: 8px;
+}

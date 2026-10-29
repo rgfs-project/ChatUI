@@ -7,6 +7,7 @@ import {
   type GenerationState,
   type TerminalState,
 } from "@shared/generations";
+import { refreshSession, reportSessionExpired } from "../lib/api";
 import { qk } from "../lib/query/keys";
 
 /** The browser's view of one generation, kept under its query key. */
@@ -84,6 +85,14 @@ export function useGenerationObserver(userId: string, generationId: string | nul
       };
       update((v) => ({ ...v, state: t.state, finishReason: t.finishReason, error: t.error }));
       finish();
+    });
+    // A closed stream that did not end with a terminal event may mean the
+    // session ended (the server closes streams of revoked sessions, §5).
+    source.addEventListener("error", () => {
+      if (source.readyState !== EventSource.CLOSED) return; // the browser retries itself
+      void refreshSession(false).then((session) => {
+        if (session && !session.user) reportSessionExpired();
+      });
     });
     return () => {
       source.close();

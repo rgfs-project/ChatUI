@@ -177,3 +177,48 @@ describe("account boundary", () => {
     delete (globalThis as { window?: unknown }).window;
   });
 });
+
+describe("Phase 8: startup dependency graph (INV-29, INV-30)", () => {
+  it("critical loads start concurrently and a slow sidebar list never holds the document", async () => {
+    const events: string[] = [];
+    const timed = <T>(name: string, ms: number, value: T) => {
+      events.push(`start:${name}`);
+      return new Promise<T>((resolve) =>
+        setTimeout(() => {
+          events.push(`end:${name}`);
+          resolve(value);
+        }, ms),
+      );
+    };
+    const svc = services();
+    const slow = {
+      ...svc,
+      bootstrap: {
+        conversations: () => timed("list", 5_000, []),
+        conversation: (userId: string, id: string) =>
+          timed("conversation", 80, null).then(() => svc.bootstrap.conversation(userId, id)),
+        preferences: () => timed("preferences", 80, null).then(() => svc.bootstrap.preferences()),
+      },
+      models: { listModels: () => timed("models", 80, []) },
+    };
+    const context = new RouterContextProvider();
+    context.set(appContext, { nonce: "n", services: slow as never, auth: A });
+    const started = Date.now();
+    const result = (await layoutLoader({
+      context,
+      request: new Request(`http://x/chat/${CONV_A}`),
+      params: { conversationId: CONV_A },
+    } as never)) as unknown as { data: { dehydrated: { queries: { queryKey: unknown[] }[] } } };
+    const elapsed = Date.now() - started;
+    // Every load started before the first one finished: no serial waterfall.
+    const firstEnd = events.findIndex((e) => e.startsWith("end:"));
+    expect(events.slice(0, firstEnd).sort()).toEqual(
+      ["start:conversation", "start:list", "start:models", "start:preferences"].sort(),
+    );
+    // The secondary list's 5 s did not hold the document (budget 300 ms).
+    expect(elapsed).toBeLessThan(1_500);
+    const keys = result.data.dehydrated.queries.map((q) => q.queryKey[2]);
+    expect(keys).toContain("conversation");
+    expect(keys).not.toContain("conversations");
+  });
+});

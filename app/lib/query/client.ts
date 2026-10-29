@@ -7,10 +7,14 @@ import { DEHYDRATE_ALLOWLIST, resourceOf } from "./keys";
  */
 export const STALE_TIME_MS = 30_000;
 
-export function makeQueryClient(): QueryClient {
+/**
+ * Server render clients never retry: a document must not wait out a retry
+ * delay (a failed or late query is simply fetched again by the browser).
+ */
+export function makeQueryClient(server = typeof window === "undefined"): QueryClient {
   return new QueryClient({
     defaultOptions: {
-      queries: { staleTime: STALE_TIME_MS, retry: 1, refetchOnWindowFocus: false },
+      queries: { staleTime: STALE_TIME_MS, retry: server ? false : 1, refetchOnWindowFocus: false },
     },
   });
 }

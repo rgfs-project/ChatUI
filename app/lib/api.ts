@@ -9,6 +9,20 @@ let current: SessionDto | null = null;
 let epoch = 0;
 
 export const ACCOUNT_CHANGED_EVENT = "chatui:account-changed";
+/**
+ * The signed-in session stopped working mid-use (expired, revoked): the app
+ * opens the in-app re-authentication dialog (contracts §12). Fired once per
+ * session; `detail.userId` is the account whose draft may be restored.
+ */
+export const SESSION_EXPIRED_EVENT = "chatui:session-expired";
+let expiryReported = false;
+
+export function reportSessionExpired(): void {
+  const userId = current?.user?.id;
+  if (expiryReported || !userId) return;
+  expiryReported = true;
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { userId } }));
+}
 
 export class AccountChangedError extends Error {
   override name = "AccountChangedError";
@@ -19,6 +33,7 @@ export function setSession(session: SessionDto): void {
     epoch++;
     window.dispatchEvent(new CustomEvent(ACCOUNT_CHANGED_EVENT));
   }
+  if (session.user) expiryReported = false;
   current = session;
 }
 
@@ -66,6 +81,7 @@ export async function apiFetch(
     return fetch(url, { ...init, headers });
   };
   const response = await send();
+  if (response.status === 401) reportSessionExpired();
   if (!mutation) return response;
   const code = await errorCode(response);
   if (code === "SESSION_CHANGED") {

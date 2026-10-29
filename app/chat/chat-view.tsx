@@ -1,12 +1,13 @@
 import { ArrowDown, Trash2 } from "lucide-react";
-import { useEffect, useMemo } from "react";
-import { Link } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigation } from "react-router";
 import type { MessageDto } from "@shared/conversations";
 import { useHydrated } from "../lib/hydrated";
 import { useNonce } from "../lib/nonce";
-import { paths } from "../lib/paths";
+import { conversationIdOfPath, paths } from "../lib/paths";
 import { useRenderProbe } from "../lib/render-probe";
 import { useUi } from "../lib/ui-context";
+import { ErrorBoundary as AreaBoundary } from "../ui/error-boundary";
 import { useChat } from "./chat-context";
 import { Composer } from "./composer";
 import { Header } from "./header";
@@ -49,6 +50,29 @@ function ScrollToLatestOnLoad() {
   );
 }
 
+/** Chat-to-chat navigation that takes longer than this shows a spinner. */
+const SWITCH_SPINNER_DELAY_MS = 250;
+
+function useDelayedSwitch(): boolean {
+  const navigation = useNavigation();
+  const target = navigation.location?.pathname;
+  const loadingChat =
+    navigation.state === "loading" &&
+    target !== undefined &&
+    conversationIdOfPath(target) !== undefined;
+  const [shown, setShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!loadingChat) return;
+    const timer = setTimeout(() => {
+      setShown(target);
+    }, SWITCH_SPINNER_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [loadingChat, target]);
+  return loadingChat && shown === target;
+}
+
 export function ChatView() {
   useRenderProbe("ChatView");
   const chat = useChat();
@@ -66,6 +90,20 @@ export function ChatView() {
   const failure = result && !result.ok ? result.code : null;
   const { scrollerRef, contentRef, state, jumpToLatest } = useScrollIntent(conversationId ?? "new");
   const { jumpRef } = chat;
+  const switching = useDelayedSwitch();
+  const modelCount = chat.groups.reduce((n, g) => n + g.models.length, 0);
+  const allUnavailable =
+    chat.groups.length > 0 && chat.groups.every((g) => g.provider.status === "unavailable");
+  const modelNotice =
+    chat.modelsState !== "ready"
+      ? chat.modelsState === "error"
+        ? "The model list could not be loaded."
+        : null
+      : allUnavailable
+        ? "The model servers can't be reached right now."
+        : modelCount === 0
+          ? "No models are available. An admin needs to add a model server."
+          : null;
   useEffect(() => {
     jumpRef.current = jumpToLatest;
     return () => {
@@ -77,6 +115,11 @@ export function ChatView() {
     <div className={`chat-area${empty ? " is-empty" : ""}`}>
       <title>{conversation ? `${conversation.title} · ChatUI` : "ChatUI"}</title>
       <Header />
+      {switching ? (
+        <div className="switch-spinner" role="status" aria-label="Opening chat">
+          <span className="spinner" aria-hidden />
+        </div>
+      ) : null}
       <div className="scroller" id="transcript-scroller" ref={scrollerRef}>
         <div className="thread" ref={contentRef} data-testid="transcript">
           {failure === "NOT_FOUND" ? (
@@ -107,8 +150,23 @@ export function ChatView() {
               </button>
             </div>
           ) : null}
-          <Transcript messages={messages} timeFormat={timeFormat} />
-          {showPending ? <UserBubble content={pending.content} pending /> : null}
+          <AreaBoundary
+            area="Transcript"
+            onRetry={() => {
+              void chat.checkPending();
+            }}
+          >
+            <Transcript messages={messages} timeFormat={timeFormat} />
+          </AreaBoundary>
+          {showPending ? (
+            <UserBubble
+              content={pending.content}
+              pending={pending.status}
+              onCheck={() => {
+                void chat.checkPending();
+              }}
+            />
+          ) : null}
           {chat.activeGenerationId && conversationId ? (
             <LiveReply
               userId={chat.userId}
@@ -135,6 +193,20 @@ export function ChatView() {
         {empty ? <h1 className="greeting">{greetingFor(timeFormat.now)}</h1> : null}
         {!empty && !failure ? (
           <p className="disclaimer">ChatUI can make mistakes. Check important info.</p>
+        ) : null}
+        {modelNotice ? (
+          <p className="composer-notice" role="status" data-testid="model-notice">
+            {modelNotice}{" "}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                void chat.refreshModels();
+              }}
+            >
+              Try again
+            </button>
+          </p>
         ) : null}
         {failure ? null : <Composer />}
         {empty && !chat.hasDraft ? <Suggestions /> : null}

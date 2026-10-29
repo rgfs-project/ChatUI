@@ -53,12 +53,19 @@ import type { ConversationDto, ConversationSummary } from "@shared/conversations
 
 /** Resends of an unresolved send with the same operation key (contracts §4.1). */
 const SEND_RETRIES = 3;
+/** Backoff between resends: base × attempt (tests shorten it). */
+export const sendTiming = { baseDelayMs: 1_000 };
 
 /** A user message accepted (or being accepted) but not yet in the fetched transcript. */
 export interface PendingSend {
   conversationId: string | null;
   content: string;
   userMessageId: string | null;
+  /**
+   * `sending`: in flight or being resent with the same key; `unknown`: retries
+   * are exhausted or the key expired, so the user must check (contracts §4.1).
+   */
+  status: "sending" | "unknown";
 }
 
 export interface RenameTarget {
@@ -78,6 +85,8 @@ export interface ChatApi {
   activeGenerationId: string | null;
   running: boolean;
   pending: PendingSend | null;
+  /** Clears an unknown-outcome send after refreshing the conversation. */
+  checkPending: () => Promise<void>;
   groups: ProviderModelsDto[];
   modelsState: "loading" | "error" | "ready";
   selectedPair: ModelPair | null;
@@ -205,7 +214,7 @@ export function ChatProvider({
       if (conversationId !== null && result && !result.ok) return false;
       sending.current = true;
       const target = conversationId;
-      setPending({ conversationId: target, content, userMessageId: null });
+      setPending({ conversationId: target, content, userMessageId: null, status: "sending" });
       const body = JSON.stringify({
         ...(target ? { conversationId: target } : {}),
         providerId: pair[0],
@@ -251,6 +260,7 @@ export function ChatProvider({
               conversationId: accepted.conversationId,
               content,
               userMessageId: accepted.userMessageId,
+              status: "sending",
             });
             setChosen((map) => new Map(map).set(accepted.conversationId, pair));
             setLastUsed(pair);
@@ -269,27 +279,36 @@ export function ChatProvider({
           }
           if (response) {
             const error = await apiError(response);
-            // Any contract error except INTERNAL means rejected: nothing was saved.
+            // An expired key can never become a fresh send: the outcome stays unknown.
+            if (error.code === "OPERATION_EXPIRED") break;
+            // Any other contract error except INTERNAL means rejected: nothing was saved.
             if (error.code && error.code !== "INTERNAL") {
               setPending(null);
-              toast(error.message, "error");
+              if (error.code !== "UNAUTHENTICATED") toast(error.message, "error");
               return false;
             }
           }
-          await new Promise((resolve) => setTimeout(resolve, 1_000 * (attempt + 1)));
+          await new Promise((resolve) =>
+            setTimeout(resolve, sendTiming.baseDelayMs * (attempt + 1)),
+          );
         }
-        setPending(null);
-        toast(
-          "The outcome of this send is unknown. Check the conversation, then send again if needed.",
-          "error",
-        );
-        return false;
+        // Unknown outcome: keep the message visible and never mint a new key for it.
+        setPending((p) => (p ? { ...p, status: "unknown" } : p));
+        toast("The outcome of this send is unknown. Check the conversation.", "error");
+        return true;
       } finally {
         sending.current = false;
       }
     },
     [client, conversationId, navigate, result, running, selectedPair, toast, userId],
   );
+
+  const checkPending = useCallback(async () => {
+    const target = pending?.conversationId ?? conversationId;
+    setPending(null);
+    if (target) await client.invalidateQueries({ queryKey: qk.conversation(userId, target) });
+    await client.invalidateQueries({ queryKey: qk.conversations(userId) });
+  }, [client, conversationId, pending, userId]);
 
   const cancel = useCallback(async () => {
     if (!activeGenerationId) return;
@@ -402,6 +421,7 @@ export function ChatProvider({
       activeGenerationId,
       running,
       pending,
+      checkPending,
       groups,
       modelsState: models.isPending ? "loading" : models.isError ? "error" : "ready",
       selectedPair,
@@ -432,6 +452,7 @@ export function ChatProvider({
       activeGenerationId,
       running,
       pending,
+      checkPending,
       groups,
       models.isPending,
       models.isError,

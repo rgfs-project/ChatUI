@@ -1,0 +1,36 @@
+## Phase 8 report
+
+- **Scope completed (files/features):**
+  - Startup dependency graph: concurrent critical loads; the conversation list is secondary with a 300 ms SSR budget; server QueryClients never retry (`app/routes/app-layout.tsx`, `app/lib/query/client.ts`).
+  - Optimistic sends with sending / rolled back / outcome unknown states and same-key resends (`app/chat/chat-context.tsx`, `app/chat/message.tsx`).
+  - Stale-response guard for mutation results (`storeConversation`).
+  - Session expiry: a single expiry signal from the fetch adapter and the event stream; an in-app re-authentication dialog; tab-memory drafts restored only for the same user (`app/lib/api.ts`, `app/chat/reauth.tsx`, `app/chat/generation.ts`).
+  - Error boundaries: shell route boundary, sidebar and transcript (`app/ui/error-boundary.tsx`).
+  - Empty states for no models and unreachable providers; chat-switch spinner after 250 ms.
+- **Required tests:**
+  - **Cold concurrent load:** every load starts before the first ends, and a held secondary list doesn't hold the document (`tests/client/query-ssr.test.ts`).
+  - **Hard reloads:** `/chat/:id`, `/settings` and `/admin` never return HTML for `/api` (`resilience.spec.ts`).
+  - **Slow network:** scripts held; the composer stays typeable and the text survives hydration.
+  - **Reordered responses:** INV-23 unit test. **Rapid switching:** E2E.
+  - **Sign out, then in as another user:** Phase 7a `routing.spec.ts`.
+  - **Strict Mode:** one POST.
+  - **Sends:** explicit rejection rolls back; a dropped 202 is resent with the same key; exhausted retries and `OPERATION_EXPIRED` show the unknown state (`tests/client/resilience.test.tsx`).
+  - **Session expiry:** same-user restore, other-account discard, no storage writes (E2E), and the single expiry signal (unit). Reload discards by design: the draft lives in module memory only.
+  - **Error boundary:** recovers with Retry.
+  - **Empty states:** both model notices.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (399)
+  - `build`: PASS
+  - `verify`: PASS (77/77)
+  - `test:e2e`: PASS (31/31)
+  - `npm audit`: 0
+  - `verify:compose`: CI
+- **Invariants:**
+  - INV-23: implemented.
+  - INV-29 and INV-30: Phase 8 portions implemented; Phase 9 measures them.
+- **Dependencies:** none new.
+- **Deviations / limitations / unverified items:**
+  - There is no separate "auth unknown" UI state: SSR resolves identity before rendering, so no flash is possible.
+  - Timing evidence uses deterministic delays, not wall-clock thresholds on CI.
+- **Commit/tag:** `feat(phase-8): resilient client state, loading, and request lifecycle`, tag `phase-8` (local), pushed to `main`.

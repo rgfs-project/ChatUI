@@ -71,14 +71,19 @@ export async function refreshModels(client: QueryClient, userId: string): Promis
   client.setQueryData(qk.models(userId), list.providers);
 }
 
-/** A rename/mutation response replaces the cached conversation and its revision. */
+/**
+ * A mutation response replaces the cached conversation, unless the cache
+ * already holds a newer version: a stale response never wins (INV-23).
+ * Storage sets `updatedAt` on every canonical mutation, so it orders versions.
+ */
 export function storeConversation(
   client: QueryClient,
   userId: string,
   conversation: ConversationDto,
-): void {
-  client.setQueryData(qk.conversation(userId, conversation.id), {
-    ok: true,
-    conversation,
-  } satisfies ConversationResult);
+): boolean {
+  const key = qk.conversation(userId, conversation.id);
+  const cached = client.getQueryData<ConversationResult>(key);
+  if (cached?.ok && cached.conversation.updatedAt > conversation.updatedAt) return false;
+  client.setQueryData(key, { ok: true, conversation } satisfies ConversationResult);
+  return true;
 }
