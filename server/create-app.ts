@@ -46,6 +46,9 @@ import { createHealthService } from "./services/health.ts";
 import { AuditLog } from "./admin/audit.ts";
 import { AdminService } from "./admin/service.ts";
 import { SettingsStore } from "./admin/settings.ts";
+import { AttachmentStore } from "./attachments/store.ts";
+import { listDir } from "./storage/fs.ts";
+import { isUuid } from "./storage/paths.ts";
 
 export const JSON_BODY_LIMIT = "256kb";
 
@@ -58,7 +61,10 @@ export interface DocumentRequestValues {
 }
 
 export interface AppOptions {
-  config: Pick<Config, "nodeEnv" | "inContainer" | "provider" | "storage" | "dataDir" | "auth">;
+  config: Pick<
+    Config,
+    "nodeEnv" | "inContainer" | "provider" | "storage" | "attachments" | "dataDir" | "auth"
+  >;
   logger: Logger;
   version: string;
   /** Builds the React Router document handler; receives per-request values. */
@@ -166,6 +172,55 @@ export function createApp(options: AppOptions): ChatUiApp {
   const settings = new SettingsStore(paths, locks);
   const audit = new AuditLog(paths, now);
   const users = new UserStore({ paths, locks, now });
+  const preferences = new PreferencesStore(paths, locks);
+  const attachmentConfig = options.config.attachments;
+  /** Environment limits; admin settings may lower the file size and change the quota. */
+  const attachmentLimits = () => {
+    const current = settings.get();
+    return {
+      maxBytes: Math.min(
+        attachmentConfig.maxBytes,
+        current.maxAttachmentBytes ?? attachmentConfig.maxBytes,
+      ),
+      quotaBytes: current.userQuotaBytes ?? attachmentConfig.quotaBytes,
+      maxPerMessage: attachmentConfig.maxPerMessage,
+    };
+  };
+  const attachments = new AttachmentStore({
+    paths,
+    locks,
+    logger,
+    limits: attachmentLimits,
+    maxConcurrentUploads: attachmentConfig.maxConcurrentUploads,
+    maxImagePixels: attachmentConfig.maxImagePixels,
+    pendingTtlMs: attachmentConfig.pendingTtlMs,
+    now,
+  });
+  /**
+   * Attachment references per conversation, for startup reconciliation. A
+   * malformed conversation is listed with no references, so its linked files
+   * are never mistaken for orphans.
+   */
+  const attachmentReferences = async (userId: string) => {
+    const refs = new Map<string, { messageId: string; attachments: string[] }[]>();
+    for (const name of await listDir(paths.chatsDir(userId))) {
+      const id = name.endsWith(".md") ? name.slice(0, -3) : "";
+      if (!isUuid(id)) continue;
+      const read = await conversations.readUnlocked(userId, id);
+      if (read.kind === "missing") continue;
+      refs.set(
+        id,
+        read.kind === "malformed"
+          ? []
+          : read.conversation.model.blocks.flatMap((block) =>
+              block.type === "user" && block.attachments
+                ? [{ messageId: block.id, attachments: block.attachments }]
+                : [],
+            ),
+      );
+    }
+    return refs;
+  };
   /** A gone or closing account accepts no more terminal writes (contracts §6). */
   const isClosing = async (userId: string) => {
     const user = await users.get(userId);
@@ -185,6 +240,14 @@ export function createApp(options: AppOptions): ChatUiApp {
     now,
     settings,
     isClosing,
+    attachments,
+    preferences,
+    attachmentLimits: {
+      maxPerMessage: attachmentConfig.maxPerMessage,
+      maxInlineTextBytes: attachmentConfig.maxInlineTextBytes,
+      mediaTokenReserve: attachmentConfig.mediaTokenReserve,
+      maxPromptMediaParts: attachmentConfig.maxPromptMediaParts,
+    },
     ...options.send,
   });
   const sessions = new SessionStore({
@@ -264,6 +327,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     policy: providerConfig.ssrf,
     resolver: options.resolver ?? systemResolver,
     maxOutputTokens: providerConfig.maxOutputTokens,
+    maxAttachmentBytes: attachmentConfig.maxBytes,
     reloadProviders: installProviders,
     providerFor,
   });
@@ -286,6 +350,9 @@ export function createApp(options: AppOptions): ChatUiApp {
         checkpoints,
         retentionMs: storageConfig.generationRetentionMs,
       },
+      attachments: async (userId) => {
+        await attachments.reconcile(userId, await attachmentReferences(userId));
+      },
     });
     await users.rebuildIndex();
     await sessions.sweep();
@@ -305,6 +372,7 @@ export function createApp(options: AppOptions): ChatUiApp {
           storageConfig.operationRetentionMs,
           now(),
         );
+        await attachments.collectExpired(userId);
       }
     })().catch((error: unknown) => {
       logger.warn({ err: error }, "housekeeping sweep failed");
@@ -312,7 +380,6 @@ export function createApp(options: AppOptions): ChatUiApp {
   }, 3_600_000);
   retentionTimer.unref();
 
-  const preferences = new PreferencesStore(paths, locks);
   const services: RouteServices = {
     conversationDto: async (userId, id) =>
       toConversationDto(await conversations.get(userId, id), services, userId),
@@ -327,6 +394,8 @@ export function createApp(options: AppOptions): ChatUiApp {
     users,
     admin,
     settings,
+    attachments,
+    attachmentLimits,
     preferences,
     sseConnections,
     health: createHealthService(options.version),

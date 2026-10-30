@@ -18,6 +18,20 @@ function providerNote(group: ProviderModelsDto): string {
   return "";
 }
 
+/** Notes for a model: missing image/audio input for attached files, and load state. */
+function modelDetail(
+  model: ProviderModelsDto["models"][number],
+  needs: { image: boolean; audio: boolean } | undefined,
+): string | undefined {
+  const inputs = model.capabilities.inputModalities;
+  const notes = [
+    needs?.image && !inputs.includes("image") ? "Can't view images" : null,
+    needs?.audio && !inputs.includes("audio") ? "Can't listen to audio" : null,
+    model.status === "unloaded" ? "Not loaded" : null,
+  ].filter((note): note is string => note !== null);
+  return notes.length > 0 ? notes.join(" · ") : undefined;
+}
+
 /** Model selector on Radix DropdownMenu radio groups, grouped by provider. */
 export function ModelMenu({
   groups,
@@ -31,6 +45,7 @@ export function ModelMenu({
   trigger,
   before,
   side = "bottom",
+  needs,
 }: {
   groups: ProviderModelsDto[];
   selected: ModelPair | null;
@@ -46,6 +61,8 @@ export function ModelMenu({
   /** Items shown above the model list (e.g. attachments, Phase 12). */
   before?: React.ReactNode;
   side?: "top" | "bottom";
+  /** Attached media: models without that input are marked (Phase 12). */
+  needs?: { image: boolean; audio: boolean };
 }) {
   const value = selected ? pairKey(selected) : "";
   const count = groups.reduce((n, g) => n + g.models.length, 0);
@@ -103,7 +120,7 @@ export function ModelMenu({
               <MenuRadioItem
                 key={model.id}
                 value={pairKey([model.providerId, model.id])}
-                {...(model.status === "unloaded" ? { detail: "Not loaded" } : {})}
+                {...(modelDetail(model, needs) ? { detail: modelDetail(model, needs) } : {})}
               >
                 {model.id}
               </MenuRadioItem>

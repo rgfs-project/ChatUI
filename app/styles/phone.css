@@ -160,3 +160,22 @@ html[data-phone] .settings-row {
 html[data-phone] .menu {
   max-width: calc(100vw - 16px);
 }
+
+/* Composer files sit above the text on phones too. */
+html[data-phone] .composer.has-files {
+  grid-template-areas:
+    "files files"
+    "text text"
+    "start actions";
+}
+
+html[data-phone] .composer-file {
+  width: 150px;
+}
+
+/* The remove button looks small but answers a 44 × 44 tap. */
+html[data-phone] .composer-file-remove::after {
+  position: absolute;
+  inset: -12px;
+  content: "";
+}

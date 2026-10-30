@@ -13,7 +13,12 @@ import {
   SsrfError,
   type SsrfPolicy,
 } from "../../server/providers/ssrf.ts";
-import type { Provider, ProviderEvent, ProviderModel } from "../../server/providers/types.ts";
+import type {
+  ChatRequest,
+  Provider,
+  ProviderEvent,
+  ProviderModel,
+} from "../../server/providers/types.ts";
 import { parseConversation } from "../../server/storage/markdown.ts";
 import { MOCK_MODELS, startMockLlama, type MockLlama } from "../support/mock-llama.ts";
 import {
@@ -52,7 +57,7 @@ afterEach(async () => {
 class MemoryProvider implements Provider {
   models: ProviderModel[];
   failListing = false;
-  requests: { model: string; messages: { role: string; content: string }[] }[] = [];
+  requests: Pick<ChatRequest, "model" | "messages">[] = [];
   gate: Promise<void> | undefined;
 
   constructor(models: string[]) {
@@ -70,10 +75,7 @@ class MemoryProvider implements Provider {
   applyTemplate(_model: string, messages: { role: string; content: string }[]): Promise<string> {
     return Promise.resolve(messages.map((m) => `${m.role}: ${m.content}`).join("\n"));
   }
-  async *streamChat(request: {
-    model: string;
-    messages: { role: string; content: string }[];
-  }): AsyncGenerator<ProviderEvent> {
+  async *streamChat(request: ChatRequest): AsyncGenerator<ProviderEvent> {
     this.requests.push({ model: request.model, messages: request.messages });
     yield { type: "start" };
     await this.gate;

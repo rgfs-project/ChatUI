@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import type { Provider } from "../providers/types.ts";
-import { estimateCounter, type PromptMessage, type TokenCounter } from "./prompt.ts";
+import {
+  estimateCounter,
+  mediaCount,
+  textOf,
+  type PromptMessage,
+  type TokenCounter,
+} from "./prompt.ts";
 
 const CACHE_LIMIT = 10_000;
 
@@ -15,11 +21,18 @@ export class ProviderTokenCounter implements TokenCounter {
   private readonly provider: Provider;
   private readonly model: string;
   private readonly overhead: number;
+  private readonly mediaReserve: number;
 
-  constructor(provider: Provider, model: string, templateOverheadTokens: number) {
+  constructor(
+    provider: Provider,
+    model: string,
+    templateOverheadTokens: number,
+    mediaTokenReserve = 0,
+  ) {
     this.provider = provider;
     this.model = model;
     this.overhead = templateOverheadTokens;
+    this.mediaReserve = mediaTokenReserve;
   }
 
   private async tokens(text: string): Promise<number> {
@@ -35,14 +48,24 @@ export class ProviderTokenCounter implements TokenCounter {
     return count;
   }
 
+  /** Media parts are not tokenized here: each counts the documented reserve. */
+  private media(messages: PromptMessage[]): number {
+    return messages.reduce((sum, m) => sum + mediaCount(m.content), 0) * this.mediaReserve;
+  }
+
   async countGroup(messages: PromptMessage[]): Promise<number> {
-    const counts = await Promise.all(messages.map((m) => this.tokens(m.content)));
-    return counts.reduce((sum, n) => sum + n + this.overhead, 0);
+    const counts = await Promise.all(messages.map((m) => this.tokens(textOf(m.content))));
+    return counts.reduce((sum, n) => sum + n + this.overhead, 0) + this.media(messages);
   }
 
   async countPrompt(messages: PromptMessage[]): Promise<number> {
-    const prompt = await this.provider.applyTemplate(this.model, messages);
-    return this.provider.tokenize(this.model, prompt, { special: true });
+    const prompt = await this.provider.applyTemplate(
+      this.model,
+      messages.map((m) => ({ role: m.role, content: textOf(m.content) })),
+    );
+    return (
+      (await this.provider.tokenize(this.model, prompt, { special: true })) + this.media(messages)
+    );
   }
 }
 
@@ -51,11 +74,12 @@ export async function counterFor(
   provider: Provider,
   model: string,
   templateOverheadTokens: number,
+  mediaTokenReserve = 0,
 ): Promise<TokenCounter> {
   try {
     await provider.tokenize(model, "probe");
-    return new ProviderTokenCounter(provider, model, templateOverheadTokens);
+    return new ProviderTokenCounter(provider, model, templateOverheadTokens, mediaTokenReserve);
   } catch {
-    return estimateCounter(templateOverheadTokens);
+    return estimateCounter(templateOverheadTokens, mediaTokenReserve);
   }
 }

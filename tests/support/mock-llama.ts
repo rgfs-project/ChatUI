@@ -19,6 +19,8 @@ export const MOCK_MODELS = {
   flood: "mock-flood",
   length: "mock-length",
   long: "mock-long",
+  /** Advertises image and audio input; echoes the text and counts media parts. */
+  vision: "mock-vision",
 } as const;
 
 /**
@@ -113,10 +115,20 @@ function usageChunk(model: string) {
   };
 }
 
+type MockContent = string | { type: string; text?: string }[];
+
 function lastUserText(body: unknown): string {
   const messages =
-    (body as { messages?: { role: string; content: string }[] } | undefined)?.messages ?? [];
-  return [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+    (body as { messages?: { role: string; content: MockContent }[] } | undefined)?.messages ?? [];
+  const content = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  if (typeof content === "string") return content;
+  const text = content
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("\n\n");
+  const images = content.filter((part) => part.type === "image_url").length;
+  const audio = content.filter((part) => part.type === "input_audio").length;
+  return `${text} [images: ${String(images)}, audio: ${String(audio)}]`;
 }
 
 export async function startMockLlama(options: MockLlamaOptions = {}): Promise<MockLlama> {
@@ -179,6 +191,14 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
                 args: ["/app/llama-server", "--model", `/secret/path/${id}.gguf`],
               },
               ...(index === 0 ? { meta: { n_ctx: 32_768, n_params: 123 } } : {}),
+              ...(id === MOCK_MODELS.vision
+                ? {
+                    architecture: {
+                      input_modalities: ["text", "image", "audio"],
+                      output_modalities: ["text"],
+                    },
+                  }
+                : {}),
             })),
         });
         return;
@@ -277,7 +297,8 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
 
     send(chunk(model, { role: "assistant", content: null }));
     switch (model) {
-      case MOCK_MODELS.chat: {
+      case MOCK_MODELS.chat:
+      case MOCK_MODELS.vision: {
         const delay = options.chatChunkDelayMs ?? 0;
         for (const piece of ["Considering ", "the request."]) {
           send(chunk(model, { reasoning_content: piece }));

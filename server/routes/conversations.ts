@@ -9,6 +9,7 @@ import {
   type MessageDto,
 } from "@shared/conversations";
 import { ErrorCode } from "@shared/errors";
+import { attachmentRefs } from "../attachments/serve.ts";
 import { AppError } from "../errors.ts";
 import { defineRoute, userOf, type RouteServices } from "../registry.ts";
 import { conversationSummaries } from "../services/bootstrap.ts";
@@ -39,12 +40,15 @@ async function mapStorage<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Explicit DTO from canonical storage (INV-03): no paths, no raw file text. */
-export function toConversationDto(
+/**
+ * Explicit DTO from canonical storage (INV-03): no paths, no raw file text.
+ * Attachment metadata comes along; the bytes are fetched on demand.
+ */
+export async function toConversationDto(
   conversation: LoadedConversation,
   services: RouteServices,
   userId: string,
-): ConversationDto {
+): Promise<ConversationDto> {
   const messages: MessageDto[] = [];
   let pendingReasoning: string | null = null;
   for (const block of conversation.model.blocks) {
@@ -60,7 +64,10 @@ export function toConversationDto(
       status: block.type === "assistant" ? block.status : null,
       provider: block.type === "assistant" ? (block.provider ?? null) : null,
       model: block.type === "assistant" ? (block.model ?? null) : null,
-      attachments: block.type === "user" ? (block.attachments ?? []) : [],
+      attachments:
+        block.type === "user" && block.attachments
+          ? await attachmentRefs(services.attachments, userId, block.attachments)
+          : [],
       time: block.type === "user" || block.type === "assistant" ? (block.time ?? null) : null,
     });
     pendingReasoning = null;
@@ -159,7 +166,10 @@ export const deleteConversationRoute = defineRoute({
   response: z.strictObject({ deleted: z.literal(true) }),
   handler: ({ params }, ctx) =>
     mapStorage(async () => {
-      await ctx.services.conversations.delete(userOf(ctx).userId, params.id);
+      const { userId } = userOf(ctx);
+      await ctx.services.conversations.delete(userId, params.id);
+      // Markdown first, then its files: an orphan is safe and collected; a dangling reference is not.
+      await ctx.services.attachments.deleteForConversation(userId, params.id);
       return { deleted: true as const };
     }),
   fixture: { params: unknownId, expectStatus: 404 },

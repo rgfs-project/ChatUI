@@ -122,8 +122,8 @@ export async function resolveOperations(
 }
 
 /**
- * Phase 3 startup recovery in contracts §2 order: (1) temp files, (4) pending
- * operation records, (8) derived indexes. Runs before requests are accepted.
+ * Startup recovery in contracts §2 order: (1) temp files, (4) pending
+ * operation records, (5) generations, (7) attachments, (8) derived indexes. Runs before requests are accepted.
  */
 export async function recoverStorage(options: {
   paths: DataPaths;
@@ -134,6 +134,8 @@ export async function recoverStorage(options: {
   startedAt: Date;
   now?: Date;
   generations?: { store: ConversationStore; checkpoints: CheckpointStore; retentionMs: number };
+  /** Step 7: reconcile and garbage-collect pending attachments (Phase 12). */
+  attachments?: (userId: string) => Promise<void>;
 }): Promise<RecoveryReport> {
   const { paths, logger } = options;
   await ensureDir(paths.root);
@@ -169,6 +171,7 @@ export async function recoverStorage(options: {
         now: options.now ?? new Date(),
       })
     : null;
+  if (options.attachments) for (const userId of users) await options.attachments(userId);
   for (const userId of users) await options.index.load(userId);
   const report = { tempFilesRemoved, unexpectedEntries, ...totals, generations };
   logger.info(report, "storage recovery complete");

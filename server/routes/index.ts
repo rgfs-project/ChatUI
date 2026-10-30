@@ -20,6 +20,13 @@ import {
   sessionRoute,
 } from "./auth.ts";
 import { healthRoute } from "./health.ts";
+import {
+  attachmentContentRoute,
+  deleteAttachmentRoute,
+  getAttachmentRoute,
+  listAttachmentsRoute,
+  uploadAttachmentRoute,
+} from "./attachments.ts";
 import { getPreferencesRoute, updatePreferencesRoute } from "./preferences.ts";
 import { getOperationRoute } from "./operations.ts";
 import { listModelsRoute, listProvidersRoute } from "./models.ts";
@@ -56,6 +63,11 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(updatePreferencesRoute),
   erase(listProvidersRoute),
   erase(listModelsRoute),
+  erase(uploadAttachmentRoute),
+  erase(listAttachmentsRoute),
+  erase(getAttachmentRoute),
+  erase(attachmentContentRoute),
+  erase(deleteAttachmentRoute),
   erase(startGenerationRoute),
   erase(getGenerationRoute),
   erase(cancelGenerationRoute),

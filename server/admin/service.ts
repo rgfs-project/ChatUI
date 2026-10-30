@@ -97,6 +97,8 @@ export interface AdminServiceOptions {
   resolver: Resolver;
   /** Upper bound for the instance output-token setting (the environment's). */
   maxOutputTokens: number;
+  /** Environment file size cap (MAX_ATTACHMENT_BYTES); admin settings may only lower it. */
+  maxAttachmentBytes: number;
   /** Re-reads providers.json and swaps the provider registry in-process. */
   reloadProviders: () => Promise<void>;
   /** A provider for an entry (the same SSRF-guarded client as production). */
@@ -496,6 +498,11 @@ export class AdminService {
       throw new AppError(
         ErrorCode.VALIDATION,
         `The output limit cannot exceed the server's ${String(this.o.maxOutputTokens)} tokens`,
+      );
+    if (patch.maxAttachmentBytes != null && patch.maxAttachmentBytes > this.o.maxAttachmentBytes)
+      throw new AppError(
+        ErrorCode.VALIDATION,
+        `The file size limit cannot exceed the server's ${String(this.o.maxAttachmentBytes)} bytes`,
       );
     await this.o.settings.update((current) => ({ ...current, ...patch }));
     await this.audit(actor, "settings.update", { type: "settings", id: null }, "ok", {

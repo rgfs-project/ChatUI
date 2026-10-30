@@ -6,6 +6,9 @@ import { ModelMenu } from "../chat/model-picker";
 import { apiJson } from "../lib/api";
 import { field, useAdminAction, useAdminQuery } from "./data";
 
+const toMb = (bytes: number | null) =>
+  bytes === null ? "" : String(Math.round((bytes / 1_048_576) * 100) / 100);
+
 export function InstanceSection() {
   const { userId, groups, modelsState } = useChat();
   const settings = useAdminQuery<AdminSettings>(userId, "settings", "/api/admin/settings");
@@ -23,6 +26,10 @@ export function InstanceSection() {
     const mode = field(form, "registrationMode");
     const tokens = field(form, "maxOutputTokens").trim();
     const notice = field(form, "notice").trim();
+    const megabytes = (name: string) => {
+      const value = field(form, name).trim();
+      return value === "" ? null : Math.round(Number(value) * 1_048_576);
+    };
     await act(
       () =>
         apiJson("/api/admin/settings", {
@@ -33,6 +40,8 @@ export function InstanceSection() {
             maxOutputTokens: tokens === "" ? null : Number(tokens),
             timeZone: field(form, "timeZone") || "UTC",
             defaultModel: chosen,
+            maxAttachmentBytes: megabytes("maxAttachmentMb"),
+            userQuotaBytes: megabytes("userQuotaMb"),
           },
         }),
       { done: "Instance settings saved.", refresh: ["settings", "audit"] },
@@ -96,6 +105,32 @@ export function InstanceSection() {
         <label>
           Time zone
           <input name="timeZone" className="text-field selectable" defaultValue={data.timeZone} />
+        </label>
+      </div>
+      <div className="admin-fields">
+        <label>
+          Largest file (MB)
+          <input
+            name="maxAttachmentMb"
+            type="number"
+            min={1}
+            step="any"
+            className="text-field"
+            defaultValue={toMb(data.maxAttachmentBytes)}
+            placeholder="server default"
+          />
+        </label>
+        <label>
+          Storage per account (MB)
+          <input
+            name="userQuotaMb"
+            type="number"
+            min={1}
+            step="any"
+            className="text-field"
+            defaultValue={toMb(data.userQuotaBytes)}
+            placeholder="server default"
+          />
         </label>
       </div>
       <div className="dialog-actions">

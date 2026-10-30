@@ -108,3 +108,28 @@ ChatUI classifies only by status and `error.type`. Messages are ChatUI's own; up
   - `host.docker.internal` plus `extra_hosts: ["host.docker.internal:host-gateway"]` (Docker Engine on Linux; commented in `compose.yaml`).
 - `node server/cli.ts provider:check` tests DNS, routing and credentials from inside the container without printing secrets. `verify:compose` runs it against a mock llama-server on the CI host for Docker (LAN address and `host-gateway`) and rootless Podman (LAN address and `host.containers.internal`). Results are in the Phase 2 report.
 - The llama-server must listen beyond `127.0.0.1` on its host for a container to reach it.
+
+## Images and audio (Phase 12)
+
+ChatUI sends media as OpenAI-compatible content parts in the user message:
+
+```json
+{
+  "role": "user",
+  "content": [
+    { "type": "text", "text": "What is this?" },
+    { "type": "image_url", "image_url": { "url": "data:image/png;base64,…" } },
+    { "type": "input_audio", "input_audio": { "data": "<base64>", "format": "mp3" } }
+  ]
+}
+```
+
+- Image parts are a base64 data URL with the sniffed media type. Audio parts carry the format `wav`, `mp3` or `flac`.
+- Capability comes from `/v1/models` `architecture.input_modalities` (router mode), else from the provider's configured `capabilities.inputModalities`.
+- Token counting templates the text alone and adds `MEDIA_TOKEN_RESERVE` (default 1024) per part, since `/apply-template` and `/tokenize` count text only.
+- **UNVERIFIED against a live server** (none was reachable during Phase 12):
+  - that `llama-server` with a vision/audio projector accepts these parts;
+  - whether `input_audio.format` accepts `flac` (llama.cpp documents `wav` and `mp3`);
+  - the real per-image token cost.
+
+  Re-run the probe with a multimodal model and adjust `MEDIA_TOKEN_RESERVE`.

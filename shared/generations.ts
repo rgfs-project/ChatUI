@@ -55,26 +55,29 @@ export type ProviderModelsDto = z.infer<typeof providerModelsDtoSchema>;
 export const modelListDtoSchema = z.strictObject({ providers: z.array(providerModelsDtoSchema) });
 export type ModelListDto = z.infer<typeof modelListDtoSchema>;
 
-export const chatMessageSchema = z.strictObject({
-  role: z.enum(["system", "user", "assistant"]),
-  content: z.string().max(100_000),
-});
-export type ChatMessage = z.infer<typeof chatMessageSchema>;
-
-export const startGenerationRequestSchema = z.strictObject({
-  /** Omit for a draft: the server mints the conversation on first send (§4.1). */
-  conversationId: canonicalUuid.optional(),
-  /** The pair is validated server-side on every send (INV-18). */
-  providerId: z.string().min(1).max(64),
-  model: z.string().trim().min(1).max(200),
-  content: z
-    .string()
-    .max(100_000)
-    .refine((value) => value.trim() !== "", "must not be empty"),
-  /** Client-minted idempotency key for this send (INV-58). */
-  operationKey: z.uuid(),
-  operationIssuedAt: z.iso.datetime({ offset: false }),
-});
+export const startGenerationRequestSchema = z
+  .strictObject({
+    /** Omit for a draft: the server mints the conversation on first send (§4.1). */
+    conversationId: canonicalUuid.optional(),
+    /** The pair is validated server-side on every send (INV-18). */
+    providerId: z.string().min(1).max(64),
+    model: z.string().trim().min(1).max(200),
+    /** May be empty only when the message carries attachments. */
+    content: z.string().max(100_000),
+    /** Pending uploads to send with this message (Phase 12), in display order. */
+    attachmentIds: z
+      .array(canonicalUuid)
+      .max(10)
+      .refine((ids) => new Set(ids).size === ids.length, "must not repeat an attachment")
+      .optional(),
+    /** Client-minted idempotency key for this send (INV-58). */
+    operationKey: z.uuid(),
+    operationIssuedAt: z.iso.datetime({ offset: false }),
+  })
+  .refine((request) => request.content.trim() !== "" || (request.attachmentIds?.length ?? 0) > 0, {
+    path: ["content"],
+    message: "must not be empty",
+  });
 export type StartGenerationRequest = z.infer<typeof startGenerationRequestSchema>;
 
 export const startGenerationResponseSchema = z.strictObject({

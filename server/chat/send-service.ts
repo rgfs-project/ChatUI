@@ -26,6 +26,9 @@ import {
 } from "./prompt.ts";
 import { counterFor } from "./token-counter.ts";
 import { expandSystemPrompt, type Sampling, type SettingsStore } from "../admin/settings.ts";
+import { prepareExpansion } from "../attachments/expand.ts";
+import type { AttachmentMeta, AttachmentStore } from "../attachments/store.ts";
+import type { PreferencesStore } from "../storage/preferences.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -73,7 +76,24 @@ export interface SendServiceOptions {
   settings?: SettingsStore;
   /** True once an account is closing: its late terminal writes are skipped (contracts §6). */
   isClosing?: (userId: string) => Promise<boolean>;
+  /** Attachments (Phase 12): ownership, pending state, linking and prompt expansion. */
+  attachments?: AttachmentStore;
+  /** `historyImages` is a prompt-relevant preference (§4.1). */
+  preferences?: PreferencesStore;
+  attachmentLimits?: {
+    maxPerMessage: number;
+    maxInlineTextBytes: number;
+    mediaTokenReserve: number;
+    maxPromptMediaParts: number;
+  };
 }
+
+const DEFAULT_ATTACHMENT_LIMITS = {
+  maxPerMessage: 10,
+  maxInlineTextBytes: 100_000,
+  mediaTokenReserve: 0,
+  maxPromptMediaParts: 8,
+};
 
 /** Who is sending: role decides hidden-model access; username fills {{username}}. */
 export interface Sender {
@@ -107,7 +127,10 @@ export class SendService {
   }
 
   static payloadHash(
-    request: Pick<StartGenerationRequest, "conversationId" | "providerId" | "model" | "content">,
+    request: Pick<
+      StartGenerationRequest,
+      "conversationId" | "providerId" | "model" | "content" | "attachmentIds"
+    >,
   ): string {
     return sha256Hex(
       JSON.stringify({
@@ -115,8 +138,41 @@ export class SendService {
         providerId: request.providerId,
         model: request.model,
         content: normalizeBody(request.content),
+        // Absent when empty, so records from before Phase 12 keep their hash.
+        ...(request.attachmentIds?.length ? { attachmentIds: request.attachmentIds } : {}),
       }),
     );
+  }
+
+  private get limits() {
+    return this.o.attachmentLimits ?? DEFAULT_ATTACHMENT_LIMITS;
+  }
+
+  /** Each id must be this user's and still pending (unknown and foreign look the same). */
+  private async pendingAttachments(
+    userId: string,
+    ids: readonly string[],
+  ): Promise<AttachmentMeta[]> {
+    if (ids.length === 0) return [];
+    if (!this.o.attachments || ids.length > this.limits.maxPerMessage) {
+      throw new AppError(
+        ErrorCode.VALIDATION,
+        `A message can carry at most ${String(this.limits.maxPerMessage)} files`,
+      );
+    }
+    const metas: AttachmentMeta[] = [];
+    for (const id of ids) {
+      const meta = await this.o.attachments.get(userId, id);
+      if (!meta) throw new AppError(ErrorCode.NOT_FOUND, "An attached file is no longer available");
+      if (meta.messageId !== null)
+        throw new AppError(ErrorCode.CONFLICT, "An attached file was already sent in a message");
+      metas.push(meta);
+    }
+    return metas;
+  }
+
+  private async historyImages(userId: string): Promise<"include" | "omit"> {
+    return (await this.o.preferences?.get(userId))?.historyImages ?? "include";
   }
 
   async send(
@@ -199,26 +255,43 @@ export class SendService {
       throw new AppError(ErrorCode.MODEL_NOT_FOUND, "The selected model is not available");
     }
     const provider = this.o.catalog.provider(model.providerId);
+    const attachmentIds = request.attachmentIds ?? [];
+    const attached = await this.pendingAttachments(userId, attachmentIds);
+    // Images and audio only reach a server-verified model with that modality (INV-44).
+    for (const kind of ["image", "audio"] as const) {
+      if (
+        attached.some((meta) => meta.kind === kind) &&
+        !model.capabilities.inputModalities.includes(kind)
+      ) {
+        throw new AppError(
+          ErrorCode.MODEL_CAPABILITY_UNSUPPORTED,
+          kind === "image"
+            ? "The selected model can't view images; choose a model with vision"
+            : "The selected model can't listen to audio; choose a model with audio input",
+        );
+      }
+    }
 
     for (let attempt = 0; attempt < 2; attempt++) {
       // Prompt-relevant settings revision (§4.1): rechecked under the lock below.
       const settingsRevision = this.o.settings?.revision ?? null;
       const config = this.modelConfig(model.providerId, model.id, sender);
+      const historyImages = await this.historyImages(userId);
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
       const snapshot = request.conversationId
         ? await this.o.store.withLock(userId, conversationId, () =>
             this.readExisting(userId, conversationId),
           )
         : null;
-      const prompt = await this.preflight(
-        snapshot?.model ?? null,
-        content,
+      const prompt = await this.preflight(userId, snapshot?.model ?? null, content, attachmentIds, {
         provider,
-        model.providerId,
-        model.id,
-        model.contextTokens,
+        providerId: model.providerId,
+        model: model.id,
+        contextTokens: model.contextTokens,
+        modalities: model.capabilities.inputModalities,
+        historyImages,
         config,
-      );
+      });
       await this.o.hooks?.beforeRecheck?.();
 
       // Step 3–4: recheck and commit under the conversation lock.
@@ -234,22 +307,31 @@ export class SendService {
         }
         if ((current?.revision ?? null) !== (snapshot?.revision ?? null)) return "changed" as const;
         if ((this.o.settings?.revision ?? null) !== settingsRevision) return "changed" as const;
-        const again = await this.checkKey(userId, request, payloadHash);
-        if (again) return { response: again, launch: undefined };
-        const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
-        return this.commit(userId, {
-          request,
-          payloadHash,
-          conversationId,
-          content,
-          provider,
-          providerId: model.providerId,
-          model: model.id,
-          current,
-          prompt,
-          reservation,
-          config,
-        });
+        if ((await this.historyImages(userId)) !== historyImages) return "changed" as const;
+        // Attachment locks follow the conversation lock (contracts §2 global order).
+        const commitWith = async () => {
+          const again = await this.checkKey(userId, request, payloadHash);
+          if (again) return { response: again, launch: undefined };
+          const metas = await this.pendingAttachments(userId, attachmentIds);
+          const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
+          return this.commit(userId, {
+            request,
+            payloadHash,
+            conversationId,
+            content,
+            attachments: metas,
+            provider,
+            providerId: model.providerId,
+            model: model.id,
+            current,
+            prompt,
+            reservation,
+            config,
+          });
+        };
+        return this.o.attachments && attachmentIds.length > 0
+          ? this.o.attachments.withLocks(userId, attachmentIds, commitWith)
+          : commitWith();
       });
       if (outcome !== "changed") {
         // Completion work (network I/O) starts only after the lock is released.
@@ -294,14 +376,21 @@ export class SendService {
 
   /** Step 2 (no locks held): prompt assembly and context budget, from canonical data only. */
   private async preflight(
+    userId: string,
     current: ConversationModel | null,
     content: string,
-    provider: Provider,
-    providerId: string,
-    model: string,
-    contextTokens: number,
-    config: ModelConfig,
+    attachmentIds: string[],
+    target: {
+      provider: Provider;
+      providerId: string;
+      model: string;
+      contextTokens: number;
+      modalities: readonly ("text" | "image" | "audio")[];
+      historyImages: "include" | "omit";
+      config: ModelConfig;
+    },
   ): Promise<AssembledPrompt> {
+    const { provider, providerId, model, contextTokens, config } = target;
     const draft: ConversationModel = current ?? {
       title: NEW_CONVERSATION_TITLE,
       createdAt: this.now().toISOString(),
@@ -310,12 +399,36 @@ export class SendService {
     };
     const withUser: ConversationModel = {
       ...draft,
-      blocks: [...draft.blocks, { type: "user", id: randomUUID(), body: content }],
+      blocks: [
+        ...draft.blocks,
+        {
+          type: "user",
+          id: randomUUID(),
+          body: content,
+          ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
+        },
+      ],
     };
     const budget = Math.max(0, contextTokens - config.maxTokens);
     const counter = this.o.counterFor
       ? await this.o.counterFor(providerId, model)
-      : await counterFor(provider, model, this.o.templateOverheadTokens);
+      : await counterFor(
+          provider,
+          model,
+          this.o.templateOverheadTokens,
+          this.limits.mediaTokenReserve,
+        );
+    const expand = this.o.attachments
+      ? await prepareExpansion(withUser, {
+          store: this.o.attachments,
+          userId,
+          modalities: target.modalities,
+          historyImages: target.historyImages,
+          maxInlineTextBytes: this.limits.maxInlineTextBytes,
+          maxPromptMediaParts: this.limits.maxPromptMediaParts,
+          logger: this.o.logger,
+        })
+      : undefined;
     try {
       return await assemblePrompt(withUser, {
         budget,
@@ -323,6 +436,7 @@ export class SendService {
         counter,
         instructions: config.instructions,
         context: config.context,
+        ...(expand ? { expand } : {}),
       });
     } catch (error) {
       if (error instanceof ContextTooLargeError) {
@@ -343,6 +457,7 @@ export class SendService {
       payloadHash: string;
       conversationId: string;
       content: string;
+      attachments: AttachmentMeta[];
       provider: Provider;
       providerId: string;
       model: string;
@@ -367,8 +482,15 @@ export class SendService {
         updatedAt: now,
         blocks: [],
       };
+      const attachmentIds = input.attachments.map((meta) => meta.id);
       const next = this.o.store.appendBlocks(base, [
-        { type: "user", id: ids.userMessageId, time: now, body: input.content },
+        {
+          type: "user",
+          id: ids.userMessageId,
+          time: now,
+          body: input.content,
+          ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
+        },
       ]);
       const record: OperationRecord = {
         version: 1,
@@ -389,6 +511,14 @@ export class SendService {
       await this.o.hooks?.afterPendingRecord?.();
       await this.o.store.writeUnlocked(userId, conversationId, next);
       await this.o.hooks?.afterMarkdownWrite?.();
+      // Linked after the Markdown: a crash in between is repaired by startup reconciliation.
+      if (input.attachments.length > 0)
+        await this.o.attachments?.linkUnlocked(
+          userId,
+          input.attachments,
+          conversationId,
+          ids.userMessageId,
+        );
       await this.o.operations.write(userId, {
         ...record,
         status: "committed",

@@ -1,11 +1,13 @@
 import { Check, Copy, Square, Volume2 } from "lucide-react";
 import { memo, useState } from "react";
+import type { AttachmentRef } from "@shared/attachments";
 import type { MessageDto } from "@shared/conversations";
 import type { GenerationState } from "@shared/generations";
 import { useRenderProbe } from "../lib/render-probe";
 import { IconButton } from "../ui/icon-button";
 import { copyText } from "./copy";
 import { Markdown } from "./markdown";
+import { MessageAttachments } from "./message-attachments";
 import { speak, speakableText, stopSpeaking, useSpeaking, useSpeechSupported } from "./read-aloud";
 
 export const STATUS_LABEL: Record<NonNullable<MessageDto["status"]>, string> = {
@@ -74,12 +76,16 @@ export function Reasoning({ text }: { text: string }) {
   );
 }
 
+const NO_ATTACHMENTS: readonly AttachmentRef[] = [];
+
 export function UserBubble({
   content,
+  attachments = NO_ATTACHMENTS,
   pending,
   onCheck,
 }: {
   content: string;
+  attachments?: readonly AttachmentRef[];
   /** An optimistic message: still sending, or its outcome is unknown. */
   pending?: "sending" | "unknown";
   onCheck?: () => void;
@@ -89,7 +95,8 @@ export function UserBubble({
       className={`msg msg-user${pending ? ` is-pending is-${pending}` : ""}`}
       data-testid="message-user"
     >
-      <div className="bubble selectable">{content}</div>
+      <MessageAttachments refs={attachments} />
+      {content ? <div className="bubble selectable">{content}</div> : null}
       <div className="msg-actions">
         {pending === "sending" ? <span className="msg-note">Sending…</span> : null}
         {pending === "unknown" ? (
@@ -100,7 +107,7 @@ export function UserBubble({
             </button>
           </span>
         ) : null}
-        {pending ? null : <CopyButton text={content} label="Copy message" />}
+        {pending || !content ? null : <CopyButton text={content} label="Copy message" />}
       </div>
     </div>
   );
@@ -109,7 +116,8 @@ export function UserBubble({
 /** A stored message. Memoized: streaming another message never re-renders it. */
 export const Message = memo(function Message({ message }: { message: MessageDto }) {
   useRenderProbe(`Message:${message.id}`);
-  if (message.role === "user") return <UserBubble content={message.content} />;
+  if (message.role === "user")
+    return <UserBubble content={message.content} attachments={message.attachments} />;
   if (message.role === "system") {
     return (
       <details className="msg msg-system" data-testid="message-system">

@@ -5,7 +5,12 @@ import { Writable } from "node:stream";
 import type { RequestHandler } from "express";
 import { createApp, type AppOptions } from "../../server/create-app.ts";
 import { PasswordHasher } from "../../server/auth/passwords.ts";
-import type { AuthConfig, ProviderConfig, StorageConfig } from "../../server/config.ts";
+import type {
+  AttachmentConfig,
+  AuthConfig,
+  ProviderConfig,
+  StorageConfig,
+} from "../../server/config.ts";
 import { createLogger, type Logger } from "../../server/logger.ts";
 
 export interface LogCapture {
@@ -60,6 +65,21 @@ export function storageConfig(overrides: Partial<StorageConfig> = {}): StorageCo
     generationCheckpointMs: 200,
     generationRetentionMs: 3_600_000,
     sseReplayEvents: 2_000,
+    ...overrides,
+  };
+}
+
+export function attachmentConfig(overrides: Partial<AttachmentConfig> = {}): AttachmentConfig {
+  return {
+    maxBytes: 1_048_576,
+    maxPerMessage: 10,
+    quotaBytes: 8_388_608,
+    maxInlineTextBytes: 100_000,
+    pendingTtlMs: 86_400_000,
+    mediaTokenReserve: 1_024,
+    maxImagePixels: 50_000_000,
+    maxConcurrentUploads: 4,
+    maxPromptMediaParts: 8,
     ...overrides,
   };
 }
@@ -166,6 +186,7 @@ export function testApp(overrides: TestAppOptions = {}) {
       inContainer: false,
       provider: providerConfig(),
       storage: storageConfig(),
+      attachments: attachmentConfig(),
       auth: authConfig(),
       dataDir,
       ...config,

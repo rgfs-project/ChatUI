@@ -124,6 +124,9 @@ test.describe("INV-47: menus and dialogs", () => {
     await page.keyboard.press("Enter");
     const menu = page.getByRole("menu", { name: "Composer options" });
     await expect(menu).toBeVisible();
+    // Attaching files comes first (Phase 12), then the models.
+    await expect(menu.getByRole("menuitem", { name: "Add photos and files" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
     await expect(menu.getByRole("menuitemradio").first()).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(menu.getByRole("menuitemradio").nth(1)).toBeFocused();

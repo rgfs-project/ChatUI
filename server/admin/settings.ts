@@ -49,6 +49,10 @@ export const instanceSettingsSchema = z.strictObject({
   maxOutputTokens: z.number().int().min(16).max(1_000_000).nullable(),
   /** Time zone for the {{date}}, {{timezone}} and {{time}} template values. */
   timeZone: z.string().max(64),
+  /** Lowers MAX_ATTACHMENT_BYTES (never raises it); null = the environment value (Phase 12). */
+  maxAttachmentBytes: z.number().int().min(1_024).max(1_073_741_824).nullable(),
+  /** Replaces USER_STORAGE_QUOTA_BYTES; null = the environment value (Phase 12). */
+  userQuotaBytes: z.number().int().min(1_048_576).max(1_099_511_627_776).nullable(),
   models: z.array(modelSettingsSchema).max(2_000),
 });
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>;
@@ -60,6 +64,8 @@ export const DEFAULT_SETTINGS: InstanceSettings = {
   notice: null,
   maxOutputTokens: null,
   timeZone: "UTC",
+  maxAttachmentBytes: null,
+  userQuotaBytes: null,
   models: [],
 };
 
@@ -96,7 +102,11 @@ export class SettingsStore {
     let parsed: InstanceSettings = DEFAULT_SETTINGS;
     if (raw) {
       try {
-        const result = instanceSettingsSchema.safeParse(JSON.parse(raw.toString("utf8")));
+        // Fields added by later phases start at their defaults.
+        const json: unknown = JSON.parse(raw.toString("utf8"));
+        const result = instanceSettingsSchema.safeParse(
+          typeof json === "object" && json !== null ? { ...DEFAULT_SETTINGS, ...json } : json,
+        );
         if (result.success) parsed = result.data;
       } catch {
         // an unreadable file keeps the defaults (it is never rewritten silently)

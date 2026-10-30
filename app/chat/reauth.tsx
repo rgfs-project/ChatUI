@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import type { SessionDto } from "@shared/auth";
 import { paths } from "../lib/paths";
 import { applySession, purgeUserCache } from "../lib/session";
+import { composerFiles } from "./composer-files";
 import { draftStore } from "./drafts";
 
 /**
@@ -43,6 +44,7 @@ export function ReauthDialog({
       if (body.user?.id !== user.id) {
         // Not the account whose draft is held: nothing of it may carry over.
         draftStore.clearAll();
+        composerFiles.clearAll();
         purgeUserCache(client);
         applySession(client, body);
         await navigate(paths.newChat(), { replace: true });
@@ -59,6 +61,7 @@ export function ReauthDialog({
 
   async function otherAccount() {
     draftStore.clearAll();
+    composerFiles.clearAll();
     purgeUserCache(client);
     applySession(client, { user: null, csrfToken: null, registrationOpen: false });
     await navigate(paths.login(), { replace: true });

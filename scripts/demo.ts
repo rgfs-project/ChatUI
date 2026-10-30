@@ -157,7 +157,7 @@ async function main(): Promise<void> {
   const llama = await startMockLlama({
     chatChunkDelayMs: 25,
     chunkDelayMs: 80,
-    listed: [MOCK_MODELS.chat, MOCK_MODELS.slow, MOCK_MODELS.long],
+    listed: [MOCK_MODELS.chat, MOCK_MODELS.vision, MOCK_MODELS.slow, MOCK_MODELS.long],
   });
   const server = spawn(process.execPath, ["server/main.ts"], {
     cwd: ROOT,

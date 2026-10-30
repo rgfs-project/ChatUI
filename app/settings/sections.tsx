@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Keyboard, Palette, Settings as SettingsIcon, UserRound } from "lucide-react";
+import { Keyboard, Paperclip, Palette, Settings as SettingsIcon, UserRound } from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import { useNavigate } from "react-router";
 import type { PreferencesDto } from "@shared/preferences";
@@ -11,6 +11,7 @@ import { qk } from "../lib/query/keys";
 import { modelsQuery, preferencesQuery } from "../lib/query/queries";
 import { useToast } from "../ui/toast";
 import { appearanceRows } from "./appearance";
+import { HistoryImagesRow, ImageSizeRow, StorageRow } from "./files";
 import { Row, type SettingsSection } from "./row";
 
 function General() {
@@ -185,6 +186,31 @@ export const SECTIONS: SettingsSection[] = [
     label: "Appearance",
     icon: <Palette size={18} aria-hidden />,
     rows: appearanceRows,
+  },
+  {
+    id: "files",
+    label: "Files",
+    icon: <Paperclip size={18} aria-hidden />,
+    rows: [
+      {
+        id: "image-size",
+        label: "Shrink large images",
+        keywords: "upload photo resize downscale attachment",
+        render: () => <ImageSizeRow />,
+      },
+      {
+        id: "history-images",
+        label: "Send earlier images again",
+        keywords: "vision prompt attachment history",
+        render: () => <HistoryImagesRow />,
+      },
+      {
+        id: "storage",
+        label: "File storage",
+        keywords: "quota uploads attachments space",
+        render: () => <StorageRow />,
+      },
+    ],
   },
   {
     id: "account",

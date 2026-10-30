@@ -1,0 +1,133 @@
+/* Loaded with the lazy viewer chunk, never with the chat page (Phase 12). */
+/* ── Image viewer (Phase 12) ── */
+.viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(0 0 0 / 94%);
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  outline: none;
+}
+
+.viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 12px 0 20px;
+  padding-top: env(safe-area-inset-top);
+}
+
+.viewer-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--text-ui);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-count {
+  flex: none;
+  color: rgb(255 255 255 / 70%);
+  font-size: var(--text-ui);
+}
+
+.viewer-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.viewer .icon-button {
+  color: #fff;
+}
+
+.viewer .icon-button:hover {
+  background: rgb(255 255 255 / 12%);
+}
+
+.viewer .icon-button:disabled {
+  opacity: 0.35;
+}
+
+.viewer-zoom {
+  min-width: 56px;
+  height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font-size: var(--text-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-zoom:hover {
+  background: rgb(255 255 255 / 12%);
+}
+
+.viewer-stage {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0 56px 24px;
+  overflow: hidden;
+  touch-action: none;
+  cursor: zoom-in;
+}
+
+.viewer-stage.is-zoomed {
+  cursor: grab;
+}
+
+.viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transform-origin: center;
+  transition: transform calc(var(--motion) * 0.6) ease-out;
+  user-select: none;
+}
+
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 10%);
+}
+
+.viewer-nav.is-prev {
+  left: 8px;
+}
+
+.viewer-nav.is-next {
+  right: 8px;
+}
+
+html[data-phone] .viewer-stage {
+  padding: 0 0 calc(16px + env(safe-area-inset-bottom));
+}
+
+html[data-phone] .viewer-nav {
+  top: auto;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: none;
+}

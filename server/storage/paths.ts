@@ -79,6 +79,27 @@ export class DataPaths {
     return this.inside(this.uuid(userId, "user id"), "operations", `${digest}.json`);
   }
 
+  /** Attachments (Phase 12): `attachments/<attachment-uuid>/{blob,meta.json}`. */
+  attachmentsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "attachments");
+  }
+
+  attachmentDir(userId: string, attachmentId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "attachments",
+      this.uuid(attachmentId, "attachment id"),
+    );
+  }
+
+  attachmentBlob(userId: string, attachmentId: string): string {
+    return path.join(this.attachmentDir(userId, attachmentId), "blob");
+  }
+
+  attachmentMeta(userId: string, attachmentId: string): string {
+    return path.join(this.attachmentDir(userId, attachmentId), "meta.json");
+  }
+
   systemDir(): string {
     return this.inside(SYSTEM_DIR);
   }

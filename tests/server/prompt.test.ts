@@ -261,3 +261,56 @@ describe("context budget counting", () => {
     expect(apply.length).toBe(observed.length);
   });
 });
+
+describe("typed content parts (Phase 12)", () => {
+  const image = { type: "image_url" as const, image_url: { url: "data:image/png;base64,AA==" } };
+
+  it("merging adjacent same-role messages keeps part order and joins text with two newlines", () => {
+    const merged = normalizeRoles([
+      { role: "user", content: [{ type: "text", text: "first" }, image] },
+      { role: "user", content: "second" },
+      { role: "user", content: [image] },
+    ]);
+    expect(merged).toEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "first" }, image, { type: "text", text: "second" }, image],
+      },
+    ]);
+    expect(
+      normalizeRoles([
+        { role: "user", content: [{ type: "text", text: "a" }] },
+        { role: "user", content: "b" },
+      ]),
+    ).toEqual([{ role: "user", content: [{ type: "text", text: "a\n\nb" }] }]);
+  });
+
+  it("the estimate counts text bytes plus a reserve per media part; text-only prompts are unchanged", async () => {
+    const counter = estimateCounter(16, 1_000);
+    expect(await counter.countPrompt([{ role: "user", content: "hello" }])).toBe(5 + 16);
+    expect(
+      await counter.countPrompt([
+        { role: "user", content: [{ type: "text", text: "hello" }, image, image] },
+      ]),
+    ).toBe(5 + 16 + 2_000);
+  });
+
+  it("the volatile context joins the newest message's first text part, before the media", async () => {
+    const result = await assemblePrompt(
+      model([{ type: "user", id: id(), body: "look", attachments: [id()] }]),
+      {
+        budget: 100_000,
+        trimStep: 1_000,
+        counter: estimateCounter(16, 100),
+        context: "Current time: 09:00 (UTC)",
+        expand: (block) => [{ type: "text", text: block.body }, image],
+      },
+    );
+    expect(result.messages).toEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "Current time: 09:00 (UTC)\n\nlook" }, image],
+      },
+    ]);
+  });
+});

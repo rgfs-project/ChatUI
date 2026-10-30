@@ -1,10 +1,61 @@
-import type { ConversationModel } from "../storage/markdown.ts";
+import type { Block, ConversationModel } from "../storage/markdown.ts";
+
+/** OpenAI-compatible typed content parts (Phase 12, docs/provider-notes.md). */
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "input_audio"; input_audio: { data: string; format: "wav" | "mp3" | "flac" } };
+
+/** Plain text, or typed parts when a message carries images or audio. */
+export type PromptContent = string | ContentPart[];
 
 /** A provider-bound message. Built from canonical storage only (contracts §4). */
 export interface PromptMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: PromptContent;
 }
+
+/** The text of a message (text parts joined); media parts contribute nothing. */
+export function textOf(content: PromptContent): string {
+  if (typeof content === "string") return content;
+  return content
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .filter((text) => text !== "")
+    .join("\n\n");
+}
+
+/** Image and audio parts in a message (each counts MEDIA_TOKEN_RESERVE). */
+export function mediaCount(content: PromptContent): number {
+  return typeof content === "string" ? 0 : content.filter((part) => part.type !== "text").length;
+}
+
+function toParts(content: PromptContent): ContentPart[] {
+  return typeof content === "string"
+    ? content === ""
+      ? []
+      : [{ type: "text", text: content }]
+    : content;
+}
+
+/** Joins two contents with two newlines, preserving typed part order. */
+export function joinContent(a: PromptContent, b: PromptContent): PromptContent {
+  if (typeof a === "string" && typeof b === "string") return `${a}\n\n${b}`;
+  const left = toParts(a);
+  const right = toParts(b);
+  const last = left.at(-1);
+  const first = right[0];
+  if (last?.type === "text" && first?.type === "text") {
+    return [
+      ...left.slice(0, -1),
+      { type: "text", text: `${last.text}\n\n${first.text}` },
+      ...right.slice(1),
+    ];
+  }
+  return [...left, ...right];
+}
+
+/** Expands a user block's attachments (Phase 12); the default is the body alone. */
+export type ExpandUser = (block: Extract<Block, { type: "user" }>) => PromptContent;
 
 export interface TokenCounter {
   /** True when counts come from the model's own template/tokenizer. */
@@ -26,14 +77,17 @@ export interface HistoryGroups {
   groups: PromptMessage[][];
 }
 
-export function historyGroups(model: ConversationModel): HistoryGroups {
+export function historyGroups(
+  model: ConversationModel,
+  expand: ExpandUser = (block) => block.body,
+): HistoryGroups {
   const system: PromptMessage[] = [];
   const groups: PromptMessage[][] = [];
   for (const block of model.blocks) {
     if (block.type === "system") {
       system.push({ role: "system", content: block.body });
     } else if (block.type === "user") {
-      groups.push([{ role: "user", content: block.body }]);
+      groups.push([{ role: "user", content: expand(block) }]);
     } else if (block.type === "assistant" && block.body !== "") {
       groups.at(-1)?.push({ role: "assistant", content: block.body });
     }
@@ -47,7 +101,7 @@ export function normalizeRoles(messages: PromptMessage[]): PromptMessage[] {
   for (const message of messages) {
     const last = out.at(-1);
     if (last?.role === message.role) {
-      last.content = `${last.content}\n\n${message.content}`;
+      last.content = joinContent(last.content, message.content);
     } else {
       out.push({ ...message });
     }
@@ -103,10 +157,12 @@ export async function assemblePrompt(
     instructions?: string | null;
     /** Volatile server context (e.g. time of day), only before the newest user message. */
     context?: string | null;
+    /** Attachment expansion for user blocks (Phase 12). */
+    expand?: ExpandUser;
   },
 ): Promise<AssembledPrompt> {
   const { budget, counter } = options;
-  const history = historyGroups(model);
+  const history = historyGroups(model, options.expand);
   const system: PromptMessage[] = [
     ...(options.instructions ? [{ role: "system" as const, content: options.instructions }] : []),
     ...history.system,
@@ -119,7 +175,7 @@ export async function assemblePrompt(
   const newestGroup = groups[newest];
   if (options.context && newestGroup?.[0]) {
     groups[newest] = [
-      { role: "user", content: `${options.context}\n\n${newestGroup[0].content}` },
+      { role: "user", content: joinContent(options.context, newestGroup[0].content) },
       ...newestGroup.slice(1),
     ];
   }
@@ -170,12 +226,22 @@ export async function assemblePrompt(
   }
 }
 
-/** Pessimistic fallback: one token per UTF-8 byte plus template overhead per message. */
-export function estimateCounter(templateOverheadTokens: number): TokenCounter {
+/**
+ * Pessimistic fallback: one token per UTF-8 byte plus template overhead per
+ * message, plus `mediaTokenReserve` per image or audio part.
+ */
+export function estimateCounter(
+  templateOverheadTokens: number,
+  mediaTokenReserve = 0,
+): TokenCounter {
   const count = (messages: PromptMessage[]) =>
     Promise.resolve(
       messages.reduce(
-        (sum, m) => sum + Buffer.byteLength(m.content, "utf8") + templateOverheadTokens,
+        (sum, m) =>
+          sum +
+          Buffer.byteLength(textOf(m.content), "utf8") +
+          templateOverheadTokens +
+          mediaTokenReserve * mediaCount(m.content),
         0,
       ),
     );

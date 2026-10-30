@@ -32,7 +32,8 @@ export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
     // insert (react-remove-scroll); style attributes stay blocked.
     "style-src": ["'self'", nonce],
     "style-src-attr": ["'none'"],
-    "img-src": ["'self'"],
+    // blob: previews of images chosen for upload, before they reach the server (Phase 12).
+    "img-src": ["'self'", "blob:"],
     "font-src": ["'self'"],
     "connect-src": ["'self'"],
     "manifest-src": ["'self'"],

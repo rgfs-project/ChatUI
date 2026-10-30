@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { makePng } from "../support/media.ts";
 import { base, hydrated, longChat, signIn } from "./helpers.ts";
 
 const ANDROID =
@@ -108,6 +109,39 @@ test.describe("phone (390 × 844)", () => {
       return el ? el.scrollHeight - el.clientHeight - el.scrollTop : -1;
     });
     expect(pinned).toBeLessThanOrEqual(32);
+    expect(await noHorizontalScroll(page)).toBe(true);
+  });
+
+  test("attachments: the picker opens from a tap; files sit above the text and stay visible with the keyboard open", async ({
+    page,
+  }) => {
+    await signIn(page, `/chat/${longChat()}`);
+    let chooserOpened = 0;
+    page.on("filechooser", () => {
+      chooserOpened++;
+    });
+    await page.locator("#message").tap();
+    expect(chooserOpened).toBe(0);
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByTestId("composer-menu").tap();
+    await page.getByRole("menuitem", { name: "Add photos and files" }).tap();
+    await (
+      await chooser
+    ).setFiles([
+      { name: "one.png", mimeType: "image/png", buffer: makePng(30, 20) },
+      { name: "two.png", mimeType: "image/png", buffer: makePng(20, 30) },
+    ]);
+    await expect(page.locator('[data-testid="composer-file"][data-status="ready"]')).toHaveCount(2);
+    expect(await smallTargets(page, ".composer")).toEqual([]);
+    await page.locator("#message").focus();
+    await page.setViewportSize({ width: 390, height: 460 });
+    await page.waitForTimeout(300);
+    const composer = await page.locator(".composer").boundingBox();
+    const files = await page.getByTestId("composer-files").boundingBox();
+    const text = await page.locator("#message").boundingBox();
+    expect(composer && composer.y >= 0 && composer.y + composer.height <= 460).toBe(true);
+    expect(files && text && files.y + files.height <= text.y).toBe(true);
+    expect(files && composer && files.y >= composer.y).toBe(true);
     expect(await noHorizontalScroll(page)).toBe(true);
   });
 

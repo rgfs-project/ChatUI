@@ -63,6 +63,17 @@ const envSchema = z.object({
   GENERATION_RETENTION_MS: intFrom(1_000, 7 * 86_400_000).default(3_600_000),
   SSE_REPLAY_EVENTS: intFrom(10, 100_000).default(2_000),
 
+  // Attachments (Phase 12).
+  MAX_ATTACHMENT_BYTES: intFrom(1_024, 1_073_741_824).default(26_214_400),
+  MAX_ATTACHMENTS_PER_MESSAGE: intFrom(1, 10).default(10),
+  USER_STORAGE_QUOTA_BYTES: intFrom(1_048_576, 1_099_511_627_776).default(1_073_741_824),
+  MAX_INLINE_TEXT_BYTES: intFrom(1_024, 10_000_000).default(100_000),
+  ATTACHMENT_PENDING_TTL: intFrom(60_000, 30 * 86_400_000).default(86_400_000),
+  MEDIA_TOKEN_RESERVE: intFrom(0, 100_000).default(1_024),
+  MAX_IMAGE_PIXELS: intFrom(1_000_000, 1_000_000_000).default(50_000_000),
+  MAX_UPLOADS_PER_USER: intFrom(1, 64).default(4),
+  MAX_PROMPT_MEDIA_PARTS: intFrom(0, 100).default(8),
+
   // Authentication (Phase 4).
   PUBLIC_ORIGIN: z.string().optional(),
   TRUST_PROXY: intFrom(0, 10).default(0),
@@ -93,7 +104,28 @@ export interface Config {
   inContainer: boolean;
   provider: ProviderConfig;
   storage: StorageConfig;
+  attachments: AttachmentConfig;
   auth: AuthConfig;
+}
+
+/** Upload, quota and prompt limits for attachments (Phase 12, contracts §7). */
+export interface AttachmentConfig {
+  /** Largest accepted file, enforced while streaming. */
+  maxBytes: number;
+  maxPerMessage: number;
+  /** Total stored bytes per user (pending and linked). */
+  quotaBytes: number;
+  /** Text attachments beyond this are truncated in the prompt (never in storage). */
+  maxInlineTextBytes: number;
+  /** Unlinked uploads older than this are removed. */
+  pendingTtlMs: number;
+  /** Tokens counted per image or audio part when the provider reports no exact count. */
+  mediaTokenReserve: number;
+  maxImagePixels: number;
+  /** Concurrent uploads per user (INV-62). */
+  maxConcurrentUploads: number;
+  /** Most recent image/audio parts sent with a prompt; older ones become a text note. */
+  maxPromptMediaParts: number;
 }
 
 export interface AuthConfig {
@@ -311,6 +343,17 @@ export function loadConfig(
       },
     },
     auth,
+    attachments: {
+      maxBytes: parsed.data.MAX_ATTACHMENT_BYTES,
+      maxPerMessage: parsed.data.MAX_ATTACHMENTS_PER_MESSAGE,
+      quotaBytes: parsed.data.USER_STORAGE_QUOTA_BYTES,
+      maxInlineTextBytes: parsed.data.MAX_INLINE_TEXT_BYTES,
+      pendingTtlMs: parsed.data.ATTACHMENT_PENDING_TTL,
+      mediaTokenReserve: parsed.data.MEDIA_TOKEN_RESERVE,
+      maxImagePixels: parsed.data.MAX_IMAGE_PIXELS,
+      maxConcurrentUploads: parsed.data.MAX_UPLOADS_PER_USER,
+      maxPromptMediaParts: parsed.data.MAX_PROMPT_MEDIA_PARTS,
+    },
     storage: {
       operationRetentionMs: parsed.data.OPERATION_RETENTION_MS,
       contextTrimStep: parsed.data.CONTEXT_TRIM_STEP,

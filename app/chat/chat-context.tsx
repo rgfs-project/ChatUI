@@ -38,6 +38,7 @@ import {
 import { applySession, purgeUserCache } from "../lib/session";
 import { useConfirm } from "../ui/dialog";
 import { useToast } from "../ui/toast";
+import { composerFiles, refOf } from "./composer-files";
 import { draftStore } from "./drafts";
 import { useGenerationObserver, useLiveGeneration, type LiveGeneration } from "./generation";
 import {
@@ -49,6 +50,7 @@ import {
   type ModelPair,
 } from "./model-choice";
 import type { ConversationDto, ConversationSummary } from "@shared/conversations";
+import type { AttachmentDto, AttachmentRef } from "@shared/attachments";
 
 /** Resends of an unresolved send with the same operation key (contracts §4.1). */
 const SEND_RETRIES = 3;
@@ -59,6 +61,7 @@ export const sendTiming = { baseDelayMs: 1_000 };
 export interface PendingSend {
   conversationId: string | null;
   content: string;
+  attachments: AttachmentRef[];
   userMessageId: string | null;
   /**
    * `sending`: in flight or being resent with the same key; `unknown`: retries
@@ -91,7 +94,7 @@ export interface ChatApi {
   selectedPair: ModelPair | null;
   selectModel: (pair: ModelPair) => void;
   refreshModels: () => Promise<void>;
-  send: (content: string) => Promise<boolean>;
+  send: (content: string, attachments?: readonly AttachmentDto[]) => Promise<boolean>;
   cancel: () => Promise<void>;
   rename: (target: RenameTarget) => void;
   renameTarget: RenameTarget | null;
@@ -207,8 +210,9 @@ export function ChatProvider({
   const sending = useRef(false);
 
   const send = useCallback(
-    async (content: string): Promise<boolean> => {
+    async (content: string, attachments: readonly AttachmentDto[] = []): Promise<boolean> => {
       const pair = selectedPair;
+      if (content === "" && attachments.length === 0) return false;
       if (sending.current || running) return false;
       if (!pair) {
         toast("Choose a model first.", "error");
@@ -217,12 +221,20 @@ export function ChatProvider({
       if (conversationId !== null && result && !result.ok) return false;
       sending.current = true;
       const target = conversationId;
-      setPending({ conversationId: target, content, userMessageId: null, status: "sending" });
+      const refs = attachments.map(refOf);
+      setPending({
+        conversationId: target,
+        content,
+        attachments: refs,
+        userMessageId: null,
+        status: "sending",
+      });
       const body = JSON.stringify({
         ...(target ? { conversationId: target } : {}),
         providerId: pair[0],
         model: pair[1],
         content,
+        ...(attachments.length > 0 ? { attachmentIds: attachments.map((a) => a.id) } : {}),
         operationKey: crypto.randomUUID(),
         operationIssuedAt: new Date().toISOString(),
       });
@@ -263,6 +275,7 @@ export function ChatProvider({
             setPending({
               conversationId: accepted.conversationId,
               content,
+              attachments: refs,
               userMessageId: accepted.userMessageId,
               status: "sending",
             });
@@ -385,6 +398,7 @@ export function ChatProvider({
   // ── Sign-out and account changes (INV-59) ──
   const signedOut = useCallback(async () => {
     draftStore.clearAll();
+    composerFiles.clearAll();
     if (composerRef.current) composerRef.current.value = "";
     purgeUserCache(client);
     await navigate(paths.login(), { replace: true });

@@ -37,7 +37,7 @@
   - `verify`: PASS (78/78)
   - `test:e2e`: PASS (46/46)
   - `npm audit`: 0
-  - `verify:compose`: CI
+  - `verify:compose`: FAILED in CI on the phase commit. `user:reset-password` imported `server/auth/sessions.ts`, which the image did not copy, so the container could not start. Fixed in `fix(phase-10): copy the session store into the container image`, with a test that checks the image copies every natively loaded module. CI is green after the fix.
 - **Budget:** `performance-budget.json` re-recorded:
   - chat JS 229,979 → 231,554 B (+1.6 KB: notice banner, instance query, admin menu entry)
   - CSS 6,773 → 7,118 B

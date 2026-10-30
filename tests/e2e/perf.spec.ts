@@ -6,14 +6,17 @@ import { chooseModel, hydrated, longChat, send, signIn, storedReplies } from "./
 const SENTINEL = "SENTINEL-PRIVATE-9f2c";
 
 /** A route module's own chunk, from the production build manifest (names can collide). */
-function routeChunk(route: string): string {
+function manifestChunk(key: string): string {
   const manifest = JSON.parse(
     readFileSync(new URL("../../build/client/.vite/manifest.json", import.meta.url), "utf8"),
   ) as Record<string, { file: string }>;
-  const entry = manifest[`app/routes/${route}.tsx?__react-router-build-client-route`];
-  if (!entry) throw new Error(`no chunk for ${route}`);
+  const entry = manifest[key];
+  if (!entry) throw new Error(`no chunk for ${key}`);
   return `/${entry.file}`;
 }
+
+const routeChunk = (route: string) =>
+  manifestChunk(`app/routes/${route}.tsx?__react-router-build-client-route`);
 
 test("performance marks fire once, compute ComposerTTI and FirstAssistantEvent, carry no content", async ({
   page,
@@ -62,6 +65,8 @@ test("secondary route chunks load on demand, and a failed chunk recovers", async
   await signIn(page, `/chat/${longChat()}`);
   expect(scripts).not.toContain(settingsChunk);
   expect(scripts).not.toContain(routeChunk("admin"));
+  // The image viewer (Phase 12) loads only when an image is opened.
+  expect(scripts).not.toContain(manifestChunk("app/chat/image-viewer.tsx"));
   // First attempt at the Settings chunk fails: the app still gets there.
   let failed = false;
   await page.route(`**${settingsChunk}`, async (route) => {

@@ -61,6 +61,8 @@ export const adminSettingsSchema = z.strictObject({
   notice: z.string().nullable(),
   maxOutputTokens: z.number().nullable(),
   timeZone: z.string(),
+  maxAttachmentBytes: z.number().nullable(),
+  userQuotaBytes: z.number().nullable(),
 });
 export type AdminSettings = z.infer<typeof adminSettingsSchema>;
 

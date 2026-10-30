@@ -1,5 +1,5 @@
 import { ArrowDown, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Link, useNavigation } from "react-router";
 import type { MessageDto } from "@shared/conversations";
 import { useHydrated } from "../lib/hydrated";
@@ -10,11 +10,13 @@ import { useRenderProbe } from "../lib/render-probe";
 import { useUi } from "../lib/ui-context";
 import { ErrorBoundary as AreaBoundary } from "../ui/error-boundary";
 import { useChat } from "./chat-context";
-import { Composer } from "./composer";
+import { Composer, useAddFiles } from "./composer";
 import { Header } from "./header";
 import { NoticeBanner } from "./notice";
 import { LiveReply } from "./live-reply";
 import { UserBubble } from "./message";
+import { draftKey } from "./drafts";
+import { ViewerProvider, type ViewerImage } from "./viewer";
 import { useScrollIntent } from "./scroll-intent";
 import { Suggestions } from "./suggestions";
 import { Transcript } from "./transcript";
@@ -89,6 +91,17 @@ export function ChatView() {
     pending.conversationId === conversationId &&
     !storedIds.has(pending.userMessageId ?? "");
   const empty = conversationId === null && !showPending;
+  // Every image in the conversation, in order, for the viewer's previous/next.
+  const images = useMemo(
+    () =>
+      [
+        ...messages.flatMap((m) => m.attachments),
+        ...(showPending ? pending.attachments : []),
+      ].filter((ref): ref is ViewerImage => !ref.missing && ref.kind === "image"),
+    [messages, pending, showPending],
+  );
+  const addFiles = useAddFiles(chat.userId, draftKey(chat.userId, conversationId));
+  const [dragging, setDragging] = useState(false);
   const failure = result && !result.ok ? result.code : null;
   const { scrollerRef, contentRef, state, jumpToLatest } = useScrollIntent(conversationId ?? "new");
   const { jumpRef } = chat;
@@ -117,107 +130,135 @@ export function ChatView() {
     };
   }, [jumpRef, jumpToLatest]);
 
+  const hasFiles = (event: DragEvent) => event.dataTransfer.types.includes("Files");
   return (
-    <div className={`chat-area${empty ? " is-empty" : ""}`}>
-      <title>{conversation ? `${conversation.title} · ChatUI` : "ChatUI"}</title>
-      <Header />
-      <NoticeBanner userId={chat.userId} />
-      {switching ? (
-        <div className="switch-spinner" role="status" aria-label="Opening chat">
-          <span className="spinner" aria-hidden />
-        </div>
-      ) : null}
-      <div className="scroller" id="transcript-scroller" ref={scrollerRef}>
-        <div className="thread" ref={contentRef} data-testid="transcript">
-          {failure === "NOT_FOUND" ? (
-            <div className="chat-error" role="alert">
-              <h1>This conversation does not exist.</h1>
-              <p>It may have been deleted, or the link may be wrong.</p>
-              <Link to={paths.newChat()} className="pill-button pill-primary">
-                Start a new chat
-              </Link>
-            </div>
-          ) : null}
-          {failure === "CONVERSATION_MALFORMED" && conversationId ? (
-            <div className="chat-error" role="alert">
-              <h1>This conversation can't be opened.</h1>
-              <p>
-                Its file is malformed. It can be deleted, but not opened or changed. Nothing in the
-                file has been modified.
-              </p>
-              <button
-                type="button"
-                className="pill-button pill-danger"
-                disabled={!hydrated}
-                onClick={() => {
-                  void chat.remove(conversationId, "this conversation");
-                }}
-              >
-                <Trash2 size={16} aria-hidden /> Delete it
-              </button>
-            </div>
-          ) : null}
-          <AreaBoundary
-            area="Transcript"
-            onRetry={() => {
-              void chat.checkPending();
-            }}
-          >
-            <Transcript messages={messages} timeFormat={timeFormat} />
-          </AreaBoundary>
-          {showPending ? (
-            <UserBubble
-              content={pending.content}
-              pending={pending.status}
-              onCheck={() => {
+    <ViewerProvider images={images}>
+      <div
+        className={`chat-area${empty ? " is-empty" : ""}${dragging ? " is-dropping" : ""}`}
+        onDragEnter={(event) => {
+          if (hasFiles(event) && !failure) setDragging(true);
+        }}
+        onDragOver={(event) => {
+          if (!hasFiles(event) || failure) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+        }}
+        onDrop={(event) => {
+          if (!hasFiles(event) || failure) return;
+          event.preventDefault();
+          setDragging(false);
+          addFiles(Array.from(event.dataTransfer.files));
+        }}
+      >
+        {dragging ? (
+          <div className="drop-overlay" aria-hidden>
+            <p>Drop files to attach them</p>
+          </div>
+        ) : null}
+        <title>{conversation ? `${conversation.title} · ChatUI` : "ChatUI"}</title>
+        <Header />
+        <NoticeBanner userId={chat.userId} />
+        {switching ? (
+          <div className="switch-spinner" role="status" aria-label="Opening chat">
+            <span className="spinner" aria-hidden />
+          </div>
+        ) : null}
+        <div className="scroller" id="transcript-scroller" ref={scrollerRef}>
+          <div className="thread" ref={contentRef} data-testid="transcript">
+            {failure === "NOT_FOUND" ? (
+              <div className="chat-error" role="alert">
+                <h1>This conversation does not exist.</h1>
+                <p>It may have been deleted, or the link may be wrong.</p>
+                <Link to={paths.newChat()} className="pill-button pill-primary">
+                  Start a new chat
+                </Link>
+              </div>
+            ) : null}
+            {failure === "CONVERSATION_MALFORMED" && conversationId ? (
+              <div className="chat-error" role="alert">
+                <h1>This conversation can't be opened.</h1>
+                <p>
+                  Its file is malformed. It can be deleted, but not opened or changed. Nothing in
+                  the file has been modified.
+                </p>
+                <button
+                  type="button"
+                  className="pill-button pill-danger"
+                  disabled={!hydrated}
+                  onClick={() => {
+                    void chat.remove(conversationId, "this conversation");
+                  }}
+                >
+                  <Trash2 size={16} aria-hidden /> Delete it
+                </button>
+              </div>
+            ) : null}
+            <AreaBoundary
+              area="Transcript"
+              onRetry={() => {
                 void chat.checkPending();
               }}
-            />
-          ) : null}
-          {chat.activeGenerationId && conversationId ? (
-            <LiveReply
-              userId={chat.userId}
-              generationId={chat.activeGenerationId}
-              conversationId={conversationId}
-              storedIds={storedIds}
-            />
-          ) : null}
+            >
+              <Transcript messages={messages} timeFormat={timeFormat} />
+            </AreaBoundary>
+            {showPending ? (
+              <UserBubble
+                content={pending.content}
+                attachments={pending.attachments}
+                pending={pending.status}
+                onCheck={() => {
+                  void chat.checkPending();
+                }}
+              />
+            ) : null}
+            {chat.activeGenerationId && conversationId ? (
+              <LiveReply
+                userId={chat.userId}
+                generationId={chat.activeGenerationId}
+                conversationId={conversationId}
+                storedIds={storedIds}
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
-      {/* Server HTML only: after hydration the layout effect does this job. */}
-      {conversation && !hydrated ? <ScrollToLatestOnLoad /> : null}
-      <div className="dock">
-        {state.hasNew && !state.pinned ? (
-          <button
-            type="button"
-            className="jump-latest"
-            aria-label="Jump to latest"
-            onClick={jumpToLatest}
-          >
-            <ArrowDown size={18} aria-hidden />
-          </button>
-        ) : null}
-        {empty ? <h1 className="greeting">{greetingFor(timeFormat.now)}</h1> : null}
-        {!empty && !failure ? (
-          <p className="disclaimer">ChatUI can make mistakes. Check important info.</p>
-        ) : null}
-        {modelNotice ? (
-          <p className="composer-notice" role="status" data-testid="model-notice">
-            {modelNotice}{" "}
+        {/* Server HTML only: after hydration the layout effect does this job. */}
+        {conversation && !hydrated ? <ScrollToLatestOnLoad /> : null}
+        <div className="dock">
+          {state.hasNew && !state.pinned ? (
             <button
               type="button"
-              className="link-button"
-              onClick={() => {
-                void chat.refreshModels();
-              }}
+              className="jump-latest"
+              aria-label="Jump to latest"
+              onClick={jumpToLatest}
             >
-              Try again
+              <ArrowDown size={18} aria-hidden />
             </button>
-          </p>
-        ) : null}
-        {failure ? null : <Composer />}
-        {empty && !chat.hasDraft ? <Suggestions /> : null}
+          ) : null}
+          {empty ? <h1 className="greeting">{greetingFor(timeFormat.now)}</h1> : null}
+          {!empty && !failure ? (
+            <p className="disclaimer">ChatUI can make mistakes. Check important info.</p>
+          ) : null}
+          {modelNotice ? (
+            <p className="composer-notice" role="status" data-testid="model-notice">
+              {modelNotice}{" "}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  void chat.refreshModels();
+                }}
+              >
+                Try again
+              </button>
+            </p>
+          ) : null}
+          {failure ? null : <Composer />}
+          {empty && !chat.hasDraft ? <Suggestions /> : null}
+        </div>
       </div>
-    </div>
+    </ViewerProvider>
   );
 }

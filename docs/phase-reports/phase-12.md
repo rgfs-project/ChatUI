@@ -1,0 +1,79 @@
+## Phase 12 report
+
+- **Plan:** package Phase 12, plus the roadmap additions (`+` menu, drag and drop, paste, thumbnails and chips, browser downscaling, full-screen image viewer).
+  - **Server:** storage, sniffing, quota reservations, a raw route kind for bytes, linking inside send acceptance, typed prompt parts, startup reconciliation.
+  - **Browser:** composer file store with XHR progress, transcript rendering, a lazy viewer chunk, and Settings → Files.
+  - **Admin limits** in Administration → Instance.
+- **Scope completed:**
+  - **Storage and uploads:**
+    - `attachments/<uuid>/{blob,meta.json}`; the UUID is minted by the server and the filename is display-only (INV-28).
+    - Single-file multipart upload (busboy). The size is enforced per chunk; the type is sniffed from the bytes (PNG/JPEG/WebP/GIF, WAV/MP3/FLAC, UTF-8 text with allowed extensions) with structural checks for truncated or malformed files and an image pixel limit.
+    - Quota reservations before streaming, and a per-user concurrent-upload cap (INV-62).
+    - `meta.json` is written last; incomplete uploads are removed at startup.
+  - **API and serving:**
+    - `POST /api/attachments`, `GET /api/attachments` (list with usage and limits), `GET /api/attachments/:id`, `GET /api/attachments/:id/content` (raw route: sniffed type, `nosniff`, sandbox CSP, download disposition except raster images, ranges, private caching; INV-27), and `DELETE /api/attachments/:id` (pending only).
+    - Another user's file is a 404 everywhere.
+  - **Send and prompts:**
+    - `attachmentIds` on send, which may be the whole message. Ownership and pending state are checked in step 1 and rechecked under attachment locks (after the conversation lock). Files are linked between the Markdown write and the committed record.
+    - Images and audio need the model's modality (`MODEL_CAPABILITY_UNSUPPORTED` before any write; INV-44). Earlier media become notes when they can't be sent.
+    - The `historyImages` preference is respected and rechecked under the lock.
+    - Text is inlined in fenced blocks with a truncation marker. `MEDIA_TOKEN_RESERVE` counts in both token counters; text-only prompts are byte-identical to before.
+  - **Recovery:** link after a crash between Markdown and link; remove orphans of deleted conversations; pending TTL garbage collection at startup and hourly.
+  - **Conversations:** delete removes the Markdown, then the files. The conversation DTO carries attachment metadata with `missing` placeholders.
+  - **Browser:**
+    - `+` menu "Add photos and files", paste, drag and drop with an overlay.
+    - Chips with preview, progress, error and Remove (which cancels the upload or deletes the pending copy).
+    - Downscaling to `imageMaxEdge` (default 2048 px, 0 = off).
+    - A capability warning, and the model menu marks models without image/audio input. Send is blocked while uploads are running or failed.
+    - Lazy thumbnails sized from stored dimensions, audio with `preload="none"`, download chips for text, "File unavailable" placeholders.
+    - **Image viewer** (separate JS and CSS chunk): zoom (buttons, wheel, double-click, pinch, keys), pan, previous/next (buttons, arrows, swipe), download, Escape, focus return, no flash between images.
+    - Settings → Files: image size, earlier images, storage meter.
+    - Uploads are aborted and forgotten on account change.
+  - **Admin:** largest file (may only lower `MAX_ATTACHMENT_BYTES`) and storage per account.
+  - **Demo:** lists the vision mock model.
+- **Required tests:**
+  - `tests/server/attachments.test.ts` (18):
+    - Uploads: every allowed type sniffed with dimensions; INV-27 spoofed extension and Content-Type, SVG/HTML (also as `.txt`/`.md`), invalid UTF-8, NUL, PDF, EXE; truncated or malformed WAV/MP3/FLAC/PNG and the pixel limit; the size limit mid-stream with chunked transfer (no temp left) and the declared size.
+    - Quota and limits: parallel uploads against the quota, with deletion freeing space; INV-28 hostile and Unicode filenames plus `Content-Disposition`; one `file` part only; client disconnect mid-upload (no leftovers, slot released).
+    - Serving and ownership: serving headers and ranges; INV-15 cross-user read, bytes, delete and send.
+    - Sending: linking with typed parts; conversation metadata and Markdown round-trip; a linked file can't be deleted or re-sent; INV-44 capability rejection with nothing stored; attachment-only messages and the per-message limit; text truncation at a character boundary.
+    - Earlier media and missing files: notes for a text model and for `historyImages: omit`; missing file placeholder and prompt skip.
+    - Lifecycle and recovery: conversation delete removes its files; crash between Markdown write and link → reconciliation; startup removal of incomplete uploads, orphans and expired pending files (a young upload survives).
+  - `tests/server/prompt.test.ts`: content-part merging, media reserve counting, and the context block with media.
+  - `tests/scripts/dockerfile-imports.test.ts`: the image copies every module the CLI and server entry load (from the Phase 10 CI fix).
+  - `tests/e2e/attachments.spec.ts`:
+    - attach → send → reload → thumbnail (stored dimensions) → viewer (next, zoom, download link, Escape, focus return);
+    - paste and remove;
+    - drag and drop;
+    - an unsupported type is refused with a message;
+    - the capability warning and model menu marks;
+    - a 24-image conversation requests fewer than half of the image bytes on open.
+  - `tests/e2e/mobile.spec.ts`: the picker opens from a tap; chips sit above the text inside the composer with a shortened viewport, with 44 × 44 targets.
+  - `tests/e2e/perf.spec.ts`: the viewer chunk is not loaded with the chat page.
+  - `verify`: upload serving headers, attachment endpoints never SSR HTML, viewer not in the initial JS.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (454)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (81/81)
+  - `test:e2e`: PASS (52/52)
+  - `npm audit`: 0
+  - `verify:compose`: CI
+- **Budget:** re-recorded:
+  - chat JS 231,554 → 236,930 B (composer files, chips, transcript attachments, upload adapter)
+  - CSS 7,118 → 7,716 B
+  - sign-in JS 129,101 → 129,472 B
+
+  The viewer (2.0 KB JS and 0.7 KB CSS, gzip) loads on demand. Every value was within the previous 10 % tolerance.
+
+- **Invariants:** INV-27, INV-28 and INV-44 implemented; INV-62 complete (upload reservations). The Phase 10 rows (INV-24/25/26/61) were marked implemented, and INV-62 now records its Phase 4/6 parts.
+- **Dependencies:** `busboy` 1.6.0 (multipart parsing) and `@types/busboy` 1.5.4 (dev).
+- **Deviations / limitations / unverified items:**
+  - Live multimodal llama.cpp input is UNVERIFIED: no reachable server, so the format follows the OpenAI-compatible spec (`docs/provider-notes.md`). FLAC as an `input_audio` format is UNVERIFIED (llama.cpp documents wav/mp3). `MEDIA_TOKEN_RESERVE` is an estimate.
+  - Earlier media the model can't take become text notes rather than a rejection (ARCHITECTURE deviations).
+  - Composer files live in tab memory like drafts: a reload drops them from the composer, and their pending uploads expire after the TTL.
+  - The on-screen keyboard is simulated by a shorter viewport (as in Phase 11).
+  - No virus scanning (documented as a deployment consideration).
+  - PDF and Office extraction are out of scope.
+- **Commit/tag:** `feat(phase-12): attachments with sniffed types, quotas, and model capability checks`, tag `phase-12` (local), pushed to `main`.

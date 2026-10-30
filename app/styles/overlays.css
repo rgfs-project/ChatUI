@@ -599,3 +599,25 @@
 html[data-phone] .notice-banner {
   margin-top: 4px;
 }
+
+.storage-meter {
+  width: 140px;
+  height: 6px;
+  appearance: none;
+  border: 0;
+  border-radius: 3px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.storage-meter::-webkit-progress-bar {
+  background: var(--divider);
+}
+
+.storage-meter::-webkit-progress-value {
+  background: var(--accent);
+}
+
+.storage-meter::-moz-progress-bar {
+  background: var(--accent);
+}

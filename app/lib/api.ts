@@ -168,3 +168,59 @@ export function safeReturnTo(value: string | null | undefined): string {
   if (!value || !SAFE_RETURN_TO.test(value)) return "/chat/new";
   return value;
 }
+
+/**
+ * Multipart upload with progress (fetch has no upload progress). Same rules as
+ * apiFetch: CSRF and expected-user headers, a 401 opens re-authentication,
+ * and a CSRF failure refreshes the session (the caller may try again).
+ */
+export function apiUpload<T>(
+  url: string,
+  file: Blob,
+  filename: string,
+  options: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Accept", "application/json");
+    if (current?.csrfToken && current.user) {
+      xhr.setRequestHeader("X-CSRF-Token", current.csrfToken);
+      xhr.setRequestHeader("X-Expected-User", current.user.id);
+    }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) options.onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      let body: unknown;
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        body = null;
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && body !== null) {
+        resolve(body as T);
+        return;
+      }
+      if (xhr.status === 401) reportSessionExpired();
+      const error = (body as { error?: { code?: string; message?: string } } | null)?.error;
+      const code = error?.code ?? null;
+      if (code === "CSRF_INVALID" || code === "SESSION_CHANGED") void refreshSession();
+      reject(
+        new ApiError(code, error?.message ?? `Upload failed (${String(xhr.status)})`, xhr.status),
+      );
+    };
+    xhr.onerror = () => {
+      reject(new ApiError(null, "The upload failed. Check your connection.", 0));
+    };
+    xhr.onabort = () => {
+      reject(new DOMException("Upload cancelled", "AbortError"));
+    };
+    options.signal?.addEventListener("abort", () => {
+      xhr.abort();
+    });
+    const form = new FormData();
+    form.append("file", file, filename);
+    xhr.send(form);
+  });
+}

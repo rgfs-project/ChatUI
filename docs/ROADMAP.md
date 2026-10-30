@@ -57,11 +57,11 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 
 ## 5. Progress
 
-| Gate                     | Status                                                     |
-| ------------------------ | ---------------------------------------------------------- |
-| 1a–6                     | Done (tags `phase-1a` … `phase-6`)                         |
-| 7a, 7b, 8, 11, 14, 9, 10 | Done (tags `phase-<id>`); reports in `docs/phase-reports/` |
-| 12 onward                | Not started                                                |
+| Gate                         | Status                                                     |
+| ---------------------------- | ---------------------------------------------------------- |
+| 1a–6                         | Done (tags `phase-1a` … `phase-6`)                         |
+| 7a, 7b, 8, 11, 14, 9, 10, 12 | Done (tags `phase-<id>`); reports in `docs/phase-reports/` |
+| 12b onward                   | Not started                                                |
 
 ## 6. Phase 7a plan (as approved)
 

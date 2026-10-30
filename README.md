@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 10 (administration).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, appearance: theme, accent, text sizes, reduced motion; account; shortcuts) as a searchable overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. Admins manage accounts, providers, models (visibility, sampling, system prompts) and instance settings from an Administration overlay. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md); uploads and the rest come later.
+> **Status: Phase 12 (attachments).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, appearance: theme, accent, text sizes, reduced motion; account; shortcuts) as a searchable overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. Admins manage accounts, providers, models (visibility, sampling, system prompts) and instance settings from an Administration overlay. You can attach images, audio and text files to messages, and open images in a full-screen viewer. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Prerequisites
 
@@ -169,6 +169,23 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 
 - Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).
 - Each account has its own directory `DATA_DIR/<user-id>/` (`user.json`, `chats/`, `preferences.json`, `operations/`). `_system/` holds `providers.json` (secrets), sessions (deleting them signs everyone out) and the derived username index.
+- **Attachments** live in `DATA_DIR/<user-id>/attachments/<id>/` (`blob` plus `meta.json`) and are part of every backup. Messages reference them by id. A file removed by hand shows as "File unavailable" and is skipped in prompts.
+- **Attachment limits** (environment; admins can change the file size and storage in Administration → Instance):
+
+  | Variable                      | Default | Meaning                                                             |
+  | ----------------------------- | ------- | ------------------------------------------------------------------- |
+  | `MAX_ATTACHMENT_BYTES`        | 25 MB   | Largest file, enforced while uploading                              |
+  | `USER_STORAGE_QUOTA_BYTES`    | 1 GB    | Total files per account                                             |
+  | `MAX_ATTACHMENTS_PER_MESSAGE` | 10      | Files per message                                                   |
+  | `MAX_IMAGE_PIXELS`            | 50 MP   | Largest image                                                       |
+  | `MAX_INLINE_TEXT_BYTES`       | 100 KB  | Text sent to the model per file; the rest is cut in the prompt only |
+  | `ATTACHMENT_PENDING_TTL`      | 24 h    | Uploads never sent are removed after this                           |
+  | `MAX_UPLOADS_PER_USER`        | 4       | Concurrent uploads                                                  |
+  | `MAX_PROMPT_MEDIA_PARTS`      | 8       | Most recent images/audio sent with a prompt                         |
+  | `MEDIA_TOKEN_RESERVE`         | 1024    | Tokens counted per image or audio clip                              |
+
+  Accepted: PNG, JPEG, WebP, GIF, WAV, MP3, FLAC and UTF-8 text/Markdown/CSV/JSON/source files. Types are decided by the file's contents; SVG, HTML, PDF and executables are refused. Images and audio go only to models that report image or audio input. Uploaded files are not virus-scanned; scan `DATA_DIR` separately if you need that.
+
 - **Back up all of `DATA_DIR`.** `index/` is derived and optional in a backup: it is rebuilt from the Markdown when missing. Keep `operations/` (short-lived send records used for safe retries and crash recovery). Stop the server, or copy from a filesystem snapshot, for a consistent backup; online backup/restore arrives in Phase 16.
 - **Single process only.** Exactly one ChatUI process may use a `DATA_DIR` (locks are in-process). Don't run two servers, or the CLI `index:rebuild`, against the same directory at the same time.
 - Writes are atomic and durable (temp file, fsync, rename, directory fsync). On Windows, directory fsync is unavailable and rename-over-existing semantics differ; Linux containers are the supported runtime.

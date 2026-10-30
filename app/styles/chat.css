@@ -359,3 +359,237 @@
   opacity: 1;
   box-shadow: inset 0 0 0 1px var(--danger);
 }
+
+/* ── Attachments (Phase 12) ── */
+.msg-files {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: min(70%, 560px);
+  margin-bottom: 6px;
+}
+
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.msg-image {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bubble-bg);
+  cursor: zoom-in;
+}
+
+.msg-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: var(--text-ui);
+  text-decoration: none;
+}
+
+.file-chip:hover {
+  background: var(--hover);
+}
+
+.file-chip.is-missing {
+  color: var(--text-secondary);
+  border-style: dashed;
+}
+
+.file-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-chip-meta {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.file-audio {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.file-audio audio {
+  max-width: 100%;
+}
+
+/* Composer files above the text. */
+.composer.has-files {
+  grid-template-areas:
+    "files files"
+    "text text"
+    "start actions";
+}
+
+.composer-files {
+  display: flex;
+  grid-area: files;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 2px 6px;
+  overflow-x: auto;
+  list-style: none;
+}
+
+.composer-file {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  width: 220px;
+  padding: 6px 28px 6px 6px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.composer-file.is-error {
+  border-color: var(--danger);
+}
+
+.composer-file-thumb,
+.composer-file-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.composer-file-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--hover);
+  color: var(--text-secondary);
+}
+
+.composer-file-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--text-ui);
+  line-height: 18px;
+}
+
+.composer-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-file.is-error .composer-file-meta {
+  color: var(--danger);
+}
+
+.composer-file-progress {
+  position: absolute;
+  right: 8px;
+  bottom: 3px;
+  left: 8px;
+  height: 3px;
+  appearance: none;
+  border: 0;
+  border-radius: 2px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.composer-file-progress::-webkit-progress-bar {
+  background: var(--divider);
+}
+
+.composer-file-progress::-webkit-progress-value {
+  background: var(--accent);
+}
+
+.composer-file-progress::-moz-progress-bar {
+  background: var(--accent);
+}
+
+.composer-file-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.composer-warning {
+  width: min(var(--thread-width), 100%);
+  margin: 0 0 8px;
+  color: var(--danger);
+  font-size: var(--text-ui);
+  text-align: center;
+}
+
+/* Drag and drop over the chat. */
+.chat-area.is-dropping .scroller,
+.chat-area.is-dropping .dock {
+  pointer-events: none;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  pointer-events: none;
+}
+
+.drop-overlay p {
+  margin: 0;
+  font-size: var(--text-message);
+  font-weight: var(--weight-medium);
+}

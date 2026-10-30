@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { chromium, type ConsoleMessage } from "@playwright/test";
+import { makePng } from "../../tests/support/media.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const VERSION = (
@@ -283,6 +284,48 @@ export async function sendAndWait(
   return { status: 202, conversationId: started.conversationId ?? "", sse: await stream.text() };
 }
 
+/** Phase 12: attachment bytes are API responses, never an HTML document (INV-27, INV-57). */
+async function attachmentChecks(base: string, session: ApiSession): Promise<void> {
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(makePng(4, 4))], { type: "image/png" }), "v.png");
+  const uploaded = await fetch(`${base}/api/attachments`, {
+    method: "POST",
+    headers: sessionHeaders(session, true),
+    body: form,
+  });
+  const meta = (await uploaded.json()) as { id?: string; mediaType?: string };
+  const content = await fetch(`${base}/api/attachments/${String(meta.id)}/content`, {
+    headers: sessionHeaders(session),
+  });
+  await content.arrayBuffer();
+  check(
+    "INV-27: an uploaded image is served with its sniffed type, nosniff and a sandbox CSP",
+    uploaded.status === 201 &&
+      meta.mediaType === "image/png" &&
+      content.headers.get("content-type") === "image/png" &&
+      content.headers.get("x-content-type-options") === "nosniff" &&
+      content.headers.get("content-security-policy") === "sandbox; default-src 'none'",
+  );
+  const anonymous = await fetch(`${base}/api/attachments/${String(meta.id)}/content`);
+  const missing = await fetch(
+    `${base}/api/attachments/00000000-0000-4000-8000-000000000000/content`,
+    { headers: sessionHeaders(session) },
+  );
+  await Promise.all([anonymous.arrayBuffer(), missing.arrayBuffer()]);
+  check(
+    "INV-57: attachment endpoints answer with JSON errors, never SSR HTML",
+    anonymous.status === 401 &&
+      missing.status === 404 &&
+      [anonymous, missing].every((r) =>
+        (r.headers.get("content-type") ?? "").startsWith("application/json"),
+      ),
+  );
+  await fetch(`${base}/api/attachments/${String(meta.id)}`, {
+    method: "DELETE",
+    headers: sessionHeaders(session, true),
+  });
+}
+
 /** Chat demo checks (host process with a mock provider), Phase 2 + 3 UI. */
 export async function chatChecks(
   base: string,
@@ -314,15 +357,23 @@ export async function chatChecks(
     (m) => m[1] ?? "",
   );
   const heavy: string[] = [];
+  const viewer: string[] = [];
   for (const asset of new Set(critical)) {
     const code = await (await fetch(`${base}${asset}`)).text();
     if (/KaTeX parse error|registerLanguage\(|highlightAuto/.test(code)) heavy.push(asset);
+    if (code.includes("Fit to screen")) viewer.push(asset);
   }
   check(
     "Phase 14: KaTeX and highlight.js are not in the chat page's initial JavaScript",
     critical.length > 0 && heavy.length === 0,
     heavy.join(", "),
   );
+  check(
+    "Phase 12: the image viewer is not in the chat page's initial JavaScript",
+    critical.length > 0 && viewer.length === 0,
+    viewer.join(", "),
+  );
+  await attachmentChecks(base, session);
   check(
     "INV-55: the document dehydrates the session and models into the query cache",
     html.includes("csrfToken") && html.includes(models.chat) && !html.includes("passwordHash"),

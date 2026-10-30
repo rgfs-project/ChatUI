@@ -12,6 +12,7 @@ import type { PreferencesDto } from "@shared/preferences";
 import { ErrorCode } from "@shared/errors";
 import type { AdminService } from "./admin/service.ts";
 import type { SettingsStore } from "./admin/settings.ts";
+import type { AttachmentLimits, AttachmentStore } from "./attachments/store.ts";
 import type { AuthContext, AuthService } from "./auth/service.ts";
 import type { SendService } from "./chat/send-service.ts";
 import { AppError } from "./errors.ts";
@@ -57,6 +58,9 @@ export interface RouteServices {
   /** Phase 10. */
   admin: AdminService;
   settings: SettingsStore;
+  /** Phase 12. */
+  attachments: AttachmentStore;
+  attachmentLimits: () => AttachmentLimits & { maxPerMessage: number };
   preferences: PreferencesStore;
   sseConnections: SseConnections;
   sse: SseOptions;
@@ -123,6 +127,23 @@ export interface SseRoute<S extends RequestSchemas = RequestSchemas> extends Rou
   handler: (input: ParsedRequest<S>, ctx: RouteContext) => void;
 }
 
+/**
+ * A route that writes its own response (attachment bytes): validated and
+ * guarded like any route; errors thrown before it responds use the error contract.
+ */
+export interface RawRoute<S extends RequestSchemas = RequestSchemas> extends RouteBase<S> {
+  kind: "raw";
+  handler: (
+    input: ParsedRequest<S>,
+    ctx: RouteContext,
+    next: (error: unknown) => void,
+  ) => Promise<void>;
+}
+
+export function defineRawRoute<S extends RequestSchemas>(route: RawRoute<S>): RawRoute<S> {
+  return route;
+}
+
 export function defineRoute<S extends RequestSchemas, R extends z.ZodType>(
   route: ApiRoute<S, R>,
 ): ApiRoute<S, R> {
@@ -134,10 +155,10 @@ export function defineSseRoute<S extends RequestSchemas>(route: SseRoute<S>): Ss
 }
 
 /** Type-erased form for heterogeneous route lists. */
-export type AnyApiRoute = ApiRoute | SseRoute;
+export type AnyApiRoute = ApiRoute | SseRoute | RawRoute;
 
 export function erase<S extends RequestSchemas, R extends z.ZodType>(
-  route: ApiRoute<S, R> | SseRoute<S>,
+  route: ApiRoute<S, R> | SseRoute<S> | RawRoute<S>,
 ): AnyApiRoute {
   return route;
 }
@@ -166,6 +187,13 @@ export function buildApiRouter(routes: readonly AnyApiRoute[], services: RouteSe
       router[route.method](mountedPath, async (req, res) => {
         const ctx = await guard(req, res);
         route.handler(parseRequest(route.request, req), ctx);
+      });
+      continue;
+    }
+    if (route.kind === "raw") {
+      router[route.method](mountedPath, async (req, res, next) => {
+        const ctx = await guard(req, res);
+        await route.handler(parseRequest(route.request, req), ctx, next);
       });
       continue;
     }

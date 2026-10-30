@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@shared/generations";
+import type { PromptMessage } from "../chat/prompt.ts";
 import type { ErrorCode } from "@shared/errors";
 
 /** Minimal provider surface for generation: list models, stream, cancel (abort). */
@@ -24,7 +24,8 @@ export interface ProviderModel {
 
 export interface ChatRequest {
   model: string;
-  messages: ChatMessage[];
+  /** Text or typed content parts (images, audio; Phase 12). */
+  messages: PromptMessage[];
   maxTokens: number;
   /** Per-model sampling overrides (Phase 10, validated by the admin settings schema). */
   sampling?: {

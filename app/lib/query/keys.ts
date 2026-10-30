@@ -11,6 +11,8 @@ export const qk = {
   preferences: (userId: string) => ["u", userId, "preferences"] as const,
   /** Instance notice and default model (Phase 10). */
   instance: (userId: string) => ["u", userId, "instance"] as const,
+  /** The user's uploaded files (Phase 12); invalidated by uploads and deletes. */
+  attachments: (userId: string) => ["u", userId, "attachments"] as const,
   /** Live generation state written by the SSE observer; never dehydrated. */
   generation: (userId: string, id: string) => ["u", userId, "generation", id] as const,
 };
@@ -22,6 +24,7 @@ export type Resource =
   | "models"
   | "preferences"
   | "instance"
+  | "attachments"
   | "generation";
 
 /** The resource a key names, or undefined for keys outside the factory. */
@@ -35,6 +38,7 @@ export function resourceOf(key: readonly unknown[]): Resource | undefined {
       "models",
       "preferences",
       "instance",
+      "attachments",
       "generation",
     ].includes(name)
     ? (name as Resource)

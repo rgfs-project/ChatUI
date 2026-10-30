@@ -57,6 +57,17 @@ describe("configuration", () => {
         generationRetentionMs: 3_600_000,
         sseReplayEvents: 2_000,
       },
+      attachments: {
+        maxBytes: 26_214_400,
+        maxPerMessage: 10,
+        quotaBytes: 1_073_741_824,
+        maxInlineTextBytes: 100_000,
+        pendingTtlMs: 86_400_000,
+        mediaTokenReserve: 1_024,
+        maxImagePixels: 50_000_000,
+        maxConcurrentUploads: 4,
+        maxPromptMediaParts: 8,
+      },
     });
   });
 
