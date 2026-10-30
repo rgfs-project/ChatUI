@@ -37,11 +37,11 @@
     {
       "name": "section label",
       "selector": ".side-label",
-      "width": 316,
-      "height": 36,
+      "width": 328,
+      "height": 35,
       "css": {
-        "padding": "0px 10px",
-        "border-radius": "6px",
+        "padding": "6px 10px",
+        "border-radius": "8px",
         "font-size": "14px",
         "line-height": "18px",
         "font-weight": "600"
@@ -58,14 +58,14 @@
       "selector": ".sidebar-foot",
       "height": 60,
       "css": {
-        "padding": "6px 14px",
+        "padding": "6px",
         "gap": "12px"
       }
     },
     {
       "name": "profile row",
       "selector": ".profile-row",
-      "width": 312,
+      "width": 328,
       "height": 48
     },
     {

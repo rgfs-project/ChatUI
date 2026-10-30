@@ -110,6 +110,7 @@ html[data-phone] .code-copy::after {
 }
 
 html[data-phone] .side-row,
+html[data-phone] .side-label,
 html[data-phone] .chat-row,
 html[data-phone] .menu-item {
   min-height: 44px;

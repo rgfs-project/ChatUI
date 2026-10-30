@@ -83,20 +83,24 @@
 }
 
 .side-heading {
-  margin: 22px 6px 4px;
+  margin: 22px 0 4px;
   font-size: inherit;
 }
 
-/* "Recents" folds its list; the chevron shows on hover, focus or when folded. */
+/*
+ * "Recents" folds its list. The button has the chat rows' box (full width,
+ * row height, padding, corners, hover); the chevron shows on hover, focus or
+ * when folded.
+ */
 .side-label {
   display: flex;
   align-items: center;
   gap: 4px;
   width: 100%;
-  height: 36px;
-  padding: 0 10px;
+  height: var(--row-height);
+  padding: 6px 10px;
   border: 0;
-  border-radius: var(--radius-label);
+  border-radius: var(--radius-row);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--text-label);
@@ -105,7 +109,8 @@
   text-align: left;
 }
 
-.side-label:hover {
+.side-label:hover,
+.side-label:focus-visible {
   background: var(--hover);
 }
 
@@ -213,7 +218,8 @@
   align-items: center;
   gap: 12px;
   height: 60px;
-  padding: 6px 14px;
+  /* Same 6 px inset as every other sidebar row (all rows share one width). */
+  padding: 6px;
 }
 
 .profile-row {
@@ -223,7 +229,8 @@
   gap: 8px;
   min-width: 0;
   height: 48px;
-  padding: 0;
+  /* The avatar stays 14 px from the sidebar edge. */
+  padding: 0 8px;
   border: 0;
   border-radius: var(--radius-row);
   background: transparent;

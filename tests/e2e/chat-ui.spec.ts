@@ -242,3 +242,19 @@ test("slash commands: / opens a menu above the composer; keyboard and mouse choo
   await menu.getByRole("option", { name: /New chat/ }).click();
   await page.waitForURL(/\/chat\/new$/);
 });
+
+test("every sidebar row has the same width and left edge", async ({ page }) => {
+  await signIn(page);
+  const boxes = await page.evaluate(() =>
+    [
+      ...document.querySelectorAll(
+        ".sidebar .side-row, .sidebar .side-label, .sidebar .chat-row, .sidebar .profile-row",
+      ),
+    ].map((el) => {
+      const box = el.getBoundingClientRect();
+      return { x: Math.round(box.x), width: Math.round(box.width) };
+    }),
+  );
+  expect(boxes.length).toBeGreaterThanOrEqual(5);
+  expect(new Set(boxes.map((b) => `${String(b.x)}/${String(b.width)}`)).size).toBe(1);
+});
