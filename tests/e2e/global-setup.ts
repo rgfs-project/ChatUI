@@ -11,25 +11,31 @@ const ROOT = path.resolve(import.meta.dirname, "../..");
 export const E2E_USER = "e2e";
 export const E2E_PASSWORD = "e2e password 1234";
 export const E2E_OTHER_USER = "e2e-other";
+export const E2E_ADMIN = "e2e-admin";
 /**
  * Browser state holding one signed-in session, created once: logins are
  * rate-limited per client address (contracts §6), so tests reuse it.
  */
 export const E2E_AUTH_STATE = path.join(ROOT, "playwright", ".auth", "e2e.json");
+export const E2E_ADMIN_STATE = path.join(ROOT, "playwright", ".auth", "admin.json");
 
-async function saveSignedInState(base: string): Promise<void> {
+async function saveSignedInState(
+  base: string,
+  username = E2E_USER,
+  file = E2E_AUTH_STATE,
+): Promise<void> {
   const response = await fetch(`${base}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: base },
-    body: JSON.stringify({ username: E2E_USER, password: E2E_PASSWORD }),
+    body: JSON.stringify({ username, password: E2E_PASSWORD }),
   });
   const cookie = response.headers.get("set-cookie") ?? "";
   const [pair = ""] = cookie.split(";");
   const eq = pair.indexOf("=");
   if (!response.ok || eq < 1) throw new Error(`e2e sign-in failed (${String(response.status)})`);
-  mkdirSync(path.dirname(E2E_AUTH_STATE), { recursive: true });
+  mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(
-    E2E_AUTH_STATE,
+    file,
     JSON.stringify({
       cookies: [
         {
@@ -52,12 +58,12 @@ export const LONG_CHAT_MESSAGES = 200;
 /** The seeded chat ends with one more exchange showing Markdown formatting. */
 export const LONG_CHAT_TITLE = "Seeded long conversation";
 
-function createUser(dataDir: string, username: string): Promise<string> {
+function createUser(dataDir: string, username: string, admin = false): Promise<string> {
   const before = new Set(readdirSync(dataDir));
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ["server/cli.ts", "user:create", "--username", username],
+      ["server/cli.ts", "user:create", "--username", username, ...(admin ? ["--admin"] : [])],
       {
         cwd: ROOT,
         env: { ...process.env, DATA_DIR: dataDir },
@@ -137,6 +143,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
   const userId = await createUser(dataDir, E2E_USER);
   await createUser(dataDir, E2E_OTHER_USER);
+  await createUser(dataDir, E2E_ADMIN, true);
   const longChat = seedLongConversation(dataDir, userId);
   const port = await freePort();
   const base = `http://127.0.0.1:${String(port)}`;
@@ -176,6 +183,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     }, 200);
   });
   await saveSignedInState(base);
+  await saveSignedInState(base, E2E_ADMIN, E2E_ADMIN_STATE);
   process.env.E2E_BASE_URL = base;
   process.env.E2E_DATA_DIR = dataDir;
   process.env.E2E_LONG_CHAT = longChat;

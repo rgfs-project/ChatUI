@@ -29,6 +29,7 @@ import { qk } from "../lib/query/keys";
 import {
   conversationQuery,
   conversationsQuery,
+  instanceQuery,
   modelsQuery,
   preferencesQuery,
   refreshModels as refreshModelList,
@@ -140,6 +141,7 @@ export function ChatProvider({
   const result = conversationId ? conversation.data : undefined;
   const models = useQuery(modelsQuery(userId));
   const preferences = useQuery(preferencesQuery(userId));
+  const instance = useQuery(instanceQuery(userId));
   // Sidebar data loads alongside; it never gates the composer.
   useQuery(conversationsQuery(userId));
 
@@ -177,6 +179,9 @@ export function ChatProvider({
     conversation: loaded,
     lastUsed,
     preferences: preferences.data ?? null,
+    instanceDefault: instance.data?.defaultModel
+      ? [instance.data.defaultModel.providerId, instance.data.defaultModel.modelId]
+      : null,
   });
   // Compared by value: a recomputed pair with the same ids is no change.
   const selectedKey = chosenPair ? pairKey(chosenPair) : null;

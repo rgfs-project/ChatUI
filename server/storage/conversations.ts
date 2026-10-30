@@ -1,7 +1,7 @@
 // Canonical conversation storage (contracts §1–§3). Loadable natively by Node.
 import { randomUUID } from "node:crypto";
 import { entryFor, stampOf, type ChatIndex, type IndexEntry } from "./chat-index.ts";
-import { atomicWrite, durableUnlink, ensureDir, readOrNull } from "./fs.ts";
+import { atomicWrite, durableUnlink, ensureDirUnder, readOrNull } from "./fs.ts";
 import { lockKeys, type KeyedLocks } from "./locks.ts";
 import {
   NEW_CONVERSATION_TITLE,
@@ -114,7 +114,7 @@ export class ConversationStore {
       );
     const bytes = Buffer.from(text, "utf8");
     return this.index.mutate(userId, id, async () => {
-      await ensureDir(this.paths.chatsDir(userId));
+      await ensureDirUnder(this.paths.userDir(userId), this.paths.chatsDir(userId));
       const file = this.paths.chatFile(userId, id);
       await atomicWrite(file, bytes);
       const stamp = (await stampOf(file)) ?? { fileSize: bytes.length, fileMtimeMs: Date.now() };

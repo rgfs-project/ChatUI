@@ -161,7 +161,7 @@ export async function apiJson<T>(
 }
 
 const SAFE_RETURN_TO =
-  /^\/(chat\/new|chat\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|settings(\/[a-z-]{1,32})?|admin)$/;
+  /^\/(chat\/new|chat\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|settings(\/[a-z-]{1,32})?|admin(\/[a-z-]{1,32})?)$/;
 
 /** Only known same-origin in-app paths are allowed as a post-login destination. */
 export function safeReturnTo(value: string | null | undefined): string {

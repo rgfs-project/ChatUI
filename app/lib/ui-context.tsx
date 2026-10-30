@@ -24,6 +24,9 @@ export function usesDrawer(): boolean {
 
 interface UiState {
   appearance: Appearance;
+  /** Hash of the dismissed instance notice (cookie, so SSR hides it too). */
+  noticeDismissed: string | null;
+  dismissNotice: (hash: string) => void;
   setAppearance: (next: Appearance) => void;
   /** Desktop preference, remembered in a cookie and rendered by the server. */
   sidebarCollapsed: boolean;
@@ -59,6 +62,11 @@ export function UiProvider({
 }) {
   const [sidebarCollapsed, setCollapsed] = useState(hints.sidebarCollapsed);
   const [appearance, setAppearanceState] = useState(hints.appearance);
+  const [noticeDismissed, setNoticeDismissed] = useState(hints.noticeDismissed);
+  const dismissNotice = useCallback((hash: string) => {
+    setNoticeDismissed(hash);
+    writeUiCookie(UI_COOKIES.notice, hash);
+  }, []);
   const setAppearance = useCallback((next: Appearance) => {
     setAppearanceState(next);
     applyAppearance(next);
@@ -97,6 +105,8 @@ export function UiProvider({
     () => ({
       appearance,
       setAppearance,
+      noticeDismissed,
+      dismissNotice,
       sidebarCollapsed,
       narrowOpen,
       setSidebarOpen,
@@ -106,6 +116,8 @@ export function UiProvider({
     [
       appearance,
       setAppearance,
+      noticeDismissed,
+      dismissNotice,
       sidebarCollapsed,
       narrowOpen,
       setSidebarOpen,

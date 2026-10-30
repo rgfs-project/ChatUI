@@ -26,6 +26,14 @@ export interface ChatRequest {
   model: string;
   messages: ChatMessage[];
   maxTokens: number;
+  /** Per-model sampling overrides (Phase 10, validated by the admin settings schema). */
+  sampling?: {
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    minP?: number;
+    repeatPenalty?: number;
+  };
 }
 
 export type ProviderEvent =

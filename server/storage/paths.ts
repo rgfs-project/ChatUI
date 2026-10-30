@@ -112,6 +112,36 @@ export class DataPaths {
     return this.inside(SYSTEM_DIR, "sessions");
   }
 
+  /** Admin settings (Phase 10). */
+  settingsFile(): string {
+    return this.inside(SYSTEM_DIR, "settings.json");
+  }
+
+  providersFile(): string {
+    return this.inside(SYSTEM_DIR, "providers.json");
+  }
+
+  auditDir(): string {
+    return this.inside(SYSTEM_DIR, "audit");
+  }
+
+  /** Append-only audit log for one month; `month` is server-computed `YYYY-MM`. */
+  auditFile(month: string): string {
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new PathError("audit month must be YYYY-MM");
+    return this.inside(SYSTEM_DIR, "audit", `${month}.jsonl`);
+  }
+
+  /** Account directories being removed (contracts §6 closure step 5). */
+  deletingDir(): string {
+    return this.inside(SYSTEM_DIR, "deleting");
+  }
+
+  deletingEntry(userId: string, suffix: string): string {
+    if (!/^[0-9a-f]{16}$/.test(suffix))
+      throw new PathError("deletion suffix must be 16 hex digits");
+    return this.inside(SYSTEM_DIR, "deleting", `${this.uuid(userId, "user id")}-${suffix}`);
+  }
+
   /** Sessions are named by the SHA-256 of their token; the token is never stored. */
   sessionFile(tokenHash: string): string {
     if (!isSha256Hex(tokenHash)) throw new PathError("session name must be lowercase SHA-256 hex");

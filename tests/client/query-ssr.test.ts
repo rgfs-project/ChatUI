@@ -64,6 +64,11 @@ function services(delayMs = 0) {
           imageMaxEdge: null,
         };
       },
+      models: async () => {
+        await wait();
+        return [];
+      },
+      instance: () => ({ notice: null, defaultModel: null }),
     },
     models: {
       listModels: async () => {
@@ -198,6 +203,8 @@ describe("Phase 8: startup dependency graph (INV-29, INV-30)", () => {
         conversation: (userId: string, id: string) =>
           timed("conversation", 80, null).then(() => svc.bootstrap.conversation(userId, id)),
         preferences: () => timed("preferences", 80, null).then(() => svc.bootstrap.preferences()),
+        models: () => timed("models", 80, []),
+        instance: svc.bootstrap.instance,
       },
       models: { listModels: () => timed("models", 80, []) },
     };

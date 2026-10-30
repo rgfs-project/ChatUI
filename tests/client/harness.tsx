@@ -102,6 +102,7 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
         hints={{
           appearance: DEFAULT_APPEARANCE,
           phone: false,
+          noticeDismissed: null,
           sidebarCollapsed: false,
           timeZone: "UTC",
           locale: "en-US",

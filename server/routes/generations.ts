@@ -26,7 +26,10 @@ export const startGenerationRoute = defineRoute({
   request: { body: startGenerationRequestSchema },
   response: startGenerationResponseSchema,
   status: 202,
-  handler: ({ body }, ctx) => ctx.services.send.send(userOf(ctx).userId, body),
+  handler: ({ body }, ctx) => {
+    const auth = userOf(ctx);
+    return ctx.services.send.send(auth.userId, body, { role: auth.role, username: auth.username });
+  },
   fixture: {
     body: {
       providerId: "local",

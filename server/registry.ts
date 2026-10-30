@@ -6,8 +6,12 @@ import type {
   ConversationResult,
   ConversationSummary,
 } from "@shared/conversations";
+import type { ProviderModelsDto } from "@shared/generations";
+import type { InstanceDto } from "@shared/instance";
 import type { PreferencesDto } from "@shared/preferences";
 import { ErrorCode } from "@shared/errors";
+import type { AdminService } from "./admin/service.ts";
+import type { SettingsStore } from "./admin/settings.ts";
 import type { AuthContext, AuthService } from "./auth/service.ts";
 import type { SendService } from "./chat/send-service.ts";
 import { AppError } from "./errors.ts";
@@ -44,9 +48,15 @@ export interface RouteServices {
     conversations: (userId: string) => ConversationSummary[];
     conversation: (userId: string, id: string) => Promise<ConversationResult>;
     preferences: (userId: string) => Promise<PreferencesDto>;
+    /** Models visible to this role (hidden pairs only for admins). */
+    models: (role: "user" | "admin") => Promise<ProviderModelsDto[]>;
+    instance: () => InstanceDto;
   };
   auth: AuthService;
   users: UserStore;
+  /** Phase 10. */
+  admin: AdminService;
+  settings: SettingsStore;
   preferences: PreferencesStore;
   sseConnections: SseConnections;
   sse: SseOptions;
@@ -71,8 +81,12 @@ interface RouteBase<S extends RequestSchemas> {
   method: HttpMethod;
   /** Express path, always under /api. */
   path: `/api/${string}`;
-  /** `public` routes work signed out; `user` routes require a session (401). */
-  auth: "public" | "user";
+  /**
+   * `public` routes work signed out; `user` routes require a session (401);
+   * `admin` routes also require the admin role, read from the fresh user
+   * record on every request (403 FORBIDDEN otherwise, INV-24).
+   */
+  auth: "public" | "user" | "admin";
   /**
    * `none` for safe methods; `token`: synchronizer token + X-Expected-User
    * (contracts §5); `origin`: same-origin check for login/registration.
@@ -140,8 +154,10 @@ export function buildApiRouter(routes: readonly AnyApiRoute[], services: RouteSe
     // Policies run before validation and before the handler, for every route.
     const guard = async (req: Request, res: Response): Promise<RouteContext> => {
       const auth = await services.auth.resolve(req);
-      if (route.auth === "user" && !auth)
+      if (route.auth !== "public" && !auth)
         throw new AppError(ErrorCode.UNAUTHENTICATED, "Sign in to continue");
+      if (route.auth === "admin" && auth?.role !== "admin")
+        throw new AppError(ErrorCode.FORBIDDEN, "Administrators only");
       if (route.csrf === "token") services.auth.checkMutation(req, auth);
       if (route.csrf === "origin") services.auth.checkOrigin(req);
       return { req, res, services, auth };

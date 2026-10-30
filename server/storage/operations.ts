@@ -1,7 +1,7 @@
 // Generation acceptance records by client operation key (contracts §4.1,
 // INV-58). Loadable natively by Node.
 import { createHash } from "node:crypto";
-import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "./fs.ts";
+import { atomicWrite, durableUnlink, ensureDirUnder, listDir, readOrNull } from "./fs.ts";
 import { isSha256Hex, type DataPaths } from "./paths.ts";
 
 export interface OperationRecord {
@@ -65,7 +65,7 @@ export class OperationStore {
   }
 
   async write(userId: string, record: OperationRecord): Promise<void> {
-    await ensureDir(this.paths.operationsDir(userId));
+    await ensureDirUnder(this.paths.userDir(userId), this.paths.operationsDir(userId));
     await atomicWrite(
       this.paths.operationFile(userId, operationDigest(userId, record.operationKey)),
       `${JSON.stringify(record, null, 2)}\n`,

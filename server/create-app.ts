@@ -9,7 +9,7 @@ import { DEFAULT_SSE_OPTIONS, SseConnections, type SseOptions } from "./generati
 import { createLlamaCppProvider } from "./providers/llamacpp.ts";
 import type { Provider } from "./providers/types.ts";
 import { loadProviders, type ProviderEntry } from "./providers/config.ts";
-import { createSafeFetch, type Resolver } from "./providers/ssrf.ts";
+import { createSafeFetch, systemResolver, type Resolver } from "./providers/ssrf.ts";
 import { PasswordHasher } from "./auth/passwords.ts";
 import { AuthService, type AuthContext } from "./auth/service.ts";
 import { SessionStore } from "./auth/sessions.ts";
@@ -35,8 +35,17 @@ import type { Logger } from "./logger.ts";
 import { isLoopbackAddress } from "./loopback.ts";
 import { buildApiRouter, type AnyApiRoute, type RouteServices } from "./registry.ts";
 import { apiRoutes } from "./routes/index.ts";
-import { conversationResult, conversationSummaries, preferencesDto } from "./services/bootstrap.ts";
+import {
+  conversationResult,
+  conversationSummaries,
+  instanceDto,
+  preferencesDto,
+  visibleModels,
+} from "./services/bootstrap.ts";
 import { createHealthService } from "./services/health.ts";
+import { AuditLog } from "./admin/audit.ts";
+import { AdminService } from "./admin/service.ts";
+import { SettingsStore } from "./admin/settings.ts";
 
 export const JSON_BODY_LIMIT = "256kb";
 
@@ -154,6 +163,14 @@ export function createApp(options: AppOptions): ChatUiApp {
   const index = new ChatIndex(paths, logger);
   const conversations = new ConversationStore({ paths, locks, index, now });
   const operations = new OperationStore(paths);
+  const settings = new SettingsStore(paths, locks);
+  const audit = new AuditLog(paths, now);
+  const users = new UserStore({ paths, locks, now });
+  /** A gone or closing account accepts no more terminal writes (contracts §6). */
+  const isClosing = async (userId: string) => {
+    const user = await users.get(userId);
+    return !user || user.status === "closing";
+  };
   const send = new SendService({
     store: conversations,
     checkpoints,
@@ -166,9 +183,10 @@ export function createApp(options: AppOptions): ChatUiApp {
     contextTrimStep: storageConfig.contextTrimStep,
     templateOverheadTokens: storageConfig.templateOverheadTokens,
     now,
+    settings,
+    isClosing,
     ...options.send,
   });
-  const users = new UserStore({ paths, locks, now });
   const sessions = new SessionStore({
     paths,
     absoluteTtlMs: authConfig.sessionAbsoluteTtlMs,
@@ -197,9 +215,64 @@ export function createApp(options: AppOptions): ChatUiApp {
   sessions.onRevoked((tokenHash) => {
     sseConnections.closeSession(tokenHash);
   });
+  settings.onChange((current) => {
+    auth.setRegistrationMode(current.registrationMode);
+  });
+
+  /** One SSRF-guarded client per provider entry (startup, admin edits and tests). */
+  const providerFor = (entry: ProviderEntry): Provider =>
+    options.providerFactory?.(entry) ??
+    createLlamaCppProvider({
+      baseUrl: entry.baseUrl,
+      apiKey: entry.apiKey,
+      timeoutMs: entry.timeoutMs ?? providerConfig.timeoutMs,
+      maxResponseBytes: providerConfig.maxResponseBytes,
+      fetch: safeFetch,
+    });
+  /** providers.json is authoritative (bootstrapped once from LLAMA_*); reloaded in-process. */
+  const installProviders = async () => {
+    const loaded = await loadProviders({
+      paths,
+      policy: providerConfig.ssrf,
+      logger,
+      bootstrap: { baseUrl: providerConfig.baseUrl, apiKey: providerConfig.apiKey },
+    });
+    models.configure(
+      loaded.valid.map((entry) => ({ entry, provider: providerFor(entry) })),
+      loaded.invalid,
+    );
+    slotsLearned.clear();
+    for (const entry of loaded.valid)
+      generations.setProviderLimit(entry.id, entry.maxActiveGenerations ?? 1);
+    updateGlobalLimit();
+    // Discovery never blocks startup or the admin request.
+    models.warmUp();
+  };
+  const admin = new AdminService({
+    paths,
+    locks,
+    users,
+    sessions,
+    auth,
+    hasher,
+    generations,
+    index,
+    models,
+    settings,
+    audit,
+    logger,
+    policy: providerConfig.ssrf,
+    resolver: options.resolver ?? systemResolver,
+    maxOutputTokens: providerConfig.maxOutputTokens,
+    reloadProviders: installProviders,
+    providerFor,
+  });
 
   // Startup recovery (contracts §2) and account/session housekeeping.
   const ready: Promise<RecoveryReport> = (async () => {
+    // Step 2 (contracts §2): finish account closures before anything else touches them.
+    await admin.recoverClosures();
+    await settings.load();
     const report = await recoverStorage({
       paths,
       operations,
@@ -216,33 +289,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     });
     await users.rebuildIndex();
     await sessions.sweep();
-    // Providers: authoritative providers.json (bootstrapped once from LLAMA_*).
-    const loaded = await loadProviders({
-      paths,
-      policy: providerConfig.ssrf,
-      logger,
-      bootstrap: { baseUrl: providerConfig.baseUrl, apiKey: providerConfig.apiKey },
-    });
-    models.configure(
-      loaded.valid.map((entry) => ({
-        entry,
-        provider:
-          options.providerFactory?.(entry) ??
-          createLlamaCppProvider({
-            baseUrl: entry.baseUrl,
-            apiKey: entry.apiKey,
-            timeoutMs: entry.timeoutMs ?? providerConfig.timeoutMs,
-            maxResponseBytes: providerConfig.maxResponseBytes,
-            fetch: safeFetch,
-          }),
-      })),
-      loaded.invalid,
-    );
-    for (const entry of loaded.valid)
-      generations.setProviderLimit(entry.id, entry.maxActiveGenerations ?? 1);
-    updateGlobalLimit();
-    // Discovery never blocks startup.
-    models.warmUp();
+    await installProviders();
     return report;
   })();
   // Expired sessions and committed operation records are removed hourly.
@@ -273,9 +320,13 @@ export function createApp(options: AppOptions): ChatUiApp {
       conversations: (userId) => conversationSummaries(services, userId),
       conversation: (userId, id) => conversationResult(services, userId, id),
       preferences: async (userId) => preferencesDto(await preferences.get(userId)),
+      models: async (role) => visibleModels(await models.listModels(), settings, role),
+      instance: () => instanceDto(settings.get()),
     },
     auth,
     users,
+    admin,
+    settings,
     preferences,
     sseConnections,
     health: createHealthService(options.version),

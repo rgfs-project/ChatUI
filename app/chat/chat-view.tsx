@@ -12,6 +12,7 @@ import { ErrorBoundary as AreaBoundary } from "../ui/error-boundary";
 import { useChat } from "./chat-context";
 import { Composer } from "./composer";
 import { Header } from "./header";
+import { NoticeBanner } from "./notice";
 import { LiveReply } from "./live-reply";
 import { UserBubble } from "./message";
 import { useScrollIntent } from "./scroll-intent";
@@ -120,6 +121,7 @@ export function ChatView() {
     <div className={`chat-area${empty ? " is-empty" : ""}`}>
       <title>{conversation ? `${conversation.title} · ChatUI` : "ChatUI"}</title>
       <Header />
+      <NoticeBanner userId={chat.userId} />
       {switching ? (
         <div className="switch-spinner" role="status" aria-label="Opening chat">
           <span className="spinner" aria-hidden />

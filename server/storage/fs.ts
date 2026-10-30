@@ -18,6 +18,21 @@ export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: DIR_MODE });
 }
 
+/** The account directory is gone (closed or removed): nothing may recreate it. */
+export class AccountGoneError extends Error {
+  override name = "AccountGoneError";
+}
+
+/**
+ * Creates `dir` only beneath an existing account root (contracts §6): a late
+ * writer after account closure fails instead of recreating the directory.
+ */
+export async function ensureDirUnder(root: string, dir: string): Promise<void> {
+  const info = await stat(root).catch(() => null);
+  if (!info?.isDirectory()) throw new AccountGoneError("the account directory does not exist");
+  await ensureDir(dir);
+}
+
 async function fsyncDirectory(dir: string): Promise<void> {
   // Directory fsync is unavailable on Windows (documented); best effort elsewhere.
   if (process.platform === "win32") return;

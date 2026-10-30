@@ -8,6 +8,7 @@ import {
   Settings,
   SquarePen,
   Trash2,
+  Shield,
 } from "lucide-react";
 import { memo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -110,7 +111,7 @@ const ConversationRow = memo(function ConversationRow({
 
 export const Sidebar = memo(function Sidebar() {
   useRenderProbe("Sidebar");
-  const { userId, username, conversationId, logout } = useChat();
+  const { userId, username, role, conversationId, logout } = useChat();
   const { setSidebarOpen } = useUi();
   const openOverlay = useOpenOverlay();
   const list = useQuery(conversationsQuery(userId));
@@ -190,6 +191,16 @@ export const Sidebar = memo(function Sidebar() {
           >
             Keyboard shortcuts
           </MenuItem>
+          {role === "admin" ? (
+            <MenuItem
+              icon={<Shield size={16} aria-hidden />}
+              onSelect={() => {
+                openOverlay(paths.admin());
+              }}
+            >
+              Administration
+            </MenuItem>
+          ) : null}
           <MenuSeparator />
           <MenuItem
             icon={<LogOut size={16} aria-hidden />}

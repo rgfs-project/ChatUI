@@ -2,7 +2,7 @@
 
 A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
 
-> **Status: Phase 9 (performance).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, appearance: theme, accent, text sizes, reduced motion; account; shortcuts) as a searchable overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md); admin, uploads and the rest come later.
+> **Status: Phase 10 (administration).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, appearance: theme, accent, text sizes, reduced motion; account; shortcuts) as a searchable overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. Admins manage accounts, providers, models (visibility, sampling, system prompts) and instance settings from an Administration overlay. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md); uploads and the rest come later.
 
 ## Prerequisites
 
@@ -46,6 +46,7 @@ Operator commands are introduced as their services exist. Until then they exit w
 | `provider:check` (reachability and credentials of `LLAMA_BASE_URL`)      | Phase 2        |
 | `index:rebuild` (rebuild derived indexes; server stopped)                | Phase 3        |
 | `user:create --username <name> [--admin]` (password via prompt or stdin) | Phase 4        |
+| `user:reset-password --username <name>` (password via prompt or stdin)   | Phase 10       |
 | `backup`, `restore`                                                      | Phase 16       |
 
 Updating: `git pull && docker compose up -d --build`. The `/data` volume is reused.
@@ -68,6 +69,22 @@ docker compose exec chatui node server/cli.ts user:create --username admin --adm
 
 Then open the URL in `PUBLIC_ORIGIN` (default `http://localhost:3000`) and sign in. `REGISTRATION_MODE=open` lets people create their own accounts at `/register`. Changing your password (Settings → Account) signs you out everywhere.
 
+## Administration
+
+Admins open **Administration** from the profile menu (`/admin`). Every admin API checks the role on the server; members get a 404 page and never download the admin code.
+
+- **Accounts:** create, promote or demote, disable or enable, set a password (signs the account out everywhere), delete (type the username to confirm; chats, files and settings are removed). The last active admin can't be demoted, disabled or deleted.
+- **Providers:** add, edit, test and remove model servers, with the same network policy as `providers.json`. API keys are write-only: the UI shows only whether one is set.
+- **Models:** hide a model from members, and set its sampling (temperature, top-p, top-k, min-p, repeat penalty) and a system prompt. A system prompt may use `{{username}}`, `{{date}}`, `{{timezone}}` and `{{time}}`.
+- **Instance:** registration (overrides `REGISTRATION_MODE`), default model, a notice banner shown to everyone, an output-token cap and the time zone used for prompt dates.
+- **Maintenance and audit:** rebuild indexes; admin actions are logged to `DATA_DIR/_system/audit/YYYY-MM.jsonl`.
+
+Settings are stored in `DATA_DIR/_system/settings.json`; edits made in the UI survive restarts and win over the environment. Locked out of every admin account? Reset a password from the shell (it is read from a prompt or stdin):
+
+```bash
+npm run user:reset-password -- --username admin
+```
+
 ## Demo
 
 ```bash
@@ -87,7 +104,7 @@ LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
 
 ## Providers (`providers.json`)
 
-Model servers are configured in `DATA_DIR/_system/providers.json`. On first start it is created with one `local` provider from `LLAMA_BASE_URL` / `LLAMA_API_KEY`; after that **the file is authoritative** (edit it and restart; an admin UI arrives in Phase 10):
+Model servers are configured in `DATA_DIR/_system/providers.json`. On first start it is created with one `local` provider from `LLAMA_BASE_URL` / `LLAMA_API_KEY`; after that **the file is authoritative**: edit it in Administration → Providers (applied at once), or by hand and restart:
 
 ```json
 {
@@ -182,6 +199,7 @@ npm run dev                 # http://127.0.0.1:3000 with HMR
 | `lint`                    | ESLint (type-aware, strict)                                                                                                                                                                                                                                                                                                                                                                               |
 | `format` / `format:check` | Prettier                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `user:create`             | Creates an account (`-- --username <name> [--admin]`); the password is read from a prompt or stdin                                                                                                                                                                                                                                                                                                        |
+| `user:reset-password`     | Sets a new password (`-- --username <name>`) read from a prompt or stdin, and signs the account out everywhere                                                                                                                                                                                                                                                                                            |
 | `index:rebuild`           | Rebuilds the derived conversation index from the Markdown files (stop the server first)                                                                                                                                                                                                                                                                                                                   |
 | `test:e2e`                | Builds, then runs the Playwright browser suite (reload mid-generation, network drop and reconnect, cancel) against the production server with a mock provider                                                                                                                                                                                                                                             |
 | `verify:compose`          | Builds the image and verifies the Compose runtime on Docker or Podman (loopback-only publishing, non-root, read-only rootfs, healthcheck, in-container SSR/hydration checks, `/data` persistence across recreate, clean shutdown). Exits 2 with `NOT RUN` if no container engine is available                                                                                                             |

@@ -1,8 +1,19 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { E2E_USER } from "./global-setup.ts";
 import { chooseModel, hydrated, longChat, send, signIn, storedReplies } from "./helpers.ts";
 
 const SENTINEL = "SENTINEL-PRIVATE-9f2c";
+
+/** A route module's own chunk, from the production build manifest (names can collide). */
+function routeChunk(route: string): string {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../../build/client/.vite/manifest.json", import.meta.url), "utf8"),
+  ) as Record<string, { file: string }>;
+  const entry = manifest[`app/routes/${route}.tsx?__react-router-build-client-route`];
+  if (!entry) throw new Error(`no chunk for ${route}`);
+  return `/${entry.file}`;
+}
 
 test("performance marks fire once, compute ComposerTTI and FirstAssistantEvent, carry no content", async ({
   page,
@@ -47,12 +58,13 @@ test("secondary route chunks load on demand, and a failed chunk recovers", async
   page.on("request", (request) => {
     if (request.resourceType() === "script") scripts.push(new URL(request.url()).pathname);
   });
+  const settingsChunk = routeChunk("settings");
   await signIn(page, `/chat/${longChat()}`);
-  expect(scripts.some((p) => /\/assets\/settings-[\w-]+\.js$/.test(p))).toBe(false);
-  expect(scripts.some((p) => /\/assets\/admin-[\w-]+\.js$/.test(p))).toBe(false);
+  expect(scripts).not.toContain(settingsChunk);
+  expect(scripts).not.toContain(routeChunk("admin"));
   // First attempt at the Settings chunk fails: the app still gets there.
   let failed = false;
-  await page.route(/\/assets\/settings-[\w-]+\.js$/, async (route) => {
+  await page.route(`**${settingsChunk}`, async (route) => {
     if (!failed) {
       failed = true;
       await route.abort();
@@ -72,7 +84,7 @@ test("secondary route chunks load on demand, and a failed chunk recovers", async
   await hydrated(page);
   if (!(await page.getByRole("dialog", { name: "Settings" }).isVisible())) await openSettings();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-  expect(scripts.some((p) => /\/assets\/settings-[\w-]+\.js$/.test(p))).toBe(true);
+  expect(scripts).toContain(settingsChunk);
 });
 
 test("hover prefetches one conversation; the click reuses it", async ({ page }) => {

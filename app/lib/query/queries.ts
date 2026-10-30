@@ -7,6 +7,7 @@ import type {
   ConversationSummary,
 } from "@shared/conversations";
 import type { ModelListDto, ProviderModelsDto } from "@shared/generations";
+import type { InstanceDto } from "@shared/instance";
 import type { PreferencesDto } from "@shared/preferences";
 import { apiError, apiFetch, apiJson } from "../api";
 import { qk } from "./keys";
@@ -63,6 +64,12 @@ export const preferencesQuery = (userId: string) =>
   queryOptions({
     queryKey: qk.preferences(userId),
     queryFn: ({ signal }) => apiJson<PreferencesDto>("/api/preferences", { signal }),
+  });
+
+export const instanceQuery = (userId: string) =>
+  queryOptions({
+    queryKey: qk.instance(userId),
+    queryFn: ({ signal }) => apiJson<InstanceDto>("/api/instance", { signal }),
   });
 
 /** Forces a provider refresh and stores the result under the models key. */

@@ -27,6 +27,7 @@ import { qk } from "../lib/query/keys";
 import {
   conversationQuery,
   conversationsQuery,
+  instanceQuery,
   modelsQuery,
   preferencesQuery,
   sessionQuery,
@@ -92,6 +93,12 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       .catch(noop),
     client
       .query({
+        queryKey: qk.instance(userId),
+        queryFn: () => Promise.resolve(services.bootstrap.instance()),
+      })
+      .catch(noop),
+    client
+      .query({
         queryKey: qk.preferences(userId),
         queryFn: () => services.bootstrap.preferences(userId),
       })
@@ -100,7 +107,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       .query({
         queryKey: qk.models(userId),
         queryFn: (): Promise<ProviderModelsDto[]> =>
-          withBudget(services.models.listModels(), MODEL_DISCOVERY_BUDGET_MS),
+          withBudget(services.bootstrap.models(auth.role), MODEL_DISCOVERY_BUDGET_MS),
       })
       .catch(noop),
   ];
@@ -143,6 +150,7 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
   void client.query(conversationsQuery(userId)).catch(noop);
   void client.query(modelsQuery(userId)).catch(noop);
   void client.query(preferencesQuery(userId)).catch(noop);
+  void client.query(instanceQuery(userId)).catch(noop);
   // The active conversation is critical: navigation completes once it is known.
   // (An overlay's background conversation is already cached: it was just open.)
   const id = params.conversationId;

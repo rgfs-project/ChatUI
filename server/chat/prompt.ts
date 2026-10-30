@@ -95,12 +95,34 @@ export function anchorsFor(costs: number[], step: number): number[] {
  */
 export async function assemblePrompt(
   model: ConversationModel,
-  options: { budget: number; trimStep: number; counter: TokenCounter },
+  options: {
+    budget: number;
+    trimStep: number;
+    counter: TokenCounter;
+    /** Per-model system prompt (Phase 10), before the conversation's system blocks. */
+    instructions?: string | null;
+    /** Volatile server context (e.g. time of day), only before the newest user message. */
+    context?: string | null;
+  },
 ): Promise<AssembledPrompt> {
   const { budget, counter } = options;
-  const { system, groups } = historyGroups(model);
+  const history = historyGroups(model);
+  const system: PromptMessage[] = [
+    ...(options.instructions ? [{ role: "system" as const, content: options.instructions }] : []),
+    ...history.system,
+  ];
+  const groups = history.groups;
   const newest = groups.length - 1;
   if (newest < 0) throw new Error("assemblePrompt requires a newest user message");
+  // The volatile block rides on the newest user message only, so every earlier
+  // turn (and the prompt prefix) is unchanged when time moves on.
+  const newestGroup = groups[newest];
+  if (options.context && newestGroup?.[0]) {
+    groups[newest] = [
+      { role: "user", content: `${options.context}\n\n${newestGroup[0].content}` },
+      ...newestGroup.slice(1),
+    ];
+  }
 
   const systemCost = system.length > 0 ? await counter.countGroup(system) : 0;
   const costs = await Promise.all(groups.map((group) => counter.countGroup(group)));

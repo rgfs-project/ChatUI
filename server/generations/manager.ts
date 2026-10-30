@@ -10,7 +10,7 @@ import {
 import type { PromptMessage } from "../chat/prompt.ts";
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
-import { ProviderError, type Provider } from "../providers/types.ts";
+import { ProviderError, type ChatRequest, type Provider } from "../providers/types.ts";
 import type { CheckpointStore, GenerationCheckpoint } from "../storage/checkpoints.ts";
 
 /** Receives events for one generation. Must never block (INV-06, INV-62). */
@@ -292,6 +292,9 @@ export class GenerationManager {
       operationKey?: string;
       messages: PromptMessage[];
       persist: PersistOutcome;
+      /** Per-generation output cap (admin limit ≤ environment) and sampling (Phase 10). */
+      maxTokens?: number;
+      sampling?: ChatRequest["sampling"];
     },
   ): void {
     let settle!: () => void;
@@ -340,14 +343,29 @@ export class GenerationManager {
       this.abort(generation, "max");
     }, this.options.generationMaxMs);
     generation.maxTimer.unref();
-    void this.run(generation, input.messages);
+    void this.run(generation, input.messages, {
+      maxTokens: Math.min(
+        input.maxTokens ?? this.options.maxOutputTokens,
+        this.options.maxOutputTokens,
+      ),
+      ...(input.sampling ? { sampling: input.sampling } : {}),
+    });
   }
 
-  private async run(generation: Generation, messages: PromptMessage[]): Promise<void> {
+  private async run(
+    generation: Generation,
+    messages: PromptMessage[],
+    limits: { maxTokens: number; sampling?: ChatRequest["sampling"] },
+  ): Promise<void> {
     const signal = generation.controller.signal;
     try {
       const stream = generation.provider.streamChat(
-        { model: generation.model, messages, maxTokens: this.options.maxOutputTokens },
+        {
+          model: generation.model,
+          messages,
+          maxTokens: limits.maxTokens,
+          ...(limits.sampling ? { sampling: limits.sampling } : {}),
+        },
         signal,
       );
       for await (const event of stream) {
@@ -610,6 +628,11 @@ export class GenerationManager {
   }
 
   /** Cancels every running generation of a user (disabled or closed account). */
+  /** Non-terminal generations of one account (account closure waits for zero). */
+  activeCountForUser(userId: string): number {
+    return this.count((entry) => entry.userId === userId);
+  }
+
   cancelForUser(userId: string): void {
     for (const generation of this.generations.values()) {
       if (generation.userId !== userId) continue;

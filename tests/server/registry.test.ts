@@ -83,7 +83,9 @@ describe("API route registry", () => {
       expect(route.path.startsWith("/api/")).toBe(true);
       if (route.kind !== "sse") expect(route.response).toBeInstanceOf(z.ZodType);
       for (const schema of Object.values(route.request)) expect(schema).toBeInstanceOf(z.ZodType);
-      expect(route.auth, key(route)).toBe(PUBLIC.has(key(route)) ? "public" : "user");
+      expect(route.auth, key(route)).toBe(
+        PUBLIC.has(key(route)) ? "public" : route.path.startsWith("/api/admin/") ? "admin" : "user",
+      );
       if (route.method === "get") expect(route.csrf, key(route)).toBe("none");
       else expect(["token", "origin"], key(route)).toContain(route.csrf);
       if (route.csrf === "origin") expect(route.auth).toBe("public");
@@ -92,7 +94,7 @@ describe("API route registry", () => {
 
   it("INV-15: unauthenticated access to every protected route is a JSON 401", async () => {
     const { base } = await serve();
-    const protectedRoutes = apiRoutes.filter((route) => route.auth === "user");
+    const protectedRoutes = apiRoutes.filter((route) => route.auth !== "public");
     expect(protectedRoutes.length).toBeGreaterThanOrEqual(14);
     for (const route of protectedRoutes) {
       const res = await call(base, route, {});
@@ -103,10 +105,13 @@ describe("API route registry", () => {
 
   it("INV-16: every state-changing route rejects a missing or wrong CSRF token and a stale expected user", async () => {
     const { base, chatui } = await serve();
-    const session = await signIn(base, chatui);
+    const user = await signIn(base, chatui);
+    const admin = await signIn(base, chatui, "root", "admin");
     const mutations = apiRoutes.filter((route) => route.csrf === "token");
     expect(mutations.length).toBeGreaterThanOrEqual(7);
     for (const route of mutations) {
+      // Admin routes are checked with an admin (others get 403 FORBIDDEN first).
+      const session = route.auth === "admin" ? admin : user;
       const none = await call(base, route, {
         Cookie: session.cookie,
         "X-Expected-User": session.userId,
@@ -143,14 +148,20 @@ describe("API route registry", () => {
   it("every route answers its fixture with a DTO or a contract error (signed in where required)", async () => {
     const { base, chatui } = await serve();
     const session: TestSession = await signIn(base, chatui);
+    const admin: TestSession = await signIn(base, chatui, "root", "admin");
     for (const route of apiRoutes) {
       // Covered by the auth tests; calling them here would end this session.
       if (key(route) === "POST /api/auth/logout" || key(route) === "POST /api/auth/password")
         continue;
-      const headers = route.auth === "user" ? session.headers(route.csrf === "token") : {};
+      const headers =
+        route.auth === "admin"
+          ? admin.headers(route.csrf === "token")
+          : route.auth === "user"
+            ? session.headers(route.csrf === "token")
+            : {};
       const res = await call(base, route, headers);
       const expected =
-        route.auth === "user" && route.fixture.expectStatus === 401
+        route.auth !== "public" && route.fixture.expectStatus === 401
           ? route.kind === "sse"
             ? 200
             : (route.status ?? 200)
@@ -185,6 +196,9 @@ describe("API route registry", () => {
   it("INV-14: no route takes identity from the request", () => {
     const identityKeys = /^(userId|ownerId|user|owner|role)$/;
     for (const route of apiRoutes) {
+      // Admin routes name a target account in their path or body; the actor
+      // still comes only from the session (registry `admin` policy).
+      if (route.auth === "admin") continue;
       for (const schema of Object.values(route.request)) {
         const shape = (schema as { shape?: Record<string, unknown> }).shape ?? {};
         for (const name of Object.keys(shape))

@@ -76,6 +76,7 @@
     "verify:compose": "node scripts/verify-compose.ts",
     "index:rebuild": "node server/cli.ts index:rebuild",
     "user:create": "node server/cli.ts user:create",
+    "user:reset-password": "node server/cli.ts user:reset-password",
     "test:e2e": "npm run build && playwright test",
     "demo": "node scripts/demo.ts",
     "perf:check": "node scripts/perf-check.ts"

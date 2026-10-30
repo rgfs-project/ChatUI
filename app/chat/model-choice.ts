@@ -33,7 +33,7 @@ function find(models: ModelDto[], pair: ModelPair | null | undefined): ModelPair
 /**
  * Selection order: the choice made for this conversation in this tab → the
  * conversation's latest reply → the user's last-used pair → the default model
- * preference → a loaded model → any model. The server validates every send.
+ * preference → the instance default → a loaded model → any model. The server validates every send.
  */
 export function chooseModel(input: {
   groups: ProviderModelsDto[];
@@ -41,6 +41,8 @@ export function chooseModel(input: {
   conversation?: ConversationDto | null;
   lastUsed?: ModelPair | null;
   preferences?: PreferencesDto | null;
+  /** The admin's instance default (Phase 10), after the user's own preference. */
+  instanceDefault?: ModelPair | null;
 }): ModelPair | null {
   const models = allModels(input.groups);
   const lastReply = [...(input.conversation?.messages ?? [])]
@@ -56,6 +58,7 @@ export function chooseModel(input: {
     find(models, lastReply ? [lastReply.provider ?? "", lastReply.model ?? ""] : null) ??
     find(models, input.lastUsed) ??
     find(models, preferred) ??
+    find(models, input.instanceDefault) ??
     (loaded ? [loaded.providerId, loaded.id] : null)
   );
 }

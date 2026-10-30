@@ -1,0 +1,55 @@
+## Phase 10 report
+
+- **Scope completed:**
+  - **Authorization:** `auth: "admin"` route policy. The role comes from the account record loaded for the request, so a demotion applies on the next request. Non-admins get `403 FORBIDDEN`; with no session it is `401`.
+  - **Admin page:** a lazy `/admin/:section?` overlay that non-admins see as a 404. It has six sections: Accounts, Providers, Models, Instance, Maintenance and Audit log.
+  - **Accounts:** create, promote or demote, disable or enable, set a password (revokes sessions), and delete with the username typed to confirm. Exclusive closure: closing → revoke → cancel → drain → rename to `_system/deleting` → remove, resumed at startup. `ensureDirUnder` stops late writers from recreating a removed account.
+  - **Last admin:** the last active admin can't be demoted, disabled or deleted (`409 LAST_ADMIN`), including by themselves.
+  - **Providers:** create, edit, test and delete. The full SSRF policy, including DNS resolution, runs on create, edit and test; providers reload in process; API keys are write-only (`hasApiKey`).
+  - **Models:**
+    - Hidden models are left out of the list for members and give `MODEL_NOT_FOUND` when a member sends to one.
+    - Per-model sampling: temperature, top-p, top-k, min-p and repeat penalty.
+    - Per-model system prompts with `{{username}}`, `{{date}}`, `{{timezone}}` and `{{time}}`, expanded in one pass. `{{time}}` goes in a context line before the newest user message, never the system prefix.
+    - Refresh discovery.
+  - **Instance settings** (`_system/settings.json`, canonical, revisioned and rechecked on send): registration override, default model (comes after the user's own), notice banner (dismissal stored as a hash in a cookie, so the server render hides it too), output-token cap, time zone.
+  - **Audit log:** `_system/audit/YYYY-MM.jsonl`, viewable by month. Maintenance has an index rebuild for one account or all.
+  - **CLI:** `user:reset-password` (password from a prompt or stdin; revokes sessions).
+- **Required tests:**
+  - `tests/server/admin.test.ts` (13):
+    - INV-24: 401/403 per admin route; a disabled admin is locked out; role escalation through user routes is rejected; a demotion applies on the next request.
+    - INV-26: last-admin protection.
+    - Account lifecycle.
+    - INV-61: deletion mid-generation, and resume after a crash during closure.
+    - SSRF on create, edit and test (the metadata IP is rejected through DNS).
+    - INV-25: a sweep of responses, headers and logs for the secret.
+    - Hidden models and validation.
+    - System prompt and sampling reach the provider, and `{{time}}` stays out of the system prefix.
+    - Registration override; settings survive a restart.
+  - `tests/server/registry.test.ts`: every admin route is covered by the CSRF and 401 sweeps.
+  - `tests/e2e/admin.spec.ts`:
+    - In the browser: create an account, set the notice (members see it and can dismiss it), hide a model (members don't see it), delete the account.
+    - Members never load the admin chunk or call `/api/admin/*`; the chunk is found through the build manifest.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (432)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (78/78)
+  - `test:e2e`: PASS (46/46)
+  - `npm audit`: 0
+  - `verify:compose`: CI
+- **Budget:** `performance-budget.json` re-recorded:
+  - chat JS 229,979 → 231,554 B (+1.6 KB: notice banner, instance query, admin menu entry)
+  - CSS 6,773 → 7,118 B
+  - sign-in JS 128,195 → 129,101 B (shared error codes and paths)
+
+  All values were within the old 10 % tolerance before re-recording.
+
+- **Invariants:** INV-24, INV-25, INV-26, INV-61 implemented (register updated).
+- **Dependencies:** none new.
+- **Deviations / limitations / unverified items:**
+  - Quota settings (per-user storage and upload limits) arrive with uploads in Phase 12; the Instance section is where they will go.
+  - Testing a provider against a live llama.cpp server is UNVERIFIED (no endpoint here). It is exercised against the mock provider and with SSRF-rejected addresses.
+  - Audit entries record actor, action, target and outcome. Viewing is per month; there is no search.
+  - `user:reset-password` writes while the server may be running. Sessions are read from disk on each request, so the revocation applies at once. Open streams close at their next heartbeat check rather than immediately.
+- **Commit/tag:** `feat(phase-10): admin dashboard with server-enforced authorization`, tag `phase-10` (local), pushed to `main`.

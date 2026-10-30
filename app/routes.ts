@@ -13,7 +13,7 @@ export default [
     route("chat/new", "routes/chat-new.tsx"),
     route("chat/:conversationId", "routes/chat-conversation.tsx"),
     route("settings/:section?", "routes/settings.tsx"),
-    route("admin", "routes/admin.tsx"),
+    route("admin/:section?", "routes/admin.tsx"),
     route("*", "routes/not-found.tsx"),
   ]),
 ] satisfies RouteConfig;

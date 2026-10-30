@@ -3,7 +3,7 @@
 // chats/*.md when missing, unparseable or marked dirty, and reconciled with the
 // files (size + mtime) at every start so hand edits show up after a restart.
 import { stat } from "node:fs/promises";
-import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "./fs.ts";
+import { atomicWrite, durableUnlink, ensureDirUnder, listDir, readOrNull } from "./fs.ts";
 import { parseConversation, type ConversationModel } from "./markdown.ts";
 import { isUuid, type DataPaths } from "./paths.ts";
 
@@ -181,6 +181,11 @@ export class ChatIndex {
     );
   }
 
+  /** Forgets an account's entries (account closure; nothing is written). */
+  forgetUser(userId: string): void {
+    this.entries.delete(userId);
+  }
+
   get(userId: string, id: string): IndexEntry | undefined {
     return this.entries.get(userId)?.get(id);
   }
@@ -199,7 +204,7 @@ export class ChatIndex {
   ): Promise<T> {
     this.pending.set(userId, (this.pending.get(userId) ?? 0) + 1);
     try {
-      await ensureDir(this.paths.indexDir(userId));
+      await ensureDirUnder(this.paths.userDir(userId), this.paths.indexDir(userId));
       await atomicWrite(this.paths.indexDirtyFile(userId), "");
       const { entry, result } = await write();
       const map = this.entries.get(userId) ?? new Map<string, IndexEntry>();
@@ -232,7 +237,7 @@ export class ChatIndex {
   private enqueuePersist(userId: string): Promise<void> {
     return this.enqueue(userId, async () => {
       const file: IndexFile = { version: 1, entries: this.list(userId) };
-      await ensureDir(this.paths.indexDir(userId));
+      await ensureDirUnder(this.paths.userDir(userId), this.paths.indexDir(userId));
       await atomicWrite(this.paths.indexFile(userId), `${JSON.stringify(file, null, 2)}\n`);
     });
   }

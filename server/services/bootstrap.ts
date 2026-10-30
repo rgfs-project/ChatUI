@@ -7,6 +7,9 @@ import {
 } from "@shared/conversations";
 import { preferencesDtoSchema, type PreferencesDto } from "@shared/preferences";
 import type { RouteServices } from "../registry.ts";
+import type { ProviderModelsDto } from "@shared/generations";
+import type { InstanceSettings, SettingsStore } from "../admin/settings.ts";
+import { instanceDtoSchema, type InstanceDto } from "@shared/instance";
 import { StorageError } from "../storage/conversations.ts";
 import type { Preferences } from "../storage/preferences.ts";
 
@@ -51,4 +54,21 @@ export async function conversationResult(
       return { ok: false, code: "CONVERSATION_MALFORMED" };
     throw error;
   }
+}
+
+/** Models a user may see: admins see all; hidden pairs exist for nobody else (Phase 10). */
+export function visibleModels(
+  groups: ProviderModelsDto[],
+  settings: SettingsStore,
+  role: "user" | "admin",
+): ProviderModelsDto[] {
+  if (role === "admin") return groups;
+  return groups.map((group) => ({
+    ...group,
+    models: group.models.filter((m) => !settings.isHidden(group.provider.id, m.id)),
+  }));
+}
+
+export function instanceDto(settings: InstanceSettings): InstanceDto {
+  return instanceDtoSchema.parse({ notice: settings.notice, defaultModel: settings.defaultModel });
 }

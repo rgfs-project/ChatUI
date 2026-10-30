@@ -25,8 +25,16 @@ import {
   type TokenCounter,
 } from "./prompt.ts";
 import { counterFor } from "./token-counter.ts";
+import { expandSystemPrompt, type Sampling, type SettingsStore } from "../admin/settings.ts";
 
 const DAY_MS = 86_400_000;
+
+interface ModelConfig {
+  instructions: string | null;
+  context: string | null;
+  sampling: Sampling;
+  maxTokens: number;
+}
 
 const STATUS: Record<GenerationOutcome["state"], AssistantStatus> = {
   completed: "complete",
@@ -61,6 +69,16 @@ export interface SendServiceOptions {
   hooks?: SendHooks;
   /** Overrides token counting (tests). */
   counterFor?: (providerId: string, model: string) => Promise<TokenCounter>;
+  /** Admin settings (Phase 10): hidden models, per-model prompts and sampling, limits. */
+  settings?: SettingsStore;
+  /** True once an account is closing: its late terminal writes are skipped (contracts §6). */
+  isClosing?: (userId: string) => Promise<boolean>;
+}
+
+/** Who is sending: role decides hidden-model access; username fills {{username}}. */
+export interface Sender {
+  role: "user" | "admin";
+  username: string;
 }
 
 function resultOf(record: OperationRecord): StartGenerationResponse {
@@ -101,7 +119,11 @@ export class SendService {
     );
   }
 
-  async send(userId: string, request: StartGenerationRequest): Promise<StartGenerationResponse> {
+  async send(
+    userId: string,
+    request: StartGenerationRequest,
+    sender: Sender = { role: "user", username: "" },
+  ): Promise<StartGenerationResponse> {
     const flightKey = `${userId}:${request.operationKey}`;
     // Wait for an in-flight request with the same key, then decide from its record.
     for (;;) {
@@ -109,7 +131,7 @@ export class SendService {
       if (!inflight) break;
       await inflight.catch(() => undefined);
     }
-    const work = this.accept(userId, request);
+    const work = this.accept(userId, request, sender);
     this.inflight.set(flightKey, work);
     try {
       return await work;
@@ -157,6 +179,7 @@ export class SendService {
   private async accept(
     userId: string,
     request: StartGenerationRequest,
+    sender: Sender,
   ): Promise<StartGenerationResponse> {
     const payloadHash = SendService.payloadHash(request);
     const known = await this.checkKey(userId, request, payloadHash);
@@ -171,9 +194,16 @@ export class SendService {
     if (request.conversationId) this.o.generations.assertIdle(conversationKey);
     // The browser's (provider, model) pair is untrusted: validate it (INV-18).
     const model = await this.o.catalog.resolve(request.providerId, request.model);
+    // A model hidden by an admin does not exist for anyone else (Phase 10).
+    if (sender.role !== "admin" && this.o.settings?.isHidden(model.providerId, model.id)) {
+      throw new AppError(ErrorCode.MODEL_NOT_FOUND, "The selected model is not available");
+    }
     const provider = this.o.catalog.provider(model.providerId);
 
     for (let attempt = 0; attempt < 2; attempt++) {
+      // Prompt-relevant settings revision (§4.1): rechecked under the lock below.
+      const settingsRevision = this.o.settings?.revision ?? null;
+      const config = this.modelConfig(model.providerId, model.id, sender);
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
       const snapshot = request.conversationId
         ? await this.o.store.withLock(userId, conversationId, () =>
@@ -187,6 +217,7 @@ export class SendService {
         model.providerId,
         model.id,
         model.contextTokens,
+        config,
       );
       await this.o.hooks?.beforeRecheck?.();
 
@@ -202,6 +233,7 @@ export class SendService {
           throw new AppError(ErrorCode.CONFLICT, "Conversation id collision; retry");
         }
         if ((current?.revision ?? null) !== (snapshot?.revision ?? null)) return "changed" as const;
+        if ((this.o.settings?.revision ?? null) !== settingsRevision) return "changed" as const;
         const again = await this.checkKey(userId, request, payloadHash);
         if (again) return { response: again, launch: undefined };
         const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
@@ -216,6 +248,7 @@ export class SendService {
           current,
           prompt,
           reservation,
+          config,
         });
       });
       if (outcome !== "changed") {
@@ -242,6 +275,23 @@ export class SendService {
     return read.conversation;
   }
 
+  /** Per-model prompt, sampling and output cap from the admin settings (Phase 10). */
+  private modelConfig(providerId: string, modelId: string, sender: Sender): ModelConfig {
+    const settings = this.o.settings?.get();
+    const entry = this.o.settings?.forModel(providerId, modelId);
+    const expanded = expandSystemPrompt(entry?.systemPrompt ?? null, {
+      username: sender.username,
+      now: this.now(),
+      timeZone: settings?.timeZone ?? "UTC",
+    });
+    return {
+      instructions: expanded.system,
+      context: expanded.context,
+      sampling: entry?.sampling ?? {},
+      maxTokens: Math.min(this.o.maxOutputTokens, settings?.maxOutputTokens ?? Infinity),
+    };
+  }
+
   /** Step 2 (no locks held): prompt assembly and context budget, from canonical data only. */
   private async preflight(
     current: ConversationModel | null,
@@ -250,6 +300,7 @@ export class SendService {
     providerId: string,
     model: string,
     contextTokens: number,
+    config: ModelConfig,
   ): Promise<AssembledPrompt> {
     const draft: ConversationModel = current ?? {
       title: NEW_CONVERSATION_TITLE,
@@ -261,7 +312,7 @@ export class SendService {
       ...draft,
       blocks: [...draft.blocks, { type: "user", id: randomUUID(), body: content }],
     };
-    const budget = Math.max(0, contextTokens - this.o.maxOutputTokens);
+    const budget = Math.max(0, contextTokens - config.maxTokens);
     const counter = this.o.counterFor
       ? await this.o.counterFor(providerId, model)
       : await counterFor(provider, model, this.o.templateOverheadTokens);
@@ -270,6 +321,8 @@ export class SendService {
         budget,
         trimStep: this.o.contextTrimStep ?? Math.max(1, Math.floor(budget * 0.25)),
         counter,
+        instructions: config.instructions,
+        context: config.context,
       });
     } catch (error) {
       if (error instanceof ContextTooLargeError) {
@@ -296,6 +349,7 @@ export class SendService {
       current: { model: ConversationModel; revision: string } | null;
       prompt: AssembledPrompt;
       reservation: ReturnType<GenerationManager["reserve"]>;
+      config: ModelConfig;
     },
   ): Promise<{ response: StartGenerationResponse; launch: (() => void) | undefined }> {
     const { conversationId, reservation } = input;
@@ -364,6 +418,8 @@ export class SendService {
           model: input.model,
           operationKey: record.operationKey,
           messages: input.prompt.messages,
+          maxTokens: input.config.maxTokens,
+          sampling: input.config.sampling,
           persist: (outcome) =>
             this.persistOutcome(
               userId,
@@ -409,6 +465,14 @@ export class SendService {
     outcome: GenerationOutcome,
   ): Promise<string | null> {
     return this.o.store.withLock(userId, conversationId, async () => {
+      // Rechecked under the lock: a closing account's late writes are skipped.
+      if (await this.o.isClosing?.(userId)) {
+        this.o.logger.info(
+          { generationId: record.generationId },
+          "reply discarded: account closing",
+        );
+        return null;
+      }
       const read = await this.o.store.readUnlocked(userId, conversationId);
       const markWritten = () =>
         this.o.operations

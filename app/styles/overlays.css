@@ -449,3 +449,153 @@
 .reauth-dialog .dialog-title {
   margin-bottom: 8px;
 }
+
+/* ── Administration (Phase 10) ── */
+.admin-dialog-wide {
+  width: min(1040px, calc(100vw - 32px));
+}
+
+.admin-panel {
+  overflow-x: auto;
+}
+
+.admin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  font-size: var(--text-ui);
+}
+
+.admin-form label,
+.admin-label,
+.admin-provider-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-ui);
+}
+
+.admin-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.admin-fields label {
+  flex: 1 1 140px;
+}
+
+.admin-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-ui);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--divider);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-table th {
+  color: var(--text-secondary);
+  font-weight: var(--weight-semibold);
+}
+
+.admin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.admin-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--hover);
+  color: var(--text-secondary);
+  font-size: var(--text-sub);
+}
+
+.admin-muted {
+  color: var(--text-secondary);
+}
+
+.admin-error {
+  color: var(--danger);
+}
+
+.admin-url {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-textarea {
+  height: auto;
+  padding: 8px 12px;
+  line-height: 20px;
+  resize: vertical;
+}
+
+.admin-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.admin-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.admin-checks legend {
+  margin-bottom: 4px;
+  font-size: var(--text-ui);
+}
+
+.admin-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+}
+
+/* ── Instance notice ── */
+.notice-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(var(--thread-width), calc(100% - 32px));
+  margin: calc(var(--bar-height) + 4px) auto 0;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-ui);
+}
+
+.notice-banner p {
+  flex: 1;
+  margin: 0;
+}
+
+.notice-banner + .scroller .thread {
+  padding-top: 12px;
+}
+
+html[data-phone] .notice-banner {
+  margin-top: 4px;
+}

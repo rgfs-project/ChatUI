@@ -67,8 +67,15 @@ export class AuthService {
     this.cookieName = this.config.secureCookies ? "__Host-chatui_session" : "chatui_session";
   }
 
+  /** An admin's setting overrides REGISTRATION_MODE once set (Phase 10). */
+  private registrationOverride: "open" | "closed" | null = null;
+
+  setRegistrationMode(mode: "open" | "closed" | null): void {
+    this.registrationOverride = mode;
+  }
+
   get registrationOpen(): boolean {
-    return this.config.registrationMode === "open";
+    return (this.registrationOverride ?? this.config.registrationMode) === "open";
   }
 
   private tokenFrom(req: Request): string | undefined {
