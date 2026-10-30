@@ -3,6 +3,7 @@ import { readdir } from "node:fs/promises";
 import type { ChatIndex, IndexLogger } from "./chat-index.ts";
 import { cleanupTempFiles, ensureDir, readOrNull } from "./fs.ts";
 import type { CheckpointOutcome, CheckpointStore } from "./checkpoints.ts";
+import type { ProposalStore, StagedProposal } from "./proposals.ts";
 import type { ConversationStore } from "./conversations.ts";
 import { normalizeBody, type AssistantStatus, type Block } from "./markdown.ts";
 import { sha256Hex, type OperationRecord, type OperationStore } from "./operations.ts";
@@ -133,7 +134,14 @@ export async function recoverStorage(options: {
   retentionMs: number;
   startedAt: Date;
   now?: Date;
-  generations?: { store: ConversationStore; checkpoints: CheckpointStore; retentionMs: number };
+  generations?: {
+    store: ConversationStore;
+    checkpoints: CheckpointStore;
+    retentionMs: number;
+    proposals?: ProposalStore;
+  };
+  /** Step 6: memory acceptance intents (Phase 13b). */
+  memoryIntents?: (userId: string) => Promise<number>;
   /** Step 7: reconcile and garbage-collect pending attachments (Phase 12). */
   attachments?: (userId: string) => Promise<void>;
 }): Promise<RecoveryReport> {
@@ -171,6 +179,7 @@ export async function recoverStorage(options: {
         now: options.now ?? new Date(),
       })
     : null;
+  if (options.memoryIntents) for (const userId of users) await options.memoryIntents(userId);
   if (options.attachments) for (const userId of users) await options.attachments(userId);
   for (const userId of users) await options.index.load(userId);
   const report = { tempFilesRemoved, unexpectedEntries, ...totals, generations };
@@ -203,6 +212,10 @@ async function writeReplyOnce(
     content: string;
     reasoning: string;
     time: string;
+    tools?: string[];
+    /** Written after the assistant, idempotently, for a complete reply (§4.3). */
+    proposals?: StagedProposal[];
+    proposalStore?: ProposalStore;
   },
 ): Promise<"written" | "exists" | "missing" | "malformed"> {
   return store.withLock(input.userId, input.conversationId, async () => {
@@ -210,8 +223,18 @@ async function writeReplyOnce(
     if (read.kind === "missing") return "missing";
     if (read.kind === "malformed") return "malformed";
     const model = read.conversation.model;
-    if (model.blocks.some((b) => b.type === "assistant" && b.id === input.assistantMessageId))
+    const writeProposals = async () => {
+      const proposals = input.proposals ?? [];
+      const sidecar = input.proposalStore;
+      if (!sidecar || input.status !== "complete" || proposals.length === 0) return;
+      await sidecar.withLock(input.userId, input.conversationId, () =>
+        sidecar.addStagedUnlocked(input.userId, input.conversationId, proposals),
+      );
+    };
+    if (model.blocks.some((b) => b.type === "assistant" && b.id === input.assistantMessageId)) {
+      await writeProposals();
       return "exists";
+    }
     const blocks: Block[] = [];
     const reasoning = normalizeBody(input.reasoning);
     if (reasoning !== "")
@@ -223,6 +246,7 @@ async function writeReplyOnce(
       ...(input.providerId ? { provider: input.providerId } : {}),
       ...(input.model ? { model: input.model } : {}),
       time: input.time,
+      ...(input.tools && input.tools.length > 0 ? { tools: input.tools.slice(0, 16) } : {}),
       body: normalizeBody(input.content),
     });
     await store.writeUnlocked(
@@ -230,6 +254,7 @@ async function writeReplyOnce(
       input.conversationId,
       store.appendBlocks(model, blocks),
     );
+    await writeProposals();
     return "written";
   });
 }
@@ -259,6 +284,8 @@ export async function recoverGenerations(options: {
   logger: IndexLogger;
   retentionMs: number;
   now: Date;
+  /** Proposal sidecars (Phase 13b): staged suggestions of decided complete replies. */
+  proposals?: ProposalStore;
 }): Promise<GenerationRecoveryReport> {
   const { store, operations, checkpoints, logger, now } = options;
   const report: GenerationRecoveryReport = {
@@ -299,6 +326,14 @@ export async function recoverGenerations(options: {
       content: decided ? decided.content : checkpoint.content,
       reasoning: decided ? decided.reasoning : checkpoint.reasoning,
       time: decided ? decided.finishedAt : now.toISOString(),
+      // A `running` checkpoint's staged suggestions are discarded (§4.3).
+      ...(decided
+        ? {
+            tools: decided.tools ?? [],
+            proposals: decided.state === "completed" ? (decided.proposals ?? []) : [],
+            ...(options.proposals ? { proposalStore: options.proposals } : {}),
+          }
+        : {}),
     });
     if (result === "written") {
       if (decided) report.completedDecided++;

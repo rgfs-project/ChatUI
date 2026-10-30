@@ -49,6 +49,9 @@ import { SettingsStore } from "./admin/settings.ts";
 import { AttachmentStore } from "./attachments/store.ts";
 import { ProfileService } from "./profile/service.ts";
 import { ConversationMutations } from "./chat/mutations.ts";
+import { MemoryService } from "./memory/service.ts";
+import { MemoryStore } from "./storage/memories.ts";
+import { ProposalStore } from "./storage/proposals.ts";
 import { SearchService } from "./chat/search.ts";
 import { ProfileStore } from "./profile/store.ts";
 import { listDir } from "./storage/fs.ts";
@@ -230,6 +233,16 @@ export function createApp(options: AppOptions): ChatUiApp {
     const user = await users.get(userId);
     return !user || user.status === "closing";
   };
+  // Memories and proposals (Phase 13b) and search (13a; also a tool, D2).
+  const memoryStore = new MemoryStore(paths, locks, now);
+  const proposalStore = new ProposalStore(paths, locks);
+  const memory = new MemoryService({
+    memories: memoryStore,
+    proposals: proposalStore,
+    logger,
+    now,
+  });
+  const search = new SearchService(conversations, attachments);
   const send = new SendService({
     store: conversations,
     checkpoints,
@@ -246,6 +259,9 @@ export function createApp(options: AppOptions): ChatUiApp {
     isClosing,
     attachments,
     preferences,
+    memories: memoryStore,
+    proposals: proposalStore,
+    search,
     attachmentLimits: {
       maxPerMessage: attachmentConfig.maxPerMessage,
       maxInlineTextBytes: attachmentConfig.maxInlineTextBytes,
@@ -353,7 +369,9 @@ export function createApp(options: AppOptions): ChatUiApp {
         store: conversations,
         checkpoints,
         retentionMs: storageConfig.generationRetentionMs,
+        proposals: proposalStore,
       },
+      memoryIntents: (userId) => memory.recover(userId),
       attachments: async (userId) => {
         await attachments.reconcile(userId, await attachmentReferences(userId));
       },
@@ -397,9 +415,10 @@ export function createApp(options: AppOptions): ChatUiApp {
     generations,
     attachments,
     preferences,
+    proposals: proposalStore,
+    memory,
     now,
   });
-  const search = new SearchService(conversations, attachments);
   const services: RouteServices = {
     conversationDto: async (userId, id) =>
       toConversationDto(await conversations.get(userId, id), services, userId),
@@ -419,6 +438,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     attachmentLimits,
     mutations,
     search,
+    memory,
     profile,
     profileStore,
     profilePhotoPath: (userId) => paths.profilePhoto(userId),

@@ -49,6 +49,7 @@ export function conversation(overrides: Partial<ConversationDto> = {}): Conversa
     updatedAt: "2026-10-29T10:00:00.000Z",
     revision: "0".repeat(64),
     activeGeneration: null,
+    proposals: [],
     messages: [
       {
         id: "11111111-0000-4000-8000-000000000001",
@@ -60,6 +61,7 @@ export function conversation(overrides: Partial<ConversationDto> = {}): Conversa
         model: null,
         attachments: [],
         time: null,
+        tools: [],
       },
       {
         id: "11111111-0000-4000-8000-000000000002",
@@ -71,6 +73,7 @@ export function conversation(overrides: Partial<ConversationDto> = {}): Conversa
         model: "mock-chat",
         attachments: [],
         time: null,
+        tools: [],
       },
     ],
     ...overrides,

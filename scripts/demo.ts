@@ -10,7 +10,7 @@
  */
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { MOCK_MODELS, startMockLlama } from "../tests/support/mock-llama.ts";
 
@@ -151,14 +151,40 @@ async function main(): Promise<void> {
     if ((await run("npm", ["run", "build"])) !== 0) throw new Error("build failed");
   }
   await seed();
-  // The mock model gets a new port each run: let the server bootstrap the
-  // demo's provider list from LLAMA_BASE_URL again.
-  rmSync(path.join(DATA_DIR, "_system", "providers.json"), { force: true });
+  // The mock model gets a new port each run: providers.json is rewritten below.
   const llama = await startMockLlama({
     chatChunkDelayMs: 25,
     chunkDelayMs: 80,
-    listed: [MOCK_MODELS.chat, MOCK_MODELS.vision, MOCK_MODELS.slow, MOCK_MODELS.long],
+    listed: [
+      MOCK_MODELS.chat,
+      MOCK_MODELS.tools,
+      MOCK_MODELS.vision,
+      MOCK_MODELS.slow,
+      MOCK_MODELS.long,
+    ],
+    toolDelayMs: 300,
   });
+  // The mock provider supports tools (mock-tools shows the tool loop and memory suggestions).
+  mkdirSync(path.join(DATA_DIR, "_system"), { recursive: true });
+  writeFileSync(
+    path.join(DATA_DIR, "_system", "providers.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        providers: [
+          {
+            id: "local",
+            name: "Local llama.cpp",
+            kind: "openai-compatible",
+            baseUrl: llama.url,
+            capabilities: { inputModalities: ["text"], reasoning: false, tools: true },
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
   const server = spawn(process.execPath, ["server/main.ts"], {
     cwd: ROOT,
     env: {

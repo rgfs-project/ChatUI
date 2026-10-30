@@ -26,6 +26,14 @@ import {
 } from "./auth.ts";
 import { healthRoute } from "./health.ts";
 import {
+  acceptProposalRoute,
+  createMemoryRoute,
+  deleteMemoryRoute,
+  listMemoriesRoute,
+  rejectProposalRoute,
+  updateMemoryRoute,
+} from "./memories.ts";
+import {
   deletePhotoRoute,
   getProfileRoute,
   photoContentRoute,
@@ -81,6 +89,12 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(deleteExchangeRoute),
   erase(regenerateRoute),
   erase(searchRoute),
+  erase(listMemoriesRoute),
+  erase(createMemoryRoute),
+  erase(updateMemoryRoute),
+  erase(deleteMemoryRoute),
+  erase(acceptProposalRoute),
+  erase(rejectProposalRoute),
   erase(getProfileRoute),
   erase(updateProfileRoute),
   erase(uploadPhotoRoute),

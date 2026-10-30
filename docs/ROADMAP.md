@@ -75,8 +75,8 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 | --------------------------------- | ---------------------------------------------------------- |
 | 1a–6                              | Done (tags `phase-1a` … `phase-6`)                         |
 | 7a, 7b, 8, 11, 14, 9, 10, 12, 12b | Done (tags `phase-<id>`); reports in `docs/phase-reports/` |
-| 13a                               | Done (tag `phase-13a`)                                     |
-| D2, 13b onward                    | Not started                                                |
+| 13a, D2 + 13b                     | Done (tags `phase-13a`, `phase-13b`)                       |
+| 13c onward                        | Not started                                                |
 
 ## 6. Phase 7a plan (as approved)
 

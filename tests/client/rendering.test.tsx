@@ -125,6 +125,7 @@ describe("read aloud (INV-52: offered only where supported)", () => {
             model: null,
             attachments: [],
             time: null,
+            tools: [],
           }}
         />
       </TooltipProvider>,

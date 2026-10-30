@@ -145,6 +145,23 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await createUser(dataDir, E2E_OTHER_USER);
   await createUser(dataDir, E2E_ADMIN, true);
   const longChat = seedLongConversation(dataDir, userId);
+  // Tools are verified for this provider (D2): mock-tools drives the tool loop.
+  mkdirSync(path.join(dataDir, "_system"), { recursive: true });
+  writeFileSync(
+    path.join(dataDir, "_system", "providers.json"),
+    JSON.stringify({
+      version: 1,
+      providers: [
+        {
+          id: "local",
+          name: "Local llama.cpp",
+          kind: "openai-compatible",
+          baseUrl: llama.url,
+          capabilities: { inputModalities: ["text"], reasoning: false, tools: true },
+        },
+      ],
+    }),
+  );
   const port = await freePort();
   const base = `http://127.0.0.1:${String(port)}`;
   const server = spawn(process.execPath, ["server/main.ts"], {

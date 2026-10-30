@@ -7,6 +7,8 @@ import type { GenerationManager } from "../generations/manager.ts";
 import type { ConversationStore, LoadedConversation } from "../storage/conversations.ts";
 import { normalizeBody, type ConversationModel, type UserBlock } from "../storage/markdown.ts";
 import type { PreferencesStore } from "../storage/preferences.ts";
+import type { ProposalStore } from "../storage/proposals.ts";
+import type { MemoryService } from "../memory/service.ts";
 import { findExchange, removedUsers, touchesIrregular } from "./turns.ts";
 
 export interface MutationOptions {
@@ -14,6 +16,9 @@ export interface MutationOptions {
   generations: GenerationManager;
   attachments: AttachmentStore;
   preferences: PreferencesStore;
+  /** Phase 13b: suggestions of removed turns become invalid; sidecars go with their chat. */
+  proposals?: ProposalStore;
+  memory?: MemoryService;
   now?: () => Date;
 }
 
@@ -65,6 +70,20 @@ export class ConversationMutations {
     this.o = options;
   }
 
+  /** Pending suggestions whose source turn is gone become invalid (§4.3), under the conversation lock. */
+  private async invalidate(
+    userId: string,
+    conversationId: string,
+    blocks: readonly { id: string }[],
+  ) {
+    await this.o.proposals?.invalidateMissing(
+      userId,
+      conversationId,
+      new Set(blocks.map((b) => b.id)),
+      (this.o.now ?? (() => new Date()))().toISOString(),
+    );
+  }
+
   /** After a canonical write: files of removed user turns go too (Markdown first, §7). */
   private async dropFiles(userId: string, conversationId: string, removed: readonly UserBlock[]) {
     const ids = removed.flatMap((block) => block.attachments ?? []);
@@ -114,6 +133,7 @@ export class ConversationMutations {
         blocks,
         updatedAt: (this.o.now ?? (() => new Date()))().toISOString(),
       });
+      await this.invalidate(userId, conversationId, blocks);
       const dropped = existing.filter((id) => !attachments.includes(id));
       return {
         written: next,
@@ -155,6 +175,7 @@ export class ConversationMutations {
         blocks,
         updatedAt: (this.o.now ?? (() => new Date()))().toISOString(),
       });
+      await this.invalidate(userId, conversationId, blocks);
       return { written: next, removed: [exchange.user] };
     });
     await this.dropFiles(userId, conversationId, removed);
@@ -176,16 +197,37 @@ export class ConversationMutations {
     }
     let deleted = 0;
     for (const id of ids) {
-      try {
-        await this.o.store.delete(userId, id);
-        deleted++;
-      } catch {
-        continue; // already gone
-      }
-      await this.o.attachments.deleteForConversation(userId, id);
+      if (await this.deleteOne(userId, id)) deleted++;
     }
     await this.o.preferences.update(userId, { pins: [] });
     return deleted;
+  }
+
+  /**
+   * Deletes one conversation in the documented order: finish pending memory
+   * acceptances of its suggestions, then the Markdown, then its files, its
+   * proposal sidecar (§4.3) and its pin. Returns false when it was already gone.
+   */
+  private async deleteOne(userId: string, conversationId: string): Promise<boolean> {
+    await this.o.memory?.resolveIntents(userId, conversationId);
+    try {
+      await this.o.store.delete(userId, conversationId);
+    } catch {
+      return false; // already gone
+    }
+    await this.o.attachments.deleteForConversation(userId, conversationId);
+    await this.o.memory?.deleteSidecar(userId, conversationId);
+    return true;
+  }
+
+  /** Single conversation deletion (route): as clear history, plus its pin (INV-34). */
+  async deleteConversation(userId: string, conversationId: string): Promise<void> {
+    await this.o.memory?.resolveIntents(userId, conversationId);
+    // Throws NOT_FOUND for a missing conversation (StorageError, mapped by the route).
+    await this.o.store.delete(userId, conversationId);
+    await this.o.attachments.deleteForConversation(userId, conversationId);
+    await this.o.memory?.deleteSidecar(userId, conversationId);
+    await this.forgetPin(userId, conversationId);
   }
 
   /** A deleted conversation's pin goes with it (INV-34 keeps every other preference). */

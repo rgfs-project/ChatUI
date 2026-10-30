@@ -16,6 +16,7 @@ import type { AttachmentLimits, AttachmentStore } from "./attachments/store.ts";
 import type { ProfileService } from "./profile/service.ts";
 import type { ConversationMutations } from "./chat/mutations.ts";
 import type { SearchService } from "./chat/search.ts";
+import type { MemoryService } from "./memory/service.ts";
 import type { ProfileStore } from "./profile/store.ts";
 import type { ProfileDto } from "@shared/profile";
 import type { AuthContext, AuthService } from "./auth/service.ts";
@@ -70,6 +71,8 @@ export interface RouteServices {
   /** Phase 13a. */
   mutations: ConversationMutations;
   search: SearchService;
+  /** Phase 13b. */
+  memory: MemoryService;
   /** Phase 12b. */
   profile: ProfileService;
   profileStore: ProfileStore;

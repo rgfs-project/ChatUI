@@ -727,3 +727,86 @@
   display: flex;
   gap: 4px;
 }
+
+/* ── Tools and memory suggestions (D2, Phase 13b) ── */
+.tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--pill-border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.tool-chip.is-error {
+  color: var(--danger);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.proposals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proposal {
+  padding: 12px 14px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-suggestion);
+  font-size: var(--text-ui);
+}
+
+.proposal-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.proposal-kind {
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.proposal-title {
+  margin: 6px 0 2px;
+  font-weight: var(--weight-semibold);
+}
+
+.proposal-body,
+.proposal-note {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+}
+
+.proposal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}

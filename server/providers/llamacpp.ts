@@ -343,6 +343,7 @@ export function createLlamaCppProvider(
             messages: request.messages,
             max_tokens: request.maxTokens,
             ...samplingFields(request.sampling),
+            ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {}),
             stream: true,
             stream_options: { include_usage: true },
           }),
@@ -460,6 +461,20 @@ export function createLlamaCppProvider(
       }
       if (typeof delta.content === "string" && delta.content) {
         yield { type: "content", text: delta.content };
+      }
+      if (Array.isArray(delta.tool_calls)) {
+        for (const raw of delta.tool_calls as unknown[]) {
+          if (!isObject(raw)) continue;
+          const index = typeof raw.index === "number" ? raw.index : 0;
+          const fn = isObject(raw.function) ? raw.function : {};
+          yield {
+            type: "tool_call",
+            index,
+            ...(typeof raw.id === "string" ? { id: raw.id.slice(0, 100) } : {}),
+            ...(typeof fn.name === "string" ? { name: fn.name.slice(0, 64) } : {}),
+            ...(typeof fn.arguments === "string" ? { arguments: fn.arguments } : {}),
+          };
+        }
       }
       if (typeof choice.finish_reason === "string" && choice.finish_reason) {
         yield { type: "finish", reason: choice.finish_reason.slice(0, 40) };

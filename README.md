@@ -104,6 +104,8 @@ LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
 
 Under each of your messages are Copy, Edit and Delete; Edit turns the bubble into an editor, and Send replaces the message and everything after it, then asks for a new reply. Replies have Regenerate (it asks first, and replaces later messages too). Delete removes one message and its reply. Ctrl/⌘+K (or the search icon in the sidebar) searches your chats and files; opening a result jumps to the match. Pin a chat from its menu to keep it in the Pinned section. Settings → General → Delete all chats removes every chat and its files and keeps your settings.
 
+Settings → Memory holds notes ChatUI keeps in mind in every chat. With a provider whose `capabilities.tools` is `true` in `providers.json`, models can also search and read your earlier chats and files, check the time, calculate, and suggest memories; a suggestion appears under the reply and is saved only when you choose Save. Leave `tools` off until `node scripts/probe-provider.ts` shows your model handles tool calls (see [docs/provider-notes.md](docs/provider-notes.md)). In `npm run demo`, try `mock-tools` with `calc 6*7; remember Pet: has a cat`.
+
 ## Providers (`providers.json`)
 
 Model servers are configured in `DATA_DIR/_system/providers.json`. On first start it is created with one `local` provider from `LLAMA_BASE_URL` / `LLAMA_API_KEY`; after that **the file is authoritative**: edit it in Administration → Providers (applied at once), or by hand and restart:

@@ -698,3 +698,68 @@ html[data-phone] .notice-banner {
 .dialog.settings-dialog:focus-visible {
   outline: none;
 }
+
+/* ── Memory settings (Phase 13b) ── */
+.memory-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid var(--divider);
+  font-size: var(--text-ui);
+}
+
+.memory-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.memory-name {
+  font-weight: var(--weight-medium);
+}
+
+.memory-body {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.memory-badge {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--hover);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.memory-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--divider);
+}
+
+.memory-form textarea {
+  resize: vertical;
+}
+
+.memory-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.memory-empty {
+  padding: 0 0 12px;
+}

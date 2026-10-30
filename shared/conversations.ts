@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { proposalDtoSchema } from "./memories";
 import { attachmentRefSchema } from "./attachments";
 
 /** Conversation DTOs (Phase 3). Browser code imports only the types. */
@@ -31,6 +32,8 @@ export const messageDtoSchema = z.strictObject({
   /** User messages: attached files (metadata only; missing files are placeholders). */
   attachments: z.array(attachmentRefSchema),
   time: z.string().nullable(),
+  /** Assistant only: tools the reply used, as chips (D2). */
+  tools: z.array(z.string()),
 });
 export type MessageDto = z.infer<typeof messageDtoSchema>;
 
@@ -44,6 +47,8 @@ export const conversationDtoSchema = z.strictObject({
   messages: z.array(messageDtoSchema),
   /** The running generation for this conversation, if any. */
   activeGeneration: z.strictObject({ generationId: z.uuid() }).nullable(),
+  /** Memory suggestions from this conversation's replies (Phase 13b). */
+  proposals: z.array(proposalDtoSchema),
 });
 export type ConversationDto = z.infer<typeof conversationDtoSchema>;
 

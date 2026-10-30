@@ -7,6 +7,7 @@ import {
   type TerminalState,
 } from "@shared/generation-state";
 import type { GenerationError, GenerationSnapshot } from "@shared/generations";
+import type { ToolActivity } from "@shared/tool-labels";
 import { refreshSession, reportSessionExpired } from "../lib/api";
 import { mark } from "../lib/perf";
 import { qk } from "../lib/query/keys";
@@ -21,6 +22,10 @@ export interface LiveGeneration {
   reasoning: string;
   finishReason: string | null;
   error: GenerationError | null;
+  /** Tool calls so far, for the live chips (D2). */
+  tools: ToolActivity[];
+  /** Memory suggestions recorded so far: previews, never actionable (§4.3). */
+  proposals: { tool: string; name: string }[];
 }
 
 export function fromSnapshot(s: GenerationSnapshot): LiveGeneration {
@@ -33,6 +38,8 @@ export function fromSnapshot(s: GenerationSnapshot): LiveGeneration {
     reasoning: s.reasoning,
     finishReason: s.finishReason,
     error: s.error,
+    tools: s.tools,
+    proposals: s.proposals,
   };
 }
 
@@ -78,6 +85,19 @@ export function useGenerationObserver(userId: string, generationId: string | nul
         content: v.content + (delta.content ?? ""),
         reasoning: v.reasoning + (delta.reasoning ?? ""),
       }));
+    });
+    source.addEventListener("tool", (event: MessageEvent<string>) => {
+      const tool = JSON.parse(event.data) as ToolActivity;
+      update((v) => ({
+        ...v,
+        tools: v.tools.some((t) => t.callId === tool.callId)
+          ? v.tools.map((t) => (t.callId === tool.callId ? tool : t))
+          : [...v.tools, tool],
+      }));
+    });
+    source.addEventListener("proposals", (event: MessageEvent<string>) => {
+      const { previews } = JSON.parse(event.data) as { previews: LiveGeneration["proposals"] };
+      update((v) => ({ ...v, proposals: previews }));
     });
     source.addEventListener("terminal", (event: MessageEvent<string>) => {
       const t = JSON.parse(event.data) as {

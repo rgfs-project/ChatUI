@@ -209,7 +209,11 @@ export function ChatView() {
                 void chat.checkPending();
               }}
             >
-              <Transcript messages={messages} timeFormat={timeFormat} />
+              <Transcript
+                messages={messages}
+                timeFormat={timeFormat}
+                proposals={conversation?.proposals}
+              />
             </AreaBoundary>
             {showPending ? (
               <UserBubble

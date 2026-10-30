@@ -10,8 +10,32 @@ import {
 import type { PromptMessage } from "../chat/prompt.ts";
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
-import { ProviderError, type ChatRequest, type Provider } from "../providers/types.ts";
+import {
+  ProviderError,
+  type ChatRequest,
+  type Provider,
+  type ProviderMessage,
+} from "../providers/types.ts";
 import type { CheckpointStore, GenerationCheckpoint } from "../storage/checkpoints.ts";
+import type { StagedProposal } from "../storage/proposals.ts";
+import type { ToolCall, ToolDefinition, ToolResult } from "../tools/session.ts";
+
+/**
+ * The shared tool loop of one generation (D2 amendment to contracts §4.3).
+ * Tool-call and result messages live only in memory and the checkpoint; they
+ * are never written to Markdown or replayed on later turns.
+ */
+export interface ToolLoop {
+  definitions: ToolDefinition[];
+  /** Tool rounds allowed; the request after the last round offers no tools. */
+  maxRounds: number;
+  execute(calls: readonly ToolCall[]): Promise<ToolResult[]>;
+  used(): string[];
+  staged(): StagedProposal[];
+  previews(): { tool: string; name: string }[];
+  /** Whether a follow-up request with these messages fits the context budget. */
+  fits(messages: ProviderMessage[]): Promise<boolean>;
+}
 
 /** Receives events for one generation. Must never block (INV-06, INV-62). */
 export interface GenerationObserver {
@@ -28,6 +52,10 @@ export interface GenerationOutcome {
   finishReason: string | null;
   error: GenerationError | null;
   finishedAt: string;
+  /** Tools the reply used, in order of first use (saved as chips). */
+  tools: string[];
+  /** Validated and suppressed memory suggestions, written only for a complete reply. */
+  proposals: StagedProposal[];
 }
 
 /**
@@ -107,6 +135,9 @@ interface Generation {
   /** Resolves once the terminal outcome is persisted and published. */
   settled: Promise<void>;
   settle: () => void;
+  /** Live tool activity (SSE `tool`) and the session behind it. */
+  toolActivity: { callId: string; name: string; state: "running" | "done" | "error" }[];
+  loop: ToolLoop | null;
 }
 
 type AbortReason = "cancel" | "max" | "shutdown";
@@ -295,6 +326,8 @@ export class GenerationManager {
       /** Per-generation output cap (admin limit ≤ environment) and sampling (Phase 10). */
       maxTokens?: number;
       sampling?: ChatRequest["sampling"];
+      /** The shared tool loop, for tool-capable models (D2). */
+      tools?: ToolLoop;
     },
   ): void {
     let settle!: () => void;
@@ -332,6 +365,8 @@ export class GenerationManager {
       writes: Promise.resolve(),
       settled,
       settle,
+      toolActivity: [],
+      loop: input.tools ?? null,
     };
     this.generations.set(generation.id, generation);
     this.active.set(reservation.conversationKey, {
@@ -354,49 +389,163 @@ export class GenerationManager {
 
   private async run(
     generation: Generation,
-    messages: PromptMessage[],
+    initial: ProviderMessage[],
     limits: { maxTokens: number; sampling?: ChatRequest["sampling"] },
   ): Promise<void> {
     const signal = generation.controller.signal;
+    const loop = generation.loop;
+    let messages = initial;
+    let round = 0;
+    let outputTokens = 0;
+    // A function, so checks after an await are not narrowed away.
+    const stopped = () => generation.decided || signal.aborted;
+    // Whether the current follow-up request has produced anything yet.
+    let roundStarted = false;
     try {
-      const stream = generation.provider.streamChat(
-        {
-          model: generation.model,
-          messages,
-          maxTokens: limits.maxTokens,
-          ...(limits.sampling ? { sampling: limits.sampling } : {}),
-        },
-        signal,
-      );
-      for await (const event of stream) {
-        if (generation.decided || signal.aborted) break; // late chunks are dropped
-        switch (event.type) {
-          case "start":
-            this.transitionToStreaming(generation);
-            break;
-          case "content":
-            this.transitionToStreaming(generation);
-            generation.content += event.text;
-            generation.dirty = true;
-            this.emit(generation, { type: "delta", data: { content: event.text } });
-            break;
-          case "reasoning":
-            this.transitionToStreaming(generation);
-            generation.reasoning += event.text;
-            generation.dirty = true;
-            this.emit(generation, { type: "delta", data: { reasoning: event.text } });
-            break;
-          case "finish":
-            generation.finishReason = event.reason;
-            break;
-          case "usage":
-            break;
+      for (;;) {
+        const offer = loop !== null && round < loop.maxRounds;
+        const remaining = limits.maxTokens - outputTokens;
+        // Text before tool calls and the follow-up text are joined by one blank line.
+        let contentGap = generation.content !== "";
+        let reasoningGap = generation.reasoning !== "";
+        let roundText = "";
+        let roundChars = 0;
+        let usage: number | null = null;
+        roundStarted = false;
+        const calls = new Map<
+          number,
+          { id: string; name: string; args: string; oversized: boolean }
+        >();
+        const stream = generation.provider.streamChat(
+          {
+            model: generation.model,
+            messages,
+            maxTokens: remaining,
+            ...(limits.sampling ? { sampling: limits.sampling } : {}),
+            ...(offer ? { tools: loop.definitions } : {}),
+          },
+          signal,
+        );
+        for await (const event of stream) {
+          if (generation.decided || signal.aborted) break; // late chunks are dropped
+          if (event.type !== "start") roundStarted = true;
+          switch (event.type) {
+            case "start":
+              this.transitionToStreaming(generation);
+              break;
+            case "content": {
+              this.transitionToStreaming(generation);
+              const text = contentGap ? `\n\n${event.text}` : event.text;
+              contentGap = false;
+              generation.content += text;
+              roundText += event.text;
+              roundChars += event.text.length;
+              generation.dirty = true;
+              this.emit(generation, { type: "delta", data: { content: text } });
+              break;
+            }
+            case "reasoning": {
+              this.transitionToStreaming(generation);
+              const text = reasoningGap ? `\n\n${event.text}` : event.text;
+              reasoningGap = false;
+              generation.reasoning += text;
+              roundChars += event.text.length;
+              generation.dirty = true;
+              this.emit(generation, { type: "delta", data: { reasoning: text } });
+              break;
+            }
+            case "tool_call": {
+              if (!offer) break; // tools were not offered: ignored
+              this.transitionToStreaming(generation);
+              const call = calls.get(event.index) ?? {
+                id: "",
+                name: "",
+                args: "",
+                oversized: false,
+              };
+              if (event.id && !call.id) call.id = event.id;
+              if (event.name && !call.name) call.name = event.name;
+              if (event.arguments) {
+                if (call.args.length + event.arguments.length > 8_192) call.oversized = true;
+                else call.args += event.arguments;
+              }
+              calls.set(event.index, call);
+              break;
+            }
+            case "finish":
+              generation.finishReason = event.reason;
+              break;
+            case "usage":
+              usage = event.completionTokens;
+              break;
+          }
         }
+        if (signal.aborted) return;
+        outputTokens += usage ?? Math.ceil(roundChars / 4);
+        // Calls without an id or a name are incomplete: never run, never answered.
+        const complete = [...calls.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([, call]) => call)
+          .filter((call) => call.id !== "" && call.name !== "");
+        if (!offer || complete.length === 0) break;
+        const toolCalls: ToolCall[] = complete.map((call) => ({
+          id: call.id,
+          name: call.name,
+          // Oversized arguments are invalid (contracts §4.3).
+          arguments: call.oversized ? "\u0000" : call.args,
+        }));
+        for (const call of toolCalls) this.toolEvent(generation, call.id, call.name, "running");
+        const before = loop.previews().length;
+        const results = await loop.execute(toolCalls);
+        if (stopped()) return;
+        for (const result of results)
+          this.toolEvent(generation, result.callId, result.name, result.ok ? "done" : "error");
+        if (loop.previews().length !== before)
+          this.emit(generation, { type: "proposals", data: { previews: loop.previews() } });
+        generation.dirty = true;
+        round++;
+        // The follow-up gets only what is left of the output budget.
+        if (limits.maxTokens - outputTokens <= 0) break;
+        const next: ProviderMessage[] = [
+          ...messages,
+          {
+            role: "assistant",
+            content: roundText === "" ? null : roundText,
+            tool_calls: toolCalls.map((call) => ({
+              id: call.id,
+              type: "function" as const,
+              function: { name: call.name, arguments: call.arguments },
+            })),
+          },
+          ...results.map((result) => ({
+            role: "tool" as const,
+            tool_call_id: result.callId,
+            content: result.content,
+          })),
+        ];
+        // A follow-up that cannot fit is skipped: the reply ends with the text so far.
+        if (!(await loop.fits(next))) break;
+        if (stopped()) return;
+        generation.finishReason = null;
+        messages = next;
       }
-      if (!signal.aborted) this.finish(generation, "completed");
+      if (!stopped()) this.finish(generation, "completed");
     } catch (error) {
       if (signal.aborted) {
         // abort() already decided the terminal state (or shutdown left it running).
+      } else if (
+        error instanceof ProviderError &&
+        round > 0 &&
+        !roundStarted &&
+        (error.kind === "http" || error.kind === "context_overflow")
+      ) {
+        // The provider rejected the tool-loop follow-up (§4.3): the reply ends
+        // with the text it already has.
+        this.options.logger.warn(
+          { generationId: generation.id, kind: error.kind },
+          "tool follow-up rejected by the provider; ending with the text so far",
+        );
+        this.finish(generation, "completed");
       } else if (error instanceof ProviderError) {
         // Provider interruption and inactivity timeouts end here.
         this.finish(
@@ -415,6 +564,19 @@ export class GenerationManager {
         });
       }
     }
+  }
+
+  private toolEvent(
+    generation: Generation,
+    callId: string,
+    name: string,
+    state: "running" | "done" | "error",
+  ): void {
+    const entry = { callId: callId.slice(0, 100), name: name.slice(0, 64), state };
+    const index = generation.toolActivity.findIndex((t) => t.callId === entry.callId);
+    if (index >= 0) generation.toolActivity[index] = entry;
+    else if (generation.toolActivity.length < 32) generation.toolActivity.push(entry);
+    this.emit(generation, { type: "tool", data: entry });
   }
 
   /**
@@ -472,6 +634,8 @@ export class GenerationManager {
             finishReason: outcome.finishReason,
             error: outcome.error,
             finishedAt: outcome.finishedAt,
+            tools: outcome.tools,
+            proposals: outcome.proposals,
           }
         : null,
     };
@@ -533,6 +697,9 @@ export class GenerationManager {
       finishReason: state === "completed" ? generation.finishReason : null,
       error,
       finishedAt: this.now().toISOString(),
+      tools: generation.loop?.used() ?? [],
+      // Staged suggestions count only for a complete reply (contracts §4.3).
+      proposals: state === "completed" ? (generation.loop?.staged() ?? []) : [],
     };
     void (async () => {
       let revision: string | null = null;
@@ -556,7 +723,16 @@ export class GenerationManager {
       }
       this.emit(generation, {
         type: "terminal",
-        data: { state, finishReason: outcome.finishReason, error, revision },
+        data: {
+          state,
+          finishReason: outcome.finishReason,
+          error,
+          revision,
+          proposalIds:
+            state === "completed" && revision !== null
+              ? outcome.proposals.filter((p) => p.status === "pending").map((p) => p.id)
+              : [],
+        },
       });
       for (const observer of generation.observers) observer.close();
       generation.observers.clear();
@@ -611,6 +787,8 @@ export class GenerationManager {
       finishedAt: g.finishedAt,
       revision: g.revision,
       lastEventId: g.seq,
+      tools: [...g.toolActivity],
+      proposals: g.loop?.previews() ?? [],
     };
   }
 

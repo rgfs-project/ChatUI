@@ -100,6 +100,32 @@ export class DataPaths {
     return path.join(this.attachmentDir(userId, attachmentId), "meta.json");
   }
 
+  /** Approved memories (Phase 13b): `memories/<memory-uuid>.md`. */
+  memoriesDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "memories");
+  }
+
+  memoryFile(userId: string, memoryId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "memories",
+      `${this.uuid(memoryId, "memory id")}.md`,
+    );
+  }
+
+  /** Proposal sidecars (Phase 13b): `proposals/<conversation-uuid>.json`. */
+  proposalsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "proposals");
+  }
+
+  proposalFile(userId: string, conversationId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "proposals",
+      `${this.uuid(conversationId, "conversation id")}.json`,
+    );
+  }
+
   /** Profile (Phase 12b): `profile/profile.json` and the photo bytes `profile/photo`. */
   profileDir(userId: string): string {
     return this.inside(this.uuid(userId, "user id"), "profile");

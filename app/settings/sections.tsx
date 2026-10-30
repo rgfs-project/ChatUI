@@ -1,5 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Keyboard, Paperclip, Palette, Settings as SettingsIcon, UserRound } from "lucide-react";
+import {
+  Brain,
+  Keyboard,
+  Paperclip,
+  Palette,
+  Settings as SettingsIcon,
+  UserRound,
+} from "lucide-react";
 import { useState, type SyntheticEvent } from "react";
 import { useNavigate } from "react-router";
 import type { PreferencesDto } from "@shared/preferences";
@@ -13,6 +20,7 @@ import { useConfirm } from "../ui/dialog";
 import { useToast } from "../ui/toast";
 import { appearanceRows } from "./appearance";
 import { HistoryImagesRow, ImageSizeRow, StorageRow } from "./files";
+import { MemoryManager } from "./memory";
 import { Row, type SettingsSection } from "./row";
 
 function General() {
@@ -231,6 +239,19 @@ export const SECTIONS: SettingsSection[] = [
         label: "Delete all chats",
         keywords: "clear history remove conversations",
         render: () => <DeleteAllChats />,
+      },
+    ],
+  },
+  {
+    id: "memory",
+    label: "Memory",
+    icon: <Brain size={18} aria-hidden />,
+    rows: [
+      {
+        id: "memories",
+        label: "Saved memories",
+        keywords: "memory remember personalization facts suggestions",
+        render: () => <MemoryManager />,
       },
     ],
   },

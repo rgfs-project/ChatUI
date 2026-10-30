@@ -2,6 +2,7 @@
 // Unfinished checkpoints are recovery state; finalized ones are disposable.
 import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "./fs.ts";
 import { isUuid, type DataPaths } from "./paths.ts";
+import type { StagedProposal } from "./proposals.ts";
 
 export type CheckpointState = "running" | "terminal-decided" | "terminal";
 
@@ -12,6 +13,10 @@ export interface CheckpointOutcome {
   finishReason: string | null;
   error: { code: string; message: string } | null;
   finishedAt: string;
+  /** Tools the reply used (D2); absent in checkpoints from before 13b. */
+  tools?: string[];
+  /** Staged memory suggestions (contracts §4.3); written only for `completed`. */
+  proposals?: StagedProposal[];
 }
 
 export interface GenerationCheckpoint {

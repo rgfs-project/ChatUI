@@ -1,6 +1,8 @@
 import { Check, Copy, Pencil, RefreshCw, Square, Trash2, Volume2 } from "lucide-react";
 import { memo, useLayoutEffect, useRef, useState } from "react";
 import type { AttachmentRef } from "@shared/attachments";
+import type { ProposalDto } from "@shared/memories";
+import { ProposalCards, ToolChips } from "./tool-chips";
 import type { MessageDto } from "@shared/conversations";
 import type { GenerationState } from "@shared/generations";
 import { useRenderProbe } from "../lib/render-probe";
@@ -247,14 +249,19 @@ export function UserBubble({
   );
 }
 
+const NO_PROPOSALS: readonly ProposalDto[] = [];
+
 /** A stored message. Memoized: streaming another message never re-renders it. */
 export const Message = memo(function Message({
   message,
   turnUserId,
+  proposals = NO_PROPOSALS,
 }: {
   message: MessageDto;
   /** Assistant replies: the user turn they answer (for Regenerate). */
   turnUserId?: string | undefined;
+  /** Assistant replies: the model's memory suggestions in this reply (Phase 13b). */
+  proposals?: readonly ProposalDto[] | undefined;
 }) {
   useRenderProbe(`Message:${message.id}`);
   if (message.role === "user")
@@ -277,7 +284,14 @@ export const Message = memo(function Message({
   return (
     <div className="msg msg-assistant" data-testid="message-assistant" data-message-id={message.id}>
       {message.reasoning ? <Reasoning text={message.reasoning} /> : null}
+      <ToolChips names={message.tools} />
       {message.content ? <Markdown>{message.content}</Markdown> : null}
+      {message.status === "complete" && !message.content && proposals.length > 0 ? (
+        <p className="msg-status" data-testid="message-status">
+          The answer was not generated.
+        </p>
+      ) : null}
+      <ProposalCards proposals={proposals} />
       {status ? (
         <p className={`msg-status status-${message.status ?? ""}`} data-testid="message-status">
           {status}

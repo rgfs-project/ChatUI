@@ -1,0 +1,79 @@
+## Phase 13b report (with the D2 amendment)
+
+- **Plan:** D2 (decided "yes"): amend contracts §4.3 and the stored format so memory suggestions and the general tools share one tool loop, then package 13b (approved memories, proposal-only memory tools, acceptance with recovery) on top of it.
+
+- **Scope completed:**
+  - **D2 amendment** (ARCHITECTURE "Memories and the shared tool loop"):
+    - Up to three tool rounds, then a request with no tools.
+    - Per-round, per-generation, argument and result bounds.
+    - Follow-ups get only the remaining output tokens and time, and are skipped when they don't fit the context (tool schemas count against the prompt budget).
+    - A provider that rejects tool results ends the reply with the text so far.
+    - Format v1 gains an optional `tools` attribute on assistant blocks (shown as chips).
+    - Tool messages are never stored or replayed.
+  - **General tools** (`server/tools/session.ts`):
+    - Read-only, on the caller's data only: `search_chats`, `read_chat`, `list_files`, `read_file` (text files), `get_current_time`.
+    - `calculate` (`server/tools/calculate.ts`): an interpreter, never `eval`.
+  - **Memories** (`server/storage/memories.ts`):
+    - UUID files with the name inside.
+    - NFC case-folded unique names; note and total caps.
+    - Conditional update and delete by file hash.
+    - Prompt section of whole notes in name order within `MEMORY_PROMPT_BUDGET`; omitted notes are marked in Settings.
+  - **Proposals** (`server/storage/proposals.ts`, `server/memory/service.ts`):
+    - Validated against the prompt snapshot, deduplicated, staged in the `terminal-decided` checkpoint.
+    - Written after the assistant block, idempotently by `(generationId, callIndex)`.
+    - Accept/reject: under the sidecar then memory-store lock, with a recorded intent (exact bytes, before/after hashes) and startup step 6.
+    - Invalidated by edit, regenerate and delete-exchange.
+    - Deleted with their conversation after its intents are resolved.
+  - **API:**
+    - `GET/POST /api/memories`, `PATCH/DELETE /api/memories/:id`.
+    - `POST /api/conversations/:id/proposals/:proposalId/{accept,reject}`.
+    - Conversation DTOs carry `proposals` and each message's `tools`.
+    - SSE adds `tool` and `proposals` events, and the terminal event adds `proposalIds`.
+  - **Browser:**
+    - Tool chips on saved replies and while streaming.
+    - Suggestion cards with Save / Dismiss and their outcomes.
+    - "The answer was not generated" for an empty complete reply.
+    - Settings → Memory: list, add, edit, delete, "Not used in replies".
+  - **Probe:** `scripts/probe-provider.ts` records streamed tool calls, the finish reason and whether tool results are accepted. `docs/provider-notes.md` marks all three UNVERIFIED (no live server).
+  - **Demo:** `mock-tools` with tools enabled.
+- **Required tests:**
+  - `tests/server/memories.test.ts` (23):
+    - **Memories:** CRUD with UUID files; NFC/case collision; name validation; conditional update and delete; ownership. Prompt order, budget and omission, with no note cut mid-body.
+    - **Tool loop:**
+      - Text before a call plus the follow-up form one block, with one reasoning block and no tool content in Markdown.
+      - No tool messages in later prompts.
+      - Bounded rounds, with no tools on the last request.
+      - Invalid, unknown and malformed calls are dropped with the answer complete.
+      - No tools for models without the capability.
+      - Search reads only the caller's chats.
+      - A follow-up over the context is skipped.
+      - A provider rejecting tool results leaves a complete reply with no upstream detail.
+    - **Proposals:** recorded only; accept is idempotent; reject; another account gets 404. Suppression against pending, rejected and current memory. A stale note conflicts and is never overwritten. Omitted or unknown targets are invalid. Edit invalidates; deletion removes the sidecar while memories stay.
+    - **Recovery:** a crash after the assistant write writes the suggestions exactly once across two restarts. Interrupted replies discard theirs. Acceptance crashes after the intent and after the apply complete at restart. A note changed during an interrupted acceptance is reported stale.
+    - **Other:** calculator precedence and refusals; the `tools` attribute round-trips and invalid lists are rejected.
+  - `tests/e2e/memory.spec.ts` (2):
+    - Chips and Save from a reply; nothing saved before Save; Settings edit and delete.
+    - Dismiss survives a reload; a note added in Settings is in the next prompt's snapshot (its update is suggested).
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (493)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (81/81)
+  - `test:e2e`: PASS (67/67)
+  - `verify:compose`: CI
+- **Budget:** re-recorded:
+  - chat JS 244,238 → 245,681 B (chips, suggestion cards)
+  - CSS 8,418 → 8,685 B
+
+  The Memory settings code is in the lazy Settings chunk.
+
+- **Invariants:**
+  - INV-37 and INV-38 implemented.
+  - INV-39 implemented for memories and proposals; artifacts follow in 13c.
+- **Dependencies:** none new.
+- **Deviations / limitations:**
+  - D2 replaces §4.3's single continuation with up to three rounds; both are recorded in ARCHITECTURE.
+  - Tool support is configuration (`capabilities.tools`), not discovery, and is unverified against a live llama-server.
+  - Whole-account export of memories and proposals is 13d; operator backup is 16 (both read the canonical files added here).
+- **Commit/tag:** `feat(phase-13b): approved memories and proposal-only tools`, tag `phase-13b`, pushed to `main`.

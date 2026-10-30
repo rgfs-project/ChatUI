@@ -21,6 +21,8 @@ export const MOCK_MODELS = {
   long: "mock-long",
   /** Advertises image and audio input; echoes the text and counts media parts. */
   vision: "mock-vision",
+  /** Calls tools from commands in the user text (see toolCommands); D2 tool loop. */
+  tools: "mock-tools",
 } as const;
 
 /**
@@ -64,6 +66,8 @@ export interface MockLlamaOptions {
   longChunkDelayMs?: number;
   /** Delay between chunks for mock-chat (the browser demo streams visibly). */
   chatChunkDelayMs?: number;
+  /** Delay before each mock-tools response body (tests observe live events). */
+  toolDelayMs?: number;
 }
 
 export interface RecordedRequest {
@@ -129,6 +133,57 @@ function lastUserText(body: unknown): string {
   const images = content.filter((part) => part.type === "image_url").length;
   const audio = content.filter((part) => part.type === "input_audio").length;
   return `${text} [images: ${String(images)}, audio: ${String(audio)}]`;
+}
+
+interface MockToolCall {
+  name: string;
+  arguments: string;
+}
+
+/**
+ * mock-tools commands, separated by ";" in the newest user message:
+ * `say <text>` (text before the calls), `remember <name>: <content>`,
+ * `update <name>: <content>`, `forget <name>`, `calc <expression>`,
+ * `search <words>`, `read <conversation id>`, `time`, `bogus` (an unknown tool), `badargs` (invalid
+ * JSON), `loop` (calls calculate on every request that offers tools),
+ * `rejectfollow` (the follow-up request with tool results gets a 400).
+ */
+export function toolCommands(text: string): { say: string; calls: MockToolCall[] } {
+  let say = "";
+  const calls: MockToolCall[] = [];
+  for (const raw of text.split(";")) {
+    const part = raw.trim();
+    const [head = "", ...rest] = part.split(" ");
+    const tail = rest.join(" ");
+    const named = (tool: string) => {
+      const colon = tail.indexOf(":");
+      calls.push({
+        name: tool,
+        arguments: JSON.stringify({
+          name: colon >= 0 ? tail.slice(0, colon).trim() : tail.trim(),
+          content: colon >= 0 ? tail.slice(colon + 1).trim() : "",
+        }),
+      });
+    };
+    if (head === "say") say = tail;
+    else if (head === "remember") named("remember");
+    else if (head === "update") named("update_memory");
+    else if (head === "forget")
+      calls.push({ name: "forget_memory", arguments: JSON.stringify({ name: tail.trim() }) });
+    else if (head === "calc" || head === "loop")
+      calls.push({ name: "calculate", arguments: JSON.stringify({ expression: tail || "1+1" }) });
+    else if (head === "search")
+      calls.push({ name: "search_chats", arguments: JSON.stringify({ query: tail }) });
+    else if (head === "read")
+      calls.push({
+        name: "read_chat",
+        arguments: JSON.stringify({ conversation_id: tail.trim() }),
+      });
+    else if (head === "time") calls.push({ name: "get_current_time", arguments: "{}" });
+    else if (head === "bogus") calls.push({ name: "delete_everything", arguments: "{}" });
+    else if (head === "badargs") calls.push({ name: "remember", arguments: "{not json" });
+  }
+  return { say, calls };
 }
 
 export async function startMockLlama(options: MockLlamaOptions = {}): Promise<MockLlama> {
@@ -271,6 +326,21 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
       });
       return;
     }
+    // `rejectfollow`: a server that refuses tool-result messages (D2 degrade path).
+    if (
+      model === MOCK_MODELS.tools &&
+      (body as { messages?: { role: string }[] }).messages?.at(-1)?.role === "tool" &&
+      lastUserText(body).includes("rejectfollow")
+    ) {
+      json(res, 400, {
+        error: {
+          code: 400,
+          message: `tool messages unsupported ${UPSTREAM_SECRET}`,
+          type: "invalid_request_error",
+        },
+      });
+      return;
+    }
     if (model === MOCK_MODELS.noResponse) {
       open++;
       req.socket.once("close", () => open--);
@@ -296,6 +366,63 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
     };
 
     send(chunk(model, { role: "assistant", content: null }));
+    if (model === MOCK_MODELS.tools) {
+      if (options.toolDelayMs) await sleep(options.toolDelayMs);
+      const request = body as {
+        tools?: unknown[];
+        messages?: { role: string; content: unknown }[];
+      };
+      const offered = Array.isArray(request.tools) && request.tools.length > 0;
+      const messages = request.messages ?? [];
+      const last = messages.at(-1);
+      const userText = lastUserText(body);
+      const { say, calls } = toolCommands(userText);
+      const looping = userText.includes("loop");
+      if (
+        offered &&
+        (last?.role === "user" || (looping && last?.role === "tool")) &&
+        calls.length > 0
+      ) {
+        send(chunk(model, { reasoning_content: "Planning tools." }));
+        if (say && last.role === "user") send(chunk(model, { content: say }));
+        calls.forEach((call, index) => {
+          const id = `call_${String(messages.length)}_${String(index)}`;
+          const half = Math.floor(call.arguments.length / 2);
+          send(
+            chunk(model, {
+              tool_calls: [
+                {
+                  index,
+                  id,
+                  type: "function",
+                  function: { name: call.name, arguments: call.arguments.slice(0, half) },
+                },
+              ],
+            }),
+          );
+          send(
+            chunk(model, {
+              tool_calls: [{ index, function: { arguments: call.arguments.slice(half) } }],
+            }),
+          );
+        });
+        finish("tool_calls");
+        return;
+      }
+      if (last?.role === "tool") {
+        const results = messages
+          .filter((m) => m.role === "tool")
+          .map((m) => String(m.content))
+          .join(" | ");
+        send(chunk(model, { reasoning_content: "Summarizing." }));
+        send(chunk(model, { content: offered ? `Done: ${results}` : `Final: ${results}` }));
+        finish();
+        return;
+      }
+      send(chunk(model, { content: `Echo: ${userText}` }));
+      finish();
+      return;
+    }
     switch (model) {
       case MOCK_MODELS.chat:
       case MOCK_MODELS.vision: {

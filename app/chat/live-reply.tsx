@@ -3,6 +3,7 @@ import { useRenderProbe } from "../lib/render-probe";
 import { useLiveGeneration } from "./generation";
 import { LIVE_LABEL, Reasoning } from "./message";
 import { Markdown } from "./markdown";
+import { LiveToolChips } from "./tool-chips";
 
 /**
  * The reply being generated. The only component subscribed to deltas, so a
@@ -32,6 +33,7 @@ export function LiveReply({
       aria-busy={!isTerminalState(live.state)}
     >
       {live.reasoning ? <Reasoning text={live.reasoning} /> : null}
+      <LiveToolChips tools={live.tools} />
       <div data-testid="content">{live.content ? <Markdown>{live.content}</Markdown> : null}</div>
       {label ? (
         <p className="msg-status" data-testid="generation-status">

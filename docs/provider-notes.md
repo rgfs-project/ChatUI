@@ -133,3 +133,14 @@ ChatUI sends media as OpenAI-compatible content parts in the user message:
   - the real per-image token cost.
 
   Re-run the probe with a multimodal model and adjust `MEDIA_TOKEN_RESERVE`.
+
+## Tool calls (D2 tool loop, Phase 13b)
+
+ChatUI offers OpenAI-compatible function tools (`tools: [{ type: "function", function: { name, description, parameters } }]`) only to providers whose `capabilities.tools` is `true` in `providers.json`. It reads streamed `delta.tool_calls` fragments joined by `index` (the `id` and `function.name` usually come first, `function.arguments` in pieces), runs or records each call, and sends a follow-up request with an assistant message carrying `tool_calls` and one `role: "tool"` message per call id. At most three tool rounds run; the request after the last round offers no tools. Tool messages are never stored or replayed.
+
+- **UNVERIFIED against a live server** (none was reachable during Phase 13b):
+  - whether `llama-server` streams `tool_calls` for the configured model (it needs a template with tool support, usually `--jinja`);
+  - whether the model ends its turn after a call (`finish_reason: "tool_calls"`);
+  - whether the server accepts the assistant tool-call message followed by tool results.
+
+  `node scripts/probe-provider.ts` now records all three in its `tools` section. Until it shows they work, leave `capabilities.tools` set to `false` (the default): chat is unaffected, and memories you add in Settings still reach every reply. If the follow-up is rejected, ChatUI ends the reply with the text it already has.

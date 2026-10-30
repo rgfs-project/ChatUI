@@ -232,6 +232,8 @@ export function ChatProvider({
         reasoning: "",
         finishReason: null,
         error: null,
+        tools: [],
+        proposals: [],
       };
       client.setQueryData(qk.generation(userId, accepted.generationId), live);
       setStarted({ conversationId: accepted.conversationId, generationId: accepted.generationId });

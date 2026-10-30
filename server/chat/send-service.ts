@@ -31,6 +31,18 @@ import { expandSystemPrompt, type Sampling, type SettingsStore } from "../admin/
 import { prepareExpansion } from "../attachments/expand.ts";
 import type { AttachmentMeta, AttachmentStore } from "../attachments/store.ts";
 import type { PreferencesStore } from "../storage/preferences.ts";
+import {
+  memoryPrompt,
+  memorySnapshot,
+  type Memory,
+  type MemoryStore,
+} from "../storage/memories.ts";
+import type { ProposalStore } from "../storage/proposals.ts";
+import type { ToolLoop } from "../generations/manager.ts";
+import type { ProviderMessage } from "../providers/types.ts";
+import { MAX_TOOL_ROUNDS, ToolSession } from "../tools/session.ts";
+import type { SearchService } from "./search.ts";
+import type { PromptMessage } from "./prompt.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -39,6 +51,20 @@ interface ModelConfig {
   context: string | null;
   sampling: Sampling;
   maxTokens: number;
+  /** Offer the shared tool loop (a server-verified tool-capable model, D2). */
+  tools: boolean;
+  /** Approved notes in this prompt: the snapshot proposals are checked against (INV-38). */
+  memories: Memory[];
+}
+
+/** Tool-loop messages as plain messages, for counting the formatted prompt. */
+function countable(messages: ProviderMessage[]): PromptMessage[] {
+  return messages.map((m): PromptMessage => {
+    if (m.role === "tool") return { role: "user", content: m.content };
+    if ("tool_calls" in m)
+      return { role: "assistant", content: `${m.content ?? ""}${JSON.stringify(m.tool_calls)}` };
+    return m;
+  });
 }
 
 const STATUS: Record<GenerationOutcome["state"], AssistantStatus> = {
@@ -54,6 +80,8 @@ export interface SendHooks {
   afterMarkdownWrite?: () => void | Promise<void>;
   /** After the committed record and the `running` checkpoint (crash-before-launch tests). */
   afterCommit?: () => void | Promise<void>;
+  /** After the assistant write, before the proposal write (crash tests, §4.3). */
+  afterAssistantWrite?: () => void | Promise<void>;
   /** Test hook between the unlocked preflight and the locked recheck. */
   beforeRecheck?: () => void | Promise<void>;
 }
@@ -82,6 +110,10 @@ export interface SendServiceOptions {
   attachments?: AttachmentStore;
   /** `historyImages` is a prompt-relevant preference (§4.1). */
   preferences?: PreferencesStore;
+  /** Memories and the shared tool loop (Phase 13b, D2). */
+  memories?: MemoryStore;
+  proposals?: ProposalStore;
+  search?: SearchService;
   attachmentLimits?: {
     maxPerMessage: number;
     maxInlineTextBytes: number;
@@ -290,7 +322,7 @@ export class SendService {
     for (let attempt = 0; attempt < 2; attempt++) {
       // Prompt-relevant settings revision (§4.1): rechecked under the lock below.
       const settingsRevision = this.o.settings?.revision ?? null;
-      const config = this.modelConfig(model.providerId, model.id, sender);
+      const config = await this.configFor(userId, model, sender);
       const historyImages = await this.historyImages(userId);
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
       const snapshot = request.conversationId
@@ -417,7 +449,7 @@ export class SendService {
     }
     const provider = this.o.catalog.provider(model.providerId);
     const settingsRevision = this.o.settings?.revision ?? null;
-    const config = this.modelConfig(model.providerId, model.id, sender);
+    const config = await this.configFor(userId, model, sender);
     const historyImages = await this.historyImages(userId);
 
     const snapshot = await this.o.store.withLock(userId, conversationId, async () => {
@@ -497,6 +529,13 @@ export class SendService {
         config,
         regenerate: { userMessageId: messageId, truncated },
       });
+      // The replaced reply's pending suggestions become invalid (§4.3).
+      await this.o.proposals?.invalidateMissing(
+        userId,
+        conversationId,
+        new Set(truncated.blocks.map((b) => b.id)),
+        this.now().toISOString(),
+      );
       return { ...committed, removed: removedUsers(current.model.blocks, truncated.blocks) };
     });
     outcome.launch?.();
@@ -518,8 +557,34 @@ export class SendService {
     return read.conversation;
   }
 
+  /**
+   * Per-model prompt, sampling and output cap (Phase 10), plus the approved
+   * memories that fit their prompt share and whether tools are offered.
+   */
+  private async configFor(
+    userId: string,
+    model: { providerId: string; id: string; capabilities: { tools: boolean } },
+    sender: Sender,
+  ): Promise<ModelConfig> {
+    const base = this.modelConfig(model.providerId, model.id, sender);
+    const all = this.o.memories ? await this.o.memories.list(userId) : [];
+    const { included } = memorySnapshot(all);
+    const section = memoryPrompt(included);
+    return {
+      ...base,
+      instructions: [base.instructions, section].filter(Boolean).join("\n\n") || null,
+      memories: included,
+      tools:
+        model.capabilities.tools && this.o.proposals !== undefined && this.o.search !== undefined,
+    };
+  }
+
   /** Per-model prompt, sampling and output cap from the admin settings (Phase 10). */
-  private modelConfig(providerId: string, modelId: string, sender: Sender): ModelConfig {
+  private modelConfig(
+    providerId: string,
+    modelId: string,
+    sender: Sender,
+  ): Omit<ModelConfig, "tools" | "memories"> {
     const settings = this.o.settings?.get();
     const entry = this.o.settings?.forModel(providerId, modelId);
     const expanded = expandSystemPrompt(entry?.systemPrompt ?? null, {
@@ -550,7 +615,7 @@ export class SendService {
       historyImages: "include" | "omit";
       config: ModelConfig;
     },
-  ): Promise<AssembledPrompt> {
+  ): Promise<AssembledPrompt & { fits: (messages: ProviderMessage[]) => Promise<boolean> }> {
     const { provider, providerId, model, contextTokens, config } = target;
     const draft: ConversationModel = current ?? {
       title: NEW_CONVERSATION_TITLE,
@@ -570,7 +635,6 @@ export class SendService {
         },
       ],
     };
-    const budget = Math.max(0, contextTokens - config.maxTokens);
     const counter = this.o.counterFor
       ? await this.o.counterFor(providerId, model)
       : await counterFor(
@@ -590,8 +654,17 @@ export class SendService {
           logger: this.o.logger,
         })
       : undefined;
+    // Offered tool schemas are part of the formatted prompt (§4.3 budget).
+    const toolCost = config.tools
+      ? await counter.countGroup([
+          { role: "system", content: JSON.stringify(ToolSession.definitionsJson()) },
+        ])
+      : 0;
+    const budget = Math.max(0, contextTokens - config.maxTokens - toolCost);
+    const fits = async (messages: ProviderMessage[]) =>
+      (await counter.countPrompt(countable(messages))) <= budget;
     try {
-      return await assemblePrompt(withUser, {
+      const assembled = await assemblePrompt(withUser, {
         budget,
         trimStep: this.o.contextTrimStep ?? Math.max(1, Math.floor(budget * 0.25)),
         counter,
@@ -599,6 +672,7 @@ export class SendService {
         context: config.context,
         ...(expand ? { expand } : {}),
       });
+      return { ...assembled, fits };
     } catch (error) {
       if (error instanceof ContextTooLargeError) {
         throw new AppError(
@@ -623,7 +697,7 @@ export class SendService {
       providerId: string;
       model: string;
       current: { model: ConversationModel; revision: string } | null;
-      prompt: AssembledPrompt;
+      prompt: AssembledPrompt & { fits: (messages: ProviderMessage[]) => Promise<boolean> };
       reservation: ReturnType<GenerationManager["reserve"]>;
       config: ModelConfig;
       /** Regeneration (§4.2): keep this user block, drop everything after it. */
@@ -715,6 +789,18 @@ export class SendService {
           messages: input.prompt.messages,
           maxTokens: input.config.maxTokens,
           sampling: input.config.sampling,
+          ...(input.config.tools
+            ? {
+                tools: this.toolLoop(userId, {
+                  ...ids,
+                  conversationId,
+                  providerId: input.providerId,
+                  model: input.model,
+                  memories: input.config.memories,
+                  fits: input.prompt.fits,
+                }),
+              }
+            : {}),
           persist: (outcome) =>
             this.persistOutcome(
               userId,
@@ -744,6 +830,60 @@ export class SendService {
       }
       throw new AppError(ErrorCode.INTERNAL, "The send could not be completed");
     }
+  }
+
+  /** The shared tool loop of one generation (D2): runs only while no lock is held. */
+  private toolLoop(
+    userId: string,
+    input: {
+      generationId: string;
+      userMessageId: string;
+      assistantMessageId: string;
+      conversationId: string;
+      providerId: string;
+      model: string;
+      memories: Memory[];
+      fits: (messages: ProviderMessage[]) => Promise<boolean>;
+    },
+  ): ToolLoop {
+    const session = new ToolSession({
+      userId,
+      conversationId: input.conversationId,
+      generationId: input.generationId,
+      sourceUserMessageId: input.userMessageId,
+      sourceAssistantMessageId: input.assistantMessageId,
+      providerId: input.providerId,
+      model: input.model,
+      snapshot: input.memories,
+      timeZone: this.o.settings?.get().timeZone ?? "UTC",
+      now: () => this.now(),
+      store: this.o.store,
+      search: this.o.search as SearchService,
+      attachments: this.o.attachments,
+      proposals: this.o.proposals as ProposalStore,
+    });
+    return {
+      definitions: session.definitions,
+      maxRounds: MAX_TOOL_ROUNDS,
+      execute: (calls) => session.execute(calls),
+      used: () => session.used(),
+      staged: () => session.staged(),
+      previews: () => session.previews(),
+      fits: input.fits,
+    };
+  }
+
+  /** Staged suggestions of a complete reply, under the sidecar lock (after the conversation lock). */
+  private async writeProposals(
+    userId: string,
+    conversationId: string,
+    outcome: GenerationOutcome,
+  ): Promise<void> {
+    const proposals = this.o.proposals;
+    if (!proposals || outcome.state !== "completed" || outcome.proposals.length === 0) return;
+    await proposals.withLock(userId, conversationId, () =>
+      proposals.addStagedUnlocked(userId, conversationId, outcome.proposals),
+    );
   }
 
   /**
@@ -798,6 +938,7 @@ export class SendService {
           (block) => block.type === "assistant" && block.id === record.assistantMessageId,
         )
       ) {
+        await this.writeProposals(userId, conversationId, outcome);
         return conversation.revision; // already written
       }
       const blocks: Block[] = [];
@@ -811,6 +952,7 @@ export class SendService {
         provider: providerId,
         model,
         time: outcome.finishedAt,
+        ...(outcome.tools.length > 0 ? { tools: outcome.tools.slice(0, 16) } : {}),
         body: normalizeBody(outcome.content),
       });
       const written = await this.o.store.writeUnlocked(
@@ -818,6 +960,9 @@ export class SendService {
         conversationId,
         this.o.store.appendBlocks(conversation.model, blocks),
       );
+      await this.o.hooks?.afterAssistantWrite?.();
+      // Then the suggestions, idempotently by (generationId, callIndex) (§4.3).
+      await this.writeProposals(userId, conversationId, outcome);
       await markWritten();
       return written.revision;
     });

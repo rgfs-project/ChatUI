@@ -13,6 +13,7 @@ const dto = (cid: string, updatedAt: string, title: string) => ({
   updatedAt,
   revision: "0".repeat(64),
   activeGeneration: null,
+  proposals: [],
   messages: [],
 });
 

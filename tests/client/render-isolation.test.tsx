@@ -40,6 +40,8 @@ const snapshot = (state: string, content: string) => ({
   finishedAt: null,
   revision: null,
   lastEventId: 1,
+  tools: [],
+  proposals: [],
 });
 
 describe("INV-32: a streaming token re-renders only the live reply", () => {

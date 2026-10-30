@@ -20,6 +20,8 @@ export const qk = {
   search: (userId: string, query: string) => ["u", userId, "search", query] as const,
   /** The user's uploaded files (Phase 12); invalidated by uploads and deletes. */
   attachments: (userId: string) => ["u", userId, "attachments"] as const,
+  /** Approved memories (Phase 13b); never dehydrated. */
+  memories: (userId: string) => ["u", userId, "memories"] as const,
   /** Live generation state written by the SSE observer; never dehydrated. */
   generation: (userId: string, id: string) => ["u", userId, "generation", id] as const,
 };
@@ -35,6 +37,7 @@ export type Resource =
   | "profile-stats"
   | "search"
   | "attachments"
+  | "memories"
   | "generation";
 
 /** The resource a key names, or undefined for keys outside the factory. */
@@ -52,6 +55,7 @@ export function resourceOf(key: readonly unknown[]): Resource | undefined {
       "profile-stats",
       "search",
       "attachments",
+      "memories",
       "generation",
     ].includes(name)
     ? (name as Resource)

@@ -75,6 +75,7 @@ export async function toConversationDto(
           ? await attachmentRefs(services.attachments, userId, block.attachments)
           : [],
       time: block.type === "user" || block.type === "assistant" ? (block.time ?? null) : null,
+      tools: block.type === "assistant" ? (block.tools ?? []) : [],
     });
     pendingReasoning = null;
   }
@@ -87,6 +88,7 @@ export async function toConversationDto(
     revision: conversation.revision,
     messages,
     activeGeneration: active && !active.startsWith("reserved:") ? { generationId: active } : null,
+    proposals: await services.memory.proposalsFor(userId, conversation.id),
   };
 }
 
@@ -172,11 +174,7 @@ export const deleteConversationRoute = defineRoute({
   response: z.strictObject({ deleted: z.literal(true) }),
   handler: ({ params }, ctx) =>
     mapStorage(async () => {
-      const { userId } = userOf(ctx);
-      await ctx.services.conversations.delete(userId, params.id);
-      // Markdown first, then its files: an orphan is safe and collected; a dangling reference is not.
-      await ctx.services.attachments.deleteForConversation(userId, params.id);
-      await ctx.services.mutations.forgetPin(userId, params.id);
+      await ctx.services.mutations.deleteConversation(userOf(ctx).userId, params.id);
       return { deleted: true as const };
     }),
   fixture: { params: unknownId, expectStatus: 404 },

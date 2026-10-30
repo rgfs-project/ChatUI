@@ -24,6 +24,8 @@ export interface ConversationOps {
   /** Remove one exchange (asks first). */
   deleteExchange: (messageId: string) => Promise<boolean>;
   togglePin: (conversationId: string) => Promise<void>;
+  /** Save (accept) or dismiss (reject) a memory suggestion (Phase 13b, INV-37). */
+  decideProposal: (proposalId: string, accept: boolean) => Promise<void>;
 }
 
 const OpsContext = createContext<ConversationOps | null>(null);
@@ -149,6 +151,22 @@ export function ConversationOpsProvider({ children }: { children: ReactNode }) {
           await refresh(conversation.id);
           return false;
         }
+      },
+      decideProposal: async (proposalId, accept) => {
+        const { chat: c, client } = latest.current;
+        const conversation = current();
+        if (!conversation) return;
+        try {
+          await apiJson(
+            `/api/conversations/${conversation.id}/proposals/${proposalId}/${accept ? "accept" : "reject"}`,
+            { method: "POST" },
+          );
+          if (accept) latest.current.toast("Saved to memory.");
+          void client.invalidateQueries({ queryKey: qk.memories(c.userId) });
+        } catch (error) {
+          fail(error, "The suggestion could not be updated");
+        }
+        await refresh(conversation.id);
       },
       togglePin: async (conversationId) => {
         const { chat: c, client } = latest.current;

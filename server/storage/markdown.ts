@@ -40,6 +40,8 @@ export interface AssistantBlock {
   provider?: string;
   model?: string;
   time?: string;
+  /** Tools the reply used, in order of first use (D2 amendment; shown as chips). */
+  tools?: string[];
   body: string;
 }
 export type Block = SystemBlock | UserBlock | ReasoningBlock | AssistantBlock;
@@ -94,12 +96,15 @@ function malformed(reason: string, line: number): ParseResult {
 type Attrs = Map<string, { value: string; quoted: boolean }>;
 
 const TYPES = new Set(["system", "user", "reasoning", "assistant"]);
-const KEYS = new Set(["id", "status", "provider", "model", "attachments", "time"]);
+const KEYS = new Set(["id", "status", "provider", "model", "attachments", "time", "tools"]);
+/** A tool name in the `tools` attribute (D2 amendment). */
+export const TOOL_NAME_RE = /^[a-z][a-z0-9_]{0,31}$/;
+export const MAX_TOOLS_PER_REPLY = 16;
 const ALLOWED: Record<Block["type"], ReadonlySet<string>> = {
   system: new Set(["id"]),
   user: new Set(["id", "attachments", "time"]),
   reasoning: new Set(["id"]),
-  assistant: new Set(["id", "status", "provider", "model", "time"]),
+  assistant: new Set(["id", "status", "provider", "model", "time", "tools"]),
 };
 
 /** Tokenizes a full delimiter line per the §3.4 grammar. */
@@ -204,6 +209,20 @@ function buildBlock(type: Block["type"], attrs: Attrs, body: string): Block | st
       if (provider) block.provider = provider.value;
       if (model) block.model = model.value;
       if (time) block.time = time.value;
+      const tools = attrs.get("tools");
+      if (tools) {
+        const names = tools.value.split(",");
+        if (
+          !tools.quoted ||
+          names.length < 1 ||
+          names.length > MAX_TOOLS_PER_REPLY ||
+          new Set(names).size !== names.length ||
+          !names.every((name) => TOOL_NAME_RE.test(name))
+        ) {
+          return "tools must be a quoted list of 1-16 distinct tool names";
+        }
+        block.tools = names;
+      }
       return block;
     }
   }
@@ -341,7 +360,7 @@ export function parseConversation(input: string): ParseResult {
 // Serializer
 
 /** JSON string literal with <, > and & escaped, plus YAML-unsafe characters. */
-function quote(value: string): string {
+export function quote(value: string): string {
   return JSON.stringify(value).replace(/[<>&\u007f-\u009f\u2028\u2029\ufeff]/g, (char) => {
     return `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
   });
@@ -354,6 +373,8 @@ function delimiter(block: Block): string {
     if (block.provider !== undefined) parts.push(`provider=${quote(block.provider)}`);
     if (block.model !== undefined) parts.push(`model=${quote(block.model)}`);
     if (block.time !== undefined) parts.push(`time=${quote(block.time)}`);
+    if (block.tools !== undefined && block.tools.length > 0)
+      parts.push(`tools=${quote(block.tools.join(","))}`);
   }
   if (block.type === "user") {
     if (block.attachments !== undefined)

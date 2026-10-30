@@ -22,10 +22,31 @@ export interface ProviderModel {
   status: "loaded" | "unloaded" | "loading" | "unknown";
 }
 
+/** The assistant's tool calls of an earlier round (D2 tool loop; never stored). */
+export interface ToolCallMessage {
+  role: "assistant";
+  content: string | null;
+  tool_calls: { id: string; type: "function"; function: { name: string; arguments: string } }[];
+}
+
+/** A tool result for one call id (D2 tool loop; never stored). */
+export interface ToolResultMessage {
+  role: "tool";
+  tool_call_id: string;
+  content: string;
+}
+
+export type ProviderMessage = PromptMessage | ToolCallMessage | ToolResultMessage;
+
 export interface ChatRequest {
   model: string;
-  /** Text or typed content parts (images, audio; Phase 12). */
-  messages: PromptMessage[];
+  /** Text or typed content parts (images, audio; Phase 12), plus tool-loop messages. */
+  messages: ProviderMessage[];
+  /** Offered tools (D2); omitted on the last request of a tool loop. */
+  tools?: {
+    type: "function";
+    function: { name: string; description: string; parameters: Record<string, unknown> };
+  }[];
   maxTokens: number;
   /** Per-model sampling overrides (Phase 10, validated by the admin settings schema). */
   sampling?: {
@@ -43,6 +64,8 @@ export type ProviderEvent =
   | { type: "content"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "finish"; reason: string }
+  /** A streamed fragment of tool call `index` (id and name usually arrive first). */
+  | { type: "tool_call"; index: number; id?: string; name?: string; arguments?: string }
   | {
       type: "usage";
       promptTokens: number;

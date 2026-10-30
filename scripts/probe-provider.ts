@@ -97,6 +97,9 @@ async function streamChat(body: Json, timeoutMs = 180_000) {
     lastUsage: undefined as unknown,
     errorBody: undefined as unknown,
     sampleContent: "",
+    /** Streamed tool calls, joined by index (D2 probe). */
+    toolCalls: [] as { id: string; name: string; arguments: string }[],
+    toolCallChunks: 0,
   };
   if (!res.ok || !res.body) {
     const text = await res.text();
@@ -141,6 +144,17 @@ async function streamChat(body: Json, timeoutMs = 180_000) {
         result.ttftMs ??= Math.round(performance.now() - started);
         result.reasoningChars += delta.reasoning_content.length;
       }
+      if (Array.isArray(delta?.tool_calls)) {
+        for (const raw of delta.tool_calls as Json[]) {
+          result.toolCallChunks++;
+          const index = typeof raw.index === "number" ? raw.index : 0;
+          const fn = (raw.function ?? {}) as Json;
+          const call = (result.toolCalls[index] ??= { id: "", name: "", arguments: "" });
+          if (typeof raw.id === "string") call.id ||= raw.id;
+          if (typeof fn.name === "string") call.name ||= fn.name;
+          if (typeof fn.arguments === "string") call.arguments += fn.arguments;
+        }
+      }
       if (choice?.finish_reason) result.finishReasons.push(choice.finish_reason);
       if (chunk.usage) {
         result.sawUsage = true;
@@ -182,6 +196,75 @@ const loaded = list.find((m) => (m.status as Json | undefined)?.value === "loade
 const model = process.argv[2] ?? (loaded?.id as string | undefined);
 report.probedModel = model;
 if (!model) {
+  // 7. Tool calls (D2, contracts §4.3): does the model stream tool calls, end its
+  // turn after them, and accept an assistant tool-call message followed by a
+  // tool result?
+  const calculator = {
+    type: "function",
+    function: {
+      name: "calculate",
+      description: "Evaluate an arithmetic expression.",
+      parameters: {
+        type: "object",
+        properties: { expression: { type: "string" } },
+        required: ["expression"],
+      },
+    },
+  };
+  const askTool = [
+    {
+      role: "user",
+      content: "Use the calculate tool to compute 1234 * 5678, then tell me the result.",
+    },
+  ];
+  const toolTurn = await streamChat({
+    model,
+    messages: askTool,
+    tools: [calculator],
+    max_tokens: 256,
+  });
+  const firstCall = toolTurn.toolCalls[0];
+  report.tools = {
+    status: toolTurn.status,
+    streamedToolCalls: toolTurn.toolCalls.length,
+    toolCallChunks: toolTurn.toolCallChunks,
+    finishReasons: toolTurn.finishReasons,
+    contentBeforeCall: toolTurn.contentChars,
+    firstCall: firstCall
+      ? { name: firstCall.name, arguments: short(firstCall.arguments, 200) }
+      : null,
+    error: toolTurn.errorBody,
+  };
+  if (firstCall?.id) {
+    const followUp = await streamChat({
+      model,
+      messages: [
+        ...askTool,
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: firstCall.id,
+              type: "function",
+              function: { name: firstCall.name, arguments: firstCall.arguments },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: firstCall.id, content: "7006652" },
+      ],
+      max_tokens: 128,
+    });
+    (report.tools as Json).followUp = {
+      status: followUp.status,
+      contentChars: followUp.contentChars,
+      sample: short(followUp.sampleContent, 120),
+      error: followUp.errorBody,
+    };
+  } else {
+    (report.tools as Json).followUp = "UNVERIFIED: the model streamed no tool call";
+  }
+
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   process.exit(1);
 }
@@ -329,6 +412,75 @@ if (nCtx > 0) {
   };
 } else {
   report.oversizedPrompt = "UNVERIFIED: context length not discovered";
+}
+
+// 7. Tool calls (D2, contracts §4.3): does the model stream tool calls, end its
+// turn after them, and accept an assistant tool-call message followed by a
+// tool result?
+const calculator = {
+  type: "function",
+  function: {
+    name: "calculate",
+    description: "Evaluate an arithmetic expression.",
+    parameters: {
+      type: "object",
+      properties: { expression: { type: "string" } },
+      required: ["expression"],
+    },
+  },
+};
+const askTool = [
+  {
+    role: "user",
+    content: "Use the calculate tool to compute 1234 * 5678, then tell me the result.",
+  },
+];
+const toolTurn = await streamChat({
+  model,
+  messages: askTool,
+  tools: [calculator],
+  max_tokens: 256,
+});
+const firstCall = toolTurn.toolCalls[0];
+report.tools = {
+  status: toolTurn.status,
+  streamedToolCalls: toolTurn.toolCalls.length,
+  toolCallChunks: toolTurn.toolCallChunks,
+  finishReasons: toolTurn.finishReasons,
+  contentBeforeCall: toolTurn.contentChars,
+  firstCall: firstCall
+    ? { name: firstCall.name, arguments: short(firstCall.arguments, 200) }
+    : null,
+  error: toolTurn.errorBody,
+};
+if (firstCall?.id) {
+  const followUp = await streamChat({
+    model,
+    messages: [
+      ...askTool,
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: firstCall.id,
+            type: "function",
+            function: { name: firstCall.name, arguments: firstCall.arguments },
+          },
+        ],
+      },
+      { role: "tool", tool_call_id: firstCall.id, content: "7006652" },
+    ],
+    max_tokens: 128,
+  });
+  (report.tools as Json).followUp = {
+    status: followUp.status,
+    contentChars: followUp.contentChars,
+    sample: short(followUp.sampleContent, 120),
+    error: followUp.errorBody,
+  };
+} else {
+  (report.tools as Json).followUp = "UNVERIFIED: the model streamed no tool call";
 }
 
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

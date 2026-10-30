@@ -114,6 +114,16 @@ export const generationSnapshotSchema = z.strictObject({
   revision: z.string().nullable(),
   /** Id of the last event applied to this snapshot (SSE `id`). */
   lastEventId: z.number().int().nonnegative(),
+  /** Tool calls so far (D2 amendment), for the live chips. */
+  tools: z.array(
+    z.strictObject({
+      callId: z.string(),
+      name: z.string(),
+      state: z.enum(["running", "done", "error"]),
+    }),
+  ),
+  /** Memory suggestions recorded so far: previews only, never actionable (§4.3). */
+  proposals: z.array(z.strictObject({ tool: z.string(), name: z.string() })),
 });
 export type GenerationSnapshot = z.infer<typeof generationSnapshotSchema>;
 
@@ -125,6 +135,12 @@ export type GenerationEvent =
   | { type: "state"; id: number; data: { state: "streaming" } }
   | { type: "delta"; id: number; data: { content?: string; reasoning?: string } }
   | {
+      type: "tool";
+      id: number;
+      data: { callId: string; name: string; state: "running" | "done" | "error" };
+    }
+  | { type: "proposals"; id: number; data: { previews: { tool: string; name: string }[] } }
+  | {
       type: "terminal";
       id: number;
       data: {
@@ -133,5 +149,7 @@ export type GenerationEvent =
         error: GenerationError | null;
         /** Conversation revision computed after the assistant write and any auto-title. */
         revision: string | null;
+        /** Actionable memory suggestions: only when the reply is complete (§4.3). */
+        proposalIds: string[];
       };
     };

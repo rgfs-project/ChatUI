@@ -41,4 +41,6 @@ export const lockKeys = {
   conversation: (userId: string, conversationId: string) =>
     `conversation:${userId}/${conversationId}`,
   operations: (userId: string) => `operations:${userId}`,
+  memories: (userId: string) => `memories:${userId}`,
+  proposals: (userId: string, conversationId: string) => `proposals:${userId}/${conversationId}`,
 };
