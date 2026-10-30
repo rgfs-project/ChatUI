@@ -5,7 +5,6 @@
 import { atomicWrite, readOrNull } from "./fs.ts";
 import type { KeyedLocks } from "./locks.ts";
 import { isUuid, type DataPaths } from "./paths.ts";
-import path from "node:path";
 
 /** A temporary chat left open (a closed tab, a crash) is removed after this long. */
 export const TEMPORARY_TTL_MS = 24 * 3_600_000;
@@ -24,7 +23,7 @@ export class TemporaryChats {
   }
 
   private file(userId: string): string {
-    return path.join(this.paths.userDir(userId), "temporary.json");
+    return this.paths.temporaryFile(userId);
   }
 
   async load(userId: string): Promise<void> {

@@ -37,7 +37,7 @@ export const sha256 = (data: Buffer | string) => createHash("sha256").update(dat
 
 /** Where export files and import staging live (transient; never exported). */
 export function stagingDir(paths: DataPaths, userId: string): string {
-  return path.join(paths.userDir(userId), "import-staging");
+  return paths.importStagingDir(userId);
 }
 
 export interface ExportDeps {

@@ -30,7 +30,7 @@ export const adminListUsersRoute = defineRoute({
   csrf: "none",
   request: { query: z.strictObject({}) },
   response: z.strictObject({ users: z.array(adminUserSchema) }),
-  handler: async (_input, ctx) => ({ users: await ctx.services.admin.listUsers() }),
+  handler: async (_input, ctx) => ({ users: await ctx.services.admin.listUsers(userOf(ctx)) }),
   fixture: {},
 });
 
@@ -39,6 +39,7 @@ export const adminCreateUserRoute = defineRoute({
   path: "/api/admin/users",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: {
     body: z.strictObject({
       username: z.string().trim().min(1).max(64),
@@ -57,6 +58,7 @@ export const adminUpdateUserRoute = defineRoute({
   path: "/api/admin/users/:id",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: {
     params: idParams,
     body: z
@@ -76,6 +78,7 @@ export const adminSetPasswordRoute = defineRoute({
   path: "/api/admin/users/:id/password",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: { params: idParams, body: z.strictObject({ password }) },
   response: ok,
   handler: async ({ params, body }, ctx) => {
@@ -90,6 +93,7 @@ export const adminDeleteUserRoute = defineRoute({
   path: "/api/admin/users/:id",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: { params: idParams, body: z.strictObject({ confirmUsername: z.string().max(64) }) },
   response: ok,
   handler: async ({ params, body }, ctx) => {
@@ -106,7 +110,9 @@ export const adminListProvidersRoute = defineRoute({
   csrf: "none",
   request: { query: z.strictObject({}) },
   response: z.strictObject({ providers: z.array(adminProviderSchema) }),
-  handler: async (_input, ctx) => ({ providers: await ctx.services.admin.listProviders() }),
+  handler: async (_input, ctx) => ({
+    providers: await ctx.services.admin.listProviders(userOf(ctx)),
+  }),
   fixture: {},
 });
 
@@ -115,6 +121,7 @@ export const adminCreateProviderRoute = defineRoute({
   path: "/api/admin/providers",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: { body: providerInputSchema },
   response: adminProviderSchema,
   status: 201,
@@ -137,6 +144,7 @@ export const adminUpdateProviderRoute = defineRoute({
   path: "/api/admin/providers/:id",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: { params: providerParams, body: providerPatchSchema },
   response: adminProviderSchema,
   handler: ({ params, body }, ctx) =>
@@ -149,6 +157,7 @@ export const adminDeleteProviderRoute = defineRoute({
   path: "/api/admin/providers/:id",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: { params: providerParams },
   response: ok,
   handler: async ({ params }, ctx) => {
@@ -163,6 +172,7 @@ export const adminTestProviderRoute = defineRoute({
   path: "/api/admin/providers/:id/test",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: { params: providerParams },
   response: z.strictObject({ ok: z.boolean(), models: z.number(), message: z.string() }),
   handler: ({ params }, ctx) => ctx.services.admin.testProvider(userOf(ctx), params.id),
@@ -176,7 +186,7 @@ export const adminListModelsRoute = defineRoute({
   csrf: "none",
   request: { query: z.strictObject({}) },
   response: z.strictObject({ models: z.array(adminModelSchema) }),
-  handler: async (_input, ctx) => ({ models: await ctx.services.admin.listModels() }),
+  handler: async (_input, ctx) => ({ models: await ctx.services.admin.listModels(userOf(ctx)) }),
   fixture: {},
 });
 
@@ -185,6 +195,7 @@ export const adminUpdateModelRoute = defineRoute({
   path: "/api/admin/models",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: { body: modelSettingsSchema },
   response: modelSettingsSchema,
   handler: ({ body }, ctx) => ctx.services.admin.updateModel(userOf(ctx), body),
@@ -205,6 +216,7 @@ export const adminRefreshModelsRoute = defineRoute({
   path: "/api/admin/models/refresh",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: {},
   response: z.strictObject({ models: z.number() }),
   handler: async (_input, ctx) => ({ models: await ctx.services.admin.refreshModels(userOf(ctx)) }),
@@ -218,7 +230,7 @@ export const adminGetSettingsRoute = defineRoute({
   csrf: "none",
   request: { query: z.strictObject({}) },
   response: adminSettingsSchema,
-  handler: (_input, ctx) => ctx.services.admin.getSettings(),
+  handler: (_input, ctx) => ctx.services.admin.settingsFor(userOf(ctx)),
   fixture: {},
 });
 
@@ -227,6 +239,7 @@ export const adminUpdateSettingsRoute = defineRoute({
   path: "/api/admin/settings",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: {
     body: instanceSettingsSchema.omit({ version: true, models: true }).partial().strict(),
   },
@@ -240,6 +253,7 @@ export const adminRebuildIndexRoute = defineRoute({
   path: "/api/admin/maintenance/rebuild-index",
   auth: "admin",
   csrf: "token",
+  rateLimit: "admin",
   request: { body: z.strictObject({ accountId: canonicalUuid.optional() }) },
   response: z.strictObject({ accounts: z.number() }),
   handler: async ({ body }, ctx) => ({
@@ -264,6 +278,7 @@ export const adminAuditRoute = defineRoute({
   response: z.strictObject({ entries: z.array(auditEntrySchema) }),
   handler: async ({ query }, ctx) => ({
     entries: await ctx.services.admin.readAudit(
+      userOf(ctx),
       query.month ?? new Date().toISOString().slice(0, 7),
     ),
   }),

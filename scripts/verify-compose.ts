@@ -6,6 +6,7 @@
  *   - non-root user, read-only root filesystem, healthcheck, CLI entrypoint
  *   - /data writable by the app user; a test sentinel survives recreate
  *   - clean SIGTERM shutdown
+ *   - the backup CLI refuses while the server runs and works once it is stopped
  *   - Podman SELinux labeling of a bind-mounted /data (where SELinux enforces)
  * Uses an isolated project, image tag and volume; never touches real data.
  * Exits 2 with "NOT RUN" when no container engine is available.
@@ -237,13 +238,14 @@ async function main(): Promise<void> {
       true,
     );
     check("CLI healthcheck exits 0", cliHealth.code === 0);
-    const planned = await compose(
-      ["exec", "-T", "chatui", "node", "server/cli.ts", "backup"],
+    const busy = await compose(
+      ["exec", "-T", "chatui", "node", "server/cli.ts", "backup", "--out", "/tmp/backup"],
       true,
     );
     check(
-      "planned CLI commands fail clearly instead of succeeding",
-      planned.code === 2 && planned.stderr.includes("Phase 16"),
+      "backup refuses while the server uses /data",
+      busy.code === 1 && busy.stderr.includes("is using this DATA_DIR"),
+      busy.stderr.trim(),
     );
 
     // Application behaviour inside the container.
@@ -378,6 +380,14 @@ async function main(): Promise<void> {
     const stopLogs = (await compose(["logs", "--no-color", "chatui"], true)).stdout;
     check("clean shutdown on SIGTERM (exit 0)", exitCode === "0", exitCode);
     check("shutdown logged", stopLogs.includes('"shutdown complete"'));
+
+    // Phase 16: with the server stopped, the CLI backs up /data from a one-off container.
+    const backup = await compose(["run", "--rm", "chatui", "backup", "--out", "/tmp/backup"], true);
+    check(
+      "backup runs in a one-off container once the server is stopped",
+      backup.code === 0 && backup.stdout.includes("Backed up"),
+      `${backup.stdout.trim()} ${backup.stderr.trim()}`,
+    );
 
     // Podman: SELinux private label on a bind-mounted /data.
     if (engine === "podman") {

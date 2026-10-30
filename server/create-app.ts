@@ -11,6 +11,7 @@ import type { Provider } from "./providers/types.ts";
 import { loadProviders, type ProviderEntry } from "./providers/config.ts";
 import { createSafeFetch, systemResolver, type Resolver } from "./providers/ssrf.ts";
 import { PasswordHasher } from "./auth/passwords.ts";
+import { RouteLimits } from "./auth/route-limits.ts";
 import { AuthService, type AuthContext } from "./auth/service.ts";
 import { SessionStore } from "./auth/sessions.ts";
 import { PreferencesStore } from "./storage/preferences.ts";
@@ -517,6 +518,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     send,
     sse: { ...DEFAULT_SSE_OPTIONS, ...options.sse },
     logger,
+    limits: new RouteLimits(authConfig.rateLimits, () => now().getTime()),
   };
   const cspMode: CspMode = options.config.nodeEnv === "development" ? "development" : "production";
 
@@ -579,6 +581,22 @@ export function createApp(options: AppOptions): ChatUiApp {
   api.use(apiNotFound);
   api.use(apiErrorHandler(logger));
   app.use("/api", api);
+
+  // A document path that can't be percent-decoded is the client's error;
+  // answered here, before the framework router, which would log it as a warning.
+  app.use((req, res, next) => {
+    try {
+      decodeURIComponent(req.path);
+    } catch {
+      res
+        .status(400)
+        .type("text/plain")
+        .set("Cache-Control", "no-store")
+        .send("Bad request: the address is not valid.");
+      return;
+    }
+    next();
+  });
 
   if (options.clientDir) {
     app.use(

@@ -85,9 +85,19 @@ const envSchema = z.object({
   MAX_SSE_TOTAL: intFrom(1, 100_000).default(256),
   PASSWORD_HASH_CONCURRENCY: intFrom(1, 64).default(2),
   PASSWORD_HASH_QUEUE: intFrom(0, 10_000).default(16),
+  // Per-account request rates per minute (Phase 16; per process).
+  RATE_LIMIT_GENERATIONS: intFrom(1, 10_000).default(30),
+  RATE_LIMIT_UPLOADS: intFrom(1, 10_000).default(60),
+  RATE_LIMIT_ADMIN: intFrom(1, 10_000).default(120),
+  // HTTP server limits (Phase 16).
+  MAX_CONNECTIONS: intFrom(16, 100_000).default(1_024),
+  REQUEST_TIMEOUT_MS: intFrom(10_000, 3_600_000).default(600_000),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
+
+/** Route categories with a per-account rate (declared on each route in the registry). */
+export type RateCategory = "generation" | "upload" | "admin";
 
 export interface Config {
   port: number;
@@ -102,6 +112,8 @@ export interface Config {
    * container runtime's proxy, not loopback.
    */
   inContainer: boolean;
+  /** HTTP server limits (Phase 16): open connections and the time to receive one request. */
+  http: { maxConnections: number; requestTimeoutMs: number };
   provider: ProviderConfig;
   storage: StorageConfig;
   attachments: AttachmentConfig;
@@ -143,6 +155,8 @@ export interface AuthConfig {
   maxSseTotal: number;
   hashConcurrency: number;
   hashQueue: number;
+  /** Per-account requests per minute by route category (Phase 16, per process); `upload` covers every file transfer (uploads, imports, full exports). */
+  rateLimits: Record<RateCategory, number>;
 }
 
 export interface StorageConfig {
@@ -231,6 +245,9 @@ function authConfig(
     MAX_SSE_TOTAL: number;
     PASSWORD_HASH_CONCURRENCY: number;
     PASSWORD_HASH_QUEUE: number;
+    RATE_LIMIT_GENERATIONS: number;
+    RATE_LIMIT_UPLOADS: number;
+    RATE_LIMIT_ADMIN: number;
   },
   port: number,
 ): AuthConfig {
@@ -270,6 +287,11 @@ function authConfig(
     maxSseTotal: env.MAX_SSE_TOTAL,
     hashConcurrency: env.PASSWORD_HASH_CONCURRENCY,
     hashQueue: env.PASSWORD_HASH_QUEUE,
+    rateLimits: {
+      generation: env.RATE_LIMIT_GENERATIONS,
+      upload: env.RATE_LIMIT_UPLOADS,
+      admin: env.RATE_LIMIT_ADMIN,
+    },
   };
 }
 
@@ -325,6 +347,10 @@ export function loadConfig(
     logLevel: parsed.data.LOG_LEVEL,
     listenHost: parsed.data.LISTEN_HOST,
     inContainer,
+    http: {
+      maxConnections: parsed.data.MAX_CONNECTIONS,
+      requestTimeoutMs: parsed.data.REQUEST_TIMEOUT_MS,
+    },
     provider: {
       baseUrl: parsed.data.LLAMA_BASE_URL,
       apiKey: parsed.data.LLAMA_API_KEY,

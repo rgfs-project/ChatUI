@@ -22,6 +22,7 @@ export const uploadAttachmentRoute = defineRoute({
   path: "/api/attachments",
   auth: "user",
   csrf: "token",
+  rateLimit: "upload",
   // multipart/form-data with one `file` part; the JSON body parser leaves it unread.
   // `?to=library` keeps the file in the Library instead of waiting for a message.
   request: { query: z.strictObject({ to: z.literal("library").optional() }) },

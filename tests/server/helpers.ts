@@ -99,6 +99,7 @@ export function authConfig(overrides: Partial<AuthConfig> = {}): AuthConfig {
     maxSseTotal: 256,
     hashConcurrency: 4,
     hashQueue: 16,
+    rateLimits: { generation: 1_000, upload: 1_000, admin: 1_000 },
     ...overrides,
   };
 }

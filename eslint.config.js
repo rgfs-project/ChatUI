@@ -4,7 +4,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
-import { routeInventoryRestriction } from "./eslint.route-inventory.js";
+import { dtoRestriction, routeInventoryRestriction } from "./eslint.route-inventory.js";
 
 export default defineConfig(
   globalIgnores([
@@ -54,7 +54,13 @@ export default defineConfig(
   },
   {
     files: ["server/**/*.ts"],
-    ignores: ["server/registry.ts"],
+    ignores: ["server/registry.ts", "server/errors.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", routeInventoryRestriction, dtoRestriction],
+    },
+  },
+  {
+    files: ["server/errors.ts"],
     rules: {
       "no-restricted-syntax": ["error", routeInventoryRestriction],
     },

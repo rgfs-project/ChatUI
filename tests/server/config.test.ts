@@ -25,6 +25,7 @@ describe("configuration", () => {
       logLevel: "info",
       listenHost: "127.0.0.1",
       inContainer: false,
+      http: { maxConnections: 1_024, requestTimeoutMs: 600_000 },
       provider: {
         baseUrl: undefined,
         apiKey: undefined,
@@ -48,6 +49,7 @@ describe("configuration", () => {
         maxSseTotal: 256,
         hashConcurrency: 2,
         hashQueue: 16,
+        rateLimits: { generation: 30, upload: 60, admin: 120 },
       },
       storage: {
         operationRetentionMs: 7 * 86_400_000,

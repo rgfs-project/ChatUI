@@ -155,10 +155,7 @@ export class ArtifactStore {
   }
 
   private dir(userId: string, id?: string): string {
-    const root = path.join(this.paths.userDir(userId), "artifacts");
-    if (id === undefined) return root;
-    if (!isUuid(id)) throw new Error("artifact id must be a canonical UUID");
-    return path.join(root, id);
+    return id === undefined ? this.paths.artifactsDir(userId) : this.paths.artifactDir(userId, id);
   }
 
   blobPath(userId: string, id: string): string {

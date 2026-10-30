@@ -449,9 +449,7 @@ async function plan(
   // Artifacts are independent: a skipped chat leaves a dead backlink.
   const artifacts: Plan["artifacts"] = new Map();
   for (const [id, file] of archive.artifacts) {
-    const existing = await readOrNull(
-      path.join(paths.userDir(userId), "artifacts", id, "meta.json"),
-    );
+    const existing = await readOrNull(paths.artifactMeta(userId, id));
     let status: Status = "new";
     if (existing) {
       const current = JSON.parse(existing.toString("utf8")) as Partial<ArtifactMeta>;
@@ -550,11 +548,10 @@ export class ImportService {
   }
 
   private dir(userId: string, importId?: string): string {
-    const root = stagingDir(this.d.paths, userId);
-    if (importId === undefined) return root;
+    if (importId === undefined) return stagingDir(this.d.paths, userId);
     if (!/^[0-9a-f]{32}$/.test(importId))
       throw new AppError(ErrorCode.NOT_FOUND, "Import not found");
-    return path.join(root, importId);
+    return this.d.paths.importDir(userId, importId);
   }
 
   /** Moves an uploaded archive into staging and returns its preview. */
@@ -710,10 +707,9 @@ export class ImportService {
       for (const a of p.artifacts.values()) {
         if (a.target === null) continue;
         const meta: ArtifactMeta = { ...a.meta, id: a.target, ownerId: userId, finalized: true };
-        const base = path.join(userDir, "artifacts", a.target);
-        writes.push({ file: path.join(base, "blob"), bytes: a.blob });
+        writes.push({ file: this.d.paths.artifactBlob(userId, a.target), bytes: a.blob });
         writes.push({
-          file: path.join(base, "meta.json"),
+          file: this.d.paths.artifactMeta(userId, a.target),
           bytes: Buffer.from(`${JSON.stringify(meta, null, 2)}\n`),
         });
       }

@@ -252,6 +252,7 @@ export const regenerateRoute = defineRoute({
   path: "/api/conversations/:id/messages/:messageId/regenerate",
   auth: "user",
   csrf: "token",
+  rateLimit: "generation",
   request: { params: messageParams, body: regenerateSchema },
   response: startGenerationResponseSchema,
   status: 202,

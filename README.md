@@ -38,16 +38,16 @@ Then open http://127.0.0.1:3000 (override with `HOST_PORT`). The container:
 - has a built-in healthcheck and `restart: unless-stopped`;
 - has the stable entrypoint `node server/cli.ts <command>`, e.g. `docker compose exec chatui node server/cli.ts healthcheck`.
 
-Operator commands are introduced as their services exist. Until then they exit with status 2 and a message; they never pretend to succeed:
+Operator commands (an unknown command exits with status 2 and the usage):
 
-| Command                                                                  | Available from |
-| ------------------------------------------------------------------------ | -------------- |
-| `serve` (default), `healthcheck`                                         | Phase 1b       |
-| `provider:check` (reachability and credentials of `LLAMA_BASE_URL`)      | Phase 2        |
-| `index:rebuild` (rebuild derived indexes; server stopped)                | Phase 3        |
-| `user:create --username <name> [--admin]` (password via prompt or stdin) | Phase 4        |
-| `user:reset-password --username <name>` (password via prompt or stdin)   | Phase 10       |
-| `backup`, `restore`                                                      | Phase 16       |
+| Command                                                                                            | Available from |
+| -------------------------------------------------------------------------------------------------- | -------------- |
+| `serve` (default), `healthcheck`                                                                   | Phase 1b       |
+| `provider:check` (reachability and credentials of `LLAMA_BASE_URL`)                                | Phase 2        |
+| `index:rebuild` (rebuild derived indexes; server stopped)                                          | Phase 3        |
+| `user:create --username <name> [--admin]` (password via prompt or stdin)                           | Phase 4        |
+| `user:reset-password --username <name>` (password via prompt or stdin)                             | Phase 10       |
+| `backup --out <dir> [--with-sessions]`, `restore --from <dir>` (server stopped; see Backups below) | Phase 16       |
 
 Updating: `git pull && docker compose up -d --build`. The `/data` volume is reused.
 
@@ -171,7 +171,7 @@ tailscale serve --bg --https=443 http://127.0.0.1:3000
 PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net TRUST_PROXY=1 docker compose up -d
 ```
 
-Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that talks to it.
+Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that talks to it. Set `Strict-Transport-Security` (HSTS) on the proxy: ChatUI does not terminate TLS, so it does not send HSTS itself. Caddy's `header Strict-Transport-Security "max-age=31536000"` does this. See [SECURITY.md](SECURITY.md) for the security review.
 
 ## Data, backups and limits
 
@@ -194,8 +194,21 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
 
   Accepted: PNG, JPEG, WebP, GIF, WAV, MP3, FLAC and UTF-8 text/Markdown/CSV/JSON/source files. Types are decided by the file's contents; SVG, HTML, PDF and executables are refused. Images and audio go only to models that report image or audio input. Uploaded files are not virus-scanned; scan `DATA_DIR` separately if you need that.
 
-- **Back up all of `DATA_DIR`.** `index/` is derived and optional in a backup: it is rebuilt from the Markdown when missing. Keep `operations/` (short-lived send records used for safe retries and crash recovery). Stop the server, or copy from a filesystem snapshot, for a consistent backup; online backup/restore arrives in Phase 16.
-- **Single process only.** Exactly one ChatUI process may use a `DATA_DIR` (locks are in-process). Don't run two servers, or the CLI `index:rebuild`, against the same directory at the same time.
+- **Backups.** `DATA_DIR` is the complete persistent state: accounts, chats, files, captured files, memories, suggestions, settings, preferences, profile photos, and `_system/` (providers with their API keys, instance settings, audit log, sessions, recovery records). A backup therefore holds **user content and secrets**; store it like `DATA_DIR` itself.
+  - **With the CLI** (the server must be stopped; the command refuses while one is running, even from another container):
+
+    ```bash
+    docker compose stop chatui
+    docker compose run --rm -v "$PWD/backups:/backups" chatui backup --out /backups/2026-10-30
+    docker compose start chatui
+    ```
+
+    `backup` first runs the same startup recovery the server runs (interrupted imports are rolled back, interrupted replies are written, pending memory and file records are settled), then copies `DATA_DIR` into a new directory with `chatui-backup.json` (every file's size and SHA-256). It leaves out the derived `index/`, transient `import-staging/`, unfinished temporary files and, unless you pass `--with-sessions`, sessions (users then sign in again).
+
+  - **Restore** only into an **empty** `DATA_DIR` (a new volume or directory): `node server/cli.ts restore --from <backup-dir>`. Every checksum is verified and a file the manifest doesn't list is refused before anything is written; then startup recovery runs once to check that the restored data starts. Files are created `0600` (directories `0700`) for the user running the command, so run it as the container's user (`docker compose run --rm -v … chatui restore --from /backups/…`).
+  - **Without the CLI:** stop the server, or copy from a filesystem snapshot, and copy all of `DATA_DIR`. `index/` and `<user>/import-staging/` are optional. Keep the recovery records (`operations/`, `_system/generations/`, memory intents, `_system/deleting/`): startup recovery finishes them on the next start.
+- **Single process only.** Exactly one ChatUI process may use a `DATA_DIR` (locks are in-process). Don't run two servers, or the CLI `index:rebuild`, against the same directory at the same time. A running server keeps `_system/server.lock` fresh; a second server logs a warning, and `backup`/`restore` refuse to run.
+- **Request limits** (per account, per process, reset by a restart): `RATE_LIMIT_GENERATIONS` (30 sends or regenerations a minute), `RATE_LIMIT_UPLOADS` (60 uploads, imports or full exports a minute) and `RATE_LIMIT_ADMIN` (120 admin changes a minute). Over a limit the API answers `429 RATE_LIMITED` with `Retry-After`. Sign-in is limited separately (10 attempts per 15 minutes per address and per username). The HTTP server caps headers at 16 KB (30 s to send them), a whole request at `REQUEST_TIMEOUT_MS` (10 minutes) and open connections at `MAX_CONNECTIONS` (1024).
 - Writes are atomic and durable (temp file, fsync, rename, directory fsync). On Windows, directory fsync is unavailable and rename-over-existing semantics differ; Linux containers are the supported runtime.
 
 ## Install (development)

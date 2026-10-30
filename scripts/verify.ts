@@ -71,6 +71,27 @@ function createUser(
   });
 }
 
+/** Runs a CLI command with DATA_DIR set; resolves with its exit code and output. */
+function runCli(
+  dataDir: string,
+  args: string[],
+  extraEnv: Record<string, string> = {},
+): Promise<{ code: number | null; out: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ["server/cli.ts", ...args], {
+      cwd: ROOT,
+      env: { ...process.env, DATA_DIR: dataDir, ...extraEnv },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    child.once("exit", (code) => {
+      resolve({ code, out });
+    });
+  });
+}
+
 async function startServer(
   dataDir: string,
   mode: Mode,
@@ -206,7 +227,42 @@ async function persistenceChecks(llamaUrl: string): Promise<void> {
     const chats = path.join(dataDir, me.userId, "chats");
     const first = await sendAndWait(base, me, MOCK_MODELS.chat, "remember me");
     const second = await sendAndWait(base, me, MOCK_MODELS.chat, "other conversation");
+    const backupDir = mkdtempSync(path.join(tmpdir(), "chatui-verify-backup-"));
+    const busy = await runCli(dataDir, ["backup", "--out", path.join(backupDir, "b")], env);
+    check(
+      "backup refuses while the server is running",
+      busy.code === 1 && busy.out.includes("is using this DATA_DIR"),
+      busy.out,
+    );
     await stopServer(server.child);
+
+    // Phase 16: CLI backup → restore into a fresh DATA_DIR → start and read.
+    const backup = await runCli(dataDir, ["backup", "--out", path.join(backupDir, "b")], env);
+    check("backup: the CLI copies DATA_DIR with a manifest", backup.code === 0, backup.out);
+    const restoredDir = path.join(backupDir, "restored");
+    const restored = await runCli(
+      restoredDir,
+      ["restore", "--from", path.join(backupDir, "b")],
+      env,
+    );
+    check(
+      "restore: the CLI verifies and restores into an empty DATA_DIR",
+      restored.code === 0,
+      restored.out,
+    );
+    const again = await runCli(restoredDir, ["restore", "--from", path.join(backupDir, "b")], env);
+    check("restore refuses a DATA_DIR that is not empty", again.code === 1, again.out);
+    {
+      const restoredServer = await startServer(restoredDir, "production", env);
+      await signIn(restoredServer.base);
+      const read = await get(restoredServer.base, `/api/conversations/${first.conversationId}`);
+      check(
+        "backup → restore round trip: the restored server serves the conversation",
+        read.status === 200 && JSON.stringify(read.body).includes("Echo: remember me"),
+      );
+      await stopServer(restoredServer.child);
+      rmSync(backupDir, { recursive: true, force: true });
+    }
 
     server = await startServer(dataDir, "production", env);
     base = server.base;

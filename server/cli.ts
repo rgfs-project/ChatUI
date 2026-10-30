@@ -4,7 +4,13 @@
  * does; a command that is not available yet fails clearly instead of
  * pretending to succeed.
  */
-import { ConfigError, loadConfig } from "./config.ts";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import packageJson from "../package.json" with { type: "json" };
+import { assertOffline, BackupError, createBackup, restoreBackup } from "./backup.ts";
+import { ConfigError, loadConfig, type Config } from "./config.ts";
+import { createLogger } from "./logger.ts";
 import { ChatIndex } from "./storage/chat-index.ts";
 import { DataPaths } from "./storage/paths.ts";
 import { PASSWORD_MAX, PASSWORD_MIN, PasswordHasher } from "./auth/passwords.ts";
@@ -14,10 +20,7 @@ import { accountIds } from "./storage/recovery.ts";
 import { UserError, UserStore } from "./storage/users.ts";
 import { SessionStore } from "./auth/sessions.ts";
 
-const PLANNED: Readonly<Record<string, string>> = {
-  backup: "Phase 16",
-  restore: "Phase 16",
-};
+const PLANNED: Readonly<Record<string, string>> = {};
 
 const USAGE = `Usage: node server/cli.ts <command>
 
@@ -34,11 +37,15 @@ Commands:
                   Markdown in DATA_DIR (stop the server first: single process)
   provider:check  Check that LLAMA_BASE_URL is reachable from here (DNS, routing,
                   credentials) and list how many models it reports
-
-Planned (not available yet):
-${Object.entries(PLANNED)
-  .map(([name, phase]) => `  ${name.padEnd(13)} ${phase}`)
-  .join("\n")}
+  backup --out <dir> [--with-sessions]
+                  Stop the server first. Runs startup recovery, then copies
+                  DATA_DIR (without derived indexes, import staging and, unless
+                  asked, sessions) into a new directory with a checksum manifest.
+                  The backup holds user content and secrets: store it safely
+  restore --from <dir>
+                  Stop the server first. Verifies every checksum, refuses
+                  unknown files, copies the backup into an EMPTY DATA_DIR, then
+                  runs startup recovery once to check that it starts
 `;
 
 async function healthcheck(): Promise<number> {
@@ -288,6 +295,98 @@ async function indexRebuild(): Promise<number> {
   return 0;
 }
 
+/** Startup recovery exactly as the server runs it (contracts §2), then a clean stop. */
+async function recoveryPass(config: Config): Promise<void> {
+  const bundle = path.resolve(import.meta.dirname, "..", "build/server/index.js");
+  let mod: {
+    createApp: (options: unknown) => { ready: Promise<void>; shutdown: () => Promise<void> };
+  };
+  try {
+    mod = (await import(pathToFileURL(bundle).href)) as typeof mod;
+  } catch {
+    throw new BackupError("The server build is missing (run `npm run build` first)");
+  }
+  const app = mod.createApp({
+    config,
+    logger: createLogger("warn"),
+    version: packageJson.version,
+    createDocumentHandler:
+      () => (_req: unknown, res: { status: (n: number) => { end: () => void } }) => {
+        res.status(503).end();
+      },
+  });
+  await app.ready;
+  await app.shutdown();
+}
+
+function flag(args: string[], name: string): string | undefined {
+  const at = args.indexOf(name);
+  return at >= 0 ? args[at + 1] : undefined;
+}
+
+async function backup(args: string[]): Promise<number> {
+  const out = flag(args, "--out");
+  const known = new Set(["--out", "--with-sessions", out]);
+  if (!out || args.some((arg) => !known.has(arg))) {
+    process.stderr.write("Usage: node server/cli.ts backup --out <dir> [--with-sessions]\n");
+    return 2;
+  }
+  try {
+    const config = loadConfig(process.env);
+    await assertOffline(config.dataDir);
+    await recoveryPass(config);
+    const done = await createBackup({
+      dataDir: config.dataDir,
+      out,
+      includeSessions: args.includes("--with-sessions"),
+      chatuiVersion: packageJson.version,
+    });
+    process.stdout.write(
+      `Backed up ${String(done.files)} file(s), ${String(done.bytes)} bytes, to ${path.resolve(out)}.\n` +
+        "It contains user content and secrets (providers.json): keep it as safe as DATA_DIR.\n",
+    );
+    return 0;
+  } catch (error) {
+    process.stderr.write(`${backupMessage(error)}\n`);
+    return 1;
+  }
+}
+
+async function restore(args: string[]): Promise<number> {
+  const from = flag(args, "--from");
+  const known = new Set(["--from", from]);
+  if (!from || args.some((arg) => !known.has(arg))) {
+    process.stderr.write("Usage: node server/cli.ts restore --from <dir>\n");
+    return 2;
+  }
+  try {
+    // A fresh DATA_DIR may not exist yet; configuration requires the directory.
+    // An empty DATA_DIR means unset, as in loadConfig.
+    const raw = process.env.DATA_DIR;
+    await mkdir(path.resolve(raw === undefined || raw === "" ? "./data" : raw), {
+      recursive: true,
+      mode: 0o700,
+    });
+    const config = loadConfig(process.env);
+    await assertOffline(config.dataDir);
+    const done = await restoreBackup({ from, dataDir: config.dataDir });
+    await recoveryPass(config);
+    process.stdout.write(
+      `Restored ${String(done.files)} file(s) into ${path.resolve(config.dataDir)}; startup recovery completed.\n`,
+    );
+    return 0;
+  } catch (error) {
+    process.stderr.write(`${backupMessage(error)}\n`);
+    return 1;
+  }
+}
+
+function backupMessage(error: unknown): string {
+  if (error instanceof ConfigError || error instanceof BackupError) return error.message;
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code ? `Failed: ${code}` : "Failed";
+}
+
 const [command = "serve"] = process.argv.slice(2);
 
 switch (command) {
@@ -308,6 +407,12 @@ switch (command) {
     break;
   case "provider:check":
     process.exitCode = await providerCheck();
+    break;
+  case "backup":
+    process.exitCode = await backup(process.argv.slice(3));
+    break;
+  case "restore":
+    process.exitCode = await restore(process.argv.slice(3));
     break;
   case "help":
   case "--help":

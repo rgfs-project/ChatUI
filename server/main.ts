@@ -6,14 +6,16 @@
  *   serves prebuilt client assets from build/client.
  * - development: embeds Vite in middleware mode and reloads server/app.ts on change.
  */
-import { createServer, type Server } from "node:http";
+import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import express, { type Express } from "express";
 import packageJson from "../package.json" with { type: "json" };
 import { ConfigError, loadConfig, type Config } from "./config.ts";
+import { createHttpServer } from "./http-server.ts";
 import { createLogger, type Logger } from "./logger.ts";
+import { InstanceLock } from "./storage/instance-lock.ts";
 import type * as AppModule from "./app.ts";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -112,7 +114,16 @@ async function main(): Promise<void> {
       ? await developmentHandler(config, logger)
       : await productionHandler(config, logger);
 
-  const server = createServer(running.handler);
+  // Tells offline tools (backup, restore) that this DATA_DIR is in use.
+  const lock = new InstanceLock(config.dataDir);
+  const other = await lock.acquire();
+  if (other)
+    logger.warn(
+      { pid: other.pid, host: other.host },
+      "another server appears to use this DATA_DIR; ChatUI must run as a single process",
+    );
+
+  const server = createHttpServer(running.handler, config.http);
   const address = await listen(server, config.port, config.listenHost);
   logger.info({ host: address.address, port: address.port, mode: config.nodeEnv }, "listening");
 
@@ -132,6 +143,7 @@ async function main(): Promise<void> {
     server.close(() => {
       void (async () => {
         await closing;
+        await lock.release();
         clearTimeout(force);
         logger.info("shutdown complete");
         logger.flush();

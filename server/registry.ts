@@ -25,6 +25,8 @@ import type { ProjectService } from "./chat/projects.ts";
 import type { ProfileStore } from "./profile/store.ts";
 import type { ProfileDto } from "@shared/profile";
 import type { AuthContext, AuthService } from "./auth/service.ts";
+import type { RouteLimits } from "./auth/route-limits.ts";
+import type { RateCategory } from "./config.ts";
 import type { SendService } from "./chat/send-service.ts";
 import { AppError } from "./errors.ts";
 import type { ModelCatalog } from "./generations/catalog.ts";
@@ -96,6 +98,8 @@ export interface RouteServices {
   sseConnections: SseConnections;
   sse: SseOptions;
   logger: Logger;
+  /** Phase 16: per-account rates for routes that declare a `rateLimit`. */
+  limits: RouteLimits;
 }
 
 export interface RouteContext {
@@ -127,6 +131,11 @@ interface RouteBase<S extends RequestSchemas> {
    * (contracts §5); `origin`: same-origin check for login/registration.
    */
   csrf: "none" | "token" | "origin";
+  /**
+   * Per-account rate category (Phase 16): generation starts, uploads and
+   * admin changes. Taken after authentication and CSRF pass.
+   */
+  rateLimit?: RateCategory;
   request: S;
   /**
    * Request used by the registry coverage tests, and the status it must
@@ -212,6 +221,7 @@ export function buildApiRouter(routes: readonly AnyApiRoute[], services: RouteSe
         throw new AppError(ErrorCode.FORBIDDEN, "Administrators only");
       if (route.csrf === "token") services.auth.checkMutation(req, auth);
       if (route.csrf === "origin") services.auth.checkOrigin(req);
+      if (route.rateLimit && auth) services.limits.take(route.rateLimit, auth.userId);
       return { req, res, services, auth };
     };
     if (route.kind === "sse") {

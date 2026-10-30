@@ -64,6 +64,9 @@ function fromBodyParserError(err: unknown): AppError | undefined {
 
 export function toAppError(err: unknown): AppError | undefined {
   if (err instanceof AppError) return err;
+  // The router could not percent-decode a path parameter (e.g. `%E0%A4%A`).
+  if (err instanceof URIError)
+    return new AppError(ErrorCode.VALIDATION, "The request path is not valid");
   return fromBodyParserError(err);
 }
 

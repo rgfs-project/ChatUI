@@ -49,6 +49,7 @@ export const exportArchiveRoute = defineRawRoute({
   path: "/api/export",
   auth: "user",
   csrf: "none",
+  rateLimit: "upload",
   request: { query: z.strictObject({}) },
   handler: async (_input, ctx, next) => {
     const file = await ctx.services.exportArchive(userOf(ctx).userId);
@@ -79,6 +80,7 @@ export const previewImportRoute = defineRoute({
   path: "/api/import",
   auth: "user",
   csrf: "token",
+  rateLimit: "upload",
   request: { query: z.strictObject({}) },
   response: importPreviewSchema,
   status: 201,

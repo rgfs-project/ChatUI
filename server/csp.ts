@@ -52,9 +52,36 @@ export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
   return directives;
 }
 
+/**
+ * Powerful features the app may use (Phase 16): the microphone for dictation
+ * (the browser asks first), clipboard writes for Copy, full screen. Everything
+ * else is off for this page and anything it could ever embed. Only features
+ * Chromium recognises are listed, since unknown names log console warnings.
+ */
+export const PERMISSIONS_POLICY = [
+  "accelerometer=()",
+  "camera=()",
+  "clipboard-write=(self)",
+  "display-capture=()",
+  "fullscreen=(self)",
+  "geolocation=()",
+  "gyroscope=()",
+  "hid=()",
+  "magnetometer=()",
+  "microphone=(self)",
+  "midi=()",
+  "payment=()",
+  "publickey-credentials-get=()",
+  "screen-wake-lock=()",
+  "serial=()",
+  "usb=()",
+  "xr-spatial-tracking=()",
+].join(", ");
+
 export function securityHeaders(mode: CspMode): RequestHandler[] {
   const assignNonce: RequestHandler = (_req, res, next) => {
     res.locals.cspNonce = createNonce();
+    res.setHeader("Permissions-Policy", PERMISSIONS_POLICY);
     next();
   };
   return [

@@ -6,7 +6,7 @@ import { ESLint } from "eslint";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { routeInventoryRestriction } from "../../eslint.route-inventory.js";
+import { dtoRestriction, routeInventoryRestriction } from "../../eslint.route-inventory.js";
 import type { ChatUiApp } from "../../server/create-app.ts";
 import { buildApiRouter, defineRoute, erase, type AnyApiRoute } from "../../server/registry.ts";
 import { apiRoutes } from "../../server/routes/index.ts";
@@ -231,6 +231,21 @@ describe("API route registry", () => {
     expect(bypass?.messages.map((m) => m.ruleId)).toEqual(["no-restricted-syntax"]);
     const [allowed] = await eslint.lintText(
       'const headers = new Map();\nheaders.get("user-agent");\nconst app = { use() {} };\napp.use("/api", () => {});\n',
+    );
+    expect(allowed?.messages).toEqual([]);
+  });
+
+  it("lint forbids writing JSON responses outside the registry and the error contract (DTOs)", async () => {
+    const eslint = new ESLint({
+      overrideConfigFile: true,
+      overrideConfig: { rules: { "no-restricted-syntax": ["error", dtoRestriction] } },
+    });
+    const [leak] = await eslint.lintText(
+      "const res = { json(_x) {} };\nconst user = { passwordHash: 'x' };\nres.json(user);\n",
+    );
+    expect(leak?.messages.map((m) => m.ruleId)).toEqual(["no-restricted-syntax"]);
+    const [allowed] = await eslint.lintText(
+      "const express = { json(_o) {} };\nexpress.json({ limit: 1 });\nconst r = { json() {} };\nr.json();\n",
     );
     expect(allowed?.messages).toEqual([]);
   });

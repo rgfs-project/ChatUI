@@ -1,0 +1,71 @@
+## Phase 16 report
+
+- **Plan:**
+  - Package 16: a security review of Phases 1–15 with every claim backed by code and a test, and fixes where the review finds a flaw.
+  - From the roadmap (step 19): per-account rate limits, `Permissions-Policy`, the `backup`/`restore` CLI, dependency patching.
+  - Method: inventory the existing controls and tests per review area (most already existed from Phases 1–15), build the missing controls, and add enumerated tests that sweep every route or path constructor instead of samples.
+
+- **Scope completed:**
+  - **Review:** `SECURITY.md` covers 26 areas, each with its controls (code) and tests, plus the dependency state and six documented exceptions. `ARCHITECTURE.md` gained a "Security review (Phase 16)" section, and the INV-03/12/50/62 rows are updated.
+  - **Rate limits:**
+    - Routes declare `rateLimit: "generation" | "upload" | "admin"`. The registry guard counts a hit only after authentication and CSRF pass, and answers `429 RATE_LIMITED` with `Retry-After`.
+    - Defaults are 30 generation starts, 60 transfers (uploads, profile photos, imports, full exports) and 120 admin changes per minute (`RATE_LIMIT_*`).
+    - Limits are per process, as documented.
+  - **Authorization fix:** `AdminService` trusted the route guard for the role. Every admin operation, reads included, now re-reads the actor's account and requires an active admin.
+  - **Bugs found by the new fuzz:** a malformed percent-encoding in an API path parameter returned 500 INTERNAL; it is now 400 VALIDATION. Undecodable document paths made the framework router log warnings; they are now a plain 400 before it.
+  - **Headers:** `Permissions-Policy` on every response, allowing only the microphone (dictation), clipboard writes and full screen for this origin. The existing CSP, COOP, Referrer-Policy, nosniff and frame protections are verified on HTML, JSON, bytes and errors.
+  - **HTTP limits** (`server/http-server.ts`): 16 KB headers (431), 30 s to send headers, `REQUEST_TIMEOUT_MS` (10 min), `MAX_CONNECTIONS` (1024).
+  - **Filesystem:** the artifact, import-staging and temporary-chat paths moved into `DataPaths`, so every request-influenced path has one audited constructor.
+  - **DTO lint rule:** `res.json()` is allowed only in the registry and the error contract.
+  - **Backup/restore:**
+    - `server/backup.ts` and the CLI commands `backup --out <dir> [--with-sessions]` and `restore --from <dir>`.
+    - `backup` runs startup recovery through the server bundle, then copies the canonical files with a SHA-256 manifest. It leaves out `index/`, `import-staging/`, temporary files and, by default, sessions.
+    - `restore` verifies every checksum, refuses unknown files, unsafe paths and non-empty targets before writing, then runs recovery once.
+    - The running server keeps `_system/server.lock` fresh, and both commands refuse while it is. This also works across containers that share the volume.
+    - The README documents what to back up, that backups contain secrets, consistency, and the Compose commands.
+  - **Compose:** the image copies the two new native modules (guarded by the existing Dockerfile-imports test). `verify:compose` now checks that `backup` refuses while running and works from a one-off container once stopped. Non-root, read-only root, dropped capabilities, healthcheck and loopback publication are re-verified there. HSTS is documented for the TLS proxy.
+  - **Dependencies:** releases at least 14 days old were adopted: `react`/`react-dom` 19.3.1, `express` 5.3.0, `pino` 10.4.0. Newer releases are listed in SECURITY.md. `npm audit --omit=dev`: 0 vulnerabilities.
+
+- **Tests:**
+  - `tests/server/security.test.ts` (new, 11):
+    - rate-limit declarations enumerated, and their behaviour (per account, Retry-After, rejected requests cost nothing, reads unlimited);
+    - services called directly with a mismatched user id;
+    - forged and disabled admin contexts;
+    - an unknown body field and an unknown query parameter rejected on **every** route;
+    - over 300 malformed requests across every route with no 500, stack, path or upstream text;
+    - sentinel password, token, cookie, message text, file name and memory never in default-level logs;
+    - hostile components across 16 path constructors;
+    - the same hardening headers on HTML, JSON, attachment bytes and errors;
+    - 431 for oversized headers and the server limits applied;
+    - undecodable document paths.
+  - `tests/server/backup.test.ts` (new, 4):
+    - a round trip with chats, a file, a captured file, a memory and a reply cut off mid-stream; recovery writes it once as interrupted after restore, indexes are rebuilt, and sessions are left out;
+    - `--with-sessions`;
+    - tampering, unknown files, traversal and non-empty targets refused with nothing written;
+    - the lock.
+  - `tests/e2e/security.spec.ts` (new, 4):
+    - performance marks and diagnostics carry no sentinels, user name, token or cookies;
+    - first-party runtime only, and no service worker;
+    - malformed and hostile URLs signed in;
+    - a `</script>` title is escaped in the server document and bootstrap data.
+  - `tests/server/registry.test.ts`: the DTO lint rule.
+  - `scripts/verify.ts`: the real CLI refuses while running, backs up, restores, refuses a non-empty target, and the restored server serves the chat (+6 checks).
+  - `tests/server/config.test.ts`: the new defaults.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (552)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (87/87)
+  - `test:e2e`: PASS (100/100)
+  - `npm audit --omit=dev`: 0 vulnerabilities
+  - `verify:compose`: CI (no container engine here)
+- **Invariants:** INV-50 is implemented. INV-62 is extended. INV-03 is enforced by lint. INV-12 now has one constructor for all paths.
+- **Deviations / limitations:** the six exceptions are in SECURITY.md:
+  - per-process rate limits;
+  - no automated screen-reader runner;
+  - no malware scanning;
+  - Think's provider field is unverified;
+  - backups need a stopped server or a snapshot;
+  - HSTS belongs on the TLS proxy.
+- **Commit/tag:** `chore(phase-16): security hardening, rate limits, csp, dependency audit`, tag `phase-16`, pushed to `main`.

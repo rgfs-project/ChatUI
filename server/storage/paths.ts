@@ -139,6 +139,43 @@ export class DataPaths {
     return this.inside(this.uuid(userId, "user id"), "profile", "photo");
   }
 
+  /** Captured files (Phase 13c): `artifacts/<artifact-uuid>/{blob,meta.json}`. */
+  artifactsDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "artifacts");
+  }
+
+  artifactDir(userId: string, artifactId: string): string {
+    return this.inside(
+      this.uuid(userId, "user id"),
+      "artifacts",
+      this.uuid(artifactId, "artifact id"),
+    );
+  }
+
+  artifactBlob(userId: string, artifactId: string): string {
+    return path.join(this.artifactDir(userId, artifactId), "blob");
+  }
+
+  artifactMeta(userId: string, artifactId: string): string {
+    return path.join(this.artifactDir(userId, artifactId), "meta.json");
+  }
+
+  /** Transient export files and import staging (Phase 13d); never exported or backed up. */
+  importStagingDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "import-staging");
+  }
+
+  /** One staged import: 32 hex digits, minted by the server. */
+  importDir(userId: string, importId: string): string {
+    if (!/^[0-9a-f]{32}$/.test(importId)) throw new PathError("import id must be 32 hex digits");
+    return this.inside(this.uuid(userId, "user id"), "import-staging", importId);
+  }
+
+  /** Temporary-chat registry (Phase 13f). */
+  temporaryFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "temporary.json");
+  }
+
   systemDir(): string {
     return this.inside(SYSTEM_DIR);
   }

@@ -23,6 +23,7 @@ export const startGenerationRoute = defineRoute({
   path: "/api/generations",
   auth: "user",
   csrf: "token",
+  rateLimit: "generation",
   request: { body: startGenerationRequestSchema },
   response: startGenerationResponseSchema,
   status: 202,

@@ -112,6 +112,17 @@ export class AdminService {
     this.o = options;
   }
 
+  /**
+   * Service-boundary authorization (Phase 16): every change re-reads the
+   * actor's account and requires an active admin, so no caller can reach
+   * these operations by skipping the route guard.
+   */
+  private async authorize(actor: AuthContext): Promise<void> {
+    const user = await this.o.users.get(actor.userId);
+    if (user?.status !== "active" || user.role !== "admin")
+      throw new AppError(ErrorCode.FORBIDDEN, "Administrators only");
+  }
+
   private audit(
     actor: AuthContext,
     action: string,
@@ -141,7 +152,8 @@ export class AdminService {
     };
   }
 
-  async listUsers(): Promise<AdminUserDto[]> {
+  async listUsers(actor: AuthContext): Promise<AdminUserDto[]> {
+    await this.authorize(actor);
     const users = await this.o.users.all();
     return users.sort((a, b) => a.username.localeCompare(b.username)).map((u) => this.dto(u));
   }
@@ -167,6 +179,7 @@ export class AdminService {
     actor: AuthContext,
     input: { username: string; password: string; role: Role },
   ): Promise<AdminUserDto> {
+    await this.authorize(actor);
     const username = normalizeUsername(input.username);
     if (!USERNAME_RE.test(username))
       throw new AppError(ErrorCode.VALIDATION, "Usernames are 3-32 characters: a-z, 0-9, _ . -");
@@ -188,6 +201,7 @@ export class AdminService {
 
   /** Sets a new password and revokes every session of that account. */
   async setPassword(actor: AuthContext, id: string, password: string): Promise<void> {
+    await this.authorize(actor);
     const user = await this.mustGet(id);
     this.o.auth.validatePassword(password);
     const passwordHash = await this.o.hasher.hash(password);
@@ -202,6 +216,7 @@ export class AdminService {
     id: string,
     patch: { role?: Role; status?: "active" | "disabled" },
   ): Promise<AdminUserDto> {
+    await this.authorize(actor);
     const user = await this.mustGet(id);
     const demote = patch.role === "user" && user.role === "admin";
     const disable = patch.status === "disabled" && user.status === "active";
@@ -222,6 +237,7 @@ export class AdminService {
   }
 
   async deleteUser(actor: AuthContext, id: string, confirmUsername: string): Promise<void> {
+    await this.authorize(actor);
     const user = await this.mustGet(id);
     if (normalizeUsername(confirmUsername) !== user.username)
       throw new AppError(ErrorCode.VALIDATION, "Type the username to confirm the deletion");
@@ -313,7 +329,8 @@ export class AdminService {
     };
   }
 
-  async listProviders(): Promise<AdminProviderDto[]> {
+  async listProviders(actor: AuthContext): Promise<AdminProviderDto[]> {
+    await this.authorize(actor);
     return (await this.readProviders()).map((p) => this.providerDto(p));
   }
 
@@ -349,6 +366,7 @@ export class AdminService {
     actor: AuthContext,
     input: z.infer<typeof providerInputSchema>,
   ): Promise<AdminProviderDto> {
+    await this.authorize(actor);
     return this.o.locks.run("providers", async () => {
       const entries = await this.readProviders();
       if (entries.some((e) => e.id === input.id))
@@ -370,6 +388,7 @@ export class AdminService {
     id: string,
     patch: z.infer<typeof providerPatchSchema>,
   ): Promise<AdminProviderDto> {
+    await this.authorize(actor);
     return this.o.locks.run("providers", async () => {
       const entries = await this.readProviders();
       const current = entries.find((e) => e.id === id);
@@ -391,6 +410,7 @@ export class AdminService {
   }
 
   async deleteProvider(actor: AuthContext, id: string): Promise<void> {
+    await this.authorize(actor);
     await this.o.locks.run("providers", async () => {
       const entries = await this.readProviders();
       if (!entries.some((e) => e.id === id))
@@ -405,6 +425,7 @@ export class AdminService {
     actor: AuthContext,
     id: string,
   ): Promise<{ ok: boolean; models: number; message: string }> {
+    await this.authorize(actor);
     const entry = (await this.readProviders()).find((e) => e.id === id);
     if (!entry) throw new AppError(ErrorCode.PROVIDER_NOT_FOUND, "Provider not found");
     let result: { ok: boolean; models: number; message: string };
@@ -426,7 +447,7 @@ export class AdminService {
 
   // ── Models and settings (`_system/settings.json`) ──
 
-  async listModels(): Promise<
+  async listModels(actor: AuthContext): Promise<
     {
       providerId: string;
       providerName: string;
@@ -435,6 +456,7 @@ export class AdminService {
       settings: ModelSettings;
     }[]
   > {
+    await this.authorize(actor);
     const groups = await this.o.models.listModels();
     return groups.flatMap((group) =>
       group.models.map((model) => ({
@@ -454,6 +476,7 @@ export class AdminService {
   }
 
   async updateModel(actor: AuthContext, input: ModelSettings): Promise<ModelSettings> {
+    await this.authorize(actor);
     const entry = modelSettingsSchema.parse(input);
     await this.o.settings.update((current) => ({
       ...current,
@@ -478,6 +501,7 @@ export class AdminService {
   }
 
   async refreshModels(actor: AuthContext): Promise<number> {
+    await this.authorize(actor);
     const groups = await this.o.models.listModels({ fresh: true });
     await this.audit(actor, "model.refresh", { type: "model", id: null });
     return groups.reduce((n, g) => n + g.models.length, 0);
@@ -492,6 +516,7 @@ export class AdminService {
     actor: AuthContext,
     patch: Partial<Omit<InstanceSettings, "models" | "version">>,
   ): Promise<Omit<InstanceSettings, "models">> {
+    await this.authorize(actor);
     if (patch.timeZone !== undefined && !validTimeZone(patch.timeZone))
       throw new AppError(ErrorCode.VALIDATION, "Unknown time zone");
     if (patch.maxOutputTokens != null && patch.maxOutputTokens > this.o.maxOutputTokens)
@@ -511,11 +536,19 @@ export class AdminService {
     return this.getSettings();
   }
 
-  readAudit(month: string): Promise<AuditEntry[]> {
+  async readAudit(actor: AuthContext, month: string): Promise<AuditEntry[]> {
+    await this.authorize(actor);
     return this.o.audit.read(month);
   }
 
+  /** The settings for the admin page (authorized like every admin operation). */
+  async settingsFor(actor: AuthContext): Promise<Omit<InstanceSettings, "models">> {
+    await this.authorize(actor);
+    return this.getSettings();
+  }
+
   async rebuildIndex(actor: AuthContext, userId: string | undefined): Promise<number> {
+    await this.authorize(actor);
     const ids = userId
       ? [(await this.mustGet(userId)).id]
       : (await this.o.users.all()).map((u) => u.id);

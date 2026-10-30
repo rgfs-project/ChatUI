@@ -38,6 +38,7 @@ export const uploadPhotoRoute = defineRoute({
   path: "/api/profile/photo",
   auth: "user",
   csrf: "token",
+  rateLimit: "upload",
   // multipart/form-data with one `file` part (cropped to a square in the browser).
   request: {},
   response: profileDtoSchema,
