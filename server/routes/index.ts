@@ -26,6 +26,12 @@ import {
 } from "./auth.ts";
 import { healthRoute } from "./health.ts";
 import {
+  createProjectRoute,
+  deleteProjectRoute,
+  moveToProjectRoute,
+  renameProjectRoute,
+} from "./projects.ts";
+import {
   cancelImportRoute,
   commitImportRoute,
   exportArchiveRoute,
@@ -102,6 +108,10 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(deleteExchangeRoute),
   erase(regenerateRoute),
   erase(searchRoute),
+  erase(createProjectRoute),
+  erase(renameProjectRoute),
+  erase(deleteProjectRoute),
+  erase(moveToProjectRoute),
   erase(exportConversationRoute),
   erase(exportArchiveRoute),
   erase(previewImportRoute),

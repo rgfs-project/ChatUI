@@ -21,6 +21,7 @@ import type { ArtifactStore } from "./artifacts/store.ts";
 import type { ImportService } from "./portability/import.ts";
 import type { DataPaths } from "./storage/paths.ts";
 import type { TemporaryChats } from "./storage/temporary.ts";
+import type { ProjectService } from "./chat/projects.ts";
 import type { ProfileStore } from "./profile/store.ts";
 import type { ProfileDto } from "@shared/profile";
 import type { AuthContext, AuthService } from "./auth/service.ts";
@@ -85,6 +86,8 @@ export interface RouteServices {
   imports: ImportService;
   /** Phase 13f. */
   temporary: TemporaryChats;
+  /** Phase 13g. */
+  projects: ProjectService;
   /** Phase 12b. */
   profile: ProfileService;
   profileStore: ProfileStore;

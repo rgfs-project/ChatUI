@@ -863,6 +863,24 @@ preferences.json
   - A chat left open (closed tab, crash) is deleted by the sweep once it is 24 h old, at startup and hourly.
 - **Browser.** A "Temporary chat" toggle on the new-chat screen (with an explanation instead of the greeting); a "Temporary" badge in the header; no Pin.
 
+## Projects (Phase 13g)
+
+- **Storage.** Projects are user-owned organization, like pins, so they live in `preferences.json`: `projects` (`[{id, name, createdAt}]`, display order, at most 100) and `chatProjects` (conversation id → project id; a chat is in at most one). The sanitizer drops placements that point to unknown projects. They are dehydrated with the preferences, so the sidebar renders on the server.
+- **Endpoints** (`server/chat/projects.ts`, `server/routes/projects.ts`), each answering with the updated preferences:
+  - `POST /api/projects`;
+  - `PATCH /api/projects/:id`;
+  - `DELETE /api/projects/:id` (its chats stay, out of any project);
+  - `PUT /api/conversations/:id/project` (`{projectId | null}`; temporary chats are refused).
+
+  Names are one line of 1–60 characters, unique by NFC case-folding. `PATCH /api/preferences` can't change projects.
+
+- **Lifecycle.** Deleting a chat removes its placement, as it does its pin (`PreferencesStore.removePins`).
+- **Portability.** The archive carries them in `preferences.json`. Import adds projects whose id is new (a clashing name gets " (imported)") and keeps the placement of imported chats; existing projects and placements are never changed.
+- **Browser.**
+  - A folding Projects section in the sidebar with "New project" and folder rows. Each row folds open to its chats and opens automatically when it holds the open chat; its menu has Rename and Delete.
+  - Recents leaves out chats that are in a project.
+  - "Move to project…" in the chat row menu, the chat header menu and the `/` menu opens a dialog listing projects, "New project…" (create and move) and "Remove from project".
+
 ## Container runtime (Phase 1b, INV-49)
 
 Compose is the supported production path; host Node is for development.

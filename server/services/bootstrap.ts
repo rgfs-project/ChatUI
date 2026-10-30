@@ -41,6 +41,8 @@ export function preferencesDto(p: Preferences): PreferencesDto {
     defaultModel: p.defaultModel,
     historyImages: p.historyImages,
     imageMaxEdge: p.imageMaxEdge,
+    projects: p.projects,
+    chatProjects: p.chatProjects,
   });
 }
 

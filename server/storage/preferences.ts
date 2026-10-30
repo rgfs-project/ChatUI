@@ -17,7 +17,20 @@ export interface Preferences {
   historyImages: "include" | "omit" | null;
   /** Client-side image shrink edge in pixels (Phase 12); 0 = never shrink. */
   imageMaxEdge: number | null;
+  /** Projects (Phase 13g): named folders, in display order. */
+  projects: Project[];
+  /** Conversation id → project id (a chat is in at most one project). */
+  chatProjects: Record<string, string>;
 }
+
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export const MAX_PROJECTS = 100;
+export const PROJECT_NAME_MAX = 60;
 
 export const DEFAULT_PREFERENCES: Preferences = {
   version: 1,
@@ -26,6 +39,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   defaultModel: null,
   historyImages: null,
   imageMaxEdge: null,
+  projects: [],
+  chatProjects: {},
 };
 
 function sanitize(raw: unknown): { prefs: Preferences; extra: Record<string, unknown> } {
@@ -39,8 +54,24 @@ function sanitize(raw: unknown): { prefs: Preferences; extra: Record<string, unk
     defaultModel,
     historyImages,
     imageMaxEdge,
+    projects,
+    chatProjects,
     ...extra
   } = r;
+  const validProjects = Array.isArray(projects)
+    ? (projects as unknown[])
+        .filter(
+          (p): p is Project =>
+            typeof p === "object" &&
+            p !== null &&
+            typeof (p as Project).id === "string" &&
+            isUuid((p as Project).id) &&
+            typeof (p as Project).name === "string" &&
+            typeof (p as Project).createdAt === "string",
+        )
+        .slice(0, MAX_PROJECTS)
+    : [];
+  const projectIds = new Set(validProjects.map((p) => p.id));
   return {
     prefs: {
       version: 1,
@@ -54,6 +85,16 @@ function sanitize(raw: unknown): { prefs: Preferences; extra: Record<string, unk
         typeof imageMaxEdge === "number" && Number.isInteger(imageMaxEdge) && imageMaxEdge >= 0
           ? imageMaxEdge
           : null,
+      projects: validProjects,
+      chatProjects:
+        typeof chatProjects === "object" && chatProjects !== null && !Array.isArray(chatProjects)
+          ? Object.fromEntries(
+              Object.entries(chatProjects as Record<string, unknown>).filter(
+                (e): e is [string, string] =>
+                  isUuid(e[0]) && typeof e[1] === "string" && projectIds.has(e[1]),
+              ),
+            )
+          : {},
     },
     extra,
   };
@@ -80,11 +121,19 @@ export class PreferencesStore {
   }
 
   /** Drops pins of conversations that no longer exist (under the lock; INV-34). */
+  /** A deleted conversation's pin and project place go with it (INV-34 keeps the rest). */
   async removePins(userId: string, ids: readonly string[]): Promise<void> {
     const current = await this.get(userId);
-    if (!current.pins.some((id) => ids.includes(id))) return;
+    if (
+      !current.pins.some((id) => ids.includes(id)) &&
+      !ids.some((id) => id in current.chatProjects)
+    )
+      return;
     await this.update(userId, {}, (prefs) => ({
       pins: prefs.pins.filter((id) => !ids.includes(id)),
+      chatProjects: Object.fromEntries(
+        Object.entries(prefs.chatProjects).filter(([id]) => !ids.includes(id)),
+      ),
     }));
   }
 

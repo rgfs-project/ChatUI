@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { preferencesDtoSchema } from "@shared/preferences";
+import { preferencesDtoSchema, preferencesPatchSchema } from "@shared/preferences";
 import { defineRoute, userOf } from "../registry.ts";
 import { preferencesDto } from "../services/bootstrap.ts";
 
@@ -20,7 +20,7 @@ export const updatePreferencesRoute = defineRoute({
   path: "/api/preferences",
   auth: "user",
   csrf: "token",
-  request: { body: preferencesDtoSchema.partial() },
+  request: { body: preferencesPatchSchema },
   response: preferencesDtoSchema,
   handler: async ({ body }, ctx) =>
     preferencesDto(await ctx.services.preferences.update(userOf(ctx).userId, body)),

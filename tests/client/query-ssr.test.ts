@@ -62,6 +62,8 @@ function services(delayMs = 0) {
           defaultModel: null,
           historyImages: null,
           imageMaxEdge: null,
+          projects: [],
+          chatProjects: {},
         };
       },
       models: async () => {

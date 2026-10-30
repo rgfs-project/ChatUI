@@ -8,5 +8,16 @@ export const preferencesDtoSchema = z.strictObject({
   defaultModel: z.string().max(200).nullable(),
   historyImages: z.enum(["include", "omit"]).nullable(),
   imageMaxEdge: z.number().int().min(0).max(16_384).nullable(),
+  /** Projects (Phase 13g), changed only through the project endpoints. */
+  projects: z.array(z.strictObject({ id: canonicalUuid, name: z.string(), createdAt: z.string() })),
+  chatProjects: z.record(canonicalUuid, canonicalUuid),
 });
 export type PreferencesDto = z.infer<typeof preferencesDtoSchema>;
+
+/** What PATCH /api/preferences may change (projects have their own endpoints). */
+export const preferencesPatchSchema = preferencesDtoSchema
+  .omit({ projects: true, chatProjects: true })
+  .partial();
+
+export const projectNameSchema = z.strictObject({ name: z.string().min(1).max(200) });
+export const moveToProjectSchema = z.strictObject({ projectId: canonicalUuid.nullable() });

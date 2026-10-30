@@ -17,6 +17,8 @@ async function smallTargets(page: Page, scope: string): Promise<string[]> {
     const root = document.querySelector(selector);
     if (!root) return [`${selector} missing`];
     for (const el of root.querySelectorAll<HTMLElement>("button, a[href], [role=menuitem]")) {
+      // Measure each control where it can be tapped: scrolled into view, not under the footer.
+      el.scrollIntoView({ block: "center", inline: "nearest" });
       const box = el.getBoundingClientRect();
       if (box.width === 0 || getComputedStyle(el).visibility === "hidden") continue;
       const cx = box.left + box.width / 2;

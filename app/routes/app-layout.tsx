@@ -29,6 +29,7 @@ import { OPEN_ARTIFACT_EVENT } from "../chat/artifact-events";
 import { Drawer } from "../chat/drawer";
 import { ReauthDialog } from "../chat/reauth";
 import { RenameDialog } from "../chat/rename-dialog";
+import { ProjectDialogs } from "../chat/project-dialogs";
 import { Sidebar } from "../chat/sidebar";
 import { appContext } from "../context";
 import { SESSION_EXPIRED_EVENT } from "../lib/api";
@@ -341,6 +342,7 @@ function Shell() {
         </div>
         {kind === "overlay" ? <Outlet /> : null}
         <RenameDialog />
+        <ProjectDialogs />
         {searchOpen ? (
           <Suspense fallback={null}>
             <SearchDialog

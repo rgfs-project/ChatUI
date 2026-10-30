@@ -18,6 +18,7 @@ import { useRenderProbe } from "../lib/render-probe";
 import { MenuItem, MenuLabel, MenuSeparator } from "../ui/menu";
 import { useToast } from "../ui/toast";
 import { AttachmentChips } from "./attachment-chips";
+import { openProjectDialog } from "./project-dialogs";
 import { useChat } from "./chat-context";
 import { ACCEPT, composerFiles, MAX_FILES_PER_MESSAGE, useComposerFiles } from "./composer-files";
 import { DEFAULT_IMAGE_MAX_EDGE } from "./downscale";
@@ -201,6 +202,12 @@ export function Composer() {
             });
           }
         : null,
+      moveToProject:
+        conversation && !conversation.temporary
+          ? () => {
+              openProjectDialog({ kind: "move", conversationId: conversation.id });
+            }
+          : null,
       readAloud:
         speechOk && lastReply
           ? () => {

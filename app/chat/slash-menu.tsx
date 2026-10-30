@@ -1,4 +1,13 @@
-import { ArrowLeft, Box, Check, ChevronRight, Pencil, SquarePen, Volume2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Box,
+  Check,
+  ChevronRight,
+  FolderInput,
+  Pencil,
+  SquarePen,
+  Volume2,
+} from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { ProviderModelsDto } from "@shared/generations";
 import type { ModelPair } from "./model-choice";
@@ -20,6 +29,8 @@ export interface SlashCommands {
   selectModel: (pair: ModelPair) => void;
   /** Present inside a conversation. */
   rename: (() => void) | null;
+  /** Present inside a saved (not temporary) conversation (Phase 13g). */
+  moveToProject: (() => void) | null;
   newChat: (() => void) | null;
   /** Present when the chat has a reply and the browser can speak. */
   readAloud: (() => void) | null;
@@ -58,6 +69,16 @@ function commandItems(commands: SlashCommands): SlashItem[] {
             label: "Rename chat",
             icon: <Pencil size={16} aria-hidden />,
             run: commands.rename,
+          },
+        ]
+      : []),
+    ...(commands.moveToProject
+      ? [
+          {
+            id: "project",
+            label: "Move to project",
+            icon: <FolderInput size={16} aria-hidden />,
+            run: commands.moveToProject,
           },
         ]
       : []),

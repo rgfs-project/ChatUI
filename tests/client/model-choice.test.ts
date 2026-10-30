@@ -72,6 +72,8 @@ describe("model selection order", () => {
           defaultModel: "one",
           historyImages: null,
           imageMaxEdge: null,
+          projects: [],
+          chatProjects: {},
         },
       }),
     ).toEqual(["a", "one"]);

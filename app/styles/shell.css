@@ -441,3 +441,43 @@
     display: none;
   }
 }
+
+/* ── Projects (Phase 13g) ── */
+.project-item {
+  list-style: none;
+}
+
+.project-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.project-chats {
+  padding-left: 16px;
+}
+
+.project-empty {
+  padding-left: 34px;
+}
+
+.project-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.project-current {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+}

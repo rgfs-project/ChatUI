@@ -52,6 +52,7 @@ import { ConversationMutations } from "./chat/mutations.ts";
 import { MemoryService } from "./memory/service.ts";
 import { ArtifactStore } from "./artifacts/store.ts";
 import { TemporaryChats } from "./storage/temporary.ts";
+import { ProjectService } from "./chat/projects.ts";
 import { exportArchive, type ExportDeps } from "./portability/export.ts";
 import { ImportService, type ImportDeps } from "./portability/import.ts";
 import { MemoryStore } from "./storage/memories.ts";
@@ -502,6 +503,7 @@ export function createApp(options: AppOptions): ChatUiApp {
       }),
     imports,
     temporary,
+    projects: new ProjectService({ preferences, store: conversations, temporary, now }),
     profile,
     profileStore,
     profilePhotoPath: (userId) => paths.profilePhoto(userId),

@@ -1,6 +1,7 @@
 import {
   Copy,
   Download,
+  FolderInput,
   MessageCircleDashed,
   MoreHorizontal,
   PanelLeftOpen,
@@ -14,6 +15,7 @@ import {
 import type { ConversationDto } from "@shared/conversations";
 import { useToast } from "../ui/toast";
 import { copyText } from "./copy";
+import { openProjectDialog } from "./project-dialogs";
 import { useQuery } from "@tanstack/react-query";
 import { preferencesQuery } from "../lib/query/queries";
 import { useConversationOps } from "./conversation-ops";
@@ -172,6 +174,16 @@ export const Header = memo(function Header() {
                 }}
               >
                 {pinned ? "Unpin" : "Pin"}
+              </MenuItem>
+            )}
+            {conversation.temporary ? null : (
+              <MenuItem
+                icon={<FolderInput size={16} aria-hidden />}
+                onSelect={() => {
+                  openProjectDialog({ kind: "move", conversationId: conversation.id });
+                }}
+              >
+                Move to project…
               </MenuItem>
             )}
             <MenuItem

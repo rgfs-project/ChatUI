@@ -1,0 +1,38 @@
+## Phase 13g report
+
+- **Plan:** the roadmap's new phase after 13f: Projects, a sidebar section of folders, with "Move to project" for chats (including the `/` menu item).
+
+- **Scope completed:**
+  - **Model:** `projects` and `chatProjects` in `preferences.json` (user-owned organization like pins, dehydrated with the preferences). The sanitizer drops placements to unknown projects; at most 100 projects.
+  - **Endpoints:**
+    - Create, rename and delete a project (its chats stay).
+    - Move a chat in or out (`PUT /api/conversations/:id/project`); temporary chats are refused.
+    - Names are one line of 1–60 characters, unique case-insensitively. `PATCH /api/preferences` can no longer change projects.
+  - **Lifecycle:** deleting a chat removes its placement. Import adds an archive's new projects and keeps imported chats' placements without changing existing ones.
+  - **Browser:**
+    - A folding Projects section with "New project" and folder rows that fold open to their chats (the open chat's project opens itself), each with a Rename/Delete menu.
+    - Recents leaves out chats in projects.
+    - "Move to project…" in the chat row menu, the header menu and the `/` menu: a dialog with the projects, "New project…" and "Remove from project".
+- **Tests:**
+  - `tests/server/projects.test.ts` (2):
+    - Create, rename, move in and out, delete; unique and validated names; owner only; preferences PATCH refused.
+    - Deleting a chat removes its placement; temporary chats can't be moved.
+  - `tests/e2e/projects.spec.ts`:
+    - Create from the sidebar; move from the row menu; the chat is listed under the project and not in Recents, across a reload.
+    - Remove it from the project through the `/` menu.
+    - Rename, then delete the project while the chat stays.
+  - `tests/e2e/mobile.spec.ts`: the touch-target helper scrolls each control into view first. The longer sidebar had put rows under the footer, which was a measurement artifact, not a small target.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (517)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (81/81)
+  - `test:e2e`: PASS (77/77)
+  - `verify:compose`: CI
+- **Budget:** re-recorded: chat JS 247,900 → 249,733 B and CSS 8,980 → 9,062 B (Projects section, dialogs).
+- **Invariants:** INV-34 extended (placements are preferences; deleting a chat removes only its own).
+- **Deviations / limitations:**
+  - Projects have no instructions or files of their own yet; they only group chats.
+  - Chat order inside a project follows Recents.
+- **Commit/tag:** `feat(phase-13g): projects`, tag `phase-13g`, pushed to `main`.

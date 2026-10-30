@@ -94,6 +94,8 @@ export function seededClient(result?: ConversationResult): QueryClient {
     defaultModel: null,
     historyImages: null,
     imageMaxEdge: null,
+    projects: [],
+    chatProjects: {},
   });
   client.setQueryData(qk.conversations(USER.id), [
     { id: CONV, title: "Seeded", createdAt: "", updatedAt: "", messageCount: 2, malformed: false },

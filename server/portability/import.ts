@@ -761,8 +761,12 @@ export class ImportService {
         if (written === Math.ceil(writes.length / 2)) await this.d.hooks?.midCommit?.();
       }
       const archivePrefs = archive.preferences ?? {};
+      const chatTargets = new Map(
+        [...p.conversations].map(([id, c]) => [id, c.status === "present" ? id : c.target]),
+      );
       await this.d.preferences.update(userId, {}, (current) => ({
         pins: [...current.pins, ...p.pins.filter((id) => !current.pins.includes(id))].slice(0, 500),
+        ...mergeProjects(current, archivePrefs, chatTargets),
         ...(choices.preferences
           ? {
               defaultProvider:
@@ -876,6 +880,47 @@ export class ImportService {
     if (rolledBack > 0) await this.d.index.rebuild(userId);
     return { rolledBack, removed };
   }
+}
+
+/**
+ * Projects (Phase 13g): the archive's projects are added when their id is new
+ * (a clashing name gets " (imported)"); imported chats keep their project.
+ * Existing projects and placements are never changed.
+ */
+function mergeProjects(
+  current: {
+    projects: { id: string; name: string; createdAt: string }[];
+    chatProjects: Record<string, string>;
+  },
+  archive: Record<string, unknown>,
+  chatTargets: Map<string, string | null>,
+): { projects: typeof current.projects; chatProjects: Record<string, string> } {
+  const projects = [...current.projects];
+  const names = new Set(projects.map((p) => p.name.normalize("NFC").toLowerCase()));
+  const incoming = Array.isArray(archive.projects) ? (archive.projects as unknown[]) : [];
+  for (const raw of incoming) {
+    const p = raw as { id?: unknown; name?: unknown; createdAt?: unknown };
+    if (typeof p.id !== "string" || !isUuid(p.id) || typeof p.name !== "string") continue;
+    if (projects.some((q) => q.id === p.id) || projects.length >= 100) continue;
+    let name = p.name.trim().slice(0, 60) || "Project";
+    if (names.has(name.normalize("NFC").toLowerCase())) name = `${name.slice(0, 48)} (imported)`;
+    names.add(name.normalize("NFC").toLowerCase());
+    projects.push({
+      id: p.id,
+      name,
+      createdAt: typeof p.createdAt === "string" ? p.createdAt : new Date().toISOString(),
+    });
+  }
+  const chatProjects = { ...current.chatProjects };
+  const placed = archive.chatProjects;
+  if (placed && typeof placed === "object" && !Array.isArray(placed)) {
+    for (const [chat, project] of Object.entries(placed as Record<string, unknown>)) {
+      const target = chatTargets.get(chat);
+      if (!target || typeof project !== "string" || target in chatProjects) continue;
+      if (projects.some((q) => q.id === project)) chatProjects[target] = project;
+    }
+  }
+  return { projects, chatProjects };
 }
 
 function titleOf(bytes: Buffer): string {

@@ -48,17 +48,17 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 
 ### 3a. Additions from the owner's reference screenshots (2026-10-30)
 
-| Feature                                                                                                                                               | Lands in                                 |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| "Recents" is a folding button (done in 12b); "Pinned" folds the same way                                                                              | 12b / 13a                                |
-| Search icon in the sidebar header and a "Search chats" row                                                                                            | 13a                                      |
-| Copy/Edit/Delete under your messages; edit in place with Cancel and Send; Regenerate on replies                                                       | 13a                                      |
-| Slash menu: typing `/` in an empty composer opens a menu above it (Model ›, Read aloud, Rename chat, New chat; Move to project › once projects exist) | Done (after 12b); Move to project in 13g |
-| Projects: a sidebar section of folders, "Move to project" for chats                                                                                   | **13g** _new_, after 13f                 |
-| Share button in the chat header (export a read-only copy)                                                                                             | 13d (export)                             |
-| Collapsible "Thought for …" reasoning label                                                                                                           | 14b                                      |
-| Reply actions: like, share, more (…)                                                                                                                  | 14b                                      |
-| Composer "Think" toggle (reasoning on/off per send) and microphone dictation                                                                          | 15                                       |
+| Feature                                                                                                                                               | Lands in                                      |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| "Recents" is a folding button (done in 12b); "Pinned" folds the same way                                                                              | 12b / 13a                                     |
+| Search icon in the sidebar header and a "Search chats" row                                                                                            | 13a                                           |
+| Copy/Edit/Delete under your messages; edit in place with Cancel and Send; Regenerate on replies                                                       | 13a                                           |
+| Slash menu: typing `/` in an empty composer opens a menu above it (Model ›, Read aloud, Rename chat, New chat; Move to project › once projects exist) | Done (after 12b); Move to project done in 13g |
+| Projects: a sidebar section of folders, "Move to project" for chats                                                                                   | Done (13g)                                    |
+| Share button in the chat header (export a read-only copy)                                                                                             | 13d (export)                                  |
+| Collapsible "Thought for …" reasoning label                                                                                                           | 14b                                           |
+| Reply actions: like, share, more (…)                                                                                                                  | 14b                                           |
+| Composer "Think" toggle (reasoning on/off per send) and microphone dictation                                                                          | 15                                            |
 
 ## 4. Decisions (settled 2026-10-29)
 
@@ -71,13 +71,13 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 
 ## 5. Progress
 
-| Gate                              | Status                                                     |
-| --------------------------------- | ---------------------------------------------------------- |
-| 1a–6                              | Done (tags `phase-1a` … `phase-6`)                         |
-| 7a, 7b, 8, 11, 14, 9, 10, 12, 12b | Done (tags `phase-<id>`); reports in `docs/phase-reports/` |
-| 13a, D2 + 13b, 13c, 13d, 13f      | Done (tags `phase-13a` … `phase-13d`, `phase-13f`)         |
-| 13e                               | Waiting for real Claude export fixtures                    |
-| 14b onward                        | Not started                                                |
+| Gate                              | Status                                                          |
+| --------------------------------- | --------------------------------------------------------------- |
+| 1a–6                              | Done (tags `phase-1a` … `phase-6`)                              |
+| 7a, 7b, 8, 11, 14, 9, 10, 12, 12b | Done (tags `phase-<id>`); reports in `docs/phase-reports/`      |
+| 13a, D2 + 13b, 13c, 13d, 13f, 13g | Done (tags `phase-13a` … `phase-13d`, `phase-13f`, `phase-13g`) |
+| 13e                               | Waiting for real Claude export fixtures                         |
+| 14b onward                        | Not started                                                     |
 
 ## 6. Phase 7a plan (as approved)
 
