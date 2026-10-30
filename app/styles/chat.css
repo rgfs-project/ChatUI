@@ -810,3 +810,49 @@
   gap: 8px;
   margin-top: 10px;
 }
+
+/* ── Files from replies (Phase 13c) ── */
+.artifact-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.artifact-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 280px;
+  padding: 10px 14px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-suggestion);
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+}
+
+.artifact-card:hover {
+  background: var(--hover);
+}
+
+.artifact-card-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.artifact-card-name {
+  overflow: hidden;
+  font-size: var(--text-ui);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-card-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+}

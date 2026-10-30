@@ -3,6 +3,7 @@
 import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "./fs.ts";
 import { isUuid, type DataPaths } from "./paths.ts";
 import type { StagedProposal } from "./proposals.ts";
+import type { StagedArtifact } from "../artifacts/store.ts";
 
 export type CheckpointState = "running" | "terminal-decided" | "terminal";
 
@@ -17,6 +18,8 @@ export interface CheckpointOutcome {
   tools?: string[];
   /** Staged memory suggestions (contracts §4.3); written only for `completed`. */
   proposals?: StagedProposal[];
+  /** Staged captures (Phase 13c); written only for `completed`. */
+  artifacts?: StagedArtifact[];
 }
 
 export interface GenerationCheckpoint {

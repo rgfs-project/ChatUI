@@ -3,6 +3,7 @@ import { memo, useLayoutEffect, useRef, useState } from "react";
 import type { AttachmentRef } from "@shared/attachments";
 import type { ProposalDto } from "@shared/memories";
 import { ProposalCards, ToolChips } from "./tool-chips";
+import { ArtifactCards } from "./artifact-cards";
 import type { MessageDto } from "@shared/conversations";
 import type { GenerationState } from "@shared/generations";
 import { useRenderProbe } from "../lib/render-probe";
@@ -30,7 +31,7 @@ export const LIVE_LABEL: Record<GenerationState, string> = {
   timed_out: "Timed out",
 };
 
-function CopyButton({ text, label }: { text: string; label: string }) {
+export function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <IconButton
@@ -291,6 +292,7 @@ export const Message = memo(function Message({
           The answer was not generated.
         </p>
       ) : null}
+      <ArtifactCards artifacts={message.artifacts} />
       <ProposalCards proposals={proposals} />
       {status ? (
         <p className={`msg-status status-${message.status ?? ""}`} data-testid="message-status">

@@ -42,6 +42,7 @@ import type { ToolLoop } from "../generations/manager.ts";
 import type { ProviderMessage } from "../providers/types.ts";
 import { MAX_TOOL_ROUNDS, ToolSession } from "../tools/session.ts";
 import type { SearchService } from "./search.ts";
+import type { ArtifactStore } from "../artifacts/store.ts";
 import type { PromptMessage } from "./prompt.ts";
 
 const DAY_MS = 86_400_000;
@@ -82,6 +83,8 @@ export interface SendHooks {
   afterCommit?: () => void | Promise<void>;
   /** After the assistant write, before the proposal write (crash tests, §4.3). */
   afterAssistantWrite?: () => void | Promise<void>;
+  /** After artifacts are created, before they are finalized (INV-40 crash tests). */
+  afterArtifactCapture?: () => void | Promise<void>;
   /** Test hook between the unlocked preflight and the locked recheck. */
   beforeRecheck?: () => void | Promise<void>;
 }
@@ -110,6 +113,8 @@ export interface SendServiceOptions {
   attachments?: AttachmentStore;
   /** `historyImages` is a prompt-relevant preference (§4.1). */
   preferences?: PreferencesStore;
+  /** Captured files (Phase 13c). */
+  artifacts?: ArtifactStore;
   /** Memories and the shared tool loop (Phase 13b, D2). */
   memories?: MemoryStore;
   proposals?: ProposalStore;
@@ -868,13 +873,40 @@ export class SendService {
       execute: (calls) => session.execute(calls),
       used: () => session.used(),
       staged: () => session.staged(),
+      artifacts: () => session.artifacts(),
       previews: () => session.previews(),
       fits: input.fits,
     };
   }
 
-  /** Staged suggestions of a complete reply, under the sidecar lock (after the conversation lock). */
+  /**
+   * After the assistant block (§4.3): suggestions, then captured files keyed
+   * by `(assistantMessageId, captureIndex)`, then their finalization.
+   */
   private async writeProposals(
+    userId: string,
+    conversationId: string,
+    outcome: GenerationOutcome,
+    assistantMessageId?: string,
+  ): Promise<void> {
+    await this.writeSidecar(userId, conversationId, outcome);
+    if (
+      this.o.artifacts &&
+      assistantMessageId &&
+      outcome.state === "completed" &&
+      outcome.artifacts.length > 0
+    ) {
+      const ids = await this.o.artifacts.captureUnlocked(userId, {
+        conversationId,
+        assistantMessageId,
+        staged: outcome.artifacts,
+      });
+      await this.o.hooks?.afterArtifactCapture?.();
+      await this.o.artifacts.finalizeUnlocked(userId, ids);
+    }
+  }
+
+  private async writeSidecar(
     userId: string,
     conversationId: string,
     outcome: GenerationOutcome,
@@ -938,7 +970,7 @@ export class SendService {
           (block) => block.type === "assistant" && block.id === record.assistantMessageId,
         )
       ) {
-        await this.writeProposals(userId, conversationId, outcome);
+        await this.writeProposals(userId, conversationId, outcome, record.assistantMessageId);
         return conversation.revision; // already written
       }
       const blocks: Block[] = [];
@@ -962,7 +994,7 @@ export class SendService {
       );
       await this.o.hooks?.afterAssistantWrite?.();
       // Then the suggestions, idempotently by (generationId, callIndex) (§4.3).
-      await this.writeProposals(userId, conversationId, outcome);
+      await this.writeProposals(userId, conversationId, outcome, record.assistantMessageId);
       await markWritten();
       return written.revision;
     });

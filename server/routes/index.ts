@@ -26,6 +26,12 @@ import {
 } from "./auth.ts";
 import { healthRoute } from "./health.ts";
 import {
+  artifactSourceRoute,
+  deleteArtifactRoute,
+  getArtifactRoute,
+  listArtifactsRoute,
+} from "./artifacts.ts";
+import {
   acceptProposalRoute,
   createMemoryRoute,
   deleteMemoryRoute,
@@ -89,6 +95,10 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(deleteExchangeRoute),
   erase(regenerateRoute),
   erase(searchRoute),
+  erase(listArtifactsRoute),
+  erase(getArtifactRoute),
+  erase(artifactSourceRoute),
+  erase(deleteArtifactRoute),
   erase(listMemoriesRoute),
   erase(createMemoryRoute),
   erase(updateMemoryRoute),

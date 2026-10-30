@@ -48,6 +48,7 @@ const conversation = (provider: string, m: string): ConversationDto => ({
       attachments: [],
       time: null,
       tools: [],
+      artifacts: [],
     },
   ],
 });

@@ -10,6 +10,12 @@ import { isCanonicalUuid } from "../storage/markdown.ts";
 import { MEMORY_BODY_MAX, memoryNameProblem, nameKey, type Memory } from "../storage/memories.ts";
 import type { ProposalStore, ProposalTool, StagedProposal } from "../storage/proposals.ts";
 import { calculate, CalcError, formatNumber } from "./calculate.ts";
+import {
+  ARTIFACT_MAX_BYTES,
+  ARTIFACTS_PER_GENERATION,
+  artifactNameProblem,
+  type StagedArtifact,
+} from "../artifacts/store.ts";
 
 /** OpenAI-compatible function tool. */
 export interface ToolDefinition {
@@ -34,8 +40,8 @@ export interface ToolResult {
 export const MAX_TOOL_ROUNDS = 3;
 export const MAX_CALLS_PER_ROUND = 8;
 export const MAX_CALLS_PER_GENERATION = 16;
-/** Streamed argument bytes per call. */
-export const MAX_ARGUMENT_BYTES = 8_192;
+/** Streamed argument bytes per call: a whole file for `create_file`, bounded by the response cap. */
+export const MAX_ARGUMENT_BYTES = 520 * 1024;
 /** Proposals per generation (contracts §4.3 per-call bounds). */
 export const MAX_PROPOSALS_PER_GENERATION = 8;
 /** Characters of one tool result sent back to the model. */
@@ -93,6 +99,19 @@ export const GENERAL_TOOLS: ToolDefinition[] = [
   ),
 ];
 
+/** Creates a file the user can open from the reply (Phase 13c; captured only if the reply completes). */
+export const FILE_TOOLS: ToolDefinition[] = [
+  fn(
+    "create_file",
+    "Create a text file for the user (code, data, a document). They can open, copy and download it from your reply.",
+    {
+      filename: { type: "string", description: "A file name with an extension, e.g. app.py." },
+      content: { type: "string", description: "The complete file content." },
+    },
+    ["filename", "content"],
+  ),
+];
+
 export const MEMORY_TOOLS: ToolDefinition[] = [
   fn(
     "remember",
@@ -118,7 +137,7 @@ export const MEMORY_TOOLS: ToolDefinition[] = [
 ];
 
 export const TOOL_NAMES = new Set(
-  [...GENERAL_TOOLS, ...MEMORY_TOOLS].map((tool) => tool.function.name),
+  [...GENERAL_TOOLS, ...FILE_TOOLS, ...MEMORY_TOOLS].map((tool) => tool.function.name),
 );
 
 export interface ToolSessionContext {
@@ -172,15 +191,16 @@ export class ToolSession {
   private calls = 0;
   private readonly usedNames: string[] = [];
   private readonly stagedProposals: StagedProposal[] = [];
+  private readonly stagedArtifacts: StagedArtifact[] = [];
 
   /** Every offered definition (for the prompt budget). */
   static definitionsJson(): ToolDefinition[] {
-    return [...GENERAL_TOOLS, ...MEMORY_TOOLS];
+    return [...GENERAL_TOOLS, ...FILE_TOOLS, ...MEMORY_TOOLS];
   }
 
   constructor(context: ToolSessionContext) {
     this.c = context;
-    this.definitions = [...GENERAL_TOOLS, ...MEMORY_TOOLS];
+    this.definitions = [...GENERAL_TOOLS, ...FILE_TOOLS, ...MEMORY_TOOLS];
   }
 
   /** Tool names used by valid calls, in order of first use (saved as chips). */
@@ -190,6 +210,11 @@ export class ToolSession {
 
   staged(): StagedProposal[] {
     return [...this.stagedProposals];
+  }
+
+  /** Files from `create_file`, captured only if the reply completes (INV-40). */
+  artifacts(): StagedArtifact[] {
+    return [...this.stagedArtifacts];
   }
 
   previews(): { tool: string; name: string }[] {
@@ -317,6 +342,29 @@ export class ToolSession {
           if (error instanceof CalcError) return this.invalid(call, `Error: ${error.message}`);
           throw error;
         }
+      }
+      case "create_file": {
+        const args = parseArgs(call.arguments, ["filename", "content"]);
+        const filename = args && stringArg(args, "filename", 100);
+        const content = args?.content;
+        if (
+          !filename ||
+          typeof content !== "string" ||
+          artifactNameProblem(filename) ||
+          Buffer.byteLength(content, "utf8") > ARTIFACT_MAX_BYTES ||
+          this.stagedArtifacts.length >= ARTIFACTS_PER_GENERATION
+        )
+          return this.invalid(call, "Not created: invalid file name, type or size.");
+        this.stagedArtifacts.push({
+          captureIndex: this.stagedArtifacts.length,
+          filename,
+          content,
+          source: "tool",
+        });
+        return this.ok(
+          call,
+          `Created ${filename}. The user can open it from your reply; you need not repeat its content.`,
+        );
       }
       case "remember":
       case "update_memory":

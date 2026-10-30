@@ -25,6 +25,7 @@ import { ChatProvider } from "../chat/chat-context";
 import { ChatView } from "../chat/chat-view";
 import { ConversationOpsProvider } from "../chat/conversation-ops";
 import { OPEN_SEARCH_EVENT } from "../chat/search-events";
+import { OPEN_ARTIFACT_EVENT } from "../chat/artifact-events";
 import { Drawer } from "../chat/drawer";
 import { ReauthDialog } from "../chat/reauth";
 import { RenameDialog } from "../chat/rename-dialog";
@@ -54,6 +55,7 @@ import type { Route } from "./+types/app-layout";
 
 /** Search is its own chunk: the chat page never loads it until it opens (Phase 13a). */
 const SearchDialog = lazy(() => import("../chat/search-dialog"));
+const SourcePanel = lazy(() => import("../chat/source-panel"));
 
 /**
  * Startup dependency graph (Phase 8). Critical, awaited concurrently: the
@@ -225,6 +227,16 @@ function Shell() {
   const client = useQueryClient();
   const [expired, setExpired] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [artifactId, setArtifactId] = useState<string | null>(null);
+  useEffect(() => {
+    const open = (event: Event) => {
+      setArtifactId((event as CustomEvent<{ id: string }>).detail.id);
+    };
+    window.addEventListener(OPEN_ARTIFACT_EVENT, open);
+    return () => {
+      window.removeEventListener(OPEN_ARTIFACT_EVENT, open);
+    };
+  }, []);
   useEffect(() => {
     const open = () => {
       setSearchOpen(true);
@@ -334,6 +346,17 @@ function Shell() {
             <SearchDialog
               onClose={() => {
                 setSearchOpen(false);
+              }}
+            />
+          </Suspense>
+        ) : null}
+        {artifactId ? (
+          <Suspense fallback={null}>
+            <SourcePanel
+              key={artifactId}
+              id={artifactId}
+              onClose={() => {
+                setArtifactId(null);
               }}
             />
           </Suspense>

@@ -144,7 +144,7 @@ interface MockToolCall {
  * mock-tools commands, separated by ";" in the newest user message:
  * `say <text>` (text before the calls), `remember <name>: <content>`,
  * `update <name>: <content>`, `forget <name>`, `calc <expression>`,
- * `search <words>`, `read <conversation id>`, `time`, `bogus` (an unknown tool), `badargs` (invalid
+ * `search <words>`, `read <conversation id>`, `file <name>: <content>`, `time`, `bogus` (an unknown tool), `badargs` (invalid
  * JSON), `loop` (calls calculate on every request that offers tools),
  * `rejectfollow` (the follow-up request with tool results gets a 400).
  */
@@ -174,7 +174,16 @@ export function toolCommands(text: string): { say: string; calls: MockToolCall[]
       calls.push({ name: "calculate", arguments: JSON.stringify({ expression: tail || "1+1" }) });
     else if (head === "search")
       calls.push({ name: "search_chats", arguments: JSON.stringify({ query: tail }) });
-    else if (head === "read")
+    else if (head === "file") {
+      const colon = tail.indexOf(":");
+      calls.push({
+        name: "create_file",
+        arguments: JSON.stringify({
+          filename: tail.slice(0, colon).trim(),
+          content: tail.slice(colon + 1).trim(),
+        }),
+      });
+    } else if (head === "read")
       calls.push({
         name: "read_chat",
         arguments: JSON.stringify({ conversation_id: tail.trim() }),

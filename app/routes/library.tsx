@@ -5,6 +5,7 @@ import {
   AudioLines,
   Download,
   ExternalLink,
+  FileCode2,
   FileText,
   Grid2x2,
   Image as ImageIcon,
@@ -19,7 +20,9 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
+import type { ArtifactDto, ArtifactList } from "@shared/artifacts";
 import type { AttachmentDto, AttachmentList } from "@shared/attachments";
+import { openArtifact } from "../chat/artifact-events";
 import { useChat } from "../chat/chat-context";
 import { contentUrl, formatSize } from "../chat/message-attachments";
 import { ACCEPT } from "../chat/composer-files";
@@ -37,7 +40,7 @@ import { useToast } from "../ui/toast";
 
 export const handle = { kind: "page" };
 
-type Kind = "all" | "images" | "audio" | "documents";
+type Kind = "all" | "images" | "audio" | "documents" | "created";
 type Sort = "newest" | "oldest" | "name" | "size";
 
 const KINDS: { id: Kind; label: string }[] = [
@@ -45,6 +48,7 @@ const KINDS: { id: Kind; label: string }[] = [
   { id: "images", label: "Images" },
   { id: "audio", label: "Audio" },
   { id: "documents", label: "Documents" },
+  { id: "created", label: "From replies" },
 ];
 
 const SORTS: { id: Sort; label: string }[] = [
@@ -59,6 +63,7 @@ const MATCHES: Record<Kind, (file: AttachmentDto) => boolean> = {
   images: (f) => f.kind === "image",
   audio: (f) => f.kind === "audio",
   documents: (f) => f.kind === "text",
+  created: () => false,
 };
 
 const COMPARE: Record<Sort, (a: AttachmentDto, b: AttachmentDto) => number> = {
@@ -237,7 +242,9 @@ export default function Library() {
               {formatSize(files.data.usedBytes)} of {formatSize(files.data.quotaBytes)} used
             </p>
           ) : null}
-          {files.isPending ? (
+          {kind === "created" ? (
+            <CreatedFiles userId={userId} query={query} sort={sort} titles={titles} />
+          ) : files.isPending ? (
             <p className="library-note">Loading files…</p>
           ) : files.isError ? (
             <p className="library-note" role="alert">
@@ -522,5 +529,157 @@ function FileCard({ file, chatTitle }: { file: AttachmentDto; chatTitle: string 
       </div>
       <FileMenu file={file} />
     </li>
+  );
+}
+
+const COMPARE_CREATED: Record<Sort, (a: ArtifactDto, b: ArtifactDto) => number> = {
+  newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
+  oldest: (a, b) => a.createdAt.localeCompare(b.createdAt),
+  name: (a, b) => a.filename.localeCompare(b.filename, undefined, { sensitivity: "base" }),
+  size: (a, b) => b.size - a.size,
+};
+
+/**
+ * Files captured from replies (Phase 13c). They outlive their chat; deleting
+ * one never touches the chat, and a deleted file is never captured again.
+ */
+function CreatedFiles({
+  userId,
+  query,
+  sort,
+  titles,
+}: {
+  userId: string;
+  query: string;
+  sort: Sort;
+  titles: Map<string, string>;
+}) {
+  const { timeFormat } = useUi();
+  const client = useQueryClient();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const created = useQuery({
+    queryKey: qk.artifacts(userId),
+    queryFn: ({ signal }) => apiJson<ArtifactList>("/api/artifacts", { signal }),
+  });
+  const needle = query.trim().toLowerCase();
+  const shown = (created.data?.artifacts ?? [])
+    .filter((a) => needle === "" || a.filename.toLowerCase().includes(needle))
+    .sort(COMPARE_CREATED[sort]);
+  if (created.isPending) return <p className="library-note">Loading files…</p>;
+  if (created.isError)
+    return (
+      <p className="library-note" role="alert">
+        Your files could not be loaded.
+      </p>
+    );
+  if (shown.length === 0)
+    return (
+      <p className="library-note" data-testid="library-empty">
+        {created.data.artifacts.length === 0
+          ? "No files from replies yet. Files a model creates appear here."
+          : "No files match."}
+      </p>
+    );
+  return (
+    <table className="library-table" data-testid="library-created">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th className="col-chat">Chat</th>
+          <th className="col-size">Size</th>
+          <th className="col-date">Created</th>
+          <th>
+            <span className="visually-hidden">Actions</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {shown.map((file) => (
+          <tr key={file.id} data-testid="library-row">
+            <td>
+              <button
+                type="button"
+                className="library-name"
+                onClick={() => {
+                  openArtifact(file.id);
+                }}
+              >
+                <FileCode2 size={18} aria-hidden />
+                <span className="library-name-text">{file.filename}</span>
+              </button>
+            </td>
+            <td className="col-chat">
+              {file.conversationAvailable ? (
+                <Link to={paths.chat(file.conversationId)} className="library-chat">
+                  {titles.get(file.conversationId) ?? "Chat"}
+                </Link>
+              ) : (
+                <span className="library-muted">Chat deleted</span>
+              )}
+            </td>
+            <td className="col-size">{formatSize(file.size)}</td>
+            <td className="col-date">{formatSeparator(file.createdAt, timeFormat)}</td>
+            <td className="col-actions">
+              <Menu
+                label={`Options for ${file.filename}`}
+                align="end"
+                trigger={
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Options for ${file.filename}`}
+                  >
+                    <MoreHorizontal size={18} aria-hidden />
+                  </button>
+                }
+              >
+                <MenuItem
+                  icon={<ExternalLink size={16} aria-hidden />}
+                  onSelect={() => {
+                    openArtifact(file.id);
+                  }}
+                >
+                  Open
+                </MenuItem>
+                <MenuItem
+                  icon={<Download size={16} aria-hidden />}
+                  onSelect={() => {
+                    window.location.assign(`/api/artifacts/${file.id}/source?download=1`);
+                  }}
+                >
+                  Download
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem
+                  icon={<Trash2 size={16} aria-hidden />}
+                  danger
+                  onSelect={() => {
+                    void (async () => {
+                      const yes = await confirm({
+                        title: "Delete this file?",
+                        body: `“${file.filename}” is deleted. Its chat stays as it is.`,
+                        confirmLabel: "Delete",
+                        danger: true,
+                      });
+                      if (!yes) return;
+                      try {
+                        await apiJson(`/api/artifacts/${file.id}`, { method: "DELETE" });
+                        toast("File deleted.");
+                      } catch (error) {
+                        toast(error instanceof Error ? error.message : "Could not delete", "error");
+                      }
+                      await client.invalidateQueries({ queryKey: ["u", userId] });
+                    })();
+                  }}
+                >
+                  Delete
+                </MenuItem>
+              </Menu>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

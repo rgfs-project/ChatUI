@@ -50,6 +50,7 @@ import { AttachmentStore } from "./attachments/store.ts";
 import { ProfileService } from "./profile/service.ts";
 import { ConversationMutations } from "./chat/mutations.ts";
 import { MemoryService } from "./memory/service.ts";
+import { ArtifactStore } from "./artifacts/store.ts";
 import { MemoryStore } from "./storage/memories.ts";
 import { ProposalStore } from "./storage/proposals.ts";
 import { SearchService } from "./chat/search.ts";
@@ -236,6 +237,7 @@ export function createApp(options: AppOptions): ChatUiApp {
   // Memories and proposals (Phase 13b) and search (13a; also a tool, D2).
   const memoryStore = new MemoryStore(paths, locks, now);
   const proposalStore = new ProposalStore(paths, locks);
+  const artifacts = new ArtifactStore(paths, locks, now);
   const memory = new MemoryService({
     memories: memoryStore,
     proposals: proposalStore,
@@ -261,6 +263,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     preferences,
     memories: memoryStore,
     proposals: proposalStore,
+    artifacts,
     search,
     attachmentLimits: {
       maxPerMessage: attachmentConfig.maxPerMessage,
@@ -370,10 +373,13 @@ export function createApp(options: AppOptions): ChatUiApp {
         checkpoints,
         retentionMs: storageConfig.generationRetentionMs,
         proposals: proposalStore,
+        artifacts,
       },
       memoryIntents: (userId) => memory.recover(userId),
       attachments: async (userId) => {
         await attachments.reconcile(userId, await attachmentReferences(userId));
+        // Interrupted captures: artifact directories without metadata (Phase 13c).
+        await artifacts.reconcile(userId);
       },
     });
     await users.rebuildIndex();
@@ -439,6 +445,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     mutations,
     search,
     memory,
+    artifacts,
     profile,
     profileStore,
     profilePhotoPath: (userId) => paths.profilePhoto(userId),

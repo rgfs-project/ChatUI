@@ -15,6 +15,7 @@ export const TOOL_LABELS: Record<string, string> = {
   read_file: "Read a file",
   get_current_time: "Checked the time",
   calculate: "Calculated",
+  create_file: "Created a file",
   remember: "Suggested a memory",
   update_memory: "Suggested a memory update",
   forget_memory: "Suggested forgetting a memory",

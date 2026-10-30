@@ -18,7 +18,17 @@ import {
 } from "../providers/types.ts";
 import type { CheckpointStore, GenerationCheckpoint } from "../storage/checkpoints.ts";
 import type { StagedProposal } from "../storage/proposals.ts";
-import type { ToolCall, ToolDefinition, ToolResult } from "../tools/session.ts";
+import {
+  ARTIFACTS_PER_GENERATION,
+  fencedCaptures,
+  type StagedArtifact,
+} from "../artifacts/store.ts";
+import {
+  MAX_ARGUMENT_BYTES,
+  type ToolCall,
+  type ToolDefinition,
+  type ToolResult,
+} from "../tools/session.ts";
 
 /**
  * The shared tool loop of one generation (D2 amendment to contracts §4.3).
@@ -32,6 +42,7 @@ export interface ToolLoop {
   execute(calls: readonly ToolCall[]): Promise<ToolResult[]>;
   used(): string[];
   staged(): StagedProposal[];
+  artifacts(): StagedArtifact[];
   previews(): { tool: string; name: string }[];
   /** Whether a follow-up request with these messages fits the context budget. */
   fits(messages: ProviderMessage[]): Promise<boolean>;
@@ -56,6 +67,8 @@ export interface GenerationOutcome {
   tools: string[];
   /** Validated and suppressed memory suggestions, written only for a complete reply. */
   proposals: StagedProposal[];
+  /** Files to capture (Phase 13c): `create_file` calls, then `file=` fences; complete replies only. */
+  artifacts: StagedArtifact[];
 }
 
 /**
@@ -466,7 +479,8 @@ export class GenerationManager {
               if (event.id && !call.id) call.id = event.id;
               if (event.name && !call.name) call.name = event.name;
               if (event.arguments) {
-                if (call.args.length + event.arguments.length > 8_192) call.oversized = true;
+                if (call.args.length + event.arguments.length > MAX_ARGUMENT_BYTES)
+                  call.oversized = true;
                 else call.args += event.arguments;
               }
               calls.set(event.index, call);
@@ -566,6 +580,15 @@ export class GenerationManager {
     }
   }
 
+  /** Tool files first, then `file=` fences of the visible text, with consecutive capture indexes. */
+  private captures(generation: Generation): StagedArtifact[] {
+    const fromTools = generation.loop?.artifacts() ?? [];
+    return [...fromTools, ...fencedCaptures(generation.content, fromTools.length)].slice(
+      0,
+      ARTIFACTS_PER_GENERATION,
+    );
+  }
+
   private toolEvent(
     generation: Generation,
     callId: string,
@@ -636,6 +659,7 @@ export class GenerationManager {
             finishedAt: outcome.finishedAt,
             tools: outcome.tools,
             proposals: outcome.proposals,
+            artifacts: outcome.artifacts,
           }
         : null,
     };
@@ -700,6 +724,7 @@ export class GenerationManager {
       tools: generation.loop?.used() ?? [],
       // Staged suggestions count only for a complete reply (contracts §4.3).
       proposals: state === "completed" ? (generation.loop?.staged() ?? []) : [],
+      artifacts: state === "completed" ? this.captures(generation) : [],
     };
     void (async () => {
       let revision: string | null = null;

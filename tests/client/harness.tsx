@@ -62,6 +62,7 @@ export function conversation(overrides: Partial<ConversationDto> = {}): Conversa
         attachments: [],
         time: null,
         tools: [],
+        artifacts: [],
       },
       {
         id: "11111111-0000-4000-8000-000000000002",
@@ -74,6 +75,7 @@ export function conversation(overrides: Partial<ConversationDto> = {}): Conversa
         attachments: [],
         time: null,
         tools: [],
+        artifacts: [],
       },
     ],
     ...overrides,

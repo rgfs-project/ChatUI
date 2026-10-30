@@ -112,3 +112,38 @@ test("hover prefetches one conversation; the click reuses it", async ({ page }) 
   await expect(page.getByText("needle-99", { exact: false })).toBeVisible();
   expect(gets).toHaveLength(1);
 });
+
+test("the source panel (Phase 13c) loads on demand and opens quickly, cold and warm", async ({
+  page,
+}) => {
+  const scripts: string[] = [];
+  page.on("request", (request) => {
+    if (request.resourceType() === "script") scripts.push(new URL(request.url()).pathname);
+  });
+  const panelChunk = manifestChunk("app/chat/source-panel.tsx");
+  await signIn(page);
+  await chooseModel(page, "mock-chat");
+  await send(page, "x\n```txt file=perf.txt\nmeasured\n```");
+  const card = storedReplies(page).last().getByTestId("artifact-card");
+  await expect(card).toBeVisible();
+  expect(scripts).not.toContain(panelChunk);
+  const open = async () => {
+    const started = Date.now();
+    await card.click();
+    await expect(page.getByTestId("source-panel")).toContainText("measured");
+    const ms = Date.now() - started;
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("source-panel")).toHaveCount(0);
+    return ms;
+  };
+  const cold = await open();
+  const warm = await open();
+  expect(scripts).toContain(panelChunk);
+  // Budgets (Phase 9 style): the cold open fetches the chunk, the source and its metadata.
+  expect(cold).toBeLessThan(1_500);
+  expect(warm).toBeLessThan(500);
+  test.info().annotations.push({
+    type: "source-panel",
+    description: `cold ${String(cold)} ms, warm ${String(warm)} ms`,
+  });
+});

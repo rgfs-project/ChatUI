@@ -1,0 +1,70 @@
+## Phase 13c report
+
+- **Plan:** package 13c (inert source artifacts), with `create_file` folded in because D2 is "yes", file cards in replies, and artifacts in the Library.
+
+- **Scope completed:**
+  - **Capture convention** (ARCHITECTURE "Source artifacts"):
+    - `create_file` calls first, then fenced blocks marked `file=<name>`, at most 8 per reply.
+    - Validated display names with a supported text extension.
+    - 512 KB per file and 50 MB per user.
+    - The tool loop's per-call argument cap was raised to 520 KB so a whole file fits; other tools still bound their own arguments.
+  - **Store** (`server/artifacts/store.ts`):
+    - `artifacts/<id>/{blob,meta.json}` with a deterministic server-minted id per `(assistantMessageId, captureIndex)`.
+    - Bytes, then unfinalized metadata, then finalization.
+    - Only finalized artifacts are listed, served or deleted.
+    - Metadata-less directories are removed at startup.
+  - **Terminal sequence and recovery:**
+    - Captures are staged in the `terminal-decided` checkpoint for `completed` replies only.
+    - They are written after the assistant block and proposals, under the conversation lock, then finalized before the `terminal` checkpoint.
+    - Recovery repeats this only from a decided checkpoint; nothing scans old replies.
+  - **API** (`server/routes/artifacts.ts`):
+    - List and metadata (with `conversationAvailable`).
+    - Source as `text/plain` with `nosniff`, a sandbox CSP and an RFC 6266 disposition (`?download=1` for attachment).
+    - Delete.
+    - Another account's id is a 404.
+  - **Browser:**
+    - File cards under replies.
+    - A lazy source panel (own chunk and CSS; highlighted text, Copy, Download, link to the chat or "Its chat was deleted").
+    - Focus returns to the opener; 44 × 44 controls on phones.
+    - Library → "From replies" lists, opens, downloads and deletes captured files.
+    - Message DTOs carry each reply's `artifacts`.
+  - **Import representation for 13d** documented (re-validated, new ids from the importing user and capture key, no overwrite).
+- **Required tests:**
+  - `tests/server/artifacts.test.ts` (7):
+    - **Convention fixtures:** order, quoted names, nested fences, unclosed, invalid names and types, size.
+    - **Inert serving:** an XSS payload stays text; source and download headers.
+    - **Ownership:** 404 for metadata, source and delete.
+    - **`create_file`:** captured, with a chip and an invalid name rejected.
+    - **Lifecycle:** files outlive their chat with a dead backlink; a deleted file stays deleted across restarts.
+    - **Non-resurrection:**
+      - A crash after creation and before finalization leaves the file unlisted, then finalized once at restart.
+      - Once deleted and its checkpoint evicted, it stays deleted.
+      - A crash before creation creates the file exactly once over two restarts.
+    - A decided `failed` outcome with staged captures creates nothing; metadata-less directories are cleaned.
+  - `tests/e2e/source-artifacts.spec.ts` (2):
+    - Card → panel by keyboard. The source is shown, nothing rendered or run (no element, title change or dialog). Download link. Escape closes and returns focus.
+    - Library "From replies" opens and deletes.
+    - `create_file` chip and card.
+  - `tests/e2e/mobile.spec.ts`: the panel fills a 390 px phone with 44 × 44 controls and no horizontal scroll.
+  - `tests/e2e/perf.spec.ts`: the panel chunk is not loaded at chat start. Cold open under 1.5 s and warm under 0.5 s, recorded as an annotation.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (500)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (81/81)
+  - `test:e2e`: PASS (71/71)
+  - `verify:compose`: CI
+- **Budget:** re-recorded:
+  - chat JS 245,681 → 246,946 B (cards, open event)
+  - CSS 8,685 → 8,760 B
+
+  The source panel is a separate chunk.
+
+- **Invariants:** INV-40 and INV-41 implemented; INV-39 now complete (artifacts added).
+- **Dependencies:** none new.
+- **Deviations / limitations:**
+  - Executing or previewing HTML/SVG remains Phase 19 (optional) and is not enabled.
+  - Captured files count against their own 50 MB cap, not the upload quota.
+  - The fence convention is ChatUI's own (`file=` in the info string); models must be prompted or use `create_file`.
+- **Commit/tag:** `feat(phase-13c): inert generated source artifacts`, tag `phase-13c`, pushed to `main`.

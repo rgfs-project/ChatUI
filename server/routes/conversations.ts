@@ -76,6 +76,15 @@ export async function toConversationDto(
           : [],
       time: block.type === "user" || block.type === "assistant" ? (block.time ?? null) : null,
       tools: block.type === "assistant" ? (block.tools ?? []) : [],
+      artifacts:
+        block.type === "assistant"
+          ? (await services.artifacts.forMessage(userId, block.id)).map((a) => ({
+              id: a.id,
+              filename: a.filename,
+              mediaType: a.mediaType,
+              size: a.size,
+            }))
+          : [],
     });
     pendingReasoning = null;
   }

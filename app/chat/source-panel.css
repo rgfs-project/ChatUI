@@ -1,0 +1,80 @@
+/* Source panel (Phase 13c): a lazy chunk with its own styles. */
+.dialog.source-panel {
+  inset: 0 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100vw);
+  height: 100dvh;
+  max-height: none;
+  padding: 0;
+  border-radius: 0;
+  transform: none;
+}
+
+.source-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 12px 20px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.source-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: var(--weight-semibold);
+}
+
+.source-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-meta {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: normal;
+}
+
+.source-body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px 32px;
+  overflow: auto;
+}
+
+.source-body .code-block {
+  margin: 0;
+}
+
+.source-note {
+  color: var(--text-secondary);
+  font-size: var(--text-ui);
+}
+
+html[data-phone] .dialog.source-panel {
+  width: 100vw;
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Phone tap targets: 44 × 44 for every control in the head. */
+html[data-phone] .source-head .icon-button,
+html[data-phone] .source-head button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html[data-phone] .source-meta a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.dialog.source-panel:focus-visible {
+  outline: none;
+}

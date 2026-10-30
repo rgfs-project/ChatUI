@@ -20,6 +20,9 @@ export const qk = {
   search: (userId: string, query: string) => ["u", userId, "search", query] as const,
   /** The user's uploaded files (Phase 12); invalidated by uploads and deletes. */
   attachments: (userId: string) => ["u", userId, "attachments"] as const,
+  /** Captured files (Phase 13c) and one file's metadata/source; never dehydrated. */
+  artifacts: (userId: string) => ["u", userId, "artifacts"] as const,
+  artifact: (userId: string, id: string) => ["u", userId, "artifacts", id] as const,
   /** Approved memories (Phase 13b); never dehydrated. */
   memories: (userId: string) => ["u", userId, "memories"] as const,
   /** Live generation state written by the SSE observer; never dehydrated. */
@@ -38,6 +41,7 @@ export type Resource =
   | "search"
   | "attachments"
   | "memories"
+  | "artifacts"
   | "generation";
 
 /** The resource a key names, or undefined for keys outside the factory. */
@@ -56,6 +60,7 @@ export function resourceOf(key: readonly unknown[]): Resource | undefined {
       "search",
       "attachments",
       "memories",
+      "artifacts",
       "generation",
     ].includes(name)
     ? (name as Resource)

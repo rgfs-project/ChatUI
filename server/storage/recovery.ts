@@ -4,6 +4,7 @@ import type { ChatIndex, IndexLogger } from "./chat-index.ts";
 import { cleanupTempFiles, ensureDir, readOrNull } from "./fs.ts";
 import type { CheckpointOutcome, CheckpointStore } from "./checkpoints.ts";
 import type { ProposalStore, StagedProposal } from "./proposals.ts";
+import type { ArtifactStore, StagedArtifact } from "../artifacts/store.ts";
 import type { ConversationStore } from "./conversations.ts";
 import { normalizeBody, type AssistantStatus, type Block } from "./markdown.ts";
 import { sha256Hex, type OperationRecord, type OperationStore } from "./operations.ts";
@@ -139,6 +140,7 @@ export async function recoverStorage(options: {
     checkpoints: CheckpointStore;
     retentionMs: number;
     proposals?: ProposalStore;
+    artifacts?: ArtifactStore;
   };
   /** Step 6: memory acceptance intents (Phase 13b). */
   memoryIntents?: (userId: string) => Promise<number>;
@@ -216,6 +218,9 @@ async function writeReplyOnce(
     /** Written after the assistant, idempotently, for a complete reply (§4.3). */
     proposals?: StagedProposal[];
     proposalStore?: ProposalStore;
+    /** Staged captures of a decided complete reply (Phase 13c). */
+    artifacts?: StagedArtifact[];
+    artifactStore?: ArtifactStore;
   },
 ): Promise<"written" | "exists" | "missing" | "malformed"> {
   return store.withLock(input.userId, input.conversationId, async () => {
@@ -224,12 +229,23 @@ async function writeReplyOnce(
     if (read.kind === "malformed") return "malformed";
     const model = read.conversation.model;
     const writeProposals = async () => {
+      if (input.status !== "complete") return;
       const proposals = input.proposals ?? [];
       const sidecar = input.proposalStore;
-      if (!sidecar || input.status !== "complete" || proposals.length === 0) return;
-      await sidecar.withLock(input.userId, input.conversationId, () =>
-        sidecar.addStagedUnlocked(input.userId, input.conversationId, proposals),
-      );
+      if (sidecar && proposals.length > 0)
+        await sidecar.withLock(input.userId, input.conversationId, () =>
+          sidecar.addStagedUnlocked(input.userId, input.conversationId, proposals),
+        );
+      // Keyed captures: an existing one is kept, a missing one created, then finalized (INV-40).
+      const artifacts = input.artifactStore;
+      if (artifacts && (input.artifacts?.length ?? 0) > 0) {
+        const ids = await artifacts.captureUnlocked(input.userId, {
+          conversationId: input.conversationId,
+          assistantMessageId: input.assistantMessageId,
+          staged: input.artifacts ?? [],
+        });
+        await artifacts.finalizeUnlocked(input.userId, ids);
+      }
     };
     if (model.blocks.some((b) => b.type === "assistant" && b.id === input.assistantMessageId)) {
       await writeProposals();
@@ -286,6 +302,8 @@ export async function recoverGenerations(options: {
   now: Date;
   /** Proposal sidecars (Phase 13b): staged suggestions of decided complete replies. */
   proposals?: ProposalStore;
+  /** Captured files (Phase 13c). */
+  artifacts?: ArtifactStore;
 }): Promise<GenerationRecoveryReport> {
   const { store, operations, checkpoints, logger, now } = options;
   const report: GenerationRecoveryReport = {
@@ -332,6 +350,8 @@ export async function recoverGenerations(options: {
             tools: decided.tools ?? [],
             proposals: decided.state === "completed" ? (decided.proposals ?? []) : [],
             ...(options.proposals ? { proposalStore: options.proposals } : {}),
+            artifacts: decided.state === "completed" ? (decided.artifacts ?? []) : [],
+            ...(options.artifacts ? { artifactStore: options.artifacts } : {}),
           }
         : {}),
     });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { artifactRefSchema } from "./artifacts";
 import { proposalDtoSchema } from "./memories";
 import { attachmentRefSchema } from "./attachments";
 
@@ -34,6 +35,8 @@ export const messageDtoSchema = z.strictObject({
   time: z.string().nullable(),
   /** Assistant only: tools the reply used, as chips (D2). */
   tools: z.array(z.string()),
+  /** Assistant only: files captured from the reply (Phase 13c). */
+  artifacts: z.array(artifactRefSchema),
 });
 export type MessageDto = z.infer<typeof messageDtoSchema>;
 

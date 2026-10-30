@@ -174,6 +174,24 @@ test.describe("phone (390 × 844)", () => {
     const box = await menu.boundingBox();
     expect(box && box.x >= 0 && box.x + box.width <= 390 && box.y >= 0).toBe(true);
   });
+
+  test("a file from a reply opens full width with 44 × 44 controls", async ({ page }) => {
+    await signIn(page);
+    await page.getByTestId("composer-menu").tap();
+    await page.getByRole("menuitemradio", { name: /^mock-chat(\s|$)/ }).tap();
+    await page.locator("#message").fill("x\n```txt file=phone.txt\nhello phone\n```");
+    await page.getByRole("button", { name: "Send" }).tap();
+    await page.waitForURL(/\/chat\/[0-9a-f-]{36}$/);
+    await page.getByTestId("artifact-card").last().tap();
+    const panel = page.getByTestId("source-panel");
+    await expect(panel).toContainText("hello phone");
+    const box = await panel.boundingBox();
+    expect(box?.width).toBe(390);
+    expect(await smallTargets(page, ".source-head")).toEqual([]);
+    expect(await noHorizontalScroll(page)).toBe(true);
+    await panel.getByRole("button", { name: "Close" }).tap();
+    await expect(panel).toHaveCount(0);
+  });
 });
 
 test.describe("sideways phone (844 × 390)", () => {
