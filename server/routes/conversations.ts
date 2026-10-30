@@ -76,6 +76,7 @@ export async function toConversationDto(
           : [],
       time: block.type === "user" || block.type === "assistant" ? (block.time ?? null) : null,
       tools: block.type === "assistant" ? (block.tools ?? []) : [],
+      thoughtMs: block.type === "assistant" ? (block.thought ?? null) : null,
       artifacts:
         block.type === "assistant"
           ? (await services.artifacts.forMessage(userId, block.id)).map((a) => ({

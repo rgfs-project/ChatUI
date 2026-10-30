@@ -56,8 +56,8 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 | Slash menu: typing `/` in an empty composer opens a menu above it (Model ›, Read aloud, Rename chat, New chat; Move to project › once projects exist) | Done (after 12b); Move to project done in 13g |
 | Projects: a sidebar section of folders, "Move to project" for chats                                                                                   | Done (13g)                                    |
 | Share button in the chat header (export a read-only copy)                                                                                             | 13d (export)                                  |
-| Collapsible "Thought for …" reasoning label                                                                                                           | 14b                                           |
-| Reply actions: like, share, more (…)                                                                                                                  | 14b                                           |
+| Collapsible "Thought for …" reasoning label                                                                                                           | Done (14b)                                    |
+| Reply actions: like, share, more (…)                                                                                                                  | Done (14b)                                    |
 | Composer "Think" toggle (reasoning on/off per send) and microphone dictation                                                                          | 15                                            |
 
 ## 4. Decisions (settled 2026-10-29)

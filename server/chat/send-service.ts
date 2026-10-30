@@ -1010,6 +1010,7 @@ export class SendService {
         provider: providerId,
         model,
         time: outcome.finishedAt,
+        ...(outcome.thoughtMs !== null ? { thought: Math.round(outcome.thoughtMs) } : {}),
         ...(outcome.tools.length > 0 ? { tools: outcome.tools.slice(0, 16) } : {}),
         body: normalizeBody(outcome.content),
       });

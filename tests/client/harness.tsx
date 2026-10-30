@@ -64,6 +64,7 @@ export function conversation(overrides: Partial<ConversationDto> = {}): Conversa
         time: null,
         tools: [],
         artifacts: [],
+        thoughtMs: null,
       },
       {
         id: "11111111-0000-4000-8000-000000000002",
@@ -77,6 +78,7 @@ export function conversation(overrides: Partial<ConversationDto> = {}): Conversa
         time: null,
         tools: [],
         artifacts: [],
+        thoughtMs: null,
       },
     ],
     ...overrides,
@@ -96,6 +98,8 @@ export function seededClient(result?: ConversationResult): QueryClient {
     imageMaxEdge: null,
     projects: [],
     chatProjects: {},
+    uiBlocks: null,
+    feedback: {},
   });
   client.setQueryData(qk.conversations(USER.id), [
     { id: CONV, title: "Seeded", createdAt: "", updatedAt: "", messageCount: 2, malformed: false },
@@ -156,6 +160,25 @@ export function chatApp(client: QueryClient) {
       </Providers>
     );
   };
+}
+
+/** Renders `node` inside the chat providers (for single components such as a message). */
+export function inChat(client: QueryClient, node: ReactNode) {
+  const Stub = createRoutesStub([
+    {
+      path: "/",
+      Component: () => (
+        <ChatProvider user={USER} conversationId={null}>
+          <ConversationOpsProvider>{node}</ConversationOpsProvider>
+        </ChatProvider>
+      ),
+    },
+  ]);
+  return (
+    <Providers client={client}>
+      <Stub initialEntries={["/"]} />
+    </Providers>
+  );
 }
 
 /** EventSource double: tests push SSE events by name. */

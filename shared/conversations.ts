@@ -37,6 +37,8 @@ export const messageDtoSchema = z.strictObject({
   tools: z.array(z.string()),
   /** Assistant only: files captured from the reply (Phase 13c). */
   artifacts: z.array(artifactRefSchema),
+  /** Assistant only: milliseconds of reasoning before the answer (Phase 14b). */
+  thoughtMs: z.number().int().nonnegative().nullable(),
 });
 export type MessageDto = z.infer<typeof messageDtoSchema>;
 

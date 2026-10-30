@@ -24,6 +24,8 @@ export interface ConversationOps {
   /** Remove one exchange (asks first). */
   deleteExchange: (messageId: string) => Promise<boolean>;
   togglePin: (conversationId: string) => Promise<void>;
+  /** Thumbs up/down on a reply, or null to clear it (Phase 14b). */
+  setFeedback: (messageId: string, value: "up" | "down" | null) => Promise<void>;
   /** Save (accept) or dismiss (reject) a memory suggestion (Phase 13b, INV-37). */
   decideProposal: (proposalId: string, accept: boolean) => Promise<void>;
 }
@@ -150,6 +152,32 @@ export function ConversationOpsProvider({ children }: { children: ReactNode }) {
           fail(error, "The message could not be deleted");
           await refresh(conversation.id);
           return false;
+        }
+      },
+      setFeedback: async (messageId, value) => {
+        const { chat: c, client } = latest.current;
+        const conversation = current();
+        if (!conversation) return;
+        const key = qk.preferences(c.userId);
+        const before = client.getQueryData<PreferencesDto>(key);
+        if (before) {
+          const feedback = Object.fromEntries(
+            Object.entries(before.feedback).filter(([id]) => id !== messageId),
+          );
+          if (value) feedback[messageId] = value;
+          client.setQueryData(key, { ...before, feedback });
+        }
+        try {
+          client.setQueryData(
+            key,
+            await apiJson<PreferencesDto>(
+              `/api/conversations/${conversation.id}/messages/${messageId}/feedback`,
+              { method: "PUT", json: { value } },
+            ),
+          );
+        } catch (error) {
+          if (before) client.setQueryData(key, before);
+          fail(error, "Could not save the feedback");
         }
       },
       decideProposal: async (proposalId, accept) => {

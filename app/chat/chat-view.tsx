@@ -1,5 +1,7 @@
 import { ArrowDown, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { preferencesQuery } from "../lib/query/queries";
 import { Link, useNavigation } from "react-router";
 import type { MessageDto } from "@shared/conversations";
 import { useHydrated } from "../lib/hydrated";
@@ -14,6 +16,7 @@ import { Composer, useAddFiles } from "./composer";
 import { Header } from "./header";
 import { NoticeBanner } from "./notice";
 import { LiveReply } from "./live-reply";
+import { UiBlocksContext } from "./ui/context";
 import { UserBubble } from "./message";
 import { draftKey } from "./drafts";
 import { ViewerProvider, type ViewerImage } from "./viewer";
@@ -83,6 +86,11 @@ export function ChatView() {
   const chat = useChat();
   const { timeFormat } = useUi();
   const hydrated = useHydrated();
+  // Interactive blocks (Phase 14b): one stable value per setting, so messages don't re-render.
+  const uiEnabled =
+    useQuery({ ...preferencesQuery(chat.userId), select: (p) => p.uiBlocks !== false }).data ??
+    true;
+  const uiBlocks = useMemo(() => ({ enabled: uiEnabled, streaming: false }), [uiEnabled]);
   const { result, conversationId, pending } = chat;
   const conversation = result?.ok ? result.conversation : null;
   const messages = conversation?.messages ?? NO_MESSAGES;
@@ -209,11 +217,13 @@ export function ChatView() {
                 void chat.checkPending();
               }}
             >
-              <Transcript
-                messages={messages}
-                timeFormat={timeFormat}
-                proposals={conversation?.proposals}
-              />
+              <UiBlocksContext.Provider value={uiBlocks}>
+                <Transcript
+                  messages={messages}
+                  timeFormat={timeFormat}
+                  proposals={conversation?.proposals}
+                />
+              </UiBlocksContext.Provider>
             </AreaBoundary>
             {showPending ? (
               <UserBubble

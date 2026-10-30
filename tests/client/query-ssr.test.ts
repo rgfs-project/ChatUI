@@ -64,6 +64,8 @@ function services(delayMs = 0) {
           imageMaxEdge: null,
           projects: [],
           chatProjects: {},
+          uiBlocks: null,
+          feedback: {},
         };
       },
       models: async () => {

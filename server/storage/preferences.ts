@@ -17,6 +17,10 @@ export interface Preferences {
   historyImages: "include" | "omit" | null;
   /** Client-side image shrink edge in pixels (Phase 12); 0 = never shrink. */
   imageMaxEdge: number | null;
+  /** Render ```ui blocks (Phase 14b); null = default (on). */
+  uiBlocks: boolean | null;
+  /** Feedback on replies (Phase 14b): assistant message id → thumbs up/down, newest last. */
+  feedback: Record<string, "up" | "down">;
   /** Projects (Phase 13g): named folders, in display order. */
   projects: Project[];
   /** Conversation id → project id (a chat is in at most one project). */
@@ -30,6 +34,7 @@ export interface Project {
 }
 
 export const MAX_PROJECTS = 100;
+export const MAX_FEEDBACK = 2_000;
 export const PROJECT_NAME_MAX = 60;
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -39,6 +44,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   defaultModel: null,
   historyImages: null,
   imageMaxEdge: null,
+  uiBlocks: null,
+  feedback: {},
   projects: [],
   chatProjects: {},
 };
@@ -56,6 +63,8 @@ function sanitize(raw: unknown): { prefs: Preferences; extra: Record<string, unk
     imageMaxEdge,
     projects,
     chatProjects,
+    uiBlocks,
+    feedback,
     ...extra
   } = r;
   const validProjects = Array.isArray(projects)
@@ -85,6 +94,18 @@ function sanitize(raw: unknown): { prefs: Preferences; extra: Record<string, unk
         typeof imageMaxEdge === "number" && Number.isInteger(imageMaxEdge) && imageMaxEdge >= 0
           ? imageMaxEdge
           : null,
+      uiBlocks: typeof uiBlocks === "boolean" ? uiBlocks : null,
+      feedback:
+        typeof feedback === "object" && feedback !== null && !Array.isArray(feedback)
+          ? Object.fromEntries(
+              Object.entries(feedback as Record<string, unknown>)
+                .filter(
+                  (e): e is [string, "up" | "down"] =>
+                    isUuid(e[0]) && (e[1] === "up" || e[1] === "down"),
+                )
+                .slice(-MAX_FEEDBACK),
+            )
+          : {},
       projects: validProjects,
       chatProjects:
         typeof chatProjects === "object" && chatProjects !== null && !Array.isArray(chatProjects)

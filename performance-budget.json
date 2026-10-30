@@ -3,7 +3,7 @@
   "tolerance": 0.1,
   "routes": {
     "chat": {
-      "js": 249733,
+      "js": 251076,
       "css": 9062
     },
     "login": {

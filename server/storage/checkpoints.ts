@@ -20,6 +20,7 @@ export interface CheckpointOutcome {
   proposals?: StagedProposal[];
   /** Staged captures (Phase 13c); written only for `completed`. */
   artifacts?: StagedArtifact[];
+  thoughtMs?: number | null;
 }
 
 export interface GenerationCheckpoint {

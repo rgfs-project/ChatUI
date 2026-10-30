@@ -1,5 +1,12 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { PreferencesDto } from "@shared/preferences";
+import { useChat } from "../chat/chat-context";
+import { apiJson } from "../lib/api";
+import { qk } from "../lib/query/keys";
+import { preferencesQuery } from "../lib/query/queries";
+import { useToast } from "../ui/toast";
 import { Monitor, Moon, Sun } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ACCENTS,
   CODE_SIZES,
@@ -170,6 +177,51 @@ function ReduceMotion() {
   );
 }
 
+/** Interactive blocks (Phase 14b): render ```ui blocks, or show them as code. */
+function InteractiveBlocks() {
+  const { userId } = useChat();
+  const client = useQueryClient();
+  const toast = useToast();
+  const prefs = useQuery(preferencesQuery(userId)).data;
+  // Query updates reach components after a tick; the switch shows the user's
+  // choice at once (a controlled input would otherwise snap back) until saved.
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const enabled = choice ?? prefs?.uiBlocks !== false;
+  return (
+    <Row
+      label="Interactive blocks"
+      labelFor="ui-blocks"
+      hint="Cards, tabs, charts and quizzes in replies. Off shows them as code."
+    >
+      <input
+        id="ui-blocks"
+        type="checkbox"
+        role="switch"
+        className="switch"
+        checked={enabled}
+        onChange={(event) => {
+          const uiBlocks = event.target.checked;
+          setChoice(uiBlocks);
+          const key = qk.preferences(userId);
+          void apiJson<PreferencesDto>("/api/preferences", {
+            method: "PATCH",
+            json: { uiBlocks },
+          }).then(
+            (updated) => {
+              client.setQueryData(key, updated);
+              setChoice(null);
+            },
+            (error: unknown) => {
+              setChoice(null);
+              toast(error instanceof Error ? error.message : "Could not save", "error");
+            },
+          );
+        }}
+      />
+    </Row>
+  );
+}
+
 export const appearanceRows: SettingsRow[] = [
   {
     id: "theme",
@@ -208,5 +260,11 @@ export const appearanceRows: SettingsRow[] = [
     label: "Reduce motion",
     keywords: "animation transition accessibility",
     render: () => <ReduceMotion />,
+  },
+  {
+    id: "ui-blocks",
+    label: "Interactive blocks",
+    keywords: "intelligent ui cards tabs charts quiz blocks",
+    render: () => <InteractiveBlocks />,
   },
 ];

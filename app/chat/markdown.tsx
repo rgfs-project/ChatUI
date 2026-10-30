@@ -3,6 +3,8 @@ import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markd
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { CodeBlock } from "./render/code";
+import { lazyModule, useLazy } from "./render/lazy";
+import { useUiBlocks } from "./ui/context";
 import { DisplayMath, InlineMath, normalizeMath } from "./render/math";
 import { TableBlock } from "./render/table";
 
@@ -30,6 +32,18 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
+/** The UI block renderer: a separate chunk, loaded when a reply has a ```ui block. */
+const uiBlocksModule = lazyModule(() => import("./ui/blocks"));
+
+/** A ```ui block (Phase 14b): rendered when enabled and readable, otherwise its source as code. */
+function UiFence({ source }: { source: string }) {
+  const { enabled, streaming } = useUiBlocks();
+  const blocks = useLazy(uiBlocksModule, enabled);
+  if (!enabled || !blocks?.parseUiBlock(source, !streaming).ok)
+    return <CodeBlock language="ui" source={source} />;
+  return <blocks.UiBlock source={source} streaming={streaming} />;
+}
+
 const components: Components = {
   pre({ children }) {
     // Block code: <pre><code class="language-x">…</code></pre>; display math
@@ -40,6 +54,7 @@ const components: Components = {
     const source = textOf(props?.children ?? children).replace(/\n$/, "");
     if (className.includes("math-display")) return <DisplayMath tex={source} />;
     const language = /language-([\w+#.-]+)/.exec(className)?.[1] ?? null;
+    if (language === "ui") return <UiFence source={source} />;
     return <CodeBlock language={language} source={source} />;
   },
   code({ children, className }) {

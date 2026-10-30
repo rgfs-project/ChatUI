@@ -220,6 +220,7 @@ async function writeReplyOnce(
     reasoning: string;
     time: string;
     tools?: string[];
+    thought?: number | null;
     /** Written after the assistant, idempotently, for a complete reply (§4.3). */
     proposals?: StagedProposal[];
     proposalStore?: ProposalStore;
@@ -267,6 +268,7 @@ async function writeReplyOnce(
       ...(input.providerId ? { provider: input.providerId } : {}),
       ...(input.model ? { model: input.model } : {}),
       time: input.time,
+      ...(typeof input.thought === "number" ? { thought: Math.round(input.thought) } : {}),
       ...(input.tools && input.tools.length > 0 ? { tools: input.tools.slice(0, 16) } : {}),
       body: normalizeBody(input.content),
     });
@@ -354,6 +356,7 @@ export async function recoverGenerations(options: {
       ...(decided
         ? {
             tools: decided.tools ?? [],
+            thought: decided.thoughtMs ?? null,
             proposals: decided.state === "completed" ? (decided.proposals ?? []) : [],
             ...(options.proposals ? { proposalStore: options.proposals } : {}),
             artifacts:

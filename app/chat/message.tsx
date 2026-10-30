@@ -1,4 +1,22 @@
-import { Check, Copy, Pencil, RefreshCw, Square, Trash2, Volume2 } from "lucide-react";
+import {
+  Check,
+  Copy,
+  FileText,
+  MoreHorizontal,
+  Pencil,
+  RefreshCw,
+  Share,
+  Square,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+  Volume2,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { preferencesQuery } from "../lib/query/queries";
+import { Menu, MenuItem, MenuLabel } from "../ui/menu";
+import { useToast } from "../ui/toast";
+import { useChat } from "./chat-context";
 import { memo, useLayoutEffect, useRef, useState } from "react";
 import type { AttachmentRef } from "@shared/attachments";
 import type { ProposalDto } from "@shared/memories";
@@ -71,10 +89,20 @@ function ReadAloudButton({ id, text }: { id: string; text: string }) {
   );
 }
 
-export function Reasoning({ text }: { text: string }) {
+/** "Thought for 12s" from a stored duration (Phase 14b). */
+export function thoughtLabel(ms: number | null): string {
+  if (ms === null) return "Thought";
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 1) return "Thought for a moment";
+  if (seconds < 60) return `Thought for ${String(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `Thought for ${String(minutes)}m ${String(seconds % 60)}s`;
+}
+
+export function Reasoning({ text, label = "Thought" }: { text: string; label?: string }) {
   return (
     <details className="reasoning" data-testid="reasoning">
-      <summary>Reasoning</summary>
+      <summary>{label}</summary>
       <div className="reasoning-body selectable">{text}</div>
     </details>
   );
@@ -250,6 +278,101 @@ export function UserBubble({
   );
 }
 
+/** Thumbs up/down (Phase 14b); kept with the preferences. */
+function FeedbackButtons({ messageId }: { messageId: string }) {
+  const ops = useConversationOps();
+  const { userId } = useChat();
+  const value = useQuery({
+    ...preferencesQuery(userId),
+    select: (p) => p.feedback[messageId] ?? null,
+  }).data;
+  return (
+    <>
+      <IconButton
+        label="Good response"
+        className="msg-action"
+        aria-pressed={value === "up"}
+        onClick={() => {
+          void ops.setFeedback(messageId, value === "up" ? null : "up");
+        }}
+      >
+        <ThumbsUp size={16} aria-hidden fill={value === "up" ? "currentColor" : "none"} />
+      </IconButton>
+      <IconButton
+        label="Bad response"
+        className="msg-action"
+        aria-pressed={value === "down"}
+        onClick={() => {
+          void ops.setFeedback(messageId, value === "down" ? null : "down");
+        }}
+      >
+        <ThumbsDown size={16} aria-hidden fill={value === "down" ? "currentColor" : "none"} />
+      </IconButton>
+    </>
+  );
+}
+
+/** Shares the reply's text with the system share sheet, or copies it. */
+function ShareButton({ text }: { text: string }) {
+  const toast = useToast();
+  return (
+    <IconButton
+      label="Share reply"
+      className="msg-action"
+      onClick={() => {
+        if (typeof navigator.share === "function") {
+          void navigator.share({ text }).catch(() => undefined);
+          return;
+        }
+        void copyText(text).then((copied) => {
+          toast(copied ? "Reply copied." : "Could not copy the reply", copied ? "info" : "error");
+        });
+      }}
+    >
+      <Share size={16} aria-hidden />
+    </IconButton>
+  );
+}
+
+/** Details and less common actions for a reply. */
+function MoreMenu({ message }: { message: MessageDto }) {
+  const toast = useToast();
+  return (
+    <Menu
+      label="More actions"
+      align="start"
+      trigger={
+        <button type="button" className="icon-button msg-action" aria-label="More actions">
+          <MoreHorizontal size={16} aria-hidden />
+        </button>
+      }
+    >
+      {message.model ? <MenuLabel>Answered by {message.model}</MenuLabel> : null}
+      <MenuItem
+        icon={<FileText size={16} aria-hidden />}
+        onSelect={() => {
+          void copyText(plainText(message.content)).then((copied) => {
+            toast(copied ? "Copied as plain text." : "Could not copy", copied ? "info" : "error");
+          });
+        }}
+      >
+        Copy as plain text
+      </MenuItem>
+    </Menu>
+  );
+}
+
+/** Markdown → readable plain text (markers removed, links as their text). */
+export function plainText(markdown: string): string {
+  return markdown
+    .replace(/^```[^\n]*\n?/gm, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, "$1$2")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
 const NO_PROPOSALS: readonly ProposalDto[] = [];
 
 /** A stored message. Memoized: streaming another message never re-renders it. */
@@ -284,7 +407,9 @@ export const Message = memo(function Message({
   const status = message.status ? STATUS_LABEL[message.status] : "";
   return (
     <div className="msg msg-assistant" data-testid="message-assistant" data-message-id={message.id}>
-      {message.reasoning ? <Reasoning text={message.reasoning} /> : null}
+      {message.reasoning ? (
+        <Reasoning text={message.reasoning} label={thoughtLabel(message.thoughtMs)} />
+      ) : null}
       <ToolChips names={message.tools} />
       {message.content ? <Markdown>{message.content}</Markdown> : null}
       {message.status === "complete" && !message.content && proposals.length > 0 ? (
@@ -305,8 +430,11 @@ export const Message = memo(function Message({
       {message.content ? (
         <div className="msg-actions">
           <CopyButton text={message.content} label="Copy reply" />
+          <FeedbackButtons messageId={message.id} />
+          <ShareButton text={message.content} />
           <ReadAloudButton id={message.id} text={message.content} />
           {turnUserId ? <RegenerateButton turnUserId={turnUserId} /> : null}
+          <MoreMenu message={message} />
         </div>
       ) : turnUserId ? (
         <div className="msg-actions">

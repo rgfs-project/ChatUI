@@ -108,12 +108,13 @@ describe("read aloud (INV-52: offered only where supported)", () => {
 
   it("the action is hidden without speech synthesis", async () => {
     const { Message } = await import("../../app/chat/message");
-    const { TooltipProvider } = await import("../../app/ui/tooltip");
+    const { inChat, seededClient } = await import("./harness");
     vi.stubGlobal("speechSynthesis", undefined);
     // jsdom has no speechSynthesis; the stub above keeps it that way explicitly.
     delete (window as { speechSynthesis?: unknown }).speechSynthesis;
     render(
-      <TooltipProvider>
+      inChat(
+        seededClient(),
         <Message
           message={{
             id: "11111111-0000-4000-8000-000000000001",
@@ -127,10 +128,12 @@ describe("read aloud (INV-52: offered only where supported)", () => {
             time: null,
             tools: [],
             artifacts: [],
+            thoughtMs: null,
           }}
-        />
-      </TooltipProvider>,
+        />,
+      ),
     );
+    await screen.findByRole("button", { name: "Copy reply" });
     expect(screen.queryByRole("button", { name: "Read aloud" })).toBeNull();
     vi.unstubAllGlobals();
   });

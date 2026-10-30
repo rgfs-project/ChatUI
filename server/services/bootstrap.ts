@@ -43,6 +43,8 @@ export function preferencesDto(p: Preferences): PreferencesDto {
     imageMaxEdge: p.imageMaxEdge,
     projects: p.projects,
     chatProjects: p.chatProjects,
+    uiBlocks: p.uiBlocks,
+    feedback: p.feedback,
   });
 }
 

@@ -881,6 +881,29 @@ preferences.json
   - Recents leaves out chats that are in a project.
   - "Move to project…" in the chat row menu, the chat header menu and the `/` menu opens a dialog listing projects, "New project…" (create and move) and "Remove from project".
 
+## Intelligent UI, reasoning label and reply actions (Phase 14b)
+
+### Interactive blocks (`docs/threat-model-14b.md`, D3)
+
+- A fenced block with the info string `ui` is parsed by `app/chat/ui/parse.ts` into nine allowlisted node types: callout, card, text, steps/list, tabs, stats, chart, quiz, progress, divider. Two input forms are accepted: statement form (one statement per line, children indented) and JSON form (validated into the same tree).
+- **Never evaluated.** No `eval`, `Function`, HTML or template engine is involved. Every string is a React text node. No styles, URLs, images, links or text fields come from the block. Tones are an enum and chart geometry is ChatUI's own.
+- **Bounds:** 20,000 characters of source, 300 nodes, depth 4, 1,000 characters per string, 12 tabs, 8 quiz options, 40 chart points, 24 stats. Over a bound, or unreadable, the block shows as code.
+- **Streaming.** While a reply streams only finished lines are parsed, and half-written JSON is "not ready" (shown as code).
+- **Rendering.** The renderer (`app/chat/ui/blocks.tsx`, with its own JS and CSS chunk) loads only when a reply contains a block; until then, and during SSR, the source shows as code. Each block sits in a labelled frame with `overflow: hidden` and `contain: content`. Interaction (tabs with arrow keys, quiz answers) stays in component state.
+- **Setting.** Settings → Appearance → "Interactive blocks" (`preferences.uiBlocks`, on by default) turns rendering off. The stored Markdown is never changed.
+
+### "Thought for …"
+
+The manager records when the first reasoning and the first answer text arrive. The assistant block stores the difference in the optional attribute `thought=<ms>` (an unquoted whole number up to a day; a format amendment like `tools`; recovery writes it from the decided checkpoint). The DTO's `thoughtMs` gives the reasoning label "Thought for 12s" (or "Thought" when not recorded). While streaming the label reads "Thinking…" and then "Thought".
+
+### Reply actions
+
+Copy, Good/Bad response (`aria-pressed` toggles), Share reply (the system share sheet, else copy), Read aloud, Regenerate, and More (…) with "Answered by <model>" and "Copy as plain text". Feedback is stored in `preferences.feedback` (assistant message id → `up`/`down`, at most 2,000, newest kept). It is set through `PUT /api/conversations/:id/messages/:messageId/feedback`, which checks that the reply exists in the user's chat; `PATCH /api/preferences` can't change it.
+
+### Optimistic switches
+
+A switch bound to query data keeps the user's choice in local state until the save returns. TanStack notifies subscribers a tick later, and a controlled input would otherwise snap back for a moment.
+
 ## Container runtime (Phase 1b, INV-49)
 
 Compose is the supported production path; host Node is for development.
@@ -949,6 +972,7 @@ All runtime JS/CSS/icons are built into `build/client` and served from the ChatU
 - **Node 24 LTS instead of 22.x.** The spec allows a newer supported LTS; 24.21.0 is the current Active LTS.
 - **TypeScript 6.0.3 instead of 7.0.** typescript-eslint (required for type-aware linting) supports `<6.1`.
 - **Phase order and scope** follow `docs/ROADMAP.md` (the package is partly outdated). Phase 7 runs as 7a (core chat) and 7b (settings appearance, auth and status pages, demo). Visual tokens and an automated measurement audit start in 7a rather than Phase 18; the accent is orange (the project owner's choice) instead of a monochrome palette.
+- **Stored-format amendments (format version stays 1):** assistant blocks may carry `tools="…"` (13b) and `thought=<ms>` (14b). Older files parse unchanged.
 - **D2 general tools (Phase 13b).** One shared tool loop replaces §4.3's single proposal continuation; see "Memories and the shared tool loop". The stored format gains the optional `tools` attribute on assistant blocks (format version stays 1).
 - **`/` opens the chat**, redirecting to `/chat/new` or `/login`; the Phase 1a status page moved to `/status`.
 - **Attachments (Phase 12).**

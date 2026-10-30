@@ -69,6 +69,8 @@ export interface GenerationOutcome {
   proposals: StagedProposal[];
   /** Files to capture (Phase 13c): `create_file` calls, then `file=` fences; complete replies only. */
   artifacts: StagedArtifact[];
+  /** Milliseconds from the first reasoning to the first answer text (Phase 14b), if it reasoned. */
+  thoughtMs: number | null;
 }
 
 /**
@@ -151,6 +153,9 @@ interface Generation {
   /** Live tool activity (SSE `tool`) and the session behind it. */
   toolActivity: { callId: string; name: string; state: "running" | "done" | "error" }[];
   loop: ToolLoop | null;
+  /** First reasoning and first answer text (ms since epoch), for "Thought for …". */
+  reasoningAt: number | null;
+  contentAt: number | null;
 }
 
 type AbortReason = "cancel" | "max" | "shutdown";
@@ -380,6 +385,8 @@ export class GenerationManager {
       settle,
       toolActivity: [],
       loop: input.tools ?? null,
+      reasoningAt: null,
+      contentAt: null,
     };
     this.generations.set(generation.id, generation);
     this.active.set(reservation.conversationKey, {
@@ -448,6 +455,7 @@ export class GenerationManager {
               break;
             case "content": {
               this.transitionToStreaming(generation);
+              generation.contentAt ??= Date.now();
               const text = contentGap ? `\n\n${event.text}` : event.text;
               contentGap = false;
               generation.content += text;
@@ -459,6 +467,7 @@ export class GenerationManager {
             }
             case "reasoning": {
               this.transitionToStreaming(generation);
+              generation.reasoningAt ??= Date.now();
               const text = reasoningGap ? `\n\n${event.text}` : event.text;
               reasoningGap = false;
               generation.reasoning += text;
@@ -660,6 +669,7 @@ export class GenerationManager {
             tools: outcome.tools,
             proposals: outcome.proposals,
             artifacts: outcome.artifacts,
+            thoughtMs: outcome.thoughtMs,
           }
         : null,
     };
@@ -725,6 +735,13 @@ export class GenerationManager {
       // Staged suggestions count only for a complete reply (contracts §4.3).
       proposals: state === "completed" ? (generation.loop?.staged() ?? []) : [],
       artifacts: state === "completed" ? this.captures(generation) : [],
+      thoughtMs:
+        generation.reasoningAt === null
+          ? null
+          : Math.min(
+              86_400_000,
+              Math.max(0, (generation.contentAt ?? Date.now()) - generation.reasoningAt),
+            ),
     };
     void (async () => {
       let revision: string | null = null;

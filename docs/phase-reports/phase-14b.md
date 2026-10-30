@@ -1,0 +1,50 @@
+## Phase 14b report
+
+- **Plan:**
+  - Intelligent UI (roadmap step 17): ` ```ui ` blocks in statement and JSON form, interpreted only, rendered while streaming, with an on/off setting. D3 required a threat model first.
+  - Also from the roadmap: the collapsible "Thought for …" reasoning label and reply actions (like, share, more).
+
+- **Scope completed:**
+  - **Threat model:** `docs/threat-model-14b.md`. It covers assets, the adversary (anyone who can steer the model) and threats T1–T9 (XSS, style injection, interface spoofing, network access, resource exhaustion, streaming, interaction leakage, the stored record, opting out), with mitigations and the format.
+  - **Parser** (`app/chat/ui/parse.ts`):
+    - Linear, bounded, zod-free.
+    - Nine allowlisted node types, statement form and JSON form (own keys only, prototype keys ignored).
+    - Clamped numbers; plain decimals only.
+    - Streaming reads finished lines only.
+  - **Renderer** (`app/chat/ui/blocks.tsx`, lazy chunk with its own CSS):
+    - Text nodes only; fixed classes; a labelled, contained frame.
+    - Tabs with roving focus and arrow keys; a quiz with Check and a result.
+    - SVG charts with an accessible data table; progress and stats.
+    - The source shows as code whenever the block can't be shown.
+  - **Setting:** Appearance → Interactive blocks (`preferences.uiBlocks`).
+  - **Reasoning label:** the manager measures reasoning time; it is stored as the assistant attribute `thought=<ms>` (format amendment, recovery included). Labels: "Thought for 12s" / "Thinking…".
+  - **Reply actions:** Good/Bad response (stored in preferences through a validated endpoint), Share reply, More (…) with the model and "Copy as plain text", next to Copy, Read aloud and Regenerate.
+  - **Fix found by the new test:** a switch bound to query data snapped back for a moment because TanStack notifies a tick later. It now keeps the user's choice locally until saved.
+- **Tests:**
+  - `tests/client/ui-blocks.test.tsx` (8):
+    - Every statement; the JSON form with a prototype key.
+    - Unknown statements and every bound; clamping; streaming lines and half JSON.
+    - Thought labels.
+    - Rendering of markup as text with no script, img, link, form or style; tabs by keyboard; quiz; chart table; setting off and unreadable block shown as code.
+  - `tests/client/rendering.test.tsx`: the read-aloud check renders the message inside the app providers (new `inChat` harness helper).
+  - `tests/e2e/ui-blocks.spec.ts`:
+    - A rendered block makes no outside request.
+    - Keyboard tabs; quiz; chart.
+    - The "Thought" label; Good response persists across reload; More shows the model.
+    - The setting turns blocks into code and back.
+    - Repeated 6× without a failure.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (525)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (81/81)
+  - `test:e2e`: PASS (78/78)
+  - `verify:compose`: CI
+- **Budget:** re-recorded: chat JS 249,733 → 251,076 B (reply actions, lazy-block loader). The block renderer and its CSS are a separate chunk.
+- **Invariants:** INV-22 extended: blocks are model output rendered as text only.
+- **Deviations / limitations:**
+  - Blocks carry no links or images by design.
+  - Feedback stays in the user's own data (no admin report).
+  - Reasoning time is measured on the server, so a reply recovered after a crash stores the time up to the decision.
+- **Commit/tag:** `feat(phase-14b): interactive blocks, reasoning time and reply actions`, tag `phase-14b`, pushed to `main`.

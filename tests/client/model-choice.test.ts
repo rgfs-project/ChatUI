@@ -50,6 +50,7 @@ const conversation = (provider: string, m: string): ConversationDto => ({
       time: null,
       tools: [],
       artifacts: [],
+      thoughtMs: null,
     },
   ],
 });
@@ -74,6 +75,8 @@ describe("model selection order", () => {
           imageMaxEdge: null,
           projects: [],
           chatProjects: {},
+          uiBlocks: null,
+          feedback: {},
         },
       }),
     ).toEqual(["a", "one"]);

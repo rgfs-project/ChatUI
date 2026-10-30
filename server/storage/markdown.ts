@@ -42,6 +42,8 @@ export interface AssistantBlock {
   time?: string;
   /** Tools the reply used, in order of first use (D2 amendment; shown as chips). */
   tools?: string[];
+  /** Milliseconds spent reasoning before the answer (Phase 14b amendment). */
+  thought?: number;
   body: string;
 }
 export type Block = SystemBlock | UserBlock | ReasoningBlock | AssistantBlock;
@@ -96,7 +98,16 @@ function malformed(reason: string, line: number): ParseResult {
 type Attrs = Map<string, { value: string; quoted: boolean }>;
 
 const TYPES = new Set(["system", "user", "reasoning", "assistant"]);
-const KEYS = new Set(["id", "status", "provider", "model", "attachments", "time", "tools"]);
+const KEYS = new Set([
+  "id",
+  "status",
+  "provider",
+  "model",
+  "attachments",
+  "time",
+  "tools",
+  "thought",
+]);
 /** A tool name in the `tools` attribute (D2 amendment). */
 export const TOOL_NAME_RE = /^[a-z][a-z0-9_]{0,31}$/;
 export const MAX_TOOLS_PER_REPLY = 16;
@@ -104,7 +115,7 @@ const ALLOWED: Record<Block["type"], ReadonlySet<string>> = {
   system: new Set(["id"]),
   user: new Set(["id", "attachments", "time"]),
   reasoning: new Set(["id"]),
-  assistant: new Set(["id", "status", "provider", "model", "time", "tools"]),
+  assistant: new Set(["id", "status", "provider", "model", "time", "tools", "thought"]),
 };
 
 /** Tokenizes a full delimiter line per the §3.4 grammar. */
@@ -222,6 +233,16 @@ function buildBlock(type: Block["type"], attrs: Attrs, body: string): Block | st
           return "tools must be a quoted list of 1-16 distinct tool names";
         }
         block.tools = names;
+      }
+      const thought = attrs.get("thought");
+      if (thought) {
+        if (
+          thought.quoted ||
+          !/^(?:0|[1-9]\d{0,7})$/.test(thought.value) ||
+          Number(thought.value) > 86_400_000
+        )
+          return "thought must be a whole number of milliseconds (at most a day)";
+        block.thought = Number(thought.value);
       }
       return block;
     }
@@ -373,6 +394,7 @@ function delimiter(block: Block): string {
     if (block.provider !== undefined) parts.push(`provider=${quote(block.provider)}`);
     if (block.model !== undefined) parts.push(`model=${quote(block.model)}`);
     if (block.time !== undefined) parts.push(`time=${quote(block.time)}`);
+    if (block.thought !== undefined) parts.push(`thought=${String(block.thought)}`);
     if (block.tools !== undefined && block.tools.length > 0)
       parts.push(`tools=${quote(block.tools.join(","))}`);
   }
