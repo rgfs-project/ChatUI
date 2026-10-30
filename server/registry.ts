@@ -20,6 +20,7 @@ import type { MemoryService } from "./memory/service.ts";
 import type { ArtifactStore } from "./artifacts/store.ts";
 import type { ImportService } from "./portability/import.ts";
 import type { DataPaths } from "./storage/paths.ts";
+import type { TemporaryChats } from "./storage/temporary.ts";
 import type { ProfileStore } from "./profile/store.ts";
 import type { ProfileDto } from "@shared/profile";
 import type { AuthContext, AuthService } from "./auth/service.ts";
@@ -82,6 +83,8 @@ export interface RouteServices {
   dataPaths: DataPaths;
   exportArchive: (userId: string) => Promise<string>;
   imports: ImportService;
+  /** Phase 13f. */
+  temporary: TemporaryChats;
   /** Phase 12b. */
   profile: ProfileService;
   profileStore: ProfileStore;

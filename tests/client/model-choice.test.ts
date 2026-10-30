@@ -36,6 +36,7 @@ const conversation = (provider: string, m: string): ConversationDto => ({
   revision: "0".repeat(64),
   activeGeneration: null,
   proposals: [],
+  temporary: false,
   messages: [
     {
       id: "0b7e7c2a-1111-4a1a-8a1a-222222222222",

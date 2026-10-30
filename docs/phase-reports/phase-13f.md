@@ -1,0 +1,44 @@
+## Phase 13f report
+
+- **Plan:** the roadmap's new phase: temporary chats, left out of the sidebar, search, the Library, exports and memory, and deleted when you leave them.
+
+- **Scope completed:**
+  - **Registry** (`server/storage/temporary.ts`): per-user `temporary.json` under its own lock (inside the export barrier), loaded at startup before recovery.
+  - **Send:**
+    - `temporary: true` only for a new chat (`400` otherwise); registered before the first write; part of the payload hash.
+    - No memory section.
+    - The tool loop offers general tools only, and an unoffered tool's call is invalid.
+    - No files from replies are captured, in the terminal sequence or in recovery.
+  - **Left out of:** the conversation list, search (chats and their files), the Library listing and the portable export. `ConversationDto.temporary` marks them.
+  - **Deletion:**
+    - Leaving the chat (another chat, New chat, closing the tab with a keepalive request) deletes it.
+    - Deletion removes the registry entry too.
+    - A chat left open is swept after 24 h, at startup and hourly.
+  - **Browser:**
+    - A "Temporary chat" toggle (`aria-pressed`) on the new-chat screen, with an explanation in place of the greeting.
+    - A "Temporary" badge; no Pin.
+    - On phones the toggle is a 44 × 44 icon button.
+- **Tests:**
+  - `tests/server/temporary.test.ts` (3):
+    - **Kept out of everything:** not listed; not searchable by text or file name; files not in the Library; not in the export; the memory not in the prompt; no memory or file tools offered; no captured file.
+    - **Deletion** removes the chat, its files and the registry entry.
+    - Only a new chat can be temporary.
+    - A day-old temporary chat is removed at startup.
+  - `tests/e2e/temporary.spec.ts`:
+    - Toggle, intro and badge; not listed; no Pin.
+    - Leaving sends the delete and the next new chat is normal.
+    - The old URL then shows "does not exist".
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (515)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (81/81)
+  - `test:e2e`: PASS (76/76)
+  - `verify:compose`: CI
+- **Budget:** re-recorded: chat JS 247,288 → 247,900 B and CSS 8,883 → 8,980 B (toggle, badge, intro).
+- **Invariants:** none new. INV-39 holds: the registry is per-user and its keys are user-scoped.
+- **Deviations / limitations:**
+  - A reload counts as leaving: the chat is deleted on `pagehide`.
+  - If the delete can't reach the server (offline), the 24 h sweep removes the chat.
+- **Commit/tag:** `feat(phase-13f): temporary chats`, tag `phase-13f`, pushed to `main`.

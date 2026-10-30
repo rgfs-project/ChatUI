@@ -9,6 +9,7 @@ import { normalizeBody, type ConversationModel, type UserBlock } from "../storag
 import type { PreferencesStore } from "../storage/preferences.ts";
 import type { ProposalStore } from "../storage/proposals.ts";
 import type { MemoryService } from "../memory/service.ts";
+import type { TemporaryChats } from "../storage/temporary.ts";
 import { findExchange, removedUsers, touchesIrregular } from "./turns.ts";
 
 export interface MutationOptions {
@@ -19,6 +20,8 @@ export interface MutationOptions {
   /** Phase 13b: suggestions of removed turns become invalid; sidecars go with their chat. */
   proposals?: ProposalStore;
   memory?: MemoryService;
+  /** Phase 13f: a deleted temporary chat leaves the registry. */
+  temporary?: TemporaryChats;
   now?: () => Date;
 }
 
@@ -217,6 +220,7 @@ export class ConversationMutations {
     }
     await this.o.attachments.deleteForConversation(userId, conversationId);
     await this.o.memory?.deleteSidecar(userId, conversationId);
+    await this.o.temporary?.remove(userId, conversationId);
     return true;
   }
 
@@ -227,6 +231,7 @@ export class ConversationMutations {
     await this.o.store.delete(userId, conversationId);
     await this.o.attachments.deleteForConversation(userId, conversationId);
     await this.o.memory?.deleteSidecar(userId, conversationId);
+    await this.o.temporary?.remove(userId, conversationId);
     await this.forgetPin(userId, conversationId);
   }
 

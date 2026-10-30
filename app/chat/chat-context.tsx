@@ -109,6 +109,9 @@ export interface ChatApi {
   jumpRef: RefObject<(() => void) | null>;
   hasDraft: boolean;
   setHasDraft: (value: boolean) => void;
+  /** The next new chat is temporary (Phase 13f). */
+  temporaryDraft: boolean;
+  setTemporaryDraft: (value: boolean) => void;
 }
 
 const ChatContext = createContext<ChatApi | null>(null);
@@ -138,6 +141,7 @@ export function ChatProvider({
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const jumpRef = useRef<(() => void) | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
+  const [temporaryDraft, setTemporaryDraft] = useState(false);
 
   const conversation = useQuery({
     ...conversationQuery(userId, conversationId ?? "none"),
@@ -271,6 +275,7 @@ export function ChatProvider({
         model: pair[1],
         content,
         ...(attachments.length > 0 ? { attachmentIds: attachments.map((a) => a.id) } : {}),
+        ...(target === null && temporaryDraft ? { temporary: true } : {}),
         operationKey: crypto.randomUUID(),
         operationIssuedAt: new Date().toISOString(),
       });
@@ -302,6 +307,7 @@ export function ChatProvider({
             });
             if (target === null) {
               draftStore.set(`${userId}|new`, "");
+              setTemporaryDraft(false);
               // The draft URL is replaced, so Back does not return to an empty draft.
               await navigate(paths.chat(accepted.conversationId), { replace: true });
             } else {
@@ -334,7 +340,18 @@ export function ChatProvider({
         sending.current = false;
       }
     },
-    [beginLive, client, conversationId, navigate, result, running, selectedPair, toast, userId],
+    [
+      beginLive,
+      client,
+      conversationId,
+      navigate,
+      result,
+      running,
+      selectedPair,
+      temporaryDraft,
+      toast,
+      userId,
+    ],
   );
 
   const checkPending = useCallback(async () => {
@@ -477,6 +494,8 @@ export function ChatProvider({
       jumpRef,
       hasDraft,
       setHasDraft,
+      temporaryDraft,
+      setTemporaryDraft,
     }),
     [
       userId,
@@ -503,8 +522,36 @@ export function ChatProvider({
       remove,
       logout,
       hasDraft,
+      temporaryDraft,
     ],
   );
+
+  // Leaving a temporary chat deletes it (Phase 13f): another chat, a new chat,
+  // or closing the tab. Decided by comparing with the previous chat (not in an
+  // effect cleanup, which Strict Mode runs on mount); a delete that can't run
+  // now is left to the server's sweep.
+  const temporaryId = result?.ok && result.conversation.temporary ? result.conversation.id : null;
+  const openTemporary = useRef<string | null>(null);
+  useEffect(() => {
+    const removeTemporary = (id: string) => {
+      void apiFetch(`/api/conversations/${id}`, { method: "DELETE", keepalive: true })
+        .then(() => {
+          client.removeQueries({ queryKey: qk.conversation(userId, id) });
+        })
+        .catch(() => undefined);
+    };
+    const previous = openTemporary.current;
+    if (previous && previous !== conversationId) removeTemporary(previous);
+    if (temporaryId) openTemporary.current = temporaryId;
+    else if (previous !== conversationId) openTemporary.current = null;
+    const onPageHide = () => {
+      if (openTemporary.current) removeTemporary(openTemporary.current);
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [client, conversationId, temporaryId, userId]);
 
   return <ChatContext.Provider value={api}>{children}</ChatContext.Provider>;
 }

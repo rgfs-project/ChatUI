@@ -46,6 +46,8 @@ export interface ExportDeps {
   generations: GenerationManager;
   attachments: AttachmentStore;
   artifacts: ArtifactStore;
+  /** Temporary chats are never exported (Phase 13f). */
+  temporary?: ReadonlySet<string>;
   now: () => Date;
   /** Test hooks: inside the exclusive window, and after it (before blobs are copied). */
   hooks?: { inSnapshot?: () => Promise<void>; afterSnapshot?: () => Promise<void> };
@@ -72,7 +74,7 @@ export async function exportArchive(userId: string, deps: ExportDeps): Promise<s
   await deps.locks.barrier.withExclusive(userId, async () => {
     for (const name of await listDir(paths.chatsDir(userId))) {
       const id = name.endsWith(".md") ? name.slice(0, -3) : "";
-      if (!isUuid(id)) continue;
+      if (!isUuid(id) || deps.temporary?.has(id)) continue;
       const bytes = await readOrNull(paths.chatFile(userId, id));
       if (!bytes) continue;
       small.set(`chats/${id}.md`, bytes);
@@ -86,6 +88,7 @@ export async function exportArchive(userId: string, deps: ExportDeps): Promise<s
     for (const meta of await deps.attachments.list(userId)) {
       // Pending uploads are transient; linked and Library files are user content.
       if (meta.messageId === null && !meta.saved) continue;
+      if (meta.conversationId !== null && deps.temporary?.has(meta.conversationId)) continue;
       const metaBytes = await readOrNull(paths.attachmentMeta(userId, meta.id));
       if (!metaBytes) continue;
       small.set(`attachments/${meta.id}/meta.json`, metaBytes);
@@ -116,7 +119,7 @@ export async function exportArchive(userId: string, deps: ExportDeps): Promise<s
     }
     for (const name of await listDir(paths.proposalsDir(userId))) {
       const id = name.endsWith(".json") ? name.slice(0, -5) : "";
-      if (!isUuid(id)) continue;
+      if (!isUuid(id) || deps.temporary?.has(id)) continue;
       const bytes = await readOrNull(paths.proposalFile(userId, id));
       if (bytes) small.set(`proposals/${id}.json`, bytes);
     }

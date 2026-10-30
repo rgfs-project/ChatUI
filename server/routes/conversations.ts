@@ -98,6 +98,7 @@ export async function toConversationDto(
     messages,
     activeGeneration: active && !active.startsWith("reserved:") ? { generationId: active } : null,
     proposals: await services.memory.proposalsFor(userId, conversation.id),
+    temporary: services.temporary.has(userId, conversation.id),
   };
 }
 

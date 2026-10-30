@@ -51,6 +51,7 @@ import { ProfileService } from "./profile/service.ts";
 import { ConversationMutations } from "./chat/mutations.ts";
 import { MemoryService } from "./memory/service.ts";
 import { ArtifactStore } from "./artifacts/store.ts";
+import { TemporaryChats } from "./storage/temporary.ts";
 import { exportArchive, type ExportDeps } from "./portability/export.ts";
 import { ImportService, type ImportDeps } from "./portability/import.ts";
 import { MemoryStore } from "./storage/memories.ts";
@@ -243,6 +244,7 @@ export function createApp(options: AppOptions): ChatUiApp {
   const memoryStore = new MemoryStore(paths, locks, now);
   const proposalStore = new ProposalStore(paths, locks);
   const artifacts = new ArtifactStore(paths, locks, now);
+  const temporary = new TemporaryChats(paths, locks, now);
   const imports = new ImportService({
     paths,
     locks,
@@ -281,6 +283,7 @@ export function createApp(options: AppOptions): ChatUiApp {
     memories: memoryStore,
     proposals: proposalStore,
     artifacts,
+    temporary,
     search,
     attachmentLimits: {
       maxPerMessage: attachmentConfig.maxPerMessage,
@@ -377,6 +380,8 @@ export function createApp(options: AppOptions): ChatUiApp {
     // Step 2 (contracts §2): finish account closures before anything else touches them.
     await admin.recoverClosures();
     await settings.load();
+    // Temporary-chat registries first: recovery never captures their files (Phase 13f).
+    for (const userId of await accountIds(paths)) await temporary.load(userId);
     const report = await recoverStorage({
       paths,
       operations,
@@ -391,6 +396,7 @@ export function createApp(options: AppOptions): ChatUiApp {
         retentionMs: storageConfig.generationRetentionMs,
         proposals: proposalStore,
         artifacts,
+        isTemporary: (userId, conversationId) => temporary.has(userId, conversationId),
       },
       memoryIntents: (userId) => memory.recover(userId),
       imports: async (userId) => {
@@ -403,6 +409,8 @@ export function createApp(options: AppOptions): ChatUiApp {
       },
     });
     await users.rebuildIndex();
+    // Temporary chats left open for a day go (Phase 13f).
+    await sweepTemporary();
     await sessions.sweep();
     await installProviders();
     return report;
@@ -422,6 +430,7 @@ export function createApp(options: AppOptions): ChatUiApp {
         );
         await attachments.collectExpired(userId);
       }
+      await sweepTemporary();
     })().catch((error: unknown) => {
       logger.warn({ err: error }, "housekeeping sweep failed");
     });
@@ -443,8 +452,21 @@ export function createApp(options: AppOptions): ChatUiApp {
     preferences,
     proposals: proposalStore,
     memory,
+    temporary,
     now,
   });
+  search.excludeWith((userId) => temporary.ids(userId));
+  /** Temporary chats left open (a closed tab, a crash) go after a day. */
+  async function sweepTemporary(): Promise<void> {
+    for (const userId of await accountIds(paths)) {
+      for (const id of temporary.expired(userId)) {
+        await mutations.deleteConversation(userId, id).catch(async () => {
+          // Already gone: only the registry entry is left.
+          await temporary.remove(userId, id);
+        });
+      }
+    }
+  }
   const services: RouteServices = {
     conversationDto: async (userId, id) =>
       toConversationDto(await conversations.get(userId, id), services, userId),
@@ -474,10 +496,12 @@ export function createApp(options: AppOptions): ChatUiApp {
         generations,
         attachments,
         artifacts,
+        temporary: temporary.ids(userId),
         now,
         ...(options.exportHooks ? { hooks: options.exportHooks } : {}),
       }),
     imports,
+    temporary,
     profile,
     profileStore,
     profilePhotoPath: (userId) => paths.profilePhoto(userId),

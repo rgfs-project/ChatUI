@@ -44,6 +44,13 @@ export class SearchService {
   private readonly store: ConversationStore;
   private readonly attachments: AttachmentStore;
 
+  /** Conversations left out of search (temporary chats, Phase 13f). */
+  private excluded: (userId: string) => ReadonlySet<string> = () => new Set();
+
+  excludeWith(fn: (userId: string) => ReadonlySet<string>): void {
+    this.excluded = fn;
+  }
+
   constructor(store: ConversationStore, attachments: AttachmentStore) {
     this.store = store;
     this.attachments = attachments;
@@ -52,8 +59,9 @@ export class SearchService {
   private async documents(userId: string): Promise<Map<string, Indexed>> {
     const previous = this.cache.get(userId) ?? new Map<string, Indexed>();
     const next = new Map<string, Indexed>();
+    const excluded = this.excluded(userId);
     for (const entry of this.store.list(userId)) {
-      if (entry.malformed) continue;
+      if (entry.malformed || excluded.has(entry.id)) continue;
       const stamp = `${String(entry.fileSize)}:${String(entry.fileMtimeMs)}`;
       const cached = previous.get(entry.id);
       if (cached?.stamp === stamp) {
@@ -99,7 +107,9 @@ export class SearchService {
       chats.push({ conversationId, title: doc.title, updatedAt: doc.updatedAt, matches, first });
     }
     chats.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const excluded = this.excluded(userId);
     const files = (await this.attachments.list(userId))
+      .filter((meta) => meta.conversationId === null || !excluded.has(meta.conversationId))
       .filter((meta) => meta.filename.toLowerCase().includes(needle))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, SEARCH_MAX_FILES)

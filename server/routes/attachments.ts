@@ -49,7 +49,11 @@ export const listAttachmentsRoute = defineRoute({
   handler: async (_input, ctx) => {
     const { userId } = userOf(ctx);
     const limits = ctx.services.attachmentLimits();
-    const metas = await ctx.services.attachments.list(userId);
+    // Files of temporary chats stay out of the Library (Phase 13f).
+    const temporary = ctx.services.temporary.ids(userId);
+    const metas = (await ctx.services.attachments.list(userId)).filter(
+      (meta) => meta.conversationId === null || !temporary.has(meta.conversationId),
+    );
     metas.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return {
       attachments: metas.map(attachmentDto),

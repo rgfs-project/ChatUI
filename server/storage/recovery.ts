@@ -141,6 +141,8 @@ export async function recoverStorage(options: {
     retentionMs: number;
     proposals?: ProposalStore;
     artifacts?: ArtifactStore;
+    /** Files from temporary chats are never captured (Phase 13f). */
+    isTemporary?: (userId: string, conversationId: string) => boolean;
   };
   /** Step 3: roll back interrupted import commits, remove stale staging (Phase 13d). */
   imports?: (userId: string) => Promise<void>;
@@ -307,6 +309,7 @@ export async function recoverGenerations(options: {
   proposals?: ProposalStore;
   /** Captured files (Phase 13c). */
   artifacts?: ArtifactStore;
+  isTemporary?: (userId: string, conversationId: string) => boolean;
 }): Promise<GenerationRecoveryReport> {
   const { store, operations, checkpoints, logger, now } = options;
   const report: GenerationRecoveryReport = {
@@ -353,7 +356,11 @@ export async function recoverGenerations(options: {
             tools: decided.tools ?? [],
             proposals: decided.state === "completed" ? (decided.proposals ?? []) : [],
             ...(options.proposals ? { proposalStore: options.proposals } : {}),
-            artifacts: decided.state === "completed" ? (decided.artifacts ?? []) : [],
+            artifacts:
+              decided.state === "completed" &&
+              !options.isTemporary?.(checkpoint.userId, checkpoint.conversationId)
+                ? (decided.artifacts ?? [])
+                : [],
             ...(options.artifacts ? { artifactStore: options.artifacts } : {}),
           }
         : {}),

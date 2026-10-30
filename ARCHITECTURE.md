@@ -846,6 +846,23 @@ preferences.json
   - 10 minutes per preview or commit.
 - **Browser.** Settings → Data controls has Export (a download link), Import (file picker → lazily loaded dialog with upload progress, cancel, conflict choice, memory selection, settings choice, confirmation and a report) and Delete all chats. Only the user's own query keys are refreshed after a commit.
 
+## Temporary chats (Phase 13f)
+
+- **Registry.** `<user>/temporary.json` (`{version: 1, chats: {id: createdAtMs}}`, `server/storage/temporary.ts`) lists temporary chats. It is canonical per-user state behind the `temporary:<user>` lock (so the export barrier applies), loaded at startup before recovery, and kept in memory. The chats are ordinary Markdown in `chats/`.
+- **Creation.** `temporary: true` on a send without `conversationId` (anything else is `400`). The id is registered under the conversation lock before the first write, so the chat is never listed. The flag is part of the payload hash.
+- **Left out of:**
+  - the conversation list (`conversationSummaries`);
+  - search (chats and their files);
+  - the Library listing;
+  - exports (chats, their files and sidecars);
+  - memory: no memory section in the prompt; the tool loop offers general tools only, so no memory suggestions and no `create_file`, and a call to an unoffered tool is invalid;
+  - files from replies: no capture, in the terminal sequence or in recovery.
+- **Deletion.**
+  - The browser deletes a temporary chat when you leave it (another chat, New chat, or `pagehide` with `fetch(..., {keepalive: true})`), decided by comparing the previous and current chat rather than in an effect cleanup, which Strict Mode runs on mount.
+  - Deletion follows the normal order and also removes the registry entry.
+  - A chat left open (closed tab, crash) is deleted by the sweep once it is 24 h old, at startup and hourly.
+- **Browser.** A "Temporary chat" toggle on the new-chat screen (with an explanation instead of the greeting); a "Temporary" badge in the header; no Pin.
+
 ## Container runtime (Phase 1b, INV-49)
 
 Compose is the supported production path; host Node is for development.

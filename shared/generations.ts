@@ -73,6 +73,12 @@ export const startGenerationRequestSchema = z
     /** Client-minted idempotency key for this send (INV-58). */
     operationKey: z.uuid(),
     operationIssuedAt: z.iso.datetime({ offset: false }),
+    /** A new temporary chat (Phase 13f); only with no conversationId. */
+    temporary: z.boolean().optional(),
+  })
+  .refine((request) => !(request.temporary && request.conversationId), {
+    path: ["temporary"],
+    message: "only a new chat can be temporary",
   })
   .refine((request) => request.content.trim() !== "" || (request.attachmentIds?.length ?? 0) > 0, {
     path: ["content"],

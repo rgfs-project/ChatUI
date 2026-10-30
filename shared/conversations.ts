@@ -52,6 +52,8 @@ export const conversationDtoSchema = z.strictObject({
   activeGeneration: z.strictObject({ generationId: z.uuid() }).nullable(),
   /** Memory suggestions from this conversation's replies (Phase 13b). */
   proposals: z.array(proposalDtoSchema),
+  /** A temporary chat (Phase 13f): not listed, searched, exported or remembered. */
+  temporary: z.boolean(),
 });
 export type ConversationDto = z.infer<typeof conversationDtoSchema>;
 

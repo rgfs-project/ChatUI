@@ -50,6 +50,7 @@ export function conversation(overrides: Partial<ConversationDto> = {}): Conversa
     revision: "0".repeat(64),
     activeGeneration: null,
     proposals: [],
+    temporary: false,
     messages: [
       {
         id: "11111111-0000-4000-8000-000000000001",

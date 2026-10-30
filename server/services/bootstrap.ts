@@ -17,16 +17,21 @@ export function conversationSummaries(
   services: RouteServices,
   userId: string,
 ): ConversationSummary[] {
-  return services.conversations.list(userId).map((entry) =>
-    conversationSummarySchema.parse({
-      id: entry.id,
-      title: entry.title,
-      createdAt: entry.createdAt,
-      updatedAt: entry.updatedAt,
-      messageCount: entry.messageCount,
-      malformed: entry.malformed,
-    }),
-  );
+  // Temporary chats are never listed (Phase 13f).
+  const temporary = services.temporary.ids(userId);
+  return services.conversations
+    .list(userId)
+    .filter((entry) => !temporary.has(entry.id))
+    .map((entry) =>
+      conversationSummarySchema.parse({
+        id: entry.id,
+        title: entry.title,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        messageCount: entry.messageCount,
+        malformed: entry.malformed,
+      }),
+    );
 }
 
 export function preferencesDto(p: Preferences): PreferencesDto {

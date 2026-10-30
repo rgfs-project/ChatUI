@@ -156,6 +156,8 @@ export interface ToolSessionContext {
   search: SearchService;
   attachments: AttachmentStore | undefined;
   proposals: ProposalStore;
+  /** Which tool groups to offer (default all). */
+  kinds?: ("general" | "files" | "memory")[];
 }
 
 function cap(text: string): string {
@@ -200,7 +202,12 @@ export class ToolSession {
 
   constructor(context: ToolSessionContext) {
     this.c = context;
-    this.definitions = [...GENERAL_TOOLS, ...FILE_TOOLS, ...MEMORY_TOOLS];
+    const kinds = context.kinds ?? ["general", "files", "memory"];
+    this.definitions = [
+      ...(kinds.includes("general") ? GENERAL_TOOLS : []),
+      ...(kinds.includes("files") ? FILE_TOOLS : []),
+      ...(kinds.includes("memory") ? MEMORY_TOOLS : []),
+    ];
   }
 
   /** Tool names used by valid calls, in order of first use (saved as chips). */
@@ -256,6 +263,9 @@ export class ToolSession {
 
   private async run(call: ToolCall, callIndex: number): Promise<ToolResult> {
     const c = this.c;
+    // A tool that was not offered is unknown, whatever its name.
+    if (!this.definitions.some((d) => d.function.name === call.name))
+      return this.invalid(call, "Not run: unknown tool.");
     switch (call.name) {
       case "search_chats": {
         const args = parseArgs(call.arguments, ["query"]);

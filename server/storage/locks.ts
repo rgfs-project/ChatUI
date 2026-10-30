@@ -74,7 +74,7 @@ class ExportBarrier {
 
 /** User-scoped canonical lock keys: `<kind>:<user-uuid>` or `<kind>:<user-uuid>/<id>`. */
 const USER_KEY =
-  /^(?:conversation|memories|preferences|proposals|artifact|attachment|operations|profile|import):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/;
+  /^(?:conversation|memories|preferences|proposals|artifact|attachment|operations|profile|import|temporary):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/;
 
 /**
  * FIFO mutex per key. `run` holds the key's lock for the duration of `fn`.

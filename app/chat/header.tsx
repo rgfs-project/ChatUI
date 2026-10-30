@@ -1,6 +1,7 @@
 import {
   Copy,
   Download,
+  MessageCircleDashed,
   MoreHorizontal,
   PanelLeftOpen,
   Pencil,
@@ -52,7 +53,7 @@ export const Header = memo(function Header() {
   const conversation = result?.ok ? result.conversation : null;
   const ops = useConversationOps();
   const toast = useToast();
-  const { userId } = useChat();
+  const { userId, temporaryDraft, setTemporaryDraft } = useChat();
   const pinned =
     useQuery(preferencesQuery(userId)).data?.pins.includes(conversation?.id ?? "") ?? false;
 
@@ -85,7 +86,14 @@ export const Header = memo(function Header() {
           <h1 className="header-title" title={conversation.title}>
             {conversation.title}
           </h1>
-        ) : (
+        ) : null}
+        {conversation?.temporary ? (
+          <span className="temporary-badge" data-testid="temporary-badge">
+            <MessageCircleDashed size={16} aria-hidden />
+            Temporary
+          </span>
+        ) : null}
+        {conversation ? null : (
           <ModelMenu
             label="Model"
             groups={groups}
@@ -101,6 +109,19 @@ export const Header = memo(function Header() {
         )}
       </div>
       <div className="header-end">
+        {conversationId === null ? (
+          <button
+            type="button"
+            className={`pill-button temporary-toggle${temporaryDraft ? " is-on" : ""}`}
+            aria-pressed={temporaryDraft}
+            onClick={() => {
+              setTemporaryDraft(!temporaryDraft);
+            }}
+          >
+            <MessageCircleDashed size={16} aria-hidden />
+            <span className="temporary-toggle-label">Temporary chat</span>
+          </button>
+        ) : null}
         {conversation ? (
           <Menu
             label="Share"
@@ -143,14 +164,16 @@ export const Header = memo(function Header() {
               </button>
             }
           >
-            <MenuItem
-              icon={pinned ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />}
-              onSelect={() => {
-                void ops.togglePin(conversation.id);
-              }}
-            >
-              {pinned ? "Unpin" : "Pin"}
-            </MenuItem>
+            {conversation.temporary ? null : (
+              <MenuItem
+                icon={pinned ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />}
+                onSelect={() => {
+                  void ops.togglePin(conversation.id);
+                }}
+              >
+                {pinned ? "Unpin" : "Pin"}
+              </MenuItem>
+            )}
             <MenuItem
               icon={<Pencil size={16} aria-hidden />}
               onSelect={() => {

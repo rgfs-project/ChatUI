@@ -248,7 +248,19 @@ export function ChatView() {
               <ArrowDown size={18} aria-hidden />
             </button>
           ) : null}
-          {empty ? <h1 className="greeting">{greetingFor(timeFormat.now)}</h1> : null}
+          {empty ? (
+            chat.temporaryDraft ? (
+              <div className="temporary-intro" data-testid="temporary-intro">
+                <h1 className="greeting">Temporary chat</h1>
+                <p>
+                  This chat won’t appear in your history, search or Library, won’t use or update
+                  your memories, and is deleted when you leave it.
+                </p>
+              </div>
+            ) : (
+              <h1 className="greeting">{greetingFor(timeFormat.now)}</h1>
+            )
+          ) : null}
           {!empty && !failure ? (
             <p className="disclaimer">ChatUI can make mistakes. Check important info.</p>
           ) : null}
@@ -267,7 +279,7 @@ export function ChatView() {
             </p>
           ) : null}
           {failure ? null : <Composer />}
-          {empty && !chat.hasDraft ? <Suggestions /> : null}
+          {empty && !chat.hasDraft && !chat.temporaryDraft ? <Suggestions /> : null}
         </div>
       </div>
     </ViewerProvider>

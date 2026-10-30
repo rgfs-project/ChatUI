@@ -43,6 +43,7 @@ import type { ProviderMessage } from "../providers/types.ts";
 import { MAX_TOOL_ROUNDS, ToolSession } from "../tools/session.ts";
 import type { SearchService } from "./search.ts";
 import type { ArtifactStore } from "../artifacts/store.ts";
+import type { TemporaryChats } from "../storage/temporary.ts";
 import type { PromptMessage } from "./prompt.ts";
 
 const DAY_MS = 86_400_000;
@@ -56,6 +57,8 @@ interface ModelConfig {
   tools: boolean;
   /** Approved notes in this prompt: the snapshot proposals are checked against (INV-38). */
   memories: Memory[];
+  /** A temporary chat (Phase 13f). */
+  temporary: boolean;
 }
 
 /** Tool-loop messages as plain messages, for counting the formatted prompt. */
@@ -115,6 +118,8 @@ export interface SendServiceOptions {
   preferences?: PreferencesStore;
   /** Captured files (Phase 13c). */
   artifacts?: ArtifactStore;
+  /** Temporary chats (Phase 13f): no memories, no memory tools, no captured files. */
+  temporary?: TemporaryChats;
   /** Memories and the shared tool loop (Phase 13b, D2). */
   memories?: MemoryStore;
   proposals?: ProposalStore;
@@ -179,7 +184,7 @@ export class SendService {
   static payloadHash(
     request: Pick<
       StartGenerationRequest,
-      "conversationId" | "providerId" | "model" | "content" | "attachmentIds"
+      "conversationId" | "providerId" | "model" | "content" | "attachmentIds" | "temporary"
     >,
   ): string {
     return sha256Hex(
@@ -190,6 +195,7 @@ export class SendService {
         content: normalizeBody(request.content),
         // Absent when empty, so records from before Phase 12 keep their hash.
         ...(request.attachmentIds?.length ? { attachmentIds: request.attachmentIds } : {}),
+        ...(request.temporary ? { temporary: true } : {}),
       }),
     );
   }
@@ -327,7 +333,10 @@ export class SendService {
     for (let attempt = 0; attempt < 2; attempt++) {
       // Prompt-relevant settings revision (§4.1): rechecked under the lock below.
       const settingsRevision = this.o.settings?.revision ?? null;
-      const config = await this.configFor(userId, model, sender);
+      const temporary = request.conversationId
+        ? (this.o.temporary?.has(userId, conversationId) ?? false)
+        : request.temporary === true;
+      const config = await this.configFor(userId, model, sender, temporary);
       const historyImages = await this.historyImages(userId);
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
       const snapshot = request.conversationId
@@ -366,6 +375,9 @@ export class SendService {
           if (again) return { response: again, launch: undefined };
           const metas = await this.pendingAttachments(userId, attachmentIds);
           const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
+          // Registered before the first write, so the chat is never listed (Phase 13f).
+          if (!request.conversationId && request.temporary)
+            await this.o.temporary?.add(userId, conversationId);
           return this.commit(userId, {
             request,
             payloadHash,
@@ -454,7 +466,12 @@ export class SendService {
     }
     const provider = this.o.catalog.provider(model.providerId);
     const settingsRevision = this.o.settings?.revision ?? null;
-    const config = await this.configFor(userId, model, sender);
+    const config = await this.configFor(
+      userId,
+      model,
+      sender,
+      this.o.temporary?.has(userId, conversationId) ?? false,
+    );
     const historyImages = await this.historyImages(userId);
 
     const snapshot = await this.o.store.withLock(userId, conversationId, async () => {
@@ -570,9 +587,11 @@ export class SendService {
     userId: string,
     model: { providerId: string; id: string; capabilities: { tools: boolean } },
     sender: Sender,
+    temporary = false,
   ): Promise<ModelConfig> {
     const base = this.modelConfig(model.providerId, model.id, sender);
-    const all = this.o.memories ? await this.o.memories.list(userId) : [];
+    // Temporary chats neither use nor suggest memories (Phase 13f).
+    const all = this.o.memories && !temporary ? await this.o.memories.list(userId) : [];
     const { included } = memorySnapshot(all);
     const section = memoryPrompt(included);
     return {
@@ -581,6 +600,7 @@ export class SendService {
       memories: included,
       tools:
         model.capabilities.tools && this.o.proposals !== undefined && this.o.search !== undefined,
+      temporary,
     };
   }
 
@@ -589,7 +609,7 @@ export class SendService {
     providerId: string,
     modelId: string,
     sender: Sender,
-  ): Omit<ModelConfig, "tools" | "memories"> {
+  ): Omit<ModelConfig, "tools" | "memories" | "temporary"> {
     const settings = this.o.settings?.get();
     const entry = this.o.settings?.forModel(providerId, modelId);
     const expanded = expandSystemPrompt(entry?.systemPrompt ?? null, {
@@ -802,6 +822,7 @@ export class SendService {
                   providerId: input.providerId,
                   model: input.model,
                   memories: input.config.memories,
+                  temporary: input.config.temporary,
                   fits: input.prompt.fits,
                 }),
               }
@@ -848,6 +869,7 @@ export class SendService {
       providerId: string;
       model: string;
       memories: Memory[];
+      temporary: boolean;
       fits: (messages: ProviderMessage[]) => Promise<boolean>;
     },
   ): ToolLoop {
@@ -866,6 +888,8 @@ export class SendService {
       search: this.o.search as SearchService,
       attachments: this.o.attachments,
       proposals: this.o.proposals as ProposalStore,
+      // Temporary chats: general tools only (no memory suggestions, no files).
+      kinds: input.temporary ? ["general"] : ["general", "files", "memory"],
     });
     return {
       definitions: session.definitions,
@@ -894,7 +918,9 @@ export class SendService {
       this.o.artifacts &&
       assistantMessageId &&
       outcome.state === "completed" &&
-      outcome.artifacts.length > 0
+      outcome.artifacts.length > 0 &&
+      // Files from temporary chats are not kept (Phase 13f).
+      !this.o.temporary?.has(userId, conversationId)
     ) {
       const ids = await this.o.artifacts.captureUnlocked(userId, {
         conversationId,
