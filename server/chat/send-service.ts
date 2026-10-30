@@ -59,6 +59,8 @@ interface ModelConfig {
   memories: Memory[];
   /** A temporary chat (Phase 13f). */
   temporary: boolean;
+  /** Reasoning on or off for this send (Phase 15); only for a reasoning model. */
+  think?: boolean;
 }
 
 /** Tool-loop messages as plain messages, for counting the formatted prompt. */
@@ -148,6 +150,7 @@ export interface RegenerateRequest {
   expectedRevision: string;
   operationKey: string;
   operationIssuedAt: string;
+  think?: boolean;
 }
 
 /** Who is sending: role decides hidden-model access; username fills {{username}}. */
@@ -184,7 +187,13 @@ export class SendService {
   static payloadHash(
     request: Pick<
       StartGenerationRequest,
-      "conversationId" | "providerId" | "model" | "content" | "attachmentIds" | "temporary"
+      | "conversationId"
+      | "providerId"
+      | "model"
+      | "content"
+      | "attachmentIds"
+      | "temporary"
+      | "think"
     >,
   ): string {
     return sha256Hex(
@@ -196,6 +205,7 @@ export class SendService {
         // Absent when empty, so records from before Phase 12 keep their hash.
         ...(request.attachmentIds?.length ? { attachmentIds: request.attachmentIds } : {}),
         ...(request.temporary ? { temporary: true } : {}),
+        ...(request.think !== undefined ? { think: request.think } : {}),
       }),
     );
   }
@@ -336,7 +346,7 @@ export class SendService {
       const temporary = request.conversationId
         ? (this.o.temporary?.has(userId, conversationId) ?? false)
         : request.temporary === true;
-      const config = await this.configFor(userId, model, sender, temporary);
+      const config = await this.configFor(userId, model, sender, temporary, request.think);
       const historyImages = await this.historyImages(userId);
       // Step 1–2: authorized snapshot under a short lock, then preflight unlocked.
       const snapshot = request.conversationId
@@ -449,6 +459,7 @@ export class SendService {
         providerId: request.providerId,
         model: request.model,
         expectedRevision: request.expectedRevision,
+        ...(request.think !== undefined ? { think: request.think } : {}),
       }),
     );
     const keyed = request;
@@ -471,6 +482,7 @@ export class SendService {
       model,
       sender,
       this.o.temporary?.has(userId, conversationId) ?? false,
+      request.think,
     );
     const historyImages = await this.historyImages(userId);
 
@@ -585,9 +597,10 @@ export class SendService {
    */
   private async configFor(
     userId: string,
-    model: { providerId: string; id: string; capabilities: { tools: boolean } },
+    model: { providerId: string; id: string; capabilities: { tools: boolean; reasoning: boolean } },
     sender: Sender,
     temporary = false,
+    think?: boolean,
   ): Promise<ModelConfig> {
     const base = this.modelConfig(model.providerId, model.id, sender);
     // Temporary chats neither use nor suggest memories (Phase 13f).
@@ -601,6 +614,7 @@ export class SendService {
       tools:
         model.capabilities.tools && this.o.proposals !== undefined && this.o.search !== undefined,
       temporary,
+      ...(think !== undefined && model.capabilities.reasoning ? { think } : {}),
     };
   }
 
@@ -814,6 +828,7 @@ export class SendService {
           messages: input.prompt.messages,
           maxTokens: input.config.maxTokens,
           sampling: input.config.sampling,
+          ...(input.config.think !== undefined ? { think: input.config.think } : {}),
           ...(input.config.tools
             ? {
                 tools: this.toolLoop(userId, {

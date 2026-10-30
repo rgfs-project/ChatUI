@@ -238,6 +238,41 @@
   color: var(--text);
 }
 
+/* Think toggle (Phase 15): a pill next to +, filled while on. */
+.composer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--icon-button);
+  padding: 0 12px;
+  border: 1px solid var(--composer-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-ui);
+  white-space: nowrap;
+}
+
+.composer-pill:hover {
+  background: var(--hover);
+}
+
+.composer-pill.is-on {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  /* Text stays at full contrast; the fill shows the state. */
+  color: var(--text);
+}
+
+.composer-start {
+  gap: 4px;
+}
+
+.composer-mic.is-on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
 /* Two rows: text above, + and send below. */
 .composer.is-multiline {
   display: grid;

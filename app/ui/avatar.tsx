@@ -26,6 +26,9 @@ export function Avatar({
     <span
       className={`avatar shape-${profile?.shape ?? "circle"}${size === "large" ? " avatar-large" : ""}${version ? " has-photo" : ""}`}
       aria-hidden
+      // Initials are drawn by CSS: the avatar is decoration inside a named
+      // button, and real text would not match the button's name.
+      {...(version ? {} : { "data-initials": initials(username) })}
     >
       {version ? (
         <img
@@ -34,9 +37,7 @@ export function Avatar({
           width={size === "large" ? 96 : 24}
           height={size === "large" ? 96 : 24}
         />
-      ) : (
-        initials(username)
-      )}
+      ) : null}
     </span>
   );
 }

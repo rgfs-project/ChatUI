@@ -112,6 +112,11 @@ export interface ChatApi {
   /** The next new chat is temporary (Phase 13f). */
   temporaryDraft: boolean;
   setTemporaryDraft: (value: boolean) => void;
+  /** The selected model reasons, so sends carry the Think choice (Phase 15). */
+  canThink: boolean;
+  /** Reasoning on or off for the next sends (tab memory; on by default). */
+  think: boolean;
+  setThink: (value: boolean) => void;
 }
 
 const ChatContext = createContext<ChatApi | null>(null);
@@ -142,6 +147,7 @@ export function ChatProvider({
   const jumpRef = useRef<(() => void) | null>(null);
   const [hasDraft, setHasDraft] = useState(false);
   const [temporaryDraft, setTemporaryDraft] = useState(false);
+  const [think, setThink] = useState(true);
 
   const conversation = useQuery({
     ...conversationQuery(userId, conversationId ?? "none"),
@@ -195,6 +201,19 @@ export function ChatProvider({
   // Compared by value: a recomputed pair with the same ids is no change.
   const selectedKey = chosenPair ? pairKey(chosenPair) : null;
   const selectedPair = useMemo(() => (selectedKey ? pairOfKey(selectedKey) : null), [selectedKey]);
+  const canThink = useMemo(
+    () =>
+      selectedPair !== null &&
+      groups.some((g) =>
+        g.models.some(
+          (m) =>
+            m.providerId === selectedPair[0] &&
+            m.id === selectedPair[1] &&
+            m.capabilities.reasoning,
+        ),
+      ),
+    [groups, selectedPair],
+  );
   const selectModel = useCallback(
     (pair: ModelPair) => {
       setChosen((map) => new Map(map).set(conversationId ?? "new", pair));
@@ -276,6 +295,7 @@ export function ChatProvider({
         content,
         ...(attachments.length > 0 ? { attachmentIds: attachments.map((a) => a.id) } : {}),
         ...(target === null && temporaryDraft ? { temporary: true } : {}),
+        ...(canThink ? { think } : {}),
         operationKey: crypto.randomUUID(),
         operationIssuedAt: new Date().toISOString(),
       });
@@ -349,6 +369,8 @@ export function ChatProvider({
       running,
       selectedPair,
       temporaryDraft,
+      canThink,
+      think,
       toast,
       userId,
     ],
@@ -496,6 +518,9 @@ export function ChatProvider({
       setHasDraft,
       temporaryDraft,
       setTemporaryDraft,
+      canThink,
+      think,
+      setThink,
     }),
     [
       userId,
@@ -523,6 +548,8 @@ export function ChatProvider({
       logout,
       hasDraft,
       temporaryDraft,
+      canThink,
+      think,
     ],
   );
 

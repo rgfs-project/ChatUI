@@ -259,3 +259,14 @@ body {
   animation-duration: 0s !important;
   scroll-behavior: auto !important;
 }
+
+/* The system setting stops the same motion, spinners included (Phase 15). */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-motion="system"] *,
+  :root[data-motion="system"] *::before,
+  :root[data-motion="system"] *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}

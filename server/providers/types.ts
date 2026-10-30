@@ -48,6 +48,8 @@ export interface ChatRequest {
     function: { name: string; description: string; parameters: Record<string, unknown> };
   }[];
   maxTokens: number;
+  /** Reasoning on or off (Phase 15); omitted leaves the model's default. */
+  think?: boolean;
   /** Per-model sampling overrides (Phase 10, validated by the admin settings schema). */
   sampling?: {
     temperature?: number;

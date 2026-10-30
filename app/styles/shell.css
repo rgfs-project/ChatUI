@@ -257,6 +257,10 @@
   font-weight: var(--weight-semibold);
 }
 
+.avatar[data-initials]::before {
+  content: attr(data-initials);
+}
+
 .avatar img {
   width: 100%;
   height: 100%;

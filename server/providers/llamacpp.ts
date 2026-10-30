@@ -343,6 +343,10 @@ export function createLlamaCppProvider(
             messages: request.messages,
             max_tokens: request.maxTokens,
             ...samplingFields(request.sampling),
+            // UNVERIFIED (docs/provider-notes.md): llama.cpp passes these to the chat template.
+            ...(request.think !== undefined
+              ? { chat_template_kwargs: { enable_thinking: request.think } }
+              : {}),
             ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {}),
             stream: true,
             stream_options: { include_usage: true },

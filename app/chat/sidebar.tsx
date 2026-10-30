@@ -468,8 +468,10 @@ export const Sidebar = memo(function Sidebar() {
           align="start"
           contentClassName="profile-menu"
           trigger={
-            <button type="button" className="profile-row" aria-label={`Account: ${username}`}>
+            <button type="button" className="profile-row">
               <Avatar userId={userId} username={username} />
+              {/* The visible name is part of the accessible name ("Account: alice"). */}
+              <span className="visually-hidden">Account: </span>
               <span className="profile-name" data-testid="signed-in-user">
                 {username}
               </span>

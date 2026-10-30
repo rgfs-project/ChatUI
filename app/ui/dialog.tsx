@@ -5,19 +5,29 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { claimMenuOpener } from "./menu";
 
-/** Focus return for a dialog that may have been opened from a menu item. */
+/**
+ * Focus return for a controlled dialog: to the menu trigger when a menu item
+ * opened it, else to whatever had focus when it opened (a button inside
+ * another dialog, for a nested confirmation).
+ */
 function useReturnFocus(open: boolean) {
   const target = useRef<HTMLElement | null>(null);
-  // Claimed on open (not in onOpenAutoFocus: Radix skips that when a field autofocuses).
-  useEffect(() => {
-    if (open) target.current = claimMenuOpener();
+  // A layout effect runs before Radix moves focus into the dialog (a passive
+  // effect), so the element that had focus is still known. Not in
+  // onOpenAutoFocus: Radix skips that when a field autofocuses.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
+    target.current =
+      claimMenuOpener() ??
+      (active instanceof HTMLElement && active !== document.body ? active : null);
   }, [open]);
   return {
     onCloseAutoFocus: (event: Event) => {

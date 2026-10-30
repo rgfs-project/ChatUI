@@ -53,7 +53,7 @@ test("attach an image, send, reload: the thumbnail is in the transcript and open
   await page.keyboard.press("ArrowRight");
   await expect(viewer.getByRole("heading", { name: "second.png" })).toBeVisible();
   await viewer.getByRole("button", { name: "Zoom in" }).click();
-  await expect(viewer.getByRole("button", { name: "Fit to screen" })).toHaveText("150%");
+  await expect(viewer.getByRole("button", { name: /^Fit to screen/ })).toHaveText("150%");
   await expect(viewer.getByRole("link", { name: "Download" })).toHaveAttribute(
     "href",
     /\/content\?download=1$/,

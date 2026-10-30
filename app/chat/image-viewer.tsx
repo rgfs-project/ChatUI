@@ -148,7 +148,7 @@ export default function ImageViewer({
               <button
                 type="button"
                 className="viewer-zoom"
-                aria-label="Fit to screen"
+                aria-label={`Fit to screen, ${String(Math.round(view.scale * 100))}%`}
                 onClick={() => {
                   setView(FIT);
                 }}

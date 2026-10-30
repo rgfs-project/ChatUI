@@ -226,11 +226,12 @@ export function useSlashMenu(query: string | null, commands: SlashCommands, done
     },
     ariaProps: open
       ? {
+          // A textarea keeps its textbox role (it can't be a combobox), so
+          // the open list is tied to it by aria-controls and the active
+          // option by aria-activedescendant.
           "aria-controls": MENU_ID,
-          "aria-expanded": true,
           "aria-activedescendant": slashOptionId(active),
-          "aria-haspopup": "listbox" as const,
         }
-      : { "aria-expanded": false, "aria-haspopup": "listbox" as const },
+      : {},
   };
 }

@@ -75,6 +75,8 @@ export const startGenerationRequestSchema = z
     operationIssuedAt: z.iso.datetime({ offset: false }),
     /** A new temporary chat (Phase 13f); only with no conversationId. */
     temporary: z.boolean().optional(),
+    /** Reasoning on or off for this send (Phase 15); ignored for models without it. */
+    think: z.boolean().optional(),
   })
   .refine((request) => !(request.temporary && request.conversationId), {
     path: ["temporary"],

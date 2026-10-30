@@ -58,7 +58,7 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 | Share button in the chat header (export a read-only copy)                                                                                             | 13d (export)                                  |
 | Collapsible "Thought for …" reasoning label                                                                                                           | Done (14b)                                    |
 | Reply actions: like, share, more (…)                                                                                                                  | Done (14b)                                    |
-| Composer "Think" toggle (reasoning on/off per send) and microphone dictation                                                                          | 15                                            |
+| Composer "Think" toggle (reasoning on/off per send) and microphone dictation                                                                          | Done (15)                                     |
 
 ## 4. Decisions (settled 2026-10-29)
 
@@ -77,7 +77,8 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 | 7a, 7b, 8, 11, 14, 9, 10, 12, 12b | Done (tags `phase-<id>`); reports in `docs/phase-reports/`      |
 | 13a, D2 + 13b, 13c, 13d, 13f, 13g | Done (tags `phase-13a` … `phase-13d`, `phase-13f`, `phase-13g`) |
 | 13e                               | Waiting for real Claude export fixtures                         |
-| 14b onward                        | Not started                                                     |
+| 14b, 15                           | Done (tags `phase-14b`, `phase-15`)                             |
+| 16 onward                         | Not started                                                     |
 
 ## 6. Phase 7a plan (as approved)
 

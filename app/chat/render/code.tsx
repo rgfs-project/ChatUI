@@ -1,5 +1,5 @@
 import { Check, Copy } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { copyText } from "../copy";
 import { lazyModule, useLazy } from "./lazy";
 
@@ -27,6 +27,27 @@ export function highlight(
   }
 }
 
+/** Whether an element overflows sideways, kept current as it resizes. */
+function useScrollable(content: string) {
+  const ref = useRef<HTMLPreElement | null>(null);
+  const [overflows, setOverflows] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => {
+      setOverflows(el.scrollWidth > el.clientWidth + 1);
+    };
+    check();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, [content]);
+  return [ref, overflows] as const;
+}
+
 export function CodeBlock({ language, source }: { language: string | null; source: string }) {
   const [copied, setCopied] = useState(false);
   const hljs = useLazy(highlighterModule, language !== null);
@@ -34,6 +55,7 @@ export function CodeBlock({ language, source }: { language: string | null; sourc
     () => (hljs ? highlight(hljs, source, language) : null),
     [hljs, source, language],
   );
+  const [preRef, overflows] = useScrollable(html ?? source);
   return (
     <div className="code-block">
       <div className="code-head">
@@ -56,7 +78,14 @@ export function CodeBlock({ language, source }: { language: string | null; sourc
           <span>{copied ? "Copied" : "Copy"}</span>
         </button>
       </div>
-      <pre className="selectable">
+      <pre
+        ref={preRef}
+        className="selectable"
+        // A block wider than the column scrolls; keyboard users need to reach it.
+        {...(overflows
+          ? { tabIndex: 0, role: "region", "aria-label": `${language ?? "Text"} code` }
+          : {})}
+      >
         {html ? <code dangerouslySetInnerHTML={{ __html: html }} /> : <code>{source}</code>}
       </pre>
     </div>

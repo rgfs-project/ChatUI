@@ -97,12 +97,14 @@ html[data-phone] .chat-area.is-empty .greeting {
 /* Touch: every control is at least 44 × 44 to the finger (the visual size stays). */
 html[data-phone] .icon-button,
 html[data-phone] .send-button,
+html[data-phone] .composer-pill,
 html[data-phone] .code-copy {
   position: relative;
 }
 
 html[data-phone] .icon-button::after,
 html[data-phone] .send-button::after,
+html[data-phone] .composer-pill::after,
 html[data-phone] .code-copy::after {
   position: absolute;
   inset: min(0px, calc((100% - 44px) / 2));
@@ -204,6 +206,8 @@ html[data-phone] .page-body {
 }
 
 /* Two 36px buttons side by side: 8px apart so their 44px tap areas don't overlap. */
-html[data-phone] .sidebar-head-actions {
+html[data-phone] .sidebar-head-actions,
+html[data-phone] .composer-start,
+html[data-phone] .composer-actions {
   gap: 8px;
 }

@@ -111,4 +111,6 @@ export const regenerateSchema = z.strictObject({
   expectedRevision: revision,
   operationKey: z.uuid(),
   operationIssuedAt: z.iso.datetime({ offset: false }),
+  /** Reasoning on or off (Phase 15), as for a send. */
+  think: z.boolean().optional(),
 });

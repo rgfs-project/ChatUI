@@ -144,3 +144,13 @@ ChatUI offers OpenAI-compatible function tools (`tools: [{ type: "function", fun
   - whether the server accepts the assistant tool-call message followed by tool results.
 
   `node scripts/probe-provider.ts` now records all three in its `tools` section. Until it shows they work, leave `capabilities.tools` set to `false` (the default): chat is unaffected, and memories you add in Settings still reach every reply. If the follow-up is rejected, ChatUI ends the reply with the text it already has.
+
+## Reasoning on/off (Think toggle, Phase 15)
+
+For a provider whose `capabilities.reasoning` is `true`, each send and regeneration carries the composer's Think choice. ChatUI sends it as `chat_template_kwargs: { "enable_thinking": true | false }` and sends nothing for providers without reasoning.
+
+- **UNVERIFIED against a live server** (none was reachable during Phase 15):
+  - whether this `llama-server` build accepts `chat_template_kwargs` per request (recent builds document it; older ones may ignore or reject unknown fields);
+  - whether the configured model's chat template reads `enable_thinking` (Qwen 3-style templates do; others ignore it, and the model then reasons as it always does).
+
+  If a model ignores it, the toggle has no effect and replies still show their reasoning. If the server rejects the field, the send fails with a provider error: set `capabilities.reasoning` to `false` for that provider until it is verified.

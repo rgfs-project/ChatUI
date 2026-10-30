@@ -344,6 +344,7 @@ export class GenerationManager {
       /** Per-generation output cap (admin limit ≤ environment) and sampling (Phase 10). */
       maxTokens?: number;
       sampling?: ChatRequest["sampling"];
+      think?: boolean;
       /** The shared tool loop, for tool-capable models (D2). */
       tools?: ToolLoop;
     },
@@ -404,13 +405,14 @@ export class GenerationManager {
         this.options.maxOutputTokens,
       ),
       ...(input.sampling ? { sampling: input.sampling } : {}),
+      ...(input.think !== undefined ? { think: input.think } : {}),
     });
   }
 
   private async run(
     generation: Generation,
     initial: ProviderMessage[],
-    limits: { maxTokens: number; sampling?: ChatRequest["sampling"] },
+    limits: { maxTokens: number; sampling?: ChatRequest["sampling"]; think?: boolean },
   ): Promise<void> {
     const signal = generation.controller.signal;
     const loop = generation.loop;
@@ -442,6 +444,7 @@ export class GenerationManager {
             messages,
             maxTokens: remaining,
             ...(limits.sampling ? { sampling: limits.sampling } : {}),
+            ...(limits.think !== undefined ? { think: limits.think } : {}),
             ...(offer ? { tools: loop.definitions } : {}),
           },
           signal,

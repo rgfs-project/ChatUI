@@ -71,6 +71,7 @@ export function ConversationOpsProvider({ children }: { children: ReactNode }) {
         providerId: pair[0],
         model: pair[1],
         expectedRevision: revision,
+        ...(c.canThink ? { think: c.think } : {}),
         operationKey: crypto.randomUUID(),
         operationIssuedAt: new Date().toISOString(),
       };

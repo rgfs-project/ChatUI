@@ -436,7 +436,11 @@ export async function startMockLlama(options: MockLlamaOptions = {}): Promise<Mo
       case MOCK_MODELS.chat:
       case MOCK_MODELS.vision: {
         const delay = options.chatChunkDelayMs ?? 0;
-        for (const piece of ["Considering ", "the request."]) {
+        // Like a thinking template: enable_thinking=false means no reasoning.
+        const thinking =
+          (body as { chat_template_kwargs?: { enable_thinking?: boolean } } | undefined)
+            ?.chat_template_kwargs?.enable_thinking !== false;
+        for (const piece of thinking ? ["Considering ", "the request."] : []) {
           send(chunk(model, { reasoning_content: piece }));
           if (delay) await sleep(delay);
         }

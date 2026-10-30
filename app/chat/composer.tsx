@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, Paperclip, Plus, Square } from "lucide-react";
+import { ArrowUp, Lightbulb, Mic, Paperclip, Plus, Square } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -20,6 +20,8 @@ import { useToast } from "../ui/toast";
 import { AttachmentChips } from "./attachment-chips";
 import { openProjectDialog } from "./project-dialogs";
 import { useChat } from "./chat-context";
+import { useDictation, useDictationSupported, type DictationError } from "./dictation";
+import { htmlToMarkdown } from "./html-to-markdown";
 import { ACCEPT, composerFiles, MAX_FILES_PER_MESSAGE, useComposerFiles } from "./composer-files";
 import { DEFAULT_IMAGE_MAX_EDGE } from "./downscale";
 import { ModelMenu } from "./model-picker";
@@ -49,6 +51,9 @@ export function useAddFiles(userId: string, key: string): (files: File[]) => voi
   );
 }
 
+/** Shown once per page load, on the first dictation. */
+let dictationNoticeShown = false;
+
 /** Single-row height of the textarea (26px line + 10px padding). */
 const SINGLE_ROW_PX = 36;
 const MAX_HEIGHT_PX = 216;
@@ -75,7 +80,11 @@ export function Composer() {
     setHasDraft,
     result,
     rename,
+    canThink,
+    think,
+    setThink,
   } = useChat();
+  const toast = useToast();
   const navigate = useNavigate();
   /** Text after a lone leading `/` (slash commands), or null. */
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
@@ -169,12 +178,71 @@ export function Composer() {
     }
   }
 
+  /** Puts text at the caret as if typed (kept in the undo history where the browser allows). */
+  const insertText = useCallback(
+    (text: string) => {
+      const el = composerRef.current;
+      if (!el) return;
+      el.focus();
+      // execCommand keeps native undo and fires the input event itself; no
+      // standard API inserts text into a textarea's undo history.
+      const inserted =
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- see above
+        typeof document.execCommand === "function" &&
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- see above
+        document.execCommand("insertText", false, text);
+      if (!inserted) {
+        el.setRangeText(text, el.selectionStart, el.selectionEnd, "end");
+        draftStore.set(keyRef.current, el.value);
+        sync();
+      }
+    },
+    [composerRef, sync],
+  );
+
   function onPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
     const pasted = Array.from(event.clipboardData.files);
-    if (pasted.length === 0) return;
+    if (pasted.length > 0) {
+      event.preventDefault();
+      addFiles(pasted);
+      return;
+    }
+    // Rich text (a web page, a document) arrives as Markdown; plain text and
+    // code-editor copies paste as they are (Ctrl/⌘+Shift+V pastes plain text).
+    const markdown = htmlToMarkdown(event.clipboardData.getData("text/html"));
+    if (markdown === null) return;
     event.preventDefault();
-    addFiles(pasted);
+    insertText(markdown);
   }
+
+  const dictationOk = useDictationSupported();
+  const dictation = useDictation(
+    (text) => {
+      const el = composerRef.current;
+      if (!el) return;
+      const before = el.value.slice(0, el.selectionStart);
+      insertText(before === "" || /\s$/.test(before) ? text : ` ${text}`);
+    },
+    (error: DictationError) => {
+      toast(
+        error === "denied"
+          ? "Dictation needs permission to use the microphone."
+          : error === "no-speech"
+            ? "No speech was heard."
+            : "Dictation stopped working.",
+        "error",
+      );
+    },
+  );
+  const startDictation = () => {
+    if (!dictationNoticeShown) {
+      dictationNoticeShown = true;
+      toast(
+        "Dictation uses your browser's speech recognition, which may send audio to its vendor.",
+      );
+    }
+    dictation.start();
+  };
 
   const clearSlash = () => {
     const el = composerRef.current;
@@ -333,6 +401,20 @@ export function Composer() {
               </button>
             }
           />
+          {canThink ? (
+            <button
+              type="button"
+              className={`composer-pill${think ? " is-on" : ""}`}
+              aria-pressed={think}
+              data-testid="think-toggle"
+              onClick={() => {
+                setThink(!think);
+              }}
+            >
+              <Lightbulb size={16} aria-hidden />
+              <span>Think</span>
+            </button>
+          ) : null}
         </div>
         <textarea
           id="message"
@@ -358,6 +440,22 @@ export function Composer() {
           onPaste={onPaste}
         />
         <div className="composer-actions">
+          {dictationOk ? (
+            <button
+              type="button"
+              className={`icon-button composer-mic${dictation.listening ? " is-on" : ""}`}
+              // A toggle: the name stays, the pressed state says whether it listens.
+              aria-label="Dictate"
+              aria-pressed={dictation.listening}
+              data-testid="dictate"
+              onClick={() => {
+                if (dictation.listening) dictation.stop();
+                else startDictation();
+              }}
+            >
+              <Mic size={18} aria-hidden />
+            </button>
+          ) : null}
           {running ? (
             <button
               type="button"

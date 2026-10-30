@@ -176,15 +176,30 @@ export default function SearchDialog({ onClose }: { onClose: () => void }) {
           </div>
           {query !== "" ? (
             <div className="search-tabs" role="tablist" aria-label="Result type">
-              {TABS.map((t) => (
+              {TABS.map((t, index) => (
                 <button
                   key={t.id}
+                  id={`search-tab-${t.id}`}
                   type="button"
                   role="tab"
                   aria-selected={tab === t.id}
+                  aria-controls="search-results"
+                  // Roving focus (ARIA tabs): one tab stop, arrows move between tabs.
+                  tabIndex={tab === t.id ? 0 : -1}
                   onClick={() => {
                     setTab(t.id);
                     setActive(0);
+                  }}
+                  onKeyDown={(event) => {
+                    const step =
+                      event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+                    if (step === 0) return;
+                    event.preventDefault();
+                    const next = TABS[(index + step + TABS.length) % TABS.length];
+                    if (!next) return;
+                    setTab(next.id);
+                    setActive(0);
+                    document.getElementById(`search-tab-${next.id}`)?.focus();
                   }}
                 >
                   {t.label}

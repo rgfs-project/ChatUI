@@ -210,7 +210,7 @@ test("slash commands: / opens a menu above the composer; keyboard and mouse choo
   await message.fill("/");
   const menu = page.getByTestId("slash-menu");
   await expect(menu).toBeVisible();
-  await expect(message).toHaveAttribute("aria-expanded", "true");
+  await expect(message).toHaveAttribute("aria-controls", "slash-menu");
   await expect(menu.getByRole("option", { name: /Model/ })).toContainText("Change from");
   // Rename and New chat need a conversation.
   await expect(menu.getByRole("option", { name: /Rename chat/ })).toHaveCount(0);
