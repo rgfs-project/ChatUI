@@ -95,6 +95,8 @@ export interface ChatApi {
   selectModel: (pair: ModelPair) => void;
   refreshModels: () => Promise<void>;
   send: (content: string, attachments?: readonly AttachmentDto[]) => Promise<boolean>;
+  /** Starts observing an accepted generation (send, regenerate). */
+  beginLive: (accepted: StartGenerationResponse, pair: ModelPair) => void;
   cancel: () => Promise<void>;
   rename: (target: RenameTarget) => void;
   renameTarget: RenameTarget | null;
@@ -208,6 +210,38 @@ export function ChatProvider({
   // ── Sending ──
   const [pending, setPending] = useState<PendingSend | null>(null);
   const sending = useRef(false);
+  // Once the stored conversation has the sent message, the pending copy is done:
+  // a later edit or delete that removes the message must not bring it back.
+  const storedPending =
+    pending?.userMessageId != null &&
+    result?.ok === true &&
+    result.conversation.id === pending.conversationId &&
+    result.conversation.messages.some((m) => m.id === pending.userMessageId);
+  if (storedPending) setPending(null);
+
+  /** A generation was accepted (send or regenerate): observe it at once. */
+  const beginLive = useCallback(
+    (accepted: StartGenerationResponse, pair: ModelPair) => {
+      mark("chatui:generation-accepted", { generationId: accepted.generationId });
+      const live: LiveGeneration = {
+        generationId: accepted.generationId,
+        assistantMessageId: accepted.assistantMessageId,
+        conversationId: accepted.conversationId,
+        state: "pending",
+        content: "",
+        reasoning: "",
+        finishReason: null,
+        error: null,
+      };
+      client.setQueryData(qk.generation(userId, accepted.generationId), live);
+      setStarted({ conversationId: accepted.conversationId, generationId: accepted.generationId });
+      setChosen((map) => new Map(map).set(accepted.conversationId, pair));
+      setLastUsed(pair);
+      writeLastUsed(userId, pair);
+      void client.invalidateQueries({ queryKey: qk.conversations(userId) });
+    },
+    [client, userId],
+  );
 
   const send = useCallback(
     async (content: string, attachments: readonly AttachmentDto[] = []): Promise<boolean> => {
@@ -256,22 +290,7 @@ export function ChatProvider({
           }
           if (response?.status === 202) {
             const accepted = (await response.json()) as StartGenerationResponse;
-            mark("chatui:generation-accepted", { generationId: accepted.generationId });
-            const live: LiveGeneration = {
-              generationId: accepted.generationId,
-              assistantMessageId: accepted.assistantMessageId,
-              conversationId: accepted.conversationId,
-              state: "pending",
-              content: "",
-              reasoning: "",
-              finishReason: null,
-              error: null,
-            };
-            client.setQueryData(qk.generation(userId, accepted.generationId), live);
-            setStarted({
-              conversationId: accepted.conversationId,
-              generationId: accepted.generationId,
-            });
+            beginLive(accepted, pair);
             setPending({
               conversationId: accepted.conversationId,
               content,
@@ -279,10 +298,6 @@ export function ChatProvider({
               userMessageId: accepted.userMessageId,
               status: "sending",
             });
-            setChosen((map) => new Map(map).set(accepted.conversationId, pair));
-            setLastUsed(pair);
-            writeLastUsed(userId, pair);
-            void client.invalidateQueries({ queryKey: qk.conversations(userId) });
             if (target === null) {
               draftStore.set(`${userId}|new`, "");
               // The draft URL is replaced, so Back does not return to an empty draft.
@@ -317,7 +332,7 @@ export function ChatProvider({
         sending.current = false;
       }
     },
-    [client, conversationId, navigate, result, running, selectedPair, toast, userId],
+    [beginLive, client, conversationId, navigate, result, running, selectedPair, toast, userId],
   );
 
   const checkPending = useCallback(async () => {
@@ -446,6 +461,7 @@ export function ChatProvider({
       selectModel,
       refreshModels,
       send,
+      beginLive,
       cancel,
       rename: setRenameTarget,
       renameTarget,
@@ -478,6 +494,7 @@ export function ChatProvider({
       selectModel,
       refreshModels,
       send,
+      beginLive,
       cancel,
       renameTarget,
       submitRename,

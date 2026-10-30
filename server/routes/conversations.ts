@@ -4,11 +4,17 @@ import {
   conversationDtoSchema,
   conversationListSchema,
   createConversationSchema,
+  deleteExchangeSchema,
+  editMessageSchema,
+  regenerateSchema,
   renameConversationSchema,
   type ConversationDto,
   type MessageDto,
 } from "@shared/conversations";
 import { ErrorCode } from "@shared/errors";
+import { startGenerationResponseSchema } from "@shared/generations";
+import { searchResultsSchema } from "@shared/search";
+import { SEARCH_MAX_CHATS, SEARCH_MAX_QUERY } from "../chat/search.ts";
 import { attachmentRefs } from "../attachments/serve.ts";
 import { AppError } from "../errors.ts";
 import { defineRoute, userOf, type RouteServices } from "../registry.ts";
@@ -170,7 +176,123 @@ export const deleteConversationRoute = defineRoute({
       await ctx.services.conversations.delete(userId, params.id);
       // Markdown first, then its files: an orphan is safe and collected; a dangling reference is not.
       await ctx.services.attachments.deleteForConversation(userId, params.id);
+      await ctx.services.mutations.forgetPin(userId, params.id);
       return { deleted: true as const };
     }),
   fixture: { params: unknownId, expectStatus: 404 },
+});
+
+const messageParams = z.strictObject({ id: canonicalUuid, messageId: canonicalUuid });
+const unknownMessage = { ...unknownId, messageId: "00000000-0000-4000-8000-0000000000aa" };
+const fixtureRevision = "0".repeat(64);
+
+/** Edit a user turn (contracts §4.2): later blocks go; no reply is started. */
+export const editMessageRoute = defineRoute({
+  method: "patch",
+  path: "/api/conversations/:id/messages/:messageId",
+  auth: "user",
+  csrf: "token",
+  request: { params: messageParams, body: editMessageSchema },
+  response: conversationDtoSchema,
+  handler: async ({ params, body }, ctx) => {
+    const { userId } = userOf(ctx);
+    return toConversationDto(
+      await ctx.services.mutations.edit(userId, params.id, params.messageId, body),
+      ctx.services,
+      userId,
+    );
+  },
+  fixture: {
+    params: unknownMessage,
+    body: { content: "x", expectedRevision: fixtureRevision },
+    expectStatus: 404,
+  },
+});
+
+/** Delete exactly one exchange (contracts §4.2). */
+export const deleteExchangeRoute = defineRoute({
+  method: "delete",
+  path: "/api/conversations/:id/messages/:messageId",
+  auth: "user",
+  csrf: "token",
+  request: { params: messageParams, body: deleteExchangeSchema },
+  response: conversationDtoSchema,
+  handler: async ({ params, body }, ctx) => {
+    const { userId } = userOf(ctx);
+    return toConversationDto(
+      await ctx.services.mutations.deleteExchange(
+        userId,
+        params.id,
+        params.messageId,
+        body.expectedRevision,
+      ),
+      ctx.services,
+      userId,
+    );
+  },
+  fixture: {
+    params: unknownMessage,
+    body: { expectedRevision: fixtureRevision },
+    expectStatus: 404,
+  },
+});
+
+/** Regenerate the reply to a user turn (contracts §4.2); 202 like a send. */
+export const regenerateRoute = defineRoute({
+  method: "post",
+  path: "/api/conversations/:id/messages/:messageId/regenerate",
+  auth: "user",
+  csrf: "token",
+  request: { params: messageParams, body: regenerateSchema },
+  response: startGenerationResponseSchema,
+  status: 202,
+  handler: ({ params, body }, ctx) => {
+    const auth = userOf(ctx);
+    return ctx.services.send.regenerate(
+      auth.userId,
+      { ...body, conversationId: params.id, messageId: params.messageId },
+      { role: auth.role, username: auth.username },
+    );
+  },
+  fixture: {
+    params: unknownMessage,
+    body: {
+      providerId: "local",
+      model: "fixture-missing-model",
+      expectedRevision: fixtureRevision,
+      operationKey: "00000000-0000-4000-8000-00000000f2f2",
+      operationIssuedAt: new Date().toISOString(),
+    },
+    expectStatus: 400,
+  },
+});
+
+/** Clear history: every conversation, its files and pins (contracts §4.2). */
+export const clearHistoryRoute = defineRoute({
+  method: "post",
+  path: "/api/conversations/clear",
+  auth: "user",
+  csrf: "token",
+  request: { body: z.strictObject({ confirm: z.literal(true) }) },
+  response: z.strictObject({ deleted: z.number().int().nonnegative() }),
+  handler: async (_input, ctx) => ({
+    deleted: await ctx.services.mutations.clearHistory(userOf(ctx).userId),
+  }),
+  fixture: { body: { confirm: true } },
+});
+
+export const searchRoute = defineRoute({
+  method: "get",
+  path: "/api/search",
+  auth: "user",
+  csrf: "none",
+  request: {
+    query: z.strictObject({
+      q: z.string().max(SEARCH_MAX_QUERY),
+      limit: z.coerce.number().int().min(1).max(SEARCH_MAX_CHATS).optional(),
+    }),
+  },
+  response: searchResultsSchema,
+  handler: ({ query }, ctx) => ctx.services.search.search(userOf(ctx).userId, query.q, query.limit),
+  fixture: { query: { q: "hello" } },
 });

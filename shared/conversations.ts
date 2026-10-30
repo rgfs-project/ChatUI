@@ -79,3 +79,24 @@ export const operationResultSchema = z.strictObject({
 export type ConversationResult =
   | { ok: true; conversation: ConversationDto }
   | { ok: false; code: "NOT_FOUND" | "CONVERSATION_MALFORMED" };
+
+const revision = z.string().regex(/^[0-9a-f]{64}$/);
+
+/** Edit a user turn (Phase 13a, contracts §4.2): later blocks are removed. */
+export const editMessageSchema = z.strictObject({
+  content: z.string().max(100_000),
+  /** A subset of the message's current files (omit to keep them all). */
+  attachmentIds: z.array(z.uuid()).max(10).optional(),
+  expectedRevision: revision,
+});
+
+export const deleteExchangeSchema = z.strictObject({ expectedRevision: revision });
+
+/** Regenerate the reply to a user turn (contracts §4.2), idempotent by key (§4.1). */
+export const regenerateSchema = z.strictObject({
+  providerId: z.string().min(1).max(64),
+  model: z.string().trim().min(1).max(200),
+  expectedRevision: revision,
+  operationKey: z.uuid(),
+  operationIssuedAt: z.iso.datetime({ offset: false }),
+});

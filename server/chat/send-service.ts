@@ -25,6 +25,8 @@ import {
   type TokenCounter,
 } from "./prompt.ts";
 import { counterFor } from "./token-counter.ts";
+import { exchangeOrThrow } from "./mutations.ts";
+import { removedUsers, touchesIrregular } from "./turns.ts";
 import { expandSystemPrompt, type Sampling, type SettingsStore } from "../admin/settings.ts";
 import { prepareExpansion } from "../attachments/expand.ts";
 import type { AttachmentMeta, AttachmentStore } from "../attachments/store.ts";
@@ -94,6 +96,17 @@ const DEFAULT_ATTACHMENT_LIMITS = {
   mediaTokenReserve: 0,
   maxPromptMediaParts: 8,
 };
+
+/** Regenerating an existing user turn (Phase 13a, contracts §4.2). */
+export interface RegenerateRequest {
+  conversationId: string;
+  messageId: string;
+  providerId: string;
+  model: string;
+  expectedRevision: string;
+  operationKey: string;
+  operationIssuedAt: string;
+}
 
 /** Who is sending: role decides hidden-model access; username fills {{username}}. */
 export interface Sender {
@@ -201,7 +214,7 @@ export class SendService {
   /** Step 1: the operation key decides first, before admission/model/provider checks. */
   private async checkKey(
     userId: string,
-    request: StartGenerationRequest,
+    request: Pick<StartGenerationRequest, "operationKey">,
     payloadHash: string,
   ): Promise<StartGenerationResponse | undefined> {
     const record = await this.o.operations.read(userId, request.operationKey);
@@ -219,7 +232,7 @@ export class SendService {
     return undefined;
   }
 
-  private assertFresh(request: StartGenerationRequest): void {
+  private assertFresh(request: Pick<StartGenerationRequest, "operationIssuedAt">): void {
     const issued = Date.parse(request.operationIssuedAt);
     const now = this.now().getTime();
     if (
@@ -347,6 +360,152 @@ export class SendService {
     );
   }
 
+  /**
+   * Regenerate user turn `messageId` (contracts §4.2): one fresh provider
+   * contact and the replacement prompt are checked before anything is
+   * removed; then, under the lock and at `expectedRevision`, every block
+   * after that user block is dropped and a generation starts with fresh ids.
+   * The user block is never duplicated. Idempotent by operation key.
+   */
+  async regenerate(
+    userId: string,
+    request: RegenerateRequest,
+    sender: Sender = { role: "user", username: "" },
+  ): Promise<StartGenerationResponse> {
+    const flightKey = `${userId}:${request.operationKey}`;
+    for (;;) {
+      const inflight = this.inflight.get(flightKey);
+      if (!inflight) break;
+      await inflight.catch(() => undefined);
+    }
+    const work = this.acceptRegeneration(userId, request, sender);
+    this.inflight.set(flightKey, work);
+    try {
+      return await work;
+    } finally {
+      if (this.inflight.get(flightKey) === work) this.inflight.delete(flightKey);
+    }
+  }
+
+  private async acceptRegeneration(
+    userId: string,
+    request: RegenerateRequest,
+    sender: Sender,
+  ): Promise<StartGenerationResponse> {
+    const { conversationId, messageId } = request;
+    const payloadHash = sha256Hex(
+      JSON.stringify({
+        regenerate: messageId,
+        conversationId,
+        providerId: request.providerId,
+        model: request.model,
+        expectedRevision: request.expectedRevision,
+      }),
+    );
+    const keyed = request;
+    const known = await this.checkKey(userId, keyed, payloadHash);
+    if (known) return known;
+    this.assertFresh(keyed);
+    const conversationKey = `${userId}/${conversationId}`;
+    this.o.generations.assertAdmission();
+    this.o.generations.assertIdle(conversationKey);
+    // A fresh provider contact before anything is truncated (§4.1 step 2).
+    await this.o.catalog.contact(request.providerId);
+    const model = await this.o.catalog.resolve(request.providerId, request.model);
+    if (sender.role !== "admin" && this.o.settings?.isHidden(model.providerId, model.id)) {
+      throw new AppError(ErrorCode.MODEL_NOT_FOUND, "The selected model is not available");
+    }
+    const provider = this.o.catalog.provider(model.providerId);
+    const settingsRevision = this.o.settings?.revision ?? null;
+    const config = this.modelConfig(model.providerId, model.id, sender);
+    const historyImages = await this.historyImages(userId);
+
+    const snapshot = await this.o.store.withLock(userId, conversationId, async () => {
+      const current = await this.readExisting(userId, conversationId);
+      if (current.revision !== request.expectedRevision)
+        throw new AppError(ErrorCode.CONFLICT, "The conversation changed; reload and try again");
+      return current;
+    });
+    const { layout, exchange } = exchangeOrThrow(snapshot.model, messageId);
+    if (touchesIrregular(layout, exchange.start, snapshot.model.blocks.length)) {
+      throw new AppError(
+        ErrorCode.VALIDATION,
+        "This part of the conversation has replies without a matching message and can't be changed",
+      );
+    }
+    const attachmentIds = exchange.user.attachments ?? [];
+    const store = this.o.attachments;
+    const metas = store ? await Promise.all(attachmentIds.map((id) => store.get(userId, id))) : [];
+    for (const kind of ["image", "audio"] as const) {
+      if (
+        metas.some((meta) => meta?.kind === kind) &&
+        !model.capabilities.inputModalities.includes(kind)
+      ) {
+        throw new AppError(
+          ErrorCode.MODEL_CAPABILITY_UNSUPPORTED,
+          kind === "image"
+            ? "The selected model can't view images; choose a model with vision"
+            : "The selected model can't listen to audio; choose a model with audio input",
+        );
+      }
+    }
+    const truncated: ConversationModel = {
+      ...snapshot.model,
+      blocks: snapshot.model.blocks.slice(0, exchange.start + 1),
+    };
+    const prompt = await this.preflight(
+      userId,
+      { ...snapshot.model, blocks: snapshot.model.blocks.slice(0, exchange.start) },
+      exchange.user.body,
+      attachmentIds,
+      {
+        provider,
+        providerId: model.providerId,
+        model: model.id,
+        contextTokens: model.contextTokens,
+        modalities: model.capabilities.inputModalities,
+        historyImages,
+        config,
+      },
+    );
+    await this.o.hooks?.beforeRecheck?.();
+
+    const outcome = await this.o.store.withLock(userId, conversationId, async () => {
+      const current = await this.readExisting(userId, conversationId);
+      if (
+        current.revision !== snapshot.revision ||
+        (this.o.settings?.revision ?? null) !== settingsRevision ||
+        (await this.historyImages(userId)) !== historyImages
+      ) {
+        throw new AppError(ErrorCode.CONFLICT, "The conversation changed; reload and try again");
+      }
+      const again = await this.checkKey(userId, keyed, payloadHash);
+      if (again) return { response: again, launch: undefined, removed: [] };
+      const reservation = this.o.generations.reserve(userId, conversationKey, model.providerId);
+      const committed = await this.commit(userId, {
+        request: keyed,
+        payloadHash,
+        conversationId,
+        content: exchange.user.body,
+        attachments: [],
+        provider,
+        providerId: model.providerId,
+        model: model.id,
+        current,
+        prompt,
+        reservation,
+        config,
+        regenerate: { userMessageId: messageId, truncated },
+      });
+      return { ...committed, removed: removedUsers(current.model.blocks, truncated.blocks) };
+    });
+    outcome.launch?.();
+    // Files of the removed later turns go after the canonical write (§7).
+    const dropped = outcome.removed.flatMap((block) => block.attachments ?? []);
+    if (dropped.length > 0) await this.o.attachments?.deleteIds(userId, conversationId, dropped);
+    return outcome.response;
+  }
+
   private async readExisting(userId: string, conversationId: string) {
     const read = await this.o.store.readUnlocked(userId, conversationId);
     if (read.kind === "missing") throw new AppError(ErrorCode.NOT_FOUND, "Conversation not found");
@@ -455,7 +614,7 @@ export class SendService {
   private async commit(
     userId: string,
     input: {
-      request: StartGenerationRequest;
+      request: Pick<StartGenerationRequest, "operationKey" | "operationIssuedAt">;
       payloadHash: string;
       conversationId: string;
       content: string;
@@ -467,6 +626,8 @@ export class SendService {
       prompt: AssembledPrompt;
       reservation: ReturnType<GenerationManager["reserve"]>;
       config: ModelConfig;
+      /** Regeneration (§4.2): keep this user block, drop everything after it. */
+      regenerate?: { userMessageId: string; truncated: ConversationModel };
     },
   ): Promise<{ response: StartGenerationResponse; launch: (() => void) | undefined }> {
     const { conversationId, reservation } = input;
@@ -475,7 +636,7 @@ export class SendService {
       const now = this.now().toISOString();
       const ids = {
         generationId: randomUUID(),
-        userMessageId: randomUUID(),
+        userMessageId: input.regenerate?.userMessageId ?? randomUUID(),
         assistantMessageId: randomUUID(),
       };
       const base: ConversationModel = input.current?.model ?? {
@@ -485,15 +646,17 @@ export class SendService {
         blocks: [],
       };
       const attachmentIds = input.attachments.map((meta) => meta.id);
-      const next = this.o.store.appendBlocks(base, [
-        {
-          type: "user",
-          id: ids.userMessageId,
-          time: now,
-          body: input.content,
-          ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
-        },
-      ]);
+      const next = input.regenerate
+        ? { ...input.regenerate.truncated, updatedAt: now }
+        : this.o.store.appendBlocks(base, [
+            {
+              type: "user",
+              id: ids.userMessageId,
+              time: now,
+              body: input.content,
+              ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
+            },
+          ]);
       const record: OperationRecord = {
         version: 1,
         operationKey: input.request.operationKey,

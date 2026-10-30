@@ -20,10 +20,12 @@ export function useCloseOverlay(): () => void {
 export function OverlayDialog({
   title,
   className,
+  page,
   children,
 }: {
   title: string;
   className?: string;
+  page?: boolean;
   children: ReactNode;
 }) {
   const close = useCloseOverlay();
@@ -35,6 +37,7 @@ export function OverlayDialog({
       }}
       title={title}
       {...(className ? { className } : {})}
+      {...(page ? { page } : {})}
     >
       {children}
     </Dialog>

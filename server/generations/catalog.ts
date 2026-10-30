@@ -121,6 +121,19 @@ export class ModelCatalog {
     return state.refreshing;
   }
 
+  /**
+   * One fresh, successful provider contact (contracts §4.1 step 2, required
+   * before a regeneration truncates anything); a cached list is not enough.
+   */
+  async contact(providerId: string): Promise<void> {
+    if (!this.providers.has(providerId))
+      throw new AppError(ErrorCode.PROVIDER_NOT_FOUND, "The selected provider is not available");
+    await this.refresh(providerId);
+    const state = this.state(providerId);
+    if (state.models === null || state.stale)
+      throw new AppError(ErrorCode.PROVIDER_UNAVAILABLE, "The model server is unreachable");
+  }
+
   /** Starts discovery for every provider without waiting (startup). */
   warmUp(): void {
     for (const id of this.providers.keys()) void this.refresh(id);

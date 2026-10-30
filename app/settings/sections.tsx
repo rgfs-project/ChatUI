@@ -9,6 +9,7 @@ import { apiJson } from "../lib/api";
 import { paths } from "../lib/paths";
 import { qk } from "../lib/query/keys";
 import { modelsQuery, preferencesQuery } from "../lib/query/queries";
+import { useConfirm } from "../ui/dialog";
 import { useToast } from "../ui/toast";
 import { appearanceRows } from "./appearance";
 import { HistoryImagesRow, ImageSizeRow, StorageRow } from "./files";
@@ -52,6 +53,51 @@ function General() {
           );
         }}
       />
+    </Row>
+  );
+}
+
+/** Clear history (contracts §4.2): every chat and its files; memories and settings stay. */
+function DeleteAllChats() {
+  const { userId } = useChat();
+  const client = useQueryClient();
+  const confirm = useConfirm();
+  const toast = useToast();
+  const navigate = useNavigate();
+  return (
+    <Row
+      label="Delete all chats"
+      hint="Removes every chat and the files sent in them. Settings stay."
+    >
+      <button
+        type="button"
+        className="pill-button pill-danger"
+        onClick={() => {
+          void (async () => {
+            const yes = await confirm({
+              title: "Delete all chats?",
+              body: "Every chat and the files sent in them are deleted. This cannot be undone.",
+              confirmLabel: "Delete all",
+              danger: true,
+            });
+            if (!yes) return;
+            try {
+              const { deleted } = await apiJson<{ deleted: number }>("/api/conversations/clear", {
+                method: "POST",
+                json: { confirm: true },
+              });
+              client.setQueryData(qk.conversations(userId), []);
+              void client.invalidateQueries({ queryKey: ["u", userId] });
+              toast(`${String(deleted)} ${deleted === 1 ? "chat" : "chats"} deleted.`);
+              await navigate(paths.newChat(), { replace: true });
+            } catch (error) {
+              toast(error instanceof Error ? error.message : "Could not delete the chats", "error");
+            }
+          })();
+        }}
+      >
+        Delete all
+      </button>
     </Row>
   );
 }
@@ -150,6 +196,7 @@ function LogOut() {
 }
 
 const SHORTCUTS: [string, string][] = [
+  ["Search chats", "Ctrl/⌘ + K"],
   ["Send message", "Enter"],
   ["New line", "Shift + Enter"],
   ["New chat", "Ctrl/⌘ + Shift + O"],
@@ -178,6 +225,12 @@ export const SECTIONS: SettingsSection[] = [
         label: "Default model",
         keywords: "model provider new chat",
         render: () => <General />,
+      },
+      {
+        id: "delete-all",
+        label: "Delete all chats",
+        keywords: "clear history remove conversations",
+        render: () => <DeleteAllChats />,
       },
     ],
   },

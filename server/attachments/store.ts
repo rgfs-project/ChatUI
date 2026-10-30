@@ -337,6 +337,20 @@ export class AttachmentStore {
     return removed;
   }
 
+  /** Files of removed user turns (edit, delete exchange): only those linked to this conversation. */
+  async deleteIds(userId: string, conversationId: string, ids: readonly string[]): Promise<number> {
+    let removed = 0;
+    await this.withLocks(userId, ids, async () => {
+      for (const id of ids) {
+        const current = await this.get(userId, id);
+        if (current?.conversationId !== conversationId) continue;
+        await this.removeUnlocked(userId, current);
+        removed++;
+      }
+    });
+    return removed;
+  }
+
   /** Removes pending uploads older than the TTL (each rechecked under its lock). */
   async collectExpired(userId: string): Promise<number> {
     const cutoff = this.now().getTime() - this.o.pendingTtlMs;

@@ -31,6 +31,8 @@ function useReturnFocus(open: boolean) {
   };
 }
 
+export const DialogClose = RadixDialog.Close;
+
 /**
  * Modal dialog on Radix Dialog: focus trap, Escape, focus restoration, inert
  * background and portal layering (INV-47).
@@ -43,6 +45,7 @@ export function Dialog({
   children,
   className,
   closeLabel = "Close",
+  page = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -51,6 +54,8 @@ export function Dialog({
   children: ReactNode;
   className?: string;
   closeLabel?: string;
+  /** A full-window page: no head row; the content brings its own close control (`DialogClose`). */
+  page?: boolean;
 }) {
   const focus = useReturnFocus(open);
   return (
@@ -60,16 +65,29 @@ export function Dialog({
         <RadixDialog.Content
           className={`dialog${className ? ` ${className}` : ""}`}
           onCloseAutoFocus={focus.onCloseAutoFocus}
+          // A page starts focused on itself, not on its first control (Tab reaches them in order).
+          {...(page
+            ? {
+                onOpenAutoFocus: (event: Event) => {
+                  event.preventDefault();
+                  (event.currentTarget as HTMLElement | null)?.focus();
+                },
+              }
+            : {})}
           {...(description ? {} : { "aria-describedby": undefined })}
         >
-          <div className="dialog-head">
-            <RadixDialog.Title className="dialog-title">{title}</RadixDialog.Title>
-            <RadixDialog.Close asChild>
-              <button type="button" className="icon-button" aria-label={closeLabel}>
-                <X size={18} aria-hidden />
-              </button>
-            </RadixDialog.Close>
-          </div>
+          {page ? (
+            <RadixDialog.Title className="visually-hidden">{title}</RadixDialog.Title>
+          ) : (
+            <div className="dialog-head">
+              <RadixDialog.Title className="dialog-title">{title}</RadixDialog.Title>
+              <RadixDialog.Close asChild>
+                <button type="button" className="icon-button" aria-label={closeLabel}>
+                  <X size={18} aria-hidden />
+                </button>
+              </RadixDialog.Close>
+            </div>
+          )}
           {description ? (
             <RadixDialog.Description className="dialog-body">{description}</RadixDialog.Description>
           ) : null}

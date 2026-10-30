@@ -16,6 +16,8 @@ export const qk = {
   /** Profile statistics for a time zone (Phase 12b); never dehydrated. */
   profileStats: (userId: string, timeZone: string) =>
     ["u", userId, "profile-stats", timeZone] as const,
+  /** Search results for one query (Phase 13a); never dehydrated. */
+  search: (userId: string, query: string) => ["u", userId, "search", query] as const,
   /** The user's uploaded files (Phase 12); invalidated by uploads and deletes. */
   attachments: (userId: string) => ["u", userId, "attachments"] as const,
   /** Live generation state written by the SSE observer; never dehydrated. */
@@ -31,6 +33,7 @@ export type Resource =
   | "instance"
   | "profile"
   | "profile-stats"
+  | "search"
   | "attachments"
   | "generation";
 
@@ -47,6 +50,7 @@ export function resourceOf(key: readonly unknown[]): Resource | undefined {
       "instance",
       "profile",
       "profile-stats",
+      "search",
       "attachments",
       "generation",
     ].includes(name)

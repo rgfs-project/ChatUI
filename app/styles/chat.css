@@ -664,3 +664,66 @@
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+/* ── Conversation operations (Phase 13a) ── */
+/* Edit, delete and regenerate wait for the running reply. */
+.thread[data-running] .needs-idle {
+  display: none;
+}
+
+.msg-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 640px);
+  padding: 12px 14px;
+  border-radius: var(--radius-bubble);
+  background: var(--bubble-bg);
+  color: var(--bubble-text);
+}
+
+.msg-editor textarea {
+  width: 100%;
+  min-height: 26px;
+  max-height: 320px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-message);
+  line-height: var(--lh-message);
+  resize: none;
+}
+
+.msg-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pill-dark {
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.pill-light {
+  border-color: transparent;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.pill-light:disabled {
+  opacity: 0.5;
+}
+
+/* Matches marked after opening a chat from search. */
+::highlight(chatui-search) {
+  background-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.sidebar-head-actions {
+  display: flex;
+  gap: 4px;
+}

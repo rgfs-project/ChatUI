@@ -17,6 +17,7 @@ import { LiveReply } from "./live-reply";
 import { UserBubble } from "./message";
 import { draftKey } from "./drafts";
 import { ViewerProvider, type ViewerImage } from "./viewer";
+import { useSearchMarks } from "./search-marks";
 import { useScrollIntent } from "./scroll-intent";
 import { Suggestions } from "./suggestions";
 import { Transcript } from "./transcript";
@@ -106,6 +107,7 @@ export function ChatView() {
   const { scrollerRef, contentRef, state, jumpToLatest } = useScrollIntent(conversationId ?? "new");
   const { jumpRef } = chat;
   const visible = conversation !== null;
+  useSearchMarks(visible, conversationId);
   useEffect(() => {
     if (visible) mark("chatui:conversation-visible");
   }, [visible]);
@@ -167,7 +169,12 @@ export function ChatView() {
           </div>
         ) : null}
         <div className="scroller" id="transcript-scroller" ref={scrollerRef}>
-          <div className="thread" ref={contentRef} data-testid="transcript">
+          <div
+            className="thread"
+            ref={contentRef}
+            data-testid="transcript"
+            data-running={chat.running ? "true" : undefined}
+          >
             {failure === "NOT_FOUND" ? (
               <div className="chat-error" role="alert">
                 <h1>This conversation does not exist.</h1>

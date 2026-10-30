@@ -79,8 +79,22 @@ export class PreferencesStore {
     }
   }
 
+  /** Drops pins of conversations that no longer exist (under the lock; INV-34). */
+  async removePins(userId: string, ids: readonly string[]): Promise<void> {
+    const current = await this.get(userId);
+    if (!current.pins.some((id) => ids.includes(id))) return;
+    await this.update(userId, {}, (prefs) => ({
+      pins: prefs.pins.filter((id) => !ids.includes(id)),
+    }));
+  }
+
   /** Applies a partial update under the per-user lock, preserving other fields. */
-  async update(userId: string, patch: Partial<Omit<Preferences, "version">>): Promise<Preferences> {
+  async update(
+    userId: string,
+    patch: Partial<Omit<Preferences, "version">>,
+    /** Computes more changes from the current value, still under the lock. */
+    derive?: (current: Preferences) => Partial<Omit<Preferences, "version">>,
+  ): Promise<Preferences> {
     return this.locks.run(`preferences:${userId}`, async () => {
       const bytes = await readOrNull(this.paths.preferencesFile(userId));
       let current: ReturnType<typeof sanitize>;
@@ -89,7 +103,12 @@ export class PreferencesStore {
       } catch {
         current = sanitize(undefined);
       }
-      const next: Preferences = { ...current.prefs, ...patch, version: 1 };
+      const next: Preferences = {
+        ...current.prefs,
+        ...patch,
+        ...derive?.(current.prefs),
+        version: 1,
+      };
       await atomicWrite(
         this.paths.preferencesFile(userId),
         `${JSON.stringify({ ...current.extra, ...next }, null, 2)}\n`,

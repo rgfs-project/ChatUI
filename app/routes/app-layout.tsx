@@ -1,5 +1,13 @@
 import { HydrationBoundary, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import {
   data,
   Outlet,
@@ -15,6 +23,8 @@ import type { ConversationResult } from "@shared/conversations";
 import type { ProviderModelsDto } from "@shared/generations";
 import { ChatProvider } from "../chat/chat-context";
 import { ChatView } from "../chat/chat-view";
+import { ConversationOpsProvider } from "../chat/conversation-ops";
+import { OPEN_SEARCH_EVENT } from "../chat/search-events";
 import { Drawer } from "../chat/drawer";
 import { ReauthDialog } from "../chat/reauth";
 import { RenameDialog } from "../chat/rename-dialog";
@@ -41,6 +51,9 @@ import { ConfirmProvider } from "../ui/dialog";
 import { ToastProvider } from "../ui/toast";
 import { TooltipProvider } from "../ui/tooltip";
 import type { Route } from "./+types/app-layout";
+
+/** Search is its own chunk: the chat page never loads it until it opens (Phase 13a). */
+const SearchDialog = lazy(() => import("../chat/search-dialog"));
 
 /**
  * Startup dependency graph (Phase 8). Critical, awaited concurrently: the
@@ -211,6 +224,16 @@ function Shell() {
   // for the re-authentication dialog; drafts stay in tab memory (contracts §12).
   const client = useQueryClient();
   const [expired, setExpired] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const open = () => {
+      setSearchOpen(true);
+    };
+    window.addEventListener(OPEN_SEARCH_EVENT, open);
+    return () => {
+      window.removeEventListener(OPEN_SEARCH_EVENT, open);
+    };
+  }, []);
   useEffect(() => {
     const onExpired = (event: Event) => {
       if ((event as CustomEvent<{ userId: string }>).detail.userId !== user?.id) return;
@@ -229,11 +252,14 @@ function Shell() {
   }, [location.pathname, closeNarrow]);
 
   // Global shortcuts; Ctrl/Cmd+A selects only the conversation, not the chrome.
-  function onKeyDown(event: ReactKeyboardEvent) {
+  function onKeyDown(event: ReactKeyboardEvent | KeyboardEvent) {
     const mod = event.ctrlKey || event.metaKey;
     if (!mod) return;
     const key = event.key.toLowerCase();
-    if (event.shiftKey && key === "o") {
+    if (!event.shiftKey && key === "k") {
+      event.preventDefault();
+      setSearchOpen(true);
+    } else if (event.shiftKey && key === "o") {
       event.preventDefault();
       void navigate(paths.newChat());
     } else if (event.shiftKey && key === "s") {
@@ -250,6 +276,22 @@ function Shell() {
       selection.addRange(range);
     }
   }
+
+  // With nothing focused (after a page load or a click on blank space) keys go
+  // to the body, outside the app element: the shortcuts still apply there.
+  const shortcuts = useRef(onKeyDown);
+  useLayoutEffect(() => {
+    shortcuts.current = expired ? () => undefined : onKeyDown;
+  });
+  useEffect(() => {
+    const onBodyKey = (event: KeyboardEvent) => {
+      if (event.target === document.body) shortcuts.current(event);
+    };
+    window.addEventListener("keydown", onBodyKey);
+    return () => {
+      window.removeEventListener("keydown", onBodyKey);
+    };
+  }, []);
 
   // The guard resolved signed-out (logout, account change in progress).
   if (!user) return null;
@@ -268,24 +310,35 @@ function Shell() {
 
   return (
     <ChatProvider user={user} conversationId={conversationId}>
-      <div
-        className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}${narrowOpen ? " narrow-open" : ""}`}
-        onKeyDown={onKeyDown}
-      >
-        <AreaBoundary
-          area="Sidebar"
-          className="sidebar"
-          onRetry={() => {
-            void client.invalidateQueries({ queryKey: qk.conversations(user.id) });
-          }}
+      <ConversationOpsProvider>
+        <div
+          className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}${narrowOpen ? " narrow-open" : ""}`}
+          onKeyDown={onKeyDown}
         >
-          <Sidebar />
-        </AreaBoundary>
-        <Drawer />
-        <main className="main">{kind === "page" ? <Outlet /> : <ChatView />}</main>
-      </div>
-      {kind === "overlay" ? <Outlet /> : null}
-      <RenameDialog />
+          <AreaBoundary
+            area="Sidebar"
+            className="sidebar"
+            onRetry={() => {
+              void client.invalidateQueries({ queryKey: qk.conversations(user.id) });
+            }}
+          >
+            <Sidebar />
+          </AreaBoundary>
+          <Drawer />
+          <main className="main">{kind === "page" ? <Outlet /> : <ChatView />}</main>
+        </div>
+        {kind === "overlay" ? <Outlet /> : null}
+        <RenameDialog />
+        {searchOpen ? (
+          <Suspense fallback={null}>
+            <SearchDialog
+              onClose={() => {
+                setSearchOpen(false);
+              }}
+            />
+          </Suspense>
+        ) : null}
+      </ConversationOpsProvider>
     </ChatProvider>
   );
 }

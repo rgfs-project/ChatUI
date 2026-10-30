@@ -12,6 +12,19 @@ export const Transcript = memo(function Transcript({
   timeFormat: TimeFormat;
 }) {
   const separators = useMemo(() => separatorIndexes(messages.map((m) => m.time)), [messages]);
+  // Each reply's user turn, for Regenerate (contracts §4.2 exchanges).
+  const turns = useMemo(() => {
+    const map = new Map<string, string>();
+    let user: string | null = null;
+    for (const m of messages) {
+      if (m.role === "user") user = m.id;
+      else if (m.role === "assistant" && user) {
+        map.set(m.id, user);
+        user = null;
+      } else if (m.role === "system") user = null;
+    }
+    return map;
+  }, [messages]);
   return (
     <>
       {messages.map((message, i) => (
@@ -19,7 +32,7 @@ export const Transcript = memo(function Transcript({
           {separators.has(i) && message.time ? (
             <p className="time-separator">{formatSeparator(message.time, timeFormat)}</p>
           ) : null}
-          <Message message={message} />
+          <Message message={message} turnUserId={turns.get(message.id)} />
         </Fragment>
       ))}
     </>

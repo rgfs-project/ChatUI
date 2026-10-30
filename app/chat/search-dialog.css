@@ -1,0 +1,134 @@
+/* Search (Phase 13a): loaded with the dialog's chunk, never with the chat page. */
+.dialog.search-dialog {
+  top: 12vh;
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(560px, 76vh);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+.search-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 18px;
+  border-bottom: 1px solid var(--divider);
+  color: var(--text-secondary);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.search-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0;
+}
+
+.search-tabs button {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: var(--weight-medium);
+}
+
+.search-tabs button[aria-selected="true"] {
+  background: var(--active);
+  color: var(--text);
+}
+
+.search-section {
+  margin: 10px 20px 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: var(--weight-semibold);
+}
+
+.search-results {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.search-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--radius-row);
+  cursor: pointer;
+}
+
+.search-item.is-active {
+  background: var(--hover);
+}
+
+.search-icon {
+  display: inline-flex;
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+
+.search-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.search-title,
+.search-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-title {
+  font-size: 14px;
+}
+
+.search-detail {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.search-detail mark {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: inherit;
+}
+
+.search-empty {
+  margin: 8px 20px 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+html[data-phone] .dialog.search-dialog {
+  inset: 0;
+  width: 100vw;
+  max-height: none;
+  height: 100dvh;
+  border-radius: 0;
+  transform: none;
+  padding-top: env(safe-area-inset-top);
+}

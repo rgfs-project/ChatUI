@@ -102,6 +102,8 @@ LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
 
 `/` opens a new chat (`/chat/new`); each conversation has its own address (`/chat/<id>`), and the server status page is at `/status`. The page renders the composer on the server (you can type before JavaScript loads). Replies stream with the model's reasoning shown separately. Reloading keeps watching the running reply, and Stop cancels it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
 
+Under each of your messages are Copy, Edit and Delete; Edit turns the bubble into an editor, and Send replaces the message and everything after it, then asks for a new reply. Replies have Regenerate (it asks first, and replaces later messages too). Delete removes one message and its reply. Ctrl/⌘+K (or the search icon in the sidebar) searches your chats and files; opening a result jumps to the match. Pin a chat from its menu to keep it in the Pinned section. Settings → General → Delete all chats removes every chat and its files and keeps your settings.
+
 ## Providers (`providers.json`)
 
 Model servers are configured in `DATA_DIR/_system/providers.json`. On first start it is created with one `local` provider from `LLAMA_BASE_URL` / `LLAMA_API_KEY`; after that **the file is authoritative**: edit it in Administration → Providers (applied at once), or by hand and restart:

@@ -138,9 +138,9 @@ html[data-phone] .dialog {
 
 html[data-phone] .settings-dialog {
   top: 0;
-  min-height: 100dvh;
+  height: 100dvh;
   max-height: 100dvh;
-  padding: calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));
+  padding: env(safe-area-inset-top) 0 0;
   border-radius: 0;
 }
 
@@ -149,9 +149,26 @@ html[data-phone] .settings {
 }
 
 html[data-phone] .settings-nav {
-  flex-direction: row;
   width: auto;
+  box-shadow: inset 0 -1px 0 var(--divider);
+}
+
+html[data-phone] .settings-nav-items {
+  flex-direction: row;
   overflow-x: auto;
+}
+
+html[data-phone] .settings-nav-items .side-row {
+  width: auto;
+  white-space: nowrap;
+}
+
+html[data-phone] .settings-nav-title {
+  display: none;
+}
+
+html[data-phone] .settings-panel {
+  padding: 20px 16px calc(48px + env(safe-area-inset-bottom));
 }
 
 html[data-phone] .settings-row {
@@ -184,4 +201,9 @@ html[data-phone] .composer-file-remove::after {
 /* The phone header is in the flow, so page content starts right below it. */
 html[data-phone] .page-body {
   padding-top: 8px;
+}
+
+/* Two 36px buttons side by side: 8px apart so their 44px tap areas don't overlap. */
+html[data-phone] .sidebar-head-actions {
+  gap: 8px;
 }

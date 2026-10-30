@@ -138,14 +138,26 @@
   flex-direction: column;
 }
 
-.settings-dialog {
-  width: min(720px, calc(100vw - 32px));
-  min-height: min(480px, calc(100dvh - 32px));
+/*
+ * Settings and Administration are full-window pages: a navigation column
+ * beside a scrolling column of grouped cards.
+ */
+.dialog.settings-dialog {
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 0;
+  background: var(--dialog-bg);
+  box-shadow: none;
+  transform: none;
 }
 
 .settings {
   display: flex;
-  gap: 16px;
+  height: 100%;
 }
 
 .settings-nav {
@@ -153,25 +165,68 @@
   flex: none;
   flex-direction: column;
   gap: 2px;
-  width: 200px;
+  width: 260px;
+  padding: 12px 8px;
+  overflow-y: auto;
+  background: var(--bg);
+  box-shadow: inset -1px 0 0 var(--divider);
 }
 
-.settings-panel {
-  flex: 1;
-  min-width: 0;
+.settings-nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.settings-title {
-  margin: 0 0 8px;
-  font-size: 16px;
+.settings-back {
+  margin-bottom: 4px;
+}
+
+.settings-nav-title {
+  margin: 8px 10px 8px;
+  font-size: 18px;
   font-weight: var(--weight-semibold);
   line-height: 24px;
 }
 
-.settings-subtitle {
-  margin: 16px 0 4px;
-  font-size: 14px;
+.settings-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.settings-panel {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 32px 64px;
+}
+
+.settings-panel.is-wide {
+  max-width: 1200px;
+}
+
+.settings-title {
+  margin: 0 0 20px;
+  font-size: 24px;
   font-weight: var(--weight-semibold);
+  line-height: 32px;
+}
+
+.settings-subtitle {
+  margin: 24px 0 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: var(--weight-medium);
+}
+
+.settings-card {
+  padding: 0 20px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-suggestion);
+}
+
+.settings-card > :last-child {
+  border-bottom: 0;
 }
 
 .settings-row {
@@ -222,9 +277,26 @@
   }
 
   .settings-nav {
-    flex-direction: row;
     width: auto;
+    box-shadow: inset 0 -1px 0 var(--divider);
+  }
+
+  .settings-nav-items {
+    flex-direction: row;
     overflow-x: auto;
+  }
+
+  .settings-nav-items .side-row {
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .settings-nav-title {
+    display: none;
+  }
+
+  .settings-panel {
+    padding: 20px 16px 48px;
   }
 }
 
@@ -455,10 +527,6 @@
 }
 
 /* ── Administration (Phase 10) ── */
-.admin-dialog-wide {
-  width: min(1040px, calc(100vw - 32px));
-}
-
 .admin-panel {
   overflow-x: auto;
 }
@@ -624,4 +692,9 @@ html[data-phone] .notice-banner {
 
 .storage-meter::-moz-progress-bar {
   background: var(--accent);
+}
+
+/* A page dialog holds focus itself on open; only its controls show a ring. */
+.dialog.settings-dialog:focus-visible {
+  outline: none;
 }

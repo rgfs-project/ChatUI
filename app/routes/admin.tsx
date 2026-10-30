@@ -7,6 +7,7 @@ import { UsersSection } from "../admin/users";
 import { OverlayDialog } from "../chat/overlay";
 import { appContext } from "../context";
 import { paths } from "../lib/paths";
+import { SettingsPage } from "../settings/page-layout";
 import type { Route } from "./+types/admin";
 
 export const handle = { kind: "overlay" };
@@ -75,34 +76,25 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
   }
   const current = SECTIONS.find((s) => s.id === params.section) ?? SECTIONS[0];
   return (
-    <OverlayDialog title="Administration" className="settings-dialog admin-dialog-wide">
-      <div className="settings">
-        <nav className="settings-nav" aria-label="Administration sections">
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`side-row${s.id === current.id ? " is-active" : ""}`}
-              aria-current={s.id === current.id ? "page" : undefined}
-              onClick={() => {
-                void navigate(paths.admin(s.id), {
-                  replace: true,
-                  state: location.state as unknown,
-                });
-              }}
-            >
-              {s.icon}
-              <span>{s.label}</span>
-            </button>
-          ))}
-        </nav>
-        <section className="settings-panel admin-panel" aria-labelledby="admin-section-title">
-          <h2 id="admin-section-title" className="settings-title">
-            {current.label}
-          </h2>
-          {current.render()}
-        </section>
-      </div>
+    <OverlayDialog title="Administration" className="settings-dialog" page>
+      <SettingsPage
+        title="Administration"
+        navLabel="Administration sections"
+        items={SECTIONS}
+        current={current.id}
+        wide
+        onSelect={(id) => {
+          void navigate(paths.admin(id), {
+            replace: true,
+            state: location.state as unknown,
+          });
+        }}
+      >
+        <h2 id="settings-section-title" className="settings-title">
+          {current.label}
+        </h2>
+        <div className="admin-panel">{current.render()}</div>
+      </SettingsPage>
     </OverlayDialog>
   );
 }

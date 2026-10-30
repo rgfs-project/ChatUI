@@ -11,6 +11,8 @@ export const UI_COOKIES = {
   notice: "chatui_notice",
   /** The sidebar's Recents section is folded. */
   recents: "chatui_recents",
+  /** The sidebar's Pinned section is folded. */
+  pinned: "chatui_pinned",
 } as const;
 
 import { APPEARANCE_COOKIE, parseAppearance, type Appearance } from "./appearance";
@@ -22,6 +24,7 @@ export interface UiHints {
   sidebarCollapsed: boolean;
   /** The Recents list is folded away (its heading is a toggle). */
   recentsCollapsed: boolean;
+  pinnedCollapsed: boolean;
   /** Hash of the notice this browser dismissed (so the server hides it too). */
   noticeDismissed: string | null;
   timeZone: string;
@@ -90,6 +93,7 @@ export function readUiHints(request: Request): UiHints {
     phone: isPhone(request.headers),
     sidebarCollapsed: cookies[UI_COOKIES.sidebar] === "collapsed",
     recentsCollapsed: cookies[UI_COOKIES.recents] === "collapsed",
+    pinnedCollapsed: cookies[UI_COOKIES.pinned] === "collapsed",
     noticeDismissed: /^[0-9a-z]{1,16}$/.test(cookies[UI_COOKIES.notice] ?? "")
       ? (cookies[UI_COOKIES.notice] ?? null)
       : null,

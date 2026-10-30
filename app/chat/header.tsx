@@ -1,4 +1,15 @@
-import { MoreHorizontal, PanelLeftOpen, Pencil, SquarePen, Trash2 } from "lucide-react";
+import {
+  MoreHorizontal,
+  PanelLeftOpen,
+  Pencil,
+  Pin,
+  PinOff,
+  SquarePen,
+  Trash2,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { preferencesQuery } from "../lib/query/queries";
+import { useConversationOps } from "./conversation-ops";
 import { memo } from "react";
 import { useNavigate } from "react-router";
 import { paths } from "../lib/paths";
@@ -23,6 +34,10 @@ export const Header = memo(function Header() {
   const { setSidebarOpen } = useUi();
   const navigate = useNavigate();
   const conversation = result?.ok ? result.conversation : null;
+  const ops = useConversationOps();
+  const { userId } = useChat();
+  const pinned =
+    useQuery(preferencesQuery(userId)).data?.pins.includes(conversation?.id ?? "") ?? false;
 
   return (
     <header className="chat-header">
@@ -79,6 +94,14 @@ export const Header = memo(function Header() {
               </button>
             }
           >
+            <MenuItem
+              icon={pinned ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />}
+              onSelect={() => {
+                void ops.togglePin(conversation.id);
+              }}
+            >
+              {pinned ? "Unpin" : "Pin"}
+            </MenuItem>
             <MenuItem
               icon={<Pencil size={16} aria-hidden />}
               onSelect={() => {

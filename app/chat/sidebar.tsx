@@ -6,6 +6,9 @@ import {
   Keyboard,
   LogOut,
   MoreHorizontal,
+  Pin,
+  PinOff,
+  Search,
   PanelLeftClose,
   Pencil,
   Settings,
@@ -13,7 +16,7 @@ import {
   Trash2,
   Shield,
 } from "lucide-react";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import type { ConversationSummary } from "@shared/conversations";
 import { paths, type OverlayState } from "../lib/paths";
@@ -25,6 +28,9 @@ import { Avatar } from "../ui/avatar";
 import { IconButton } from "../ui/icon-button";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { useChat } from "./chat-context";
+import { useConversationOps } from "./conversation-ops";
+import { openSearch } from "./search-events";
+import { preferencesQuery } from "../lib/query/queries";
 
 /** Opens an overlay over the current page; Back closes it (INV-53). */
 export function useOpenOverlay(): (to: string) => void {
@@ -40,13 +46,16 @@ export function useOpenOverlay(): (to: string) => void {
 const ConversationRow = memo(function ConversationRow({
   item,
   active,
+  pinned,
   prefetcher,
 }: {
   item: ConversationSummary;
   active: boolean;
+  pinned: boolean;
   prefetcher: ReturnType<typeof usePrefetcher>;
 }) {
   const { rename, remove } = useChat();
+  const ops = useConversationOps();
   const warm =
     item.malformed || active
       ? undefined
@@ -85,6 +94,14 @@ const ConversationRow = memo(function ConversationRow({
           </button>
         }
       >
+        <MenuItem
+          icon={pinned ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />}
+          onSelect={() => {
+            void ops.togglePin(item.id);
+          }}
+        >
+          {pinned ? "Unpin" : "Pin"}
+        </MenuItem>
         {item.malformed ? null : (
           <MenuItem
             icon={<Pencil size={16} aria-hidden />}
@@ -109,15 +126,69 @@ const ConversationRow = memo(function ConversationRow({
   );
 });
 
+const NO_PINS: string[] = [];
+
+/** A folding sidebar section: its heading is a button (reference UI). */
+function Section({
+  id,
+  label,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  id: string;
+  label: string;
+  collapsed: boolean;
+  onToggle: (collapsed: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <h2 className="side-heading">
+        <button
+          type="button"
+          className={`side-label${collapsed ? " is-collapsed" : ""}`}
+          aria-expanded={!collapsed}
+          aria-controls={id}
+          onClick={() => {
+            onToggle(!collapsed);
+          }}
+        >
+          <span>{label}</span>
+          <ChevronDown size={14} className="side-label-chevron" aria-hidden />
+        </button>
+      </h2>
+      {collapsed ? null : children}
+    </>
+  );
+}
+
 export const Sidebar = memo(function Sidebar() {
   useRenderProbe("Sidebar");
   const { userId, username, role, conversationId, logout } = useChat();
-  const { setSidebarOpen, recentsCollapsed, setRecentsCollapsed } = useUi();
+  const {
+    setSidebarOpen,
+    recentsCollapsed,
+    setRecentsCollapsed,
+    pinnedCollapsed,
+    setPinnedCollapsed,
+  } = useUi();
+  const prefs = useQuery(preferencesQuery(userId));
+  const pins = prefs.data?.pins ?? NO_PINS;
   const openOverlay = useOpenOverlay();
   const list = useQuery(conversationsQuery(userId));
   const prefetcher = usePrefetcher(userId);
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  // Pinned chats in pin order; Recents shows the rest.
+  const pinnedItems = useMemo(() => {
+    const byId = new Map((list.data ?? []).map((c) => [c.id, c]));
+    return pins.flatMap((id) => byId.get(id) ?? []);
+  }, [list.data, pins]);
+  const recentItems = useMemo(
+    () => (list.data ?? []).filter((c) => !pins.includes(c.id)),
+    [list.data, pins],
+  );
 
   return (
     <nav className="sidebar" aria-label="Chats">
@@ -125,15 +196,20 @@ export const Sidebar = memo(function Sidebar() {
         <Link to={paths.newChat()} className="brand">
           ChatUI
         </Link>
-        <IconButton
-          label="Close sidebar"
-          tooltipSide="right"
-          onClick={() => {
-            setSidebarOpen(false);
-          }}
-        >
-          <PanelLeftClose size={20} aria-hidden />
-        </IconButton>
+        <div className="sidebar-head-actions">
+          <IconButton label="Search chats (Ctrl+K)" tooltipSide="bottom" onClick={openSearch}>
+            <Search size={20} aria-hidden />
+          </IconButton>
+          <IconButton
+            label="Close sidebar"
+            tooltipSide="right"
+            onClick={() => {
+              setSidebarOpen(false);
+            }}
+          >
+            <PanelLeftClose size={20} aria-hidden />
+          </IconButton>
+        </div>
       </div>
       <div className="sidebar-scroll">
         <Link to={paths.newChat()} className="side-row new-chat" data-testid="new-chat">
@@ -149,38 +225,52 @@ export const Sidebar = memo(function Sidebar() {
           <LibraryBig size={18} aria-hidden />
           <span>Library</span>
         </Link>
-        <h2 className="side-heading">
-          <button
-            type="button"
-            className={`side-label${recentsCollapsed ? " is-collapsed" : ""}`}
-            aria-expanded={!recentsCollapsed}
-            aria-controls="recents"
-            onClick={() => {
-              setRecentsCollapsed(!recentsCollapsed);
-            }}
+        {pinnedItems.length > 0 ? (
+          <Section
+            id="pinned"
+            label="Pinned"
+            collapsed={pinnedCollapsed}
+            onToggle={setPinnedCollapsed}
           >
-            <span>Recents</span>
-            <ChevronDown size={14} className="side-label-chevron" aria-hidden />
-          </button>
-        </h2>
-        {recentsCollapsed ? null : list.isPending ? (
-          <p className="side-note">Loading chats…</p>
-        ) : list.isError ? (
-          <p className="side-note">Chats could not be loaded.</p>
-        ) : list.data.length === 0 ? (
-          <p className="side-note">No chats yet.</p>
-        ) : (
-          <ul className="chat-list" id="recents" data-testid="conversation-list">
-            {list.data.map((item) => (
-              <ConversationRow
-                key={item.id}
-                item={item}
-                active={item.id === conversationId}
-                prefetcher={prefetcher}
-              />
-            ))}
-          </ul>
-        )}
+            <ul className="chat-list" id="pinned" data-testid="pinned-list">
+              {pinnedItems.map((item) => (
+                <ConversationRow
+                  key={item.id}
+                  item={item}
+                  active={item.id === conversationId}
+                  pinned
+                  prefetcher={prefetcher}
+                />
+              ))}
+            </ul>
+          </Section>
+        ) : null}
+        <Section
+          id="recents"
+          label="Recents"
+          collapsed={recentsCollapsed}
+          onToggle={setRecentsCollapsed}
+        >
+          {list.isPending ? (
+            <p className="side-note">Loading chats…</p>
+          ) : list.isError ? (
+            <p className="side-note">Chats could not be loaded.</p>
+          ) : recentItems.length === 0 ? (
+            <p className="side-note">No chats yet.</p>
+          ) : (
+            <ul className="chat-list" id="recents" data-testid="conversation-list">
+              {recentItems.map((item) => (
+                <ConversationRow
+                  key={item.id}
+                  item={item}
+                  active={item.id === conversationId}
+                  pinned={false}
+                  prefetcher={prefetcher}
+                />
+              ))}
+            </ul>
+          )}
+        </Section>
       </div>
       <div className="sidebar-foot">
         <Menu

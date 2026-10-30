@@ -5,6 +5,7 @@ import type { ConversationDto, ConversationResult } from "@shared/conversations"
 import type { ProviderModelsDto } from "@shared/generations";
 import { ChatProvider } from "../../app/chat/chat-context";
 import { ChatView } from "../../app/chat/chat-view";
+import { ConversationOpsProvider } from "../../app/chat/conversation-ops";
 import { Sidebar } from "../../app/chat/sidebar";
 import { DEFAULT_APPEARANCE } from "../../app/lib/appearance";
 import { makeQueryClient } from "../../app/lib/query/client";
@@ -104,6 +105,7 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
           phone: false,
           noticeDismissed: null,
           recentsCollapsed: false,
+          pinnedCollapsed: false,
           sidebarCollapsed: false,
           timeZone: "UTC",
           locale: "en-US",
@@ -124,8 +126,10 @@ function ChatScreen() {
   const params = useParams();
   return (
     <ChatProvider user={USER} conversationId={params.conversationId ?? null}>
-      <Sidebar />
-      <ChatView />
+      <ConversationOpsProvider>
+        <Sidebar />
+        <ChatView />
+      </ConversationOpsProvider>
     </ChatProvider>
   );
 }

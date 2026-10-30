@@ -3,6 +3,7 @@ import { Fragment, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { OverlayDialog } from "../chat/overlay";
 import { paths } from "../lib/paths";
+import { SettingsCard, SettingsPage } from "../settings/page-layout";
 import { matches } from "../settings/row";
 import { SECTIONS } from "../settings/sections";
 
@@ -21,9 +22,21 @@ export default function Settings() {
   })).filter((s) => s.rows.length > 0);
   if (!current) return null;
   return (
-    <OverlayDialog title="Settings" className="settings-dialog">
-      <div className="settings">
-        <nav className="settings-nav" aria-label="Settings sections">
+    <OverlayDialog title="Settings" className="settings-dialog" page>
+      <SettingsPage
+        title="Settings"
+        navLabel="Settings sections"
+        items={SECTIONS}
+        current={searching ? null : current.id}
+        onSelect={(id) => {
+          setQuery("");
+          // Sections replace each other, so one Back still closes Settings.
+          void navigate(paths.settings(id), {
+            replace: true,
+            state: location.state as unknown,
+          });
+        }}
+        search={
           <div className="settings-search">
             <Search size={16} aria-hidden />
             <input
@@ -37,56 +50,40 @@ export default function Settings() {
               }}
             />
           </div>
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`side-row${!searching && s.id === current.id ? " is-active" : ""}`}
-              aria-current={!searching && s.id === current.id ? "page" : undefined}
-              onClick={() => {
-                setQuery("");
-                // Sections replace each other, so one Back still closes Settings.
-                void navigate(paths.settings(s.id), {
-                  replace: true,
-                  state: location.state as unknown,
-                });
-              }}
-            >
-              {s.icon}
-              <span>{s.label}</span>
-            </button>
-          ))}
-        </nav>
-        <section className="settings-panel" aria-labelledby="settings-section-title">
-          {searching ? (
-            <>
-              <h2 id="settings-section-title" className="settings-title">
-                Results
-              </h2>
-              {results.length === 0 ? (
-                <p className="settings-row-hint">No settings match “{query.trim()}”.</p>
-              ) : null}
-              {results.map((s) => (
-                <Fragment key={s.id}>
-                  <h3 className="settings-subtitle">{s.label}</h3>
+        }
+      >
+        {searching ? (
+          <>
+            <h2 id="settings-section-title" className="settings-title">
+              Results
+            </h2>
+            {results.length === 0 ? (
+              <p className="settings-row-hint">No settings match “{query.trim()}”.</p>
+            ) : null}
+            {results.map((s) => (
+              <Fragment key={s.id}>
+                <h3 className="settings-subtitle">{s.label}</h3>
+                <SettingsCard>
                   {s.rows.map((row) => (
                     <Fragment key={row.id}>{row.render()}</Fragment>
                   ))}
-                </Fragment>
-              ))}
-            </>
-          ) : (
-            <>
-              <h2 id="settings-section-title" className="settings-title">
-                {current.label}
-              </h2>
+                </SettingsCard>
+              </Fragment>
+            ))}
+          </>
+        ) : (
+          <>
+            <h2 id="settings-section-title" className="settings-title">
+              {current.label}
+            </h2>
+            <SettingsCard>
               {current.rows.map((row) => (
                 <Fragment key={row.id}>{row.render()}</Fragment>
               ))}
-            </>
-          )}
-        </section>
-      </div>
+            </SettingsCard>
+          </>
+        )}
+      </SettingsPage>
     </OverlayDialog>
   );
 }

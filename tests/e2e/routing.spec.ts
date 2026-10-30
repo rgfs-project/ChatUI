@@ -61,7 +61,7 @@ test.describe("INV-53: URL-driven conversations and overlays", () => {
     await signIn(page, "/settings/account");
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
-    await page.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Back to chat" }).click();
     await page.waitForURL(/\/chat\/new$/);
   });
 

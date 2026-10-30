@@ -33,6 +33,8 @@ interface UiState {
   /** The Recents section is folded (cookie, so the server renders it the same way). */
   recentsCollapsed: boolean;
   setRecentsCollapsed: (collapsed: boolean) => void;
+  pinnedCollapsed: boolean;
+  setPinnedCollapsed: (collapsed: boolean) => void;
   /** Narrow windows: the overlay sidebar is open (never persisted). */
   narrowOpen: boolean;
   /** Opens or closes the sidebar the way the current window width uses it. */
@@ -68,6 +70,11 @@ export function UiProvider({
   const setRecentsCollapsed = useCallback((collapsed: boolean) => {
     setRecentsState(collapsed);
     writeUiCookie(UI_COOKIES.recents, collapsed ? "collapsed" : "open");
+  }, []);
+  const [pinnedCollapsed, setPinnedState] = useState(hints.pinnedCollapsed);
+  const setPinnedCollapsed = useCallback((collapsed: boolean) => {
+    setPinnedState(collapsed);
+    writeUiCookie(UI_COOKIES.pinned, collapsed ? "collapsed" : "open");
   }, []);
   const [appearance, setAppearanceState] = useState(hints.appearance);
   const [noticeDismissed, setNoticeDismissed] = useState(hints.noticeDismissed);
@@ -118,6 +125,8 @@ export function UiProvider({
       sidebarCollapsed,
       recentsCollapsed,
       setRecentsCollapsed,
+      pinnedCollapsed,
+      setPinnedCollapsed,
       narrowOpen,
       setSidebarOpen,
       closeNarrow,
@@ -131,6 +140,8 @@ export function UiProvider({
       sidebarCollapsed,
       recentsCollapsed,
       setRecentsCollapsed,
+      pinnedCollapsed,
+      setPinnedCollapsed,
       narrowOpen,
       setSidebarOpen,
       closeNarrow,

@@ -48,6 +48,8 @@ import { AdminService } from "./admin/service.ts";
 import { SettingsStore } from "./admin/settings.ts";
 import { AttachmentStore } from "./attachments/store.ts";
 import { ProfileService } from "./profile/service.ts";
+import { ConversationMutations } from "./chat/mutations.ts";
+import { SearchService } from "./chat/search.ts";
 import { ProfileStore } from "./profile/store.ts";
 import { listDir } from "./storage/fs.ts";
 import { isUuid } from "./storage/paths.ts";
@@ -390,6 +392,14 @@ export function createApp(options: AppOptions): ChatUiApp {
     attachments,
     now,
   });
+  const mutations = new ConversationMutations({
+    store: conversations,
+    generations,
+    attachments,
+    preferences,
+    now,
+  });
+  const search = new SearchService(conversations, attachments);
   const services: RouteServices = {
     conversationDto: async (userId, id) =>
       toConversationDto(await conversations.get(userId, id), services, userId),
@@ -407,6 +417,8 @@ export function createApp(options: AppOptions): ChatUiApp {
     settings,
     attachments,
     attachmentLimits,
+    mutations,
+    search,
     profile,
     profileStore,
     profilePhotoPath: (userId) => paths.profilePhoto(userId),
