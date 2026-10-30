@@ -1,11 +1,18 @@
-// Multipart receiver for POST /api/attachments (Phase 12). Kept out of route
-// files, which never read the raw request (registry tests).
+// Multipart receiver for uploads (attachments, Phase 12; profile photo, 12b).
+// Kept out of route files, which never read the raw request (registry tests).
 import busboy from "busboy";
 import type { Readable } from "node:stream";
 import type { Request, Response } from "express";
 import { ErrorCode } from "@shared/errors";
 import { AppError } from "../errors.ts";
-import type { AttachmentMeta, AttachmentStore } from "./store.ts";
+
+/** What a receiver gets for the single `file` part. */
+export interface UploadPart {
+  filename: string;
+  clientType: string;
+  /** The request length, when known (bounds quota reservations). */
+  declaredBytes: number | undefined;
+}
 
 /**
  * Browsers escape `"`, CR and LF in multipart filenames (HTML form encoding);
@@ -16,17 +23,16 @@ function browserFilename(raw: string | undefined): string {
 }
 
 /**
- * Streams the single `file` part of a multipart/form-data request into the
- * store. Any other field or a second file is rejected. When the upload fails
- * before the body is read (size, quota, type), the connection is closed after
- * the error response so the client stops sending.
+ * Streams the single `file` part of a multipart/form-data request into
+ * `receive`. Any other field or a second file is rejected. When the upload
+ * fails before the body is read (size, quota, type), the connection is closed
+ * after the error response so the client stops sending.
  */
-export function receiveUpload(
+export function receiveUpload<T>(
   req: Request,
   res: Response,
-  store: AttachmentStore,
-  userId: string,
-): Promise<AttachmentMeta> {
+  receive: (stream: Readable, part: UploadPart) => Promise<T>,
+): Promise<T> {
   const type = req.headers["content-type"] ?? "";
   if (!/^multipart\/form-data;/i.test(type)) {
     return Promise.reject(
@@ -35,7 +41,7 @@ export function receiveUpload(
   }
   const length = Number(req.headers["content-length"]);
   const declaredBytes = Number.isSafeInteger(length) && length >= 0 ? length : undefined;
-  return new Promise<AttachmentMeta>((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     let settled = false;
     let started = false;
     let current: Readable | null = null;
@@ -66,23 +72,21 @@ export function receiveUpload(
       current = stream;
       // Errors reach the store through its async iteration; none is left unhandled.
       stream.on("error", () => undefined);
-      store
-        .ingest(userId, stream, {
-          filename: browserFilename(info.filename),
-          clientType: info.mimeType,
-          declaredBytes,
-        })
-        .then(
-          (meta) => {
-            if (settled) return;
-            settled = true;
-            resolve(meta);
-          },
-          (error: unknown) => {
-            stream.resume();
-            fail(error);
-          },
-        );
+      receive(stream, {
+        filename: browserFilename(info.filename),
+        clientType: info.mimeType,
+        declaredBytes,
+      }).then(
+        (meta) => {
+          if (settled) return;
+          settled = true;
+          resolve(meta);
+        },
+        (error: unknown) => {
+          stream.resume();
+          fail(error);
+        },
+      );
     });
     parser.on("fieldsLimit", () => {
       fail(new AppError(ErrorCode.VALIDATION, "Send exactly one file in a `file` field"));

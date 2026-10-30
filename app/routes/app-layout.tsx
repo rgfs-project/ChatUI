@@ -28,6 +28,7 @@ import {
   conversationQuery,
   conversationsQuery,
   instanceQuery,
+  profileQuery,
   modelsQuery,
   preferencesQuery,
   sessionQuery,
@@ -105,6 +106,12 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       .catch(noop),
     client
       .query({
+        queryKey: qk.profile(userId),
+        queryFn: () => services.bootstrap.profile(userId),
+      })
+      .catch(noop),
+    client
+      .query({
         queryKey: qk.models(userId),
         queryFn: (): Promise<ProviderModelsDto[]> =>
           withBudget(services.bootstrap.models(auth.role), MODEL_DISCOVERY_BUDGET_MS),
@@ -151,6 +158,7 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
   void client.query(modelsQuery(userId)).catch(noop);
   void client.query(preferencesQuery(userId)).catch(noop);
   void client.query(instanceQuery(userId)).catch(noop);
+  void client.query(profileQuery(userId)).catch(noop);
   // The active conversation is critical: navigation completes once it is known.
   // (An overlay's background conversation is already cached: it was just open.)
   const id = params.conversationId;

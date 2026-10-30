@@ -31,6 +31,8 @@ export const attachmentMetaSchema = z.strictObject({
   /** Images only. */
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
+  /** Uploaded to the Library (Phase 12b): kept until deleted, never expired or linked. */
+  saved: z.boolean().default(false),
 });
 export type AttachmentMeta = z.infer<typeof attachmentMetaSchema>;
 
@@ -165,7 +167,13 @@ export class AttachmentStore {
   async ingest(
     userId: string,
     source: Readable,
-    info: { filename: string; clientType: string; declaredBytes: number | undefined },
+    info: {
+      filename: string;
+      clientType: string;
+      declaredBytes: number | undefined;
+      /** A Library upload (kept) rather than a message attachment (pending). */
+      saved?: boolean;
+    },
   ): Promise<AttachmentMeta> {
     const { maxBytes, quotaBytes } = this.o.limits();
     const active = this.uploading.get(userId) ?? 0;
@@ -209,7 +217,7 @@ export class AttachmentStore {
     id: string,
     dir: string,
     source: Readable,
-    info: { filename: string; clientType: string },
+    info: { filename: string; clientType: string; saved?: boolean },
     bounds: { maxBytes: number; quotaRoom: number },
   ): Promise<AttachmentMeta> {
     await ensureDirUnder(this.o.paths.userDir(userId), this.o.paths.attachmentsDir(userId));
@@ -266,6 +274,7 @@ export class AttachmentStore {
         createdAt: this.now().toISOString(),
         width: sniffed.width,
         height: sniffed.height,
+        saved: info.saved === true,
       };
       // meta.json last: its presence marks a complete upload.
       await atomicWrite(this.o.paths.attachmentMeta(userId, id), `${JSON.stringify(meta)}\n`);
@@ -281,7 +290,7 @@ export class AttachmentStore {
     this.adjustUsage(userId, -meta.size);
   }
 
-  /** Deletes an upload that no message references yet. */
+  /** Deletes an upload that no message references (pending or saved in the Library). */
   async removePending(userId: string, id: string): Promise<void> {
     await this.withLocks(userId, [id], async () => {
       const meta = await this.get(userId, id);
@@ -332,13 +341,13 @@ export class AttachmentStore {
   async collectExpired(userId: string): Promise<number> {
     const cutoff = this.now().getTime() - this.o.pendingTtlMs;
     const expired = (await this.list(userId)).filter(
-      (m) => m.messageId === null && Date.parse(m.createdAt) < cutoff,
+      (m) => m.messageId === null && !m.saved && Date.parse(m.createdAt) < cutoff,
     );
     let removed = 0;
     for (const meta of expired) {
       await this.withLocks(userId, [meta.id], async () => {
         const current = await this.get(userId, meta.id);
-        if (current?.messageId !== null) return;
+        if (current?.messageId !== null || current.saved) return;
         await this.removeUnlocked(userId, current);
         removed++;
       });
@@ -376,7 +385,7 @@ export class AttachmentStore {
     this.usageCache.delete(userId);
     for (const meta of await this.list(userId)) {
       const ref = references.get(meta.id);
-      if (meta.messageId === null && ref) {
+      if (meta.messageId === null && !meta.saved && ref) {
         await this.linkUnlocked(userId, [meta], ref.conversationId, ref.messageId);
         report.linked++;
       } else if (meta.conversationId !== null && !conversations.has(meta.conversationId)) {

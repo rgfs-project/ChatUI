@@ -1,5 +1,5 @@
 import * as RadixTooltip from "@radix-ui/react-tooltip";
-import type { ReactElement, ReactNode } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 
 /** One provider at the shell root; tooltips open on hover and keyboard focus. */
 export function TooltipProvider({ children }: { children: ReactNode }) {
@@ -23,8 +23,16 @@ export function Tooltip({
   side?: "top" | "right" | "bottom" | "left";
   children: ReactElement;
 }) {
+  // Never opened on a phone: an invisible open tooltip would swallow the
+  // first Escape meant for the drawer or dialog around it.
+  const [open, setOpen] = useState(false);
   return (
-    <RadixTooltip.Root>
+    <RadixTooltip.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next && !document.documentElement.hasAttribute("data-phone"));
+      }}
+    >
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <RadixTooltip.Content className="tooltip" side={side} sideOffset={6} collisionPadding={8}>

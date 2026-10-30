@@ -69,6 +69,14 @@ function services(delayMs = 0) {
         return [];
       },
       instance: () => ({ notice: null, defaultModel: null }),
+      profile: () =>
+        Promise.resolve({
+          username: "alice",
+          role: "user",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          photoVersion: null,
+          shape: "circle",
+        }),
     },
     models: {
       listModels: async () => {
@@ -205,6 +213,7 @@ describe("Phase 8: startup dependency graph (INV-29, INV-30)", () => {
         preferences: () => timed("preferences", 80, null).then(() => svc.bootstrap.preferences()),
         models: () => timed("models", 80, []),
         instance: svc.bootstrap.instance,
+        profile: svc.bootstrap.profile,
       },
       models: { listModels: () => timed("models", 80, []) },
     };

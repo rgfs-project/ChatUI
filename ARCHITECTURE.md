@@ -667,6 +667,30 @@ Admin actions append one JSON line to `_system/audit/YYYY-MM.jsonl`: `{at, actor
 - **Image viewer:** a separate lazy chunk with its own CSS. It supports zoom, pan, pinch, previous/next, swipe, download and Escape, and returns focus to the thumbnail. The next image replaces the current one only after it decodes, so there is no flash.
 - **Tests:** `perf.spec.ts` and verify check that the viewer is not in the chat page's initial JS.
 
+## Library and profile (Phase 12b)
+
+### Library (`/library`)
+
+- **Listing:** a page route (inside the shell, not an overlay) listing `GET /api/attachments`, the user's files with usage and limits.
+- **Controls:** search, a type filter (All, Images, Audio, Documents), sort and view (list or grid) live in the URL query, so they survive reloads and Back. The list shows each file's chat (by title, from the cached conversation list); grid cards show image previews (lazy).
+- **Library uploads:** "New" → Upload files posts to `/api/attachments?to=library`. These files are `saved`: they never expire (the pending TTL skips them), are never linked, and can't be sent in a message (`409`), so a saved file can't be deleted by deleting a chat. Attaching a Library file to a message is not supported yet.
+- **Deletion:** a saved or pending file can be deleted (confirmation dialog). A file that belongs to a chat can't be deleted on its own, so a message never loses a file behind the user's back (contracts §7). Delete the chat instead; its menu offers Go to chat.
+- **Viewer:** images open in the shared lazy viewer.
+
+### Profile (`/profile`, `server/profile/`)
+
+- **Storage:** `DATA_DIR/<user>/profile/profile.json` (`{version, photo: {mediaType, size, sha256, updatedAt} | null, shape}`) and `profile/photo`. Both are canonical, written under a per-user profile lock.
+- **Photo upload:** the browser crops to a square (drag, zoom) and uploads a 512 × 512 JPEG with `PUT /api/profile/photo`. The server streams it with a 5 MB limit and sniffs the bytes (PNG, JPEG or WebP only; GIF and SVG are refused). It renames the photo into place, then writes the record. A failed upload keeps the previous photo.
+- **Photo serving:** `GET /api/profile/photo?v=<version>` serves it inline with the sniffed type, `nosniff`, the sandbox CSP and `private, no-cache`.
+- **Shapes:** circle, flower, rounded square, oval and cookie (`PATCH /api/profile`). Flower and cookie are same-origin SVG masks (`public/shapes/`); the others are CSS.
+- **Rendering:** the profile DTO (`photoVersion`, `shape`) is dehydrated with every document, so the sidebar avatar is rendered by the server with no flash.
+- **Statistics:** `GET /api/profile/stats?timeZone=` reads every conversation (`computeStats`, a pure function).
+  - Chats, your messages, replies, files.
+  - Current and longest streaks of calendar days in the user's time zone; the current streak survives a quiet today.
+  - 53 weeks of daily counts, the busiest weekday and hour, and the most used model.
+  - The result is cached per user until the index changes, the hour changes or another time zone is asked for. The page shows counts, an activity grid (it opens at the newest weeks on narrow screens) and insights.
+- **Bundles:** Library and Profile are route chunks with their own CSS. The chat page loads neither; the shared photo-shape list is zod-free.
+
 ## Container runtime (Phase 1b, INV-49)
 
 Compose is the supported production path; host Node is for development.
@@ -726,7 +750,7 @@ All runtime JS/CSS/icons are built into `build/client` and served from the ChatU
 
 ## Later sections
 
-- Library and profile, continuity, intelligent UI, component audit, security hardening, reliability, polish: N/A until Phases 12b–18.
+- Continuity, intelligent UI, component audit, security hardening, reliability, polish: N/A until Phases 13–18.
 - Interactive artifacts: optional Phase 19, separately approved.
 
 ## Deviations from the written specification
@@ -741,6 +765,7 @@ All runtime JS/CSS/icons are built into `build/client` and served from the ChatU
   - A message may consist of attachments alone (empty text).
   - `meta.json` adds `version`, `width` and `height` to the contract's fields.
   - Raw control characters in a multipart filename make the request invalid (`400`).
+- **Library and profile (Phase 12b).** These are additions to the package; the storage layout gains `profile/` (canonical) next to `attachments/`. Library uploads are `saved` attachments, outside the pending/linked lifecycle of contracts §7.
 - **Workflow.** The project owner authorized autonomous phase execution with commits pushed to `main` on GitHub. The spec's plan-approval pause and local-only commits don't apply to this repository.
 
 ## Invariant register

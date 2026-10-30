@@ -82,17 +82,46 @@
   background: var(--hover);
 }
 
+.side-heading {
+  margin: 22px 6px 4px;
+  font-size: inherit;
+}
+
+/* "Recents" folds its list; the chevron shows on hover, focus or when folded. */
 .side-label {
   display: flex;
   align-items: center;
+  gap: 4px;
+  width: 100%;
   height: 36px;
-  margin: 22px 6px 4px;
   padding: 0 10px;
+  border: 0;
   border-radius: var(--radius-label);
+  background: transparent;
   color: var(--text-secondary);
   font-size: var(--text-label);
   font-weight: var(--weight-semibold);
   line-height: var(--lh-label);
+  text-align: left;
+}
+
+.side-label:hover {
+  background: var(--hover);
+}
+
+.side-label-chevron {
+  opacity: 0;
+  transition: transform var(--motion) ease;
+}
+
+.side-label:hover .side-label-chevron,
+.side-label:focus-visible .side-label-chevron,
+.side-label.is-collapsed .side-label-chevron {
+  opacity: 1;
+}
+
+.side-label.is-collapsed .side-label-chevron {
+  transform: rotate(-90deg);
 }
 
 .side-note {
@@ -213,11 +242,44 @@
   justify-content: center;
   width: 24px;
   height: 24px;
+  overflow: hidden;
   border-radius: 50%;
   background: var(--avatar);
   color: #ffffff;
   font-size: 9px;
   font-weight: var(--weight-semibold);
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Photo shapes (Phase 12b): masks are same-origin SVGs in /shapes. */
+.avatar.shape-rounded {
+  border-radius: 28%;
+}
+
+.avatar.shape-oval {
+  border-radius: 0;
+  clip-path: ellipse(40% 50%);
+}
+
+.avatar.shape-flower,
+.avatar.shape-cookie {
+  border-radius: 0;
+  mask: url("/shapes/flower.svg") center / contain no-repeat;
+}
+
+.avatar.shape-cookie {
+  mask-image: url("/shapes/cookie.svg");
+}
+
+.avatar-large {
+  width: 96px;
+  height: 96px;
+  font-size: 32px;
 }
 
 .profile-name {
@@ -289,6 +351,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Full pages (Library, Profile) scroll under the shared header. */
+.page {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.page-body {
+  flex: 1;
+  min-height: 0;
+  padding: calc(var(--bar-height) + 8px) 24px 48px;
+  overflow-y: auto;
+}
+
+/* Pages always show their title, phones and narrow windows included. */
+.chat-header.page-header .header-title {
+  display: block;
 }
 
 .page-message {

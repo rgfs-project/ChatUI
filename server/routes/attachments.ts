@@ -23,12 +23,18 @@ export const uploadAttachmentRoute = defineRoute({
   auth: "user",
   csrf: "token",
   // multipart/form-data with one `file` part; the JSON body parser leaves it unread.
-  request: {},
+  // `?to=library` keeps the file in the Library instead of waiting for a message.
+  request: { query: z.strictObject({ to: z.literal("library").optional() }) },
   response: attachmentDtoSchema,
   status: 201,
-  handler: async (_input, ctx) =>
+  handler: async ({ query }, ctx) =>
     attachmentDto(
-      await receiveUpload(ctx.req, ctx.res, ctx.services.attachments, userOf(ctx).userId),
+      await receiveUpload(ctx.req, ctx.res, (stream, part) =>
+        ctx.services.attachments.ingest(userOf(ctx).userId, stream, {
+          ...part,
+          saved: query.to === "library",
+        }),
+      ),
     ),
   fixture: { expectStatus: 400 },
 });

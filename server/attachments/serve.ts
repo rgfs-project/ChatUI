@@ -26,7 +26,7 @@ export function attachmentDto(meta: AttachmentMeta): AttachmentDto {
     width: meta.width,
     height: meta.height,
     createdAt: meta.createdAt,
-    status: meta.messageId === null ? "pending" : "linked",
+    status: meta.saved ? "saved" : meta.messageId === null ? "pending" : "linked",
     conversationId: meta.conversationId,
   };
 }

@@ -166,6 +166,8 @@ export class SendService {
       if (!meta) throw new AppError(ErrorCode.NOT_FOUND, "An attached file is no longer available");
       if (meta.messageId !== null)
         throw new AppError(ErrorCode.CONFLICT, "An attached file was already sent in a message");
+      if (meta.saved)
+        throw new AppError(ErrorCode.CONFLICT, "Files from the Library can't be attached yet");
       metas.push(meta);
     }
     return metas;

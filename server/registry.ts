@@ -13,6 +13,9 @@ import { ErrorCode } from "@shared/errors";
 import type { AdminService } from "./admin/service.ts";
 import type { SettingsStore } from "./admin/settings.ts";
 import type { AttachmentLimits, AttachmentStore } from "./attachments/store.ts";
+import type { ProfileService } from "./profile/service.ts";
+import type { ProfileStore } from "./profile/store.ts";
+import type { ProfileDto } from "@shared/profile";
 import type { AuthContext, AuthService } from "./auth/service.ts";
 import type { SendService } from "./chat/send-service.ts";
 import { AppError } from "./errors.ts";
@@ -52,6 +55,7 @@ export interface RouteServices {
     /** Models visible to this role (hidden pairs only for admins). */
     models: (role: "user" | "admin") => Promise<ProviderModelsDto[]>;
     instance: () => InstanceDto;
+    profile: (userId: string) => Promise<ProfileDto>;
   };
   auth: AuthService;
   users: UserStore;
@@ -61,6 +65,10 @@ export interface RouteServices {
   /** Phase 12. */
   attachments: AttachmentStore;
   attachmentLimits: () => AttachmentLimits & { maxPerMessage: number };
+  /** Phase 12b. */
+  profile: ProfileService;
+  profileStore: ProfileStore;
+  profilePhotoPath: (userId: string) => string;
   preferences: PreferencesStore;
   sseConnections: SseConnections;
   sse: SseOptions;

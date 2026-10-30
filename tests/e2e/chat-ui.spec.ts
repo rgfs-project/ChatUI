@@ -180,3 +180,24 @@ test.describe("INV-47: menus and dialogs", () => {
     await expect(page.getByTestId("conversation-list")).toContainText(LONG_CHAT_TITLE);
   });
 });
+
+test("Recents is a button that folds the chat list; the server remembers it", async ({ page }) => {
+  await signIn(page);
+  const recents = page.getByRole("button", { name: "Recents" });
+  await expect(recents).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("conversation-list")).toBeVisible();
+  await recents.click();
+  await expect(recents).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("conversation-list")).toHaveCount(0);
+  // Server-rendered folded: no list in the HTML before hydration.
+  const html = await (await page.request.get(page.url())).text();
+  expect(html).toContain('aria-expanded="false"');
+  expect(html).not.toContain('data-testid="conversation-list"');
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Recents" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await page.getByRole("button", { name: "Recents" }).click();
+  await expect(page.getByTestId("conversation-list")).toBeVisible();
+});

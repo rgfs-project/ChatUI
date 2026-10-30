@@ -16,8 +16,8 @@ export const attachmentDtoSchema = z.strictObject({
   width: z.number().int().positive().nullable(),
   height: z.number().int().positive().nullable(),
   createdAt: z.string(),
-  /** `pending` until a sent message links it. */
-  status: z.enum(["pending", "linked"]),
+  /** `pending` until a sent message links it; `saved`: uploaded to the Library. */
+  status: z.enum(["pending", "linked", "saved"]),
   conversationId: z.uuid().nullable(),
 });
 export type AttachmentDto = z.infer<typeof attachmentDtoSchema>;

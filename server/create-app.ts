@@ -47,6 +47,8 @@ import { AuditLog } from "./admin/audit.ts";
 import { AdminService } from "./admin/service.ts";
 import { SettingsStore } from "./admin/settings.ts";
 import { AttachmentStore } from "./attachments/store.ts";
+import { ProfileService } from "./profile/service.ts";
+import { ProfileStore } from "./profile/store.ts";
 import { listDir } from "./storage/fs.ts";
 import { isUuid } from "./storage/paths.ts";
 
@@ -380,6 +382,14 @@ export function createApp(options: AppOptions): ChatUiApp {
   }, 3_600_000);
   retentionTimer.unref();
 
+  const profileStore = new ProfileStore(paths, locks, now);
+  const profile = new ProfileService({
+    store: profileStore,
+    users,
+    conversations,
+    attachments,
+    now,
+  });
   const services: RouteServices = {
     conversationDto: async (userId, id) =>
       toConversationDto(await conversations.get(userId, id), services, userId),
@@ -389,6 +399,7 @@ export function createApp(options: AppOptions): ChatUiApp {
       preferences: async (userId) => preferencesDto(await preferences.get(userId)),
       models: async (role) => visibleModels(await models.listModels(), settings, role),
       instance: () => instanceDto(settings.get()),
+      profile: (userId) => profile.dto(userId),
     },
     auth,
     users,
@@ -396,6 +407,9 @@ export function createApp(options: AppOptions): ChatUiApp {
     settings,
     attachments,
     attachmentLimits,
+    profile,
+    profileStore,
+    profilePhotoPath: (userId) => paths.profilePhoto(userId),
     preferences,
     sseConnections,
     health: createHealthService(options.version),

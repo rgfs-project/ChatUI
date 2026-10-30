@@ -145,6 +145,27 @@ test.describe("phone (390 × 844)", () => {
     expect(await noHorizontalScroll(page)).toBe(true);
   });
 
+  test("Library and Profile fit the phone; activity opens at the newest weeks", async ({
+    page,
+  }) => {
+    await signIn(page, "/library");
+    await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
+    expect(await noHorizontalScroll(page)).toBe(true);
+    const toolbar = await page.getByRole("toolbar", { name: "Library tools" }).boundingBox();
+    expect(toolbar && toolbar.x >= 0 && toolbar.x + toolbar.width <= 390).toBe(true);
+    expect(await smallTargets(page, ".page-header")).toEqual([]);
+    await page.goto(`${base()}/profile`);
+    await hydrated(page);
+    await expect(page.getByTestId("activity-grid")).toBeVisible();
+    expect(await noHorizontalScroll(page)).toBe(true);
+    const scroll = await page.locator(".activity-scroll").evaluate((el) => ({
+      left: el.scrollLeft,
+      max: el.scrollWidth - el.clientWidth,
+    }));
+    expect(scroll.max).toBeGreaterThan(0);
+    expect(scroll.left).toBeGreaterThanOrEqual(scroll.max - 1);
+  });
+
   test("menus fit on screen at the edges", async ({ page }) => {
     await signIn(page, `/chat/${longChat()}`);
     await page.getByTestId("composer-menu").click();

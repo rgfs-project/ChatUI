@@ -12,6 +12,8 @@ export default [
   layout("routes/app-layout.tsx", [
     route("chat/new", "routes/chat-new.tsx"),
     route("chat/:conversationId", "routes/chat-conversation.tsx"),
+    route("library", "routes/library.tsx"),
+    route("profile", "routes/profile.tsx"),
     route("settings/:section?", "routes/settings.tsx"),
     route("admin/:section?", "routes/admin.tsx"),
     route("*", "routes/not-found.tsx"),

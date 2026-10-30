@@ -103,6 +103,7 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
           appearance: DEFAULT_APPEARANCE,
           phone: false,
           noticeDismissed: null,
+          recentsCollapsed: false,
           sidebarCollapsed: false,
           timeZone: "UTC",
           locale: "en-US",

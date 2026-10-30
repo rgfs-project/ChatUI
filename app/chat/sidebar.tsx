@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  ChevronDown,
+  CircleUserRound,
+  LibraryBig,
   Keyboard,
   LogOut,
   MoreHorizontal,
@@ -18,13 +21,10 @@ import { usePrefetcher } from "../lib/prefetch";
 import { conversationsQuery } from "../lib/query/queries";
 import { useRenderProbe } from "../lib/render-probe";
 import { useUi } from "../lib/ui-context";
+import { Avatar } from "../ui/avatar";
 import { IconButton } from "../ui/icon-button";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { useChat } from "./chat-context";
-
-function initials(name: string): string {
-  return name.slice(0, 2).toUpperCase();
-}
 
 /** Opens an overlay over the current page; Back closes it (INV-53). */
 export function useOpenOverlay(): (to: string) => void {
@@ -112,10 +112,12 @@ const ConversationRow = memo(function ConversationRow({
 export const Sidebar = memo(function Sidebar() {
   useRenderProbe("Sidebar");
   const { userId, username, role, conversationId, logout } = useChat();
-  const { setSidebarOpen } = useUi();
+  const { setSidebarOpen, recentsCollapsed, setRecentsCollapsed } = useUi();
   const openOverlay = useOpenOverlay();
   const list = useQuery(conversationsQuery(userId));
   const prefetcher = usePrefetcher(userId);
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   return (
     <nav className="sidebar" aria-label="Chats">
@@ -138,15 +140,37 @@ export const Sidebar = memo(function Sidebar() {
           <SquarePen size={18} aria-hidden />
           <span>New chat</span>
         </Link>
-        <h2 className="side-label">Recents</h2>
-        {list.isPending ? (
+        <Link
+          to={paths.library()}
+          className={`side-row${pathname === paths.library() ? " is-active" : ""}`}
+          aria-current={pathname === paths.library() ? "page" : undefined}
+          data-testid="library-link"
+        >
+          <LibraryBig size={18} aria-hidden />
+          <span>Library</span>
+        </Link>
+        <h2 className="side-heading">
+          <button
+            type="button"
+            className={`side-label${recentsCollapsed ? " is-collapsed" : ""}`}
+            aria-expanded={!recentsCollapsed}
+            aria-controls="recents"
+            onClick={() => {
+              setRecentsCollapsed(!recentsCollapsed);
+            }}
+          >
+            <span>Recents</span>
+            <ChevronDown size={14} className="side-label-chevron" aria-hidden />
+          </button>
+        </h2>
+        {recentsCollapsed ? null : list.isPending ? (
           <p className="side-note">Loading chats…</p>
         ) : list.isError ? (
           <p className="side-note">Chats could not be loaded.</p>
         ) : list.data.length === 0 ? (
           <p className="side-note">No chats yet.</p>
         ) : (
-          <ul className="chat-list" data-testid="conversation-list">
+          <ul className="chat-list" id="recents" data-testid="conversation-list">
             {list.data.map((item) => (
               <ConversationRow
                 key={item.id}
@@ -166,15 +190,21 @@ export const Sidebar = memo(function Sidebar() {
           contentClassName="profile-menu"
           trigger={
             <button type="button" className="profile-row" aria-label={`Account: ${username}`}>
-              <span className="avatar" aria-hidden>
-                {initials(username)}
-              </span>
+              <Avatar userId={userId} username={username} />
               <span className="profile-name" data-testid="signed-in-user">
                 {username}
               </span>
             </button>
           }
         >
+          <MenuItem
+            icon={<CircleUserRound size={16} aria-hidden />}
+            onSelect={() => {
+              void navigate(paths.profile());
+            }}
+          >
+            Profile
+          </MenuItem>
           <MenuItem
             icon={<Settings size={16} aria-hidden />}
             onSelect={() => {

@@ -21,6 +21,14 @@ import {
 } from "./auth.ts";
 import { healthRoute } from "./health.ts";
 import {
+  deletePhotoRoute,
+  getProfileRoute,
+  photoContentRoute,
+  profileStatsRoute,
+  updateProfileRoute,
+  uploadPhotoRoute,
+} from "./profile.ts";
+import {
   attachmentContentRoute,
   deleteAttachmentRoute,
   getAttachmentRoute,
@@ -63,6 +71,12 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(updatePreferencesRoute),
   erase(listProvidersRoute),
   erase(listModelsRoute),
+  erase(getProfileRoute),
+  erase(updateProfileRoute),
+  erase(uploadPhotoRoute),
+  erase(deletePhotoRoute),
+  erase(photoContentRoute),
+  erase(profileStatsRoute),
   erase(uploadAttachmentRoute),
   erase(listAttachmentsRoute),
   erase(getAttachmentRoute),

@@ -11,6 +11,11 @@ export const qk = {
   preferences: (userId: string) => ["u", userId, "preferences"] as const,
   /** Instance notice and default model (Phase 10). */
   instance: (userId: string) => ["u", userId, "instance"] as const,
+  /** Profile: photo version and shape (Phase 12b); the sidebar avatar renders from it. */
+  profile: (userId: string) => ["u", userId, "profile"] as const,
+  /** Profile statistics for a time zone (Phase 12b); never dehydrated. */
+  profileStats: (userId: string, timeZone: string) =>
+    ["u", userId, "profile-stats", timeZone] as const,
   /** The user's uploaded files (Phase 12); invalidated by uploads and deletes. */
   attachments: (userId: string) => ["u", userId, "attachments"] as const,
   /** Live generation state written by the SSE observer; never dehydrated. */
@@ -24,6 +29,8 @@ export type Resource =
   | "models"
   | "preferences"
   | "instance"
+  | "profile"
+  | "profile-stats"
   | "attachments"
   | "generation";
 
@@ -38,6 +45,8 @@ export function resourceOf(key: readonly unknown[]): Resource | undefined {
       "models",
       "preferences",
       "instance",
+      "profile",
+      "profile-stats",
       "attachments",
       "generation",
     ].includes(name)
@@ -57,4 +66,5 @@ export const DEHYDRATE_ALLOWLIST: ReadonlySet<Resource> = new Set([
   "models",
   "preferences",
   "instance",
+  "profile",
 ]);

@@ -100,6 +100,19 @@ export class DataPaths {
     return path.join(this.attachmentDir(userId, attachmentId), "meta.json");
   }
 
+  /** Profile (Phase 12b): `profile/profile.json` and the photo bytes `profile/photo`. */
+  profileDir(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "profile");
+  }
+
+  profileFile(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "profile", "profile.json");
+  }
+
+  profilePhoto(userId: string): string {
+    return this.inside(this.uuid(userId, "user id"), "profile", "photo");
+  }
+
   systemDir(): string {
     return this.inside(SYSTEM_DIR);
   }

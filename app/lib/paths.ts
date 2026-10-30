@@ -7,6 +7,8 @@ export const paths = {
   chat: (id: string) => `/chat/${encodeURIComponent(id)}`,
   settings: (section?: string) =>
     section ? `/settings/${encodeURIComponent(section)}` : "/settings",
+  library: () => "/library",
+  profile: () => "/profile",
   admin: (section?: string) => (section ? `/admin/${encodeURIComponent(section)}` : "/admin"),
   status: () => "/status",
   login: (returnTo?: string) =>

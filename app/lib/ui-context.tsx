@@ -30,6 +30,9 @@ interface UiState {
   setAppearance: (next: Appearance) => void;
   /** Desktop preference, remembered in a cookie and rendered by the server. */
   sidebarCollapsed: boolean;
+  /** The Recents section is folded (cookie, so the server renders it the same way). */
+  recentsCollapsed: boolean;
+  setRecentsCollapsed: (collapsed: boolean) => void;
   /** Narrow windows: the overlay sidebar is open (never persisted). */
   narrowOpen: boolean;
   /** Opens or closes the sidebar the way the current window width uses it. */
@@ -61,6 +64,11 @@ export function UiProvider({
   children: ReactNode;
 }) {
   const [sidebarCollapsed, setCollapsed] = useState(hints.sidebarCollapsed);
+  const [recentsCollapsed, setRecentsState] = useState(hints.recentsCollapsed);
+  const setRecentsCollapsed = useCallback((collapsed: boolean) => {
+    setRecentsState(collapsed);
+    writeUiCookie(UI_COOKIES.recents, collapsed ? "collapsed" : "open");
+  }, []);
   const [appearance, setAppearanceState] = useState(hints.appearance);
   const [noticeDismissed, setNoticeDismissed] = useState(hints.noticeDismissed);
   const dismissNotice = useCallback((hash: string) => {
@@ -108,6 +116,8 @@ export function UiProvider({
       noticeDismissed,
       dismissNotice,
       sidebarCollapsed,
+      recentsCollapsed,
+      setRecentsCollapsed,
       narrowOpen,
       setSidebarOpen,
       closeNarrow,
@@ -119,6 +129,8 @@ export function UiProvider({
       noticeDismissed,
       dismissNotice,
       sidebarCollapsed,
+      recentsCollapsed,
+      setRecentsCollapsed,
       narrowOpen,
       setSidebarOpen,
       closeNarrow,

@@ -161,7 +161,7 @@ export async function apiJson<T>(
 }
 
 const SAFE_RETURN_TO =
-  /^\/(chat\/new|chat\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|settings(\/[a-z-]{1,32})?|admin(\/[a-z-]{1,32})?)$/;
+  /^\/(chat\/new|chat\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|settings(\/[a-z-]{1,32})?|admin(\/[a-z-]{1,32})?|library|profile)$/;
 
 /** Only known same-origin in-app paths are allowed as a post-login destination. */
 export function safeReturnTo(value: string | null | undefined): string {
@@ -178,11 +178,15 @@ export function apiUpload<T>(
   url: string,
   file: Blob,
   filename: string,
-  options: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
+  options: {
+    onProgress?: (fraction: number) => void;
+    signal?: AbortSignal;
+    method?: "POST" | "PUT";
+  } = {},
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
+    xhr.open(options.method ?? "POST", url);
     xhr.setRequestHeader("Accept", "application/json");
     if (current?.csrfToken && current.user) {
       xhr.setRequestHeader("X-CSRF-Token", current.csrfToken);

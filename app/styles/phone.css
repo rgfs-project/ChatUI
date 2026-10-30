@@ -179,3 +179,8 @@ html[data-phone] .composer-file-remove::after {
   inset: -12px;
   content: "";
 }
+
+/* The phone header is in the flow, so page content starts right below it. */
+html[data-phone] .page-body {
+  padding-top: 8px;
+}
