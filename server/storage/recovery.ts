@@ -142,6 +142,8 @@ export async function recoverStorage(options: {
     proposals?: ProposalStore;
     artifacts?: ArtifactStore;
   };
+  /** Step 3: roll back interrupted import commits, remove stale staging (Phase 13d). */
+  imports?: (userId: string) => Promise<void>;
   /** Step 6: memory acceptance intents (Phase 13b). */
   memoryIntents?: (userId: string) => Promise<number>;
   /** Step 7: reconcile and garbage-collect pending attachments (Phase 12). */
@@ -160,6 +162,7 @@ export async function recoverStorage(options: {
     operationsExpired: 0,
   };
   const users = await accountIds(paths);
+  if (options.imports) for (const userId of users) await options.imports(userId);
   for (const userId of users) {
     const r = await resolveOperations(
       paths,

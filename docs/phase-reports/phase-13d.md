@@ -1,0 +1,67 @@
+## Phase 13d report
+
+- **Plan:**
+  - Package 13d: exact single-chat export, a portable archive with a matching importer, and the per-user export barrier.
+  - From the roadmap: Settings → Data controls (export all, import, delete all) and a Share button in the chat header.
+
+- **Scope completed:**
+  - **Export barrier** (`server/storage/locks.ts`):
+    - Every user-scoped canonical lock takes the user's barrier shared first, re-entrant per async context.
+    - The export holds it exclusively and is writer-first.
+  - **Single-chat export:** `GET /api/conversations/:id/export` returns the stored bytes unparsed (malformed included), with an attachment disposition named from the title. Share menu: "Download as Markdown" and "Copy as text".
+  - **Portable archive** (`GET /api/export`, `server/portability/export.ts`):
+    - Contents: chats, linked and Library files, finalized files from replies, memories, proposal sidecars and preferences.
+    - A manifest with size and SHA-256 per entry and per-chat `malformed` and `activeGeneration` flags.
+    - Small files are copied under the exclusive barrier; blobs are copied after it and verified. A changed blob gives a retryable 409.
+    - Recovery state, accounts, sessions, secrets and indexes are excluded.
+  - **ZIP** (`server/portability/zip.ts`): writer and a defensive reader (no links, encryption or ZIP64; safe paths; entry, size, total and ratio caps; capped, CRC-checked inflation). No new dependency.
+  - **Import** (`server/portability/import.ts`):
+    - Staged upload and full preflight; a preview with counts, conflicts, memories, skipped items and the idempotency key; a replanned commit.
+    - Never overwrites. Conflicts are skipped by default or imported as copies with consistent remapping (chats, attachments and their links, Markdown rewrite, artifact backlinks, suggestion ids and targets, pins).
+    - The dependency rules apply. Memories only when selected, with the name rule. Unresolved suggestions become invalid.
+    - A journaled commit is rolled back at startup if interrupted; stale staging is cleaned.
+  - **Browser:**
+    - Settings → Data controls: Export link; Import with a lazily loaded dialog (upload progress, cancel, conflict choice, memory and settings choices, confirmation, report); Delete all chats moved here.
+    - Only the user's own queries are refreshed after an import.
+- **Required tests:**
+  - `tests/server/portability.test.ts` (12):
+    - Exact raw export (valid and malformed) and owner-only access.
+    - Manifest, checksums and exclusions (no secrets, no pending uploads, no recovery state).
+    - A full round trip into another account: chats byte-identical, image, captured file, memory, suggestion statuses, pins and settings.
+    - **Barrier:** a rename waits for the exclusive window and proceeds while blobs are copied.
+    - A blob deleted after the snapshot gives a retryable failure with nothing left behind.
+    - A running reply is exported in its accepted state and marked.
+    - Identical skip and a repeat flagged by the idempotency key.
+    - Restoring deleted chats from one's own archive.
+    - **Conflicts:** skip by default with the dependants reported (suggestions skipped, dead artifact backlink); copies with every reference remapped (attachment ids, rewritten Markdown, artifact backlink, pins); memory name rule.
+    - Malformed import, raw or skipped when it needs new ids.
+    - Cross-user 404.
+    - **Hostile archives:** traversal, absolute, backslash, symlink, ZIP bomb, too many entries, bad checksum, unknown file, not a ZIP, too large.
+    - Time limit; interrupted commit rolled back at restart, preferences included.
+  - `tests/e2e/portability.spec.ts` (4):
+    - Share downloads the exact Markdown.
+    - Export, delete, then restore through the preview with keyboard confirmation and a report; preview timing under 5 s, recorded.
+    - Cancel imports nothing.
+    - On a phone: Data controls fit and the preview opens without horizontal scroll.
+  - `tests/e2e/conversation-ops.spec.ts`: Delete all chats now under Data controls.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (512)
+  - `build`: PASS
+  - `perf:check`: PASS
+  - `verify`: PASS (81/81)
+  - `test:e2e`: PASS (75/75)
+  - `verify:compose`: CI
+- **Budget:** re-recorded:
+  - chat JS 246,946 → 247,288 B (Share menu)
+  - CSS 8,760 → 8,883 B
+
+  The import dialog is its own chunk.
+
+- **Invariants:** INV-42 and INV-43 implemented (13e will reuse INV-42's machinery).
+- **Dependencies:** none new (ZIP on `node:zlib`).
+- **Deviations / limitations:**
+  - ZIP32 only (an archive over 4 GiB is refused).
+  - Import holds an archive's entries in memory one at a time, up to 100 MiB per entry.
+  - Export and upload temp files live in the user's `import-staging/` and are removed after use or at startup.
+- **Commit/tag:** `feat(phase-13d): portable user export and import`, tag `phase-13d`, pushed to `main`.

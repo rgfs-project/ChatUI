@@ -156,6 +156,11 @@ export class AttachmentStore {
   }
 
   /** Forgets cached usage (account removal). */
+  /** The per-user storage quota currently in force. */
+  quotaBytes(): number {
+    return this.o.limits().quotaBytes;
+  }
+
   forgetUser(userId: string): void {
     this.usageCache.delete(userId);
   }

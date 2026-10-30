@@ -182,7 +182,7 @@ test.describe("Phase 13a: clear history", () => {
     await send(page, "to be cleared");
     await page.waitForURL(/\/chat\/[0-9a-f-]{36}$/);
     await expect(storedReplies(page).last()).toContainText("Echo: to be cleared");
-    await page.goto(`${base()}/settings/general`);
+    await page.goto(`${base()}/settings/data`);
     await page.getByRole("button", { name: "Delete all", exact: true }).click();
     await page
       .getByRole("alertdialog", { name: "Delete all chats?" })

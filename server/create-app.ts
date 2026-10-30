@@ -51,6 +51,8 @@ import { ProfileService } from "./profile/service.ts";
 import { ConversationMutations } from "./chat/mutations.ts";
 import { MemoryService } from "./memory/service.ts";
 import { ArtifactStore } from "./artifacts/store.ts";
+import { exportArchive, type ExportDeps } from "./portability/export.ts";
+import { ImportService, type ImportDeps } from "./portability/import.ts";
 import { MemoryStore } from "./storage/memories.ts";
 import { ProposalStore } from "./storage/proposals.ts";
 import { SearchService } from "./chat/search.ts";
@@ -93,6 +95,9 @@ export interface AppOptions {
   generationRetention?: { retentionMs?: number; maxRetained?: number };
   /** Send-acceptance crash-simulation hooks and token counting (tests only). */
   send?: Pick<SendServiceOptions, "hooks" | "counterFor">;
+  /** Phase 13d test seams: import limits and hooks, export hooks. */
+  imports?: Pick<ImportDeps, "limits" | "hooks">;
+  exportHooks?: ExportDeps["hooks"];
   /** Password hasher (tests use cheap Argon2 parameters). */
   hasher?: PasswordHasher;
   /** Clock (tests only). */
@@ -238,6 +243,18 @@ export function createApp(options: AppOptions): ChatUiApp {
   const memoryStore = new MemoryStore(paths, locks, now);
   const proposalStore = new ProposalStore(paths, locks);
   const artifacts = new ArtifactStore(paths, locks, now);
+  const imports = new ImportService({
+    paths,
+    locks,
+    index,
+    attachments,
+    artifacts,
+    memories: memoryStore,
+    preferences,
+    logger,
+    now,
+    ...options.imports,
+  });
   const memory = new MemoryService({
     memories: memoryStore,
     proposals: proposalStore,
@@ -376,6 +393,9 @@ export function createApp(options: AppOptions): ChatUiApp {
         artifacts,
       },
       memoryIntents: (userId) => memory.recover(userId),
+      imports: async (userId) => {
+        await imports.recover(userId);
+      },
       attachments: async (userId) => {
         await attachments.reconcile(userId, await attachmentReferences(userId));
         // Interrupted captures: artifact directories without metadata (Phase 13c).
@@ -446,6 +466,18 @@ export function createApp(options: AppOptions): ChatUiApp {
     search,
     memory,
     artifacts,
+    dataPaths: paths,
+    exportArchive: (userId) =>
+      exportArchive(userId, {
+        paths,
+        locks,
+        generations,
+        attachments,
+        artifacts,
+        now,
+        ...(options.exportHooks ? { hooks: options.exportHooks } : {}),
+      }),
+    imports,
     profile,
     profileStore,
     profilePhotoPath: (userId) => paths.profilePhoto(userId),

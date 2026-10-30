@@ -18,6 +18,8 @@ import type { ConversationMutations } from "./chat/mutations.ts";
 import type { SearchService } from "./chat/search.ts";
 import type { MemoryService } from "./memory/service.ts";
 import type { ArtifactStore } from "./artifacts/store.ts";
+import type { ImportService } from "./portability/import.ts";
+import type { DataPaths } from "./storage/paths.ts";
 import type { ProfileStore } from "./profile/store.ts";
 import type { ProfileDto } from "@shared/profile";
 import type { AuthContext, AuthService } from "./auth/service.ts";
@@ -76,6 +78,10 @@ export interface RouteServices {
   memory: MemoryService;
   /** Phase 13c. */
   artifacts: ArtifactStore;
+  /** Phase 13d: raw single-chat export, the portable archive and the importer. */
+  dataPaths: DataPaths;
+  exportArchive: (userId: string) => Promise<string>;
+  imports: ImportService;
   /** Phase 12b. */
   profile: ProfileService;
   profileStore: ProfileStore;

@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Brain,
+  Database,
   Keyboard,
   Paperclip,
   Palette,
@@ -20,6 +21,7 @@ import { useConfirm } from "../ui/dialog";
 import { useToast } from "../ui/toast";
 import { appearanceRows } from "./appearance";
 import { HistoryImagesRow, ImageSizeRow, StorageRow } from "./files";
+import { ExportAll, ImportData } from "./data";
 import { MemoryManager } from "./memory";
 import { Row, type SettingsSection } from "./row";
 
@@ -234,12 +236,6 @@ export const SECTIONS: SettingsSection[] = [
         keywords: "model provider new chat",
         render: () => <General />,
       },
-      {
-        id: "delete-all",
-        label: "Delete all chats",
-        keywords: "clear history remove conversations",
-        render: () => <DeleteAllChats />,
-      },
     ],
   },
   {
@@ -252,6 +248,31 @@ export const SECTIONS: SettingsSection[] = [
         label: "Saved memories",
         keywords: "memory remember personalization facts suggestions",
         render: () => <MemoryManager />,
+      },
+    ],
+  },
+  {
+    id: "data",
+    label: "Data controls",
+    icon: <Database size={18} aria-hidden />,
+    rows: [
+      {
+        id: "export",
+        label: "Export data",
+        keywords: "download backup archive zip export",
+        render: () => <ExportAll />,
+      },
+      {
+        id: "import",
+        label: "Import data",
+        keywords: "restore upload archive zip import",
+        render: () => <ImportData />,
+      },
+      {
+        id: "delete-all",
+        label: "Delete all chats",
+        keywords: "clear history remove conversations",
+        render: () => <DeleteAllChats />,
       },
     ],
   },

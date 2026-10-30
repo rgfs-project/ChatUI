@@ -1,12 +1,18 @@
 import {
+  Copy,
+  Download,
   MoreHorizontal,
   PanelLeftOpen,
   Pencil,
   Pin,
   PinOff,
+  Share,
   SquarePen,
   Trash2,
 } from "lucide-react";
+import type { ConversationDto } from "@shared/conversations";
+import { useToast } from "../ui/toast";
+import { copyText } from "./copy";
 import { useQuery } from "@tanstack/react-query";
 import { preferencesQuery } from "../lib/query/queries";
 import { useConversationOps } from "./conversation-ops";
@@ -18,6 +24,16 @@ import { IconButton } from "../ui/icon-button";
 import { Menu, MenuItem } from "../ui/menu";
 import { useChat } from "./chat-context";
 import { ModelMenu } from "./model-picker";
+
+/** A plain-text transcript for sharing: who said what, replies without reasoning. */
+function transcriptText(conversation: ConversationDto): string {
+  const lines = [conversation.title, ""];
+  for (const m of conversation.messages) {
+    if (m.role === "system" || m.content === "") continue;
+    lines.push(`${m.role === "user" ? "You" : "Assistant"}:`, m.content, "");
+  }
+  return lines.join("\n").trimEnd();
+}
 
 export const Header = memo(function Header() {
   const {
@@ -35,6 +51,7 @@ export const Header = memo(function Header() {
   const navigate = useNavigate();
   const conversation = result?.ok ? result.conversation : null;
   const ops = useConversationOps();
+  const toast = useToast();
   const { userId } = useChat();
   const pinned =
     useQuery(preferencesQuery(userId)).data?.pins.includes(conversation?.id ?? "") ?? false;
@@ -84,6 +101,38 @@ export const Header = memo(function Header() {
         )}
       </div>
       <div className="header-end">
+        {conversation ? (
+          <Menu
+            label="Share"
+            align="end"
+            trigger={
+              <button type="button" className="icon-button" aria-label="Share">
+                <Share size={20} aria-hidden />
+              </button>
+            }
+          >
+            <MenuItem
+              icon={<Download size={16} aria-hidden />}
+              onSelect={() => {
+                // The exact saved Markdown (Phase 13d); files are in the full export.
+                window.location.assign(`/api/conversations/${conversation.id}/export`);
+              }}
+            >
+              Download as Markdown
+            </MenuItem>
+            <MenuItem
+              icon={<Copy size={16} aria-hidden />}
+              onSelect={() => {
+                void copyText(transcriptText(conversation)).then((copied) => {
+                  if (copied) toast("Chat copied as text.");
+                  else toast("Could not copy the chat", "error");
+                });
+              }}
+            >
+              Copy as text
+            </MenuItem>
+          </Menu>
+        ) : null}
         {conversation ? (
           <Menu
             label="Chat options"

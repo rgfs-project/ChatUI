@@ -85,12 +85,11 @@ async function api(
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await res.text();
-  return {
-    status: res.status,
-    text,
-    json: (text ? JSON.parse(text) : null) as Record<string, unknown> | null,
-    headers: res.headers,
-  };
+  // Downloads (the export archive) are not JSON.
+  const json = res.headers.get("content-type")?.startsWith("application/json")
+    ? (JSON.parse(text) as Record<string, unknown>)
+    : null;
+  return { status: res.status, text, json, headers: res.headers };
 }
 
 const adminRoutes = apiRoutes.filter((r) => r.auth === "admin");
