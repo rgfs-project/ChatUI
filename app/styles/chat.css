@@ -593,3 +593,74 @@
   font-size: var(--text-message);
   font-weight: var(--weight-medium);
 }
+
+/* ── Slash commands (reference UI) ── */
+.composer {
+  position: relative;
+}
+
+.slash-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 10;
+  padding: 6px;
+  border: 1px solid var(--menu-border);
+  border-radius: 16px;
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+}
+
+.slash-menu ul {
+  max-height: min(420px, 50vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.slash-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: var(--radius-menu-item);
+  cursor: pointer;
+  font-size: var(--text-ui);
+}
+
+.slash-option.is-active {
+  background: var(--menu-hover);
+}
+
+.slash-icon {
+  display: inline-flex;
+  color: var(--text-secondary);
+}
+
+.slash-detail {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slash-end {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.slash-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+}

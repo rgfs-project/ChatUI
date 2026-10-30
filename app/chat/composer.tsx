@@ -8,7 +8,9 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
+import { useNavigate } from "react-router";
 import { useHydrated } from "../lib/hydrated";
+import { paths } from "../lib/paths";
 import { mark } from "../lib/perf";
 import { qk } from "../lib/query/keys";
 import { preferencesQuery } from "../lib/query/queries";
@@ -21,6 +23,8 @@ import { ACCEPT, composerFiles, MAX_FILES_PER_MESSAGE, useComposerFiles } from "
 import { DEFAULT_IMAGE_MAX_EDGE } from "./downscale";
 import { ModelMenu } from "./model-picker";
 import { draftKey, draftStore } from "./drafts";
+import { speak, speakableText, useSpeechSupported } from "./read-aloud";
+import { useSlashMenu } from "./slash-menu";
 
 /** Adds files to a draft's composer and starts uploading them (also used by drag and drop). */
 export function useAddFiles(userId: string, key: string): (files: File[]) => void {
@@ -68,7 +72,14 @@ export function Composer() {
     modelsState,
     refreshModels,
     setHasDraft,
+    result,
+    rename,
   } = useChat();
+  const navigate = useNavigate();
+  /** Text after a lone leading `/` (slash commands), or null. */
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  /** Escape hides the menu until the text changes. */
+  const [slashDismissed, setSlashDismissed] = useState(false);
   const hydrated = useHydrated();
   const [hasText, setHasText] = useState(false);
   const [multiline, setMultiline] = useState(false);
@@ -103,6 +114,7 @@ export function Composer() {
     if (!el) return;
     const text = el.value.trim() !== "";
     setHasText(text);
+    setSlashQuery(/^\/(\S*)$/.exec(el.value)?.[1] ?? null);
     setHasDraft(text);
     el.style.height = "auto";
     el.style.height = `${String(Math.min(el.scrollHeight, MAX_HEIGHT_PX))}px`;
@@ -163,7 +175,68 @@ export function Composer() {
     addFiles(pasted);
   }
 
+  const clearSlash = () => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.value = "";
+    draftStore.set(keyRef.current, "");
+    sync();
+    el.focus();
+  };
+  const conversation = result?.ok ? result.conversation : null;
+  const speechOk = useSpeechSupported();
+  const lastReply = conversation?.messages.findLast((m) => m.role === "assistant" && m.content);
+  const slash = useSlashMenu(
+    slashDismissed ? null : slashQuery,
+    {
+      groups,
+      selected: selectedPair,
+      selectModel,
+      rename: conversation
+        ? () => {
+            rename({
+              id: conversation.id,
+              title: conversation.title,
+              revision: conversation.revision,
+            });
+          }
+        : null,
+      readAloud:
+        speechOk && lastReply
+          ? () => {
+              speak(lastReply.id, speakableText(lastReply.content));
+            }
+          : null,
+      newChat:
+        conversationId !== null
+          ? () => {
+              void navigate(paths.newChat());
+            }
+          : null,
+    },
+    clearSlash,
+  );
+
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (slash.open && !event.nativeEvent.isComposing) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSlashDismissed(true);
+        return;
+      }
+      if (
+        (event.key === "ArrowDown" ||
+          event.key === "ArrowUp" ||
+          event.key === "ArrowRight" ||
+          event.key === "ArrowLeft" ||
+          event.key === "Tab" ||
+          (event.key === "Enter" && !event.shiftKey)) &&
+        slash.onKey(event.key)
+      ) {
+        event.preventDefault();
+        return;
+      }
+    }
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     void submit();
@@ -198,6 +271,7 @@ export function Composer() {
           void submit();
         }}
       >
+        {slash.menu}
         <AttachmentChips draft={key} files={files} />
         <input
           ref={pickerRef}
@@ -263,8 +337,16 @@ export function Composer() {
           className="selectable"
           onInput={() => {
             draftStore.set(keyRef.current, composerRef.current?.value ?? "");
+            setSlashDismissed(false);
             sync();
           }}
+          onBlur={() => {
+            setSlashDismissed(true);
+          }}
+          onFocus={() => {
+            setSlashDismissed(false);
+          }}
+          {...slash.ariaProps}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
         />

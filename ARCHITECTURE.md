@@ -303,6 +303,11 @@ app-layout (protected: one auth guard for every child, catch-all included)
 - Shortcuts: Ctrl/⌘+Shift+O (new chat) and Ctrl/⌘+Shift+S (sidebar), listed in Settings → Keyboard shortcuts.
 - Time separators ("Today 3:06 PM") are rendered on the server in the browser's locale and time zone, taken from validated hint cookies (`chatui_tz`, `chatui_locale`; else UTC and `Accept-Language`). Hydration starts from the server's values, and the browser updates the cookies for the next document.
 
+### Slash commands (reference UI)
+
+- Typing `/` (optionally followed by a filter) as the whole composer text opens a listbox above the composer, as wide as it. The textarea keeps focus as a combobox (`aria-expanded`, `aria-activedescendant`). Arrows move, Enter or Tab runs, → opens the model list, ← goes back, and Escape hides the menu until the text changes.
+- Commands: **Model** (opens the model list, with a check on the current model and "Not loaded" notes), **Read aloud** (the last reply, where speech is supported), **Rename chat** and **New chat** (inside a chat). A chosen command clears the slash.
+
 ### Visual tokens and measurement audit
 
 - `app/styles/tokens.css` holds the measured values from the rebuild plan (§5–7): the system font stack, the type scale, the layout sizes and the light/dark colours. Components use only these custom properties. The accent is the plan's **orange** option (`#f26b1d` light, `#c85512` dark), with the user bubble mixed from it by the plan's formula.

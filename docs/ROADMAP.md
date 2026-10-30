@@ -48,17 +48,17 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 
 ### 3a. Additions from the owner's reference screenshots (2026-10-30)
 
-| Feature                                                                                                                                   | Lands in                          |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| "Recents" is a folding button (done in 12b); "Pinned" folds the same way                                                                  | 12b / 13a                         |
-| Search icon in the sidebar header and a "Search chats" row                                                                                | 13a                               |
-| Copy/Edit/Delete under your messages; edit in place with Cancel and Send; Regenerate on replies                                           | 13a                               |
-| Slash menu: typing `/` in an empty composer opens a menu above it (Model ›, Rename chat, New chat; Move to project › once projects exist) | Now, before 13a (composer, small) |
-| Projects: a sidebar section of folders, "Move to project" for chats                                                                       | **13g** _new_, after 13f          |
-| Share button in the chat header (export a read-only copy)                                                                                 | 13d (export)                      |
-| Collapsible "Thought for …" reasoning label                                                                                               | 14b                               |
-| Reply actions: like, share, more (…)                                                                                                      | 14b                               |
-| Composer "Think" toggle (reasoning on/off per send) and microphone dictation                                                              | 15                                |
+| Feature                                                                                                                                               | Lands in                                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| "Recents" is a folding button (done in 12b); "Pinned" folds the same way                                                                              | 12b / 13a                                |
+| Search icon in the sidebar header and a "Search chats" row                                                                                            | 13a                                      |
+| Copy/Edit/Delete under your messages; edit in place with Cancel and Send; Regenerate on replies                                                       | 13a                                      |
+| Slash menu: typing `/` in an empty composer opens a menu above it (Model ›, Read aloud, Rename chat, New chat; Move to project › once projects exist) | Done (after 12b); Move to project in 13g |
+| Projects: a sidebar section of folders, "Move to project" for chats                                                                                   | **13g** _new_, after 13f                 |
+| Share button in the chat header (export a read-only copy)                                                                                             | 13d (export)                             |
+| Collapsible "Thought for …" reasoning label                                                                                                           | 14b                                      |
+| Reply actions: like, share, more (…)                                                                                                                  | 14b                                      |
+| Composer "Think" toggle (reasoning on/off per send) and microphone dictation                                                                          | 15                                       |
 
 ## 4. Decisions (settled 2026-10-29)
 

@@ -201,3 +201,44 @@ test("Recents is a button that folds the chat list; the server remembers it", as
   await page.getByRole("button", { name: "Recents" }).click();
   await expect(page.getByTestId("conversation-list")).toBeVisible();
 });
+
+test("slash commands: / opens a menu above the composer; keyboard and mouse choose", async ({
+  page,
+}) => {
+  await signIn(page);
+  const message = page.locator("#message");
+  await message.fill("/");
+  const menu = page.getByTestId("slash-menu");
+  await expect(menu).toBeVisible();
+  await expect(message).toHaveAttribute("aria-expanded", "true");
+  await expect(menu.getByRole("option", { name: /Model/ })).toContainText("Change from");
+  // Rename and New chat need a conversation.
+  await expect(menu.getByRole("option", { name: /Rename chat/ })).toHaveCount(0);
+  // → opens the models; Enter picks one and clears the slash.
+  await page.keyboard.press("ArrowRight");
+  await expect(menu.getByRole("listbox", { name: "Models" })).toBeVisible();
+  await menu.getByRole("option", { name: /^mock-vision/ }).hover();
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(message).toHaveValue("");
+  await expect(page.getByTestId("model-picker")).toContainText("mock-vision");
+  // Escape hides it until the text changes; ordinary text never opens it.
+  await message.fill("/");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await message.fill("/ren");
+  await expect(menu).toHaveCount(0);
+  await message.fill("hello / world");
+  await expect(menu).toHaveCount(0);
+
+  await page.goto(`${base()}/chat/${longChat()}`);
+  await hydrated(page);
+  await message.fill("/ren");
+  await expect(menu.getByRole("option")).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "Rename chat" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await message.fill("/new");
+  await menu.getByRole("option", { name: /New chat/ }).click();
+  await page.waitForURL(/\/chat\/new$/);
+});
