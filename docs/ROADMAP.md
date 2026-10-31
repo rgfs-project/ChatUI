@@ -77,8 +77,8 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 | 7a, 7b, 8, 11, 14, 9, 10, 12, 12b | Done (tags `phase-<id>`); reports in `docs/phase-reports/`      |
 | 13a, D2 + 13b, 13c, 13d, 13f, 13g | Done (tags `phase-13a` … `phase-13d`, `phase-13f`, `phase-13g`) |
 | 13e                               | Waiting for real Claude export fixtures                         |
-| 14b, 15, 16                       | Done (tags `phase-14b`, `phase-15`, `phase-16`)                 |
-| 17 onward                         | Not started                                                     |
+| 14b, 15, 16, 17                   | Done (tags `phase-14b` … `phase-17`)                            |
+| 18 onward                         | Not started                                                     |
 
 ## 6. Phase 7a plan (as approved)
 

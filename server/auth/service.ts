@@ -30,7 +30,7 @@ export interface AuthContext {
   csrfToken: string;
 }
 
-const LOGIN_LIMIT = { limit: 10, windowMs: 15 * 60_000 };
+const LOGIN_WINDOW_MS = 15 * 60_000;
 
 function rateLimited(seconds: number): AppError {
   return new AppError(ErrorCode.RATE_LIMITED, "Too many attempts; try again later", undefined, {
@@ -45,8 +45,8 @@ export class AuthService {
   private readonly config: AuthConfig;
   private readonly logger: Logger;
   private readonly onAccountRejected: (userId: string) => void;
-  private readonly byAddress = new RateLimiter(LOGIN_LIMIT);
-  private readonly byUsername = new RateLimiter(LOGIN_LIMIT);
+  private readonly byAddress: RateLimiter;
+  private readonly byUsername: RateLimiter;
   readonly cookieName: string;
 
   constructor(options: {
@@ -61,6 +61,9 @@ export class AuthService {
     this.sessions = options.sessions;
     this.hasher = options.hasher;
     this.config = options.config;
+    const login = { limit: options.config.loginAttempts, windowMs: LOGIN_WINDOW_MS };
+    this.byAddress = new RateLimiter(login);
+    this.byUsername = new RateLimiter(login);
     this.logger = options.logger;
     this.onAccountRejected = options.onAccountRejected ?? (() => undefined);
     // __Host- cookies must be Secure, host-only and Path=/ (https origins).

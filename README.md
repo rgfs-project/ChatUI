@@ -208,7 +208,7 @@ Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that ta
   - **Restore** only into an **empty** `DATA_DIR` (a new volume or directory): `node server/cli.ts restore --from <backup-dir>`. Every checksum is verified and a file the manifest doesn't list is refused before anything is written; then startup recovery runs once to check that the restored data starts. Files are created `0600` (directories `0700`) for the user running the command, so run it as the container's user (`docker compose run --rm -v … chatui restore --from /backups/…`).
   - **Without the CLI:** stop the server, or copy from a filesystem snapshot, and copy all of `DATA_DIR`. `index/` and `<user>/import-staging/` are optional. Keep the recovery records (`operations/`, `_system/generations/`, memory intents, `_system/deleting/`): startup recovery finishes them on the next start.
 - **Single process only.** Exactly one ChatUI process may use a `DATA_DIR` (locks are in-process). Don't run two servers, or the CLI `index:rebuild`, against the same directory at the same time. A running server keeps `_system/server.lock` fresh; a second server logs a warning, and `backup`/`restore` refuse to run.
-- **Request limits** (per account, per process, reset by a restart): `RATE_LIMIT_GENERATIONS` (30 sends or regenerations a minute), `RATE_LIMIT_UPLOADS` (60 uploads, imports or full exports a minute) and `RATE_LIMIT_ADMIN` (120 admin changes a minute). Over a limit the API answers `429 RATE_LIMITED` with `Retry-After`. Sign-in is limited separately (10 attempts per 15 minutes per address and per username). The HTTP server caps headers at 16 KB (30 s to send them), a whole request at `REQUEST_TIMEOUT_MS` (10 minutes) and open connections at `MAX_CONNECTIONS` (1024).
+- **Request limits** (per account, per process, reset by a restart): `RATE_LIMIT_GENERATIONS` (30 sends or regenerations a minute), `RATE_LIMIT_UPLOADS` (60 uploads, imports or full exports a minute) and `RATE_LIMIT_ADMIN` (120 admin changes a minute). Over a limit the API answers `429 RATE_LIMITED` with `Retry-After`. Sign-in is limited separately: `RATE_LIMIT_LOGIN` (10) attempts per 15 minutes per address and per username. The HTTP server caps headers at 16 KB (30 s to send them), a whole request at `REQUEST_TIMEOUT_MS` (10 minutes) and open connections at `MAX_CONNECTIONS` (1024).
 - Writes are atomic and durable (temp file, fsync, rename, directory fsync). On Windows, directory fsync is unavailable and rename-over-existing semantics differ; Linux containers are the supported runtime.
 
 ## Install (development)
@@ -251,9 +251,11 @@ Configuration variables are documented in [`.env.example`](.env.example) and val
 npm run format:check && npm run lint && npm run typecheck && npm test && npm run verify && npm run test:e2e
 npm run perf:check       # also part of verify: bundle sizes against performance-budget.json
 npm run verify:compose   # needs Docker or Podman
+npm run clean-checkout   # fresh clone → npm ci → .env → build → admin → browser conversation
+npm run audit:invariants # breaks each invariant on purpose; its tests must fail (docs/invariant-audit.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs every gate on every push, plus `verify:compose` on Docker and on rootless Podman. Actions are pinned by commit SHA; the base image is pinned by digest. CI builds images but never publishes them.
+CI (`.github/workflows/ci.yml`) runs every gate on every push, plus the clean-checkout proof and `verify:compose` on Docker and on rootless Podman. Actions are pinned by commit SHA; the base image is pinned by digest. CI builds images but never publishes them.
 
 ## Layout
 

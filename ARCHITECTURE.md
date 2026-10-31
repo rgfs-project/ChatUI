@@ -1004,6 +1004,12 @@ All runtime JS/CSS/icons are built into `build/client` and served from the ChatU
 - **Library and profile (Phase 12b).** These are additions to the package; the storage layout gains `profile/` (canonical) next to `attachments/`. Library uploads are `saved` attachments, outside the pending/linked lifecycle of contracts §7.
 - **Workflow.** The project owner authorized autonomous phase execution with commits pushed to `main` on GitHub. The spec's plan-approval pause and local-only commits don't apply to this repository.
 
+## Reliability (Phase 17)
+
+- **Invariant audit** (`npm run audit:invariants`, `scripts/invariant-mutations.ts`): one deliberate break per invariant, INV-01 to INV-62 except INV-51 (Phase 19). The tests the register names must fail. Results are in `docs/invariant-audit.md` (61 of 61 killed). Where a guard is duplicated (a defence in depth), the mutation removes every copy.
+- **Clean-checkout proof** (`npm run clean-checkout`, its own CI job): a fresh clone of the commit, `npm ci`, `.env` from `.env.example`, build, an admin via the CLI, then sign-in, send and reload in a real browser against the mock provider. Deleting `data/` (except `.gitkeep`) is a clean initial state.
+- **Reliability E2E** (`tests/e2e/reliability.spec.ts`): a provider failure ends one failed reply; two users stream at once in separate browsers with nothing crossing over; a hard kill mid-reply comes back as one interrupted reply with its checkpointed text.
+
 ## Invariant register
 
 Tests name the invariant in their title (e.g. `INV-01: …`). "Pending" rows are enforced and tested once their phase is executed.

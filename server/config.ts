@@ -89,6 +89,8 @@ const envSchema = z.object({
   RATE_LIMIT_GENERATIONS: intFrom(1, 10_000).default(30),
   RATE_LIMIT_UPLOADS: intFrom(1, 10_000).default(60),
   RATE_LIMIT_ADMIN: intFrom(1, 10_000).default(120),
+  // Sign-in attempts per 15 minutes, per client address and per username.
+  RATE_LIMIT_LOGIN: intFrom(1, 100_000).default(10),
   // HTTP server limits (Phase 16).
   MAX_CONNECTIONS: intFrom(16, 100_000).default(1_024),
   REQUEST_TIMEOUT_MS: intFrom(10_000, 3_600_000).default(600_000),
@@ -157,6 +159,8 @@ export interface AuthConfig {
   hashQueue: number;
   /** Per-account requests per minute by route category (Phase 16, per process); `upload` covers every file transfer (uploads, imports, full exports). */
   rateLimits: Record<RateCategory, number>;
+  /** Sign-in attempts per 15 minutes, per address and per username. */
+  loginAttempts: number;
 }
 
 export interface StorageConfig {
@@ -248,6 +252,7 @@ function authConfig(
     RATE_LIMIT_GENERATIONS: number;
     RATE_LIMIT_UPLOADS: number;
     RATE_LIMIT_ADMIN: number;
+    RATE_LIMIT_LOGIN: number;
   },
   port: number,
 ): AuthConfig {
@@ -287,6 +292,7 @@ function authConfig(
     maxSseTotal: env.MAX_SSE_TOTAL,
     hashConcurrency: env.PASSWORD_HASH_CONCURRENCY,
     hashQueue: env.PASSWORD_HASH_QUEUE,
+    loginAttempts: env.RATE_LIMIT_LOGIN,
     rateLimits: {
       generation: env.RATE_LIMIT_GENERATIONS,
       upload: env.RATE_LIMIT_UPLOADS,

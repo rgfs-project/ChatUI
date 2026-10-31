@@ -154,6 +154,7 @@ ${rows.join("\n")}
 ${String(results.filter((r) => r.killed).length)} of ${String(results.length)} mutations killed.
 `,
   );
+  run(["npx", "prettier", "--write", "docs/invariant-audit.md"]);
 }
 const survived = results.filter((r) => !r.killed);
 process.stdout.write(

@@ -50,6 +50,7 @@ describe("configuration", () => {
         hashConcurrency: 2,
         hashQueue: 16,
         rateLimits: { generation: 30, upload: 60, admin: 120 },
+        loginAttempts: 10,
       },
       storage: {
         operationRetentionMs: 7 * 86_400_000,

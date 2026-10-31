@@ -18,6 +18,7 @@ export const E2E_ADMIN = "e2e-admin";
  */
 export const E2E_AUTH_STATE = path.join(ROOT, "playwright", ".auth", "e2e.json");
 export const E2E_ADMIN_STATE = path.join(ROOT, "playwright", ".auth", "admin.json");
+export const E2E_OTHER_STATE = path.join(ROOT, "playwright", ".auth", "other.json");
 
 async function saveSignedInState(
   base: string,
@@ -135,6 +136,8 @@ function freePort(): Promise<number> {
 export default async function globalSetup(): Promise<() => Promise<void>> {
   const dataDir = mkdtempSync(path.join(tmpdir(), "chatui-e2e-"));
   const llama = await startMockLlama({
+    // Two users may stream at once (reliability.spec.ts).
+    slots: 4,
     chatChunkDelayMs: 30,
     chunkDelayMs: 120,
     slowChunks: 30,
@@ -179,6 +182,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       RATE_LIMIT_GENERATIONS: "10000",
       RATE_LIMIT_UPLOADS: "10000",
       RATE_LIMIT_ADMIN: "10000",
+      // Every spec signs in from 127.0.0.1; the login limit is tested in tests/server/auth.test.ts.
+      RATE_LIMIT_LOGIN: "10000",
     },
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -206,6 +211,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
   await saveSignedInState(base);
   await saveSignedInState(base, E2E_ADMIN, E2E_ADMIN_STATE);
+  await saveSignedInState(base, E2E_OTHER_USER, E2E_OTHER_STATE);
   process.env.E2E_BASE_URL = base;
   process.env.E2E_DATA_DIR = dataDir;
   process.env.E2E_LONG_CHAT = longChat;
