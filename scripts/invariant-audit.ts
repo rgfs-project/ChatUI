@@ -17,6 +17,7 @@ import path from "node:path";
 import { MUTATIONS, type Mutation } from "./invariant-mutations.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
+const CHECK_TIMEOUT_MS = 10 * 60_000;
 
 interface Result {
   mutation: Mutation;
@@ -32,7 +33,15 @@ function run(command: string[]): { code: number; out: string } {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
     env: { ...process.env, CI: "1" },
+    // A check that cannot finish under a mutation has not passed.
+    timeout: CHECK_TIMEOUT_MS,
+    killSignal: "SIGKILL",
   });
+  if (res.error && (res.error as NodeJS.ErrnoException).code === "ETIMEDOUT")
+    return {
+      code: 1,
+      out: `the check did not finish within ${String(CHECK_TIMEOUT_MS / 60_000)} min`,
+    };
   return { code: res.status ?? 1, out: `${res.stdout}\n${res.stderr}` };
 }
 
@@ -51,7 +60,7 @@ function failureLine(out: string): string {
   const line =
     out
       .split("\n")
-      .find((l) => /FAIL |✘|AssertionError|Error:|expected .* to /.test(l))
+      .find((l) => /FAIL |✘|AssertionError|Error:|expected .* to |did not finish/.test(l))
       ?.trim() ?? "";
   return line.replace(/\s+/g, " ").slice(0, 160);
 }
