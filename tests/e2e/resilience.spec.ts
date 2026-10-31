@@ -22,16 +22,19 @@ async function api(page: Page, method: string, path: string, body?: unknown) {
 
 test("rapid switching between chats ends on the last one chosen", async ({ page }) => {
   await signIn(page);
-  const titles = ["Switch one", "Switch two", "Switch three"];
+  // Unique per run, so repeated runs on one server never see two of a title.
+  const run = String(Date.now());
+  const titles = ["Switch one", "Switch two", "Switch three"].map((t) => `${t} ${run}`);
+  const [first = "", , last = ""] = titles;
   for (const title of titles) await api(page, "POST", "/api/conversations", { title });
   await page.reload();
   await hydrated(page);
   const list = page.getByTestId("conversation-list");
-  for (const title of [...titles, "Switch one", "Switch three"]) {
+  for (const title of [...titles, first, last]) {
     await list.getByRole("link", { name: title, exact: true }).click({ noWaitAfter: true });
   }
-  await expect(page.locator(".header-title")).toHaveText("Switch three");
-  await expect(list.getByRole("link", { name: "Switch three", exact: true })).toHaveAttribute(
+  await expect(page.locator(".header-title")).toHaveText(last);
+  await expect(list.getByRole("link", { name: last, exact: true })).toHaveAttribute(
     "aria-current",
     "page",
   );

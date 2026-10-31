@@ -82,7 +82,11 @@ export function ModelsSection() {
                       ...o,
                       [`${model.providerId}/${model.modelId}`]: hidden,
                     }));
-                    void put({ ...model.settings, hidden }).finally(() => {
+                    // Kept after a successful save (it then equals the server's
+                    // value, so a late refetch can't snap the switch back);
+                    // dropped if saving failed.
+                    void put({ ...model.settings, hidden }).then((saved) => {
+                      if (saved !== null) return;
                       setOverride((o) => {
                         const { [`${model.providerId}/${model.modelId}`]: _done, ...rest } = o;
                         return rest;

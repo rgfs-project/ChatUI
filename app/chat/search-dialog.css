@@ -114,7 +114,8 @@
 .search-detail mark {
   border-radius: 3px;
   background: color-mix(in srgb, var(--accent) 30%, transparent);
-  color: inherit;
+  /* Full-contrast text on the highlight (secondary text was 3.4:1 on it). */
+  color: var(--text);
 }
 
 .search-empty {

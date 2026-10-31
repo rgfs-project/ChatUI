@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { base, chooseModel, send, signIn, storedReplies } from "./helpers.ts";
+import { base, chooseModel, hydrated, send, signIn, storedReplies } from "./helpers.ts";
 
 test.describe("Phase 13b: tools and memory", () => {
   test("a reply shows the tools it used; a memory suggestion is saved only when the user chooses Save", async ({
@@ -24,6 +24,8 @@ test.describe("Phase 13b: tools and memory", () => {
     await page.goto(`${base()}/settings/memory`);
     await expect(page.getByTestId("memory").filter({ hasText: name })).toHaveCount(0);
     await page.goBack();
+    // Back reloads the chat (no back/forward cache): Save works once hydrated.
+    await hydrated(page);
     await storedReplies(page).last().getByRole("button", { name: "Save" }).click();
     await expect(storedReplies(page).last().getByTestId("proposal")).toContainText(
       "Saved to memory",

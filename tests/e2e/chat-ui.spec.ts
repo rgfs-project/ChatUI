@@ -27,7 +27,10 @@ test.describe("transcript and scrolling", () => {
     const s = await scrollState(page);
     expect(s.max).toBeGreaterThan(2_000);
     expect(s.max - s.top).toBeLessThanOrEqual(2);
-    await expect(page.getByTestId("message-user")).toHaveCount(LONG_CHAT_MESSAGES / 2 + 1);
+    // Other specs may add turns to the seeded chat; it holds at least its own.
+    expect(await page.getByTestId("message-user").count()).toBeGreaterThanOrEqual(
+      LONG_CHAT_MESSAGES / 2 + 1,
+    );
   });
 
   test("find-in-page reaches an old message (no virtualization)", async ({ page }) => {

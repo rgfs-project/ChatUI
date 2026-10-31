@@ -70,7 +70,7 @@ test.describe("administration (admin session)", () => {
     await confirm.getByRole("button", { name: "Delete account" }).click();
     await expect(dialog.getByTestId("admin-user-e2e-temp")).toHaveCount(0);
     await dialog.getByRole("button", { name: "Audit log" }).click();
-    await expect(dialog.getByText("user.delete")).toBeVisible();
+    await expect(dialog.getByText("user.delete").first()).toBeVisible();
   });
 });
 

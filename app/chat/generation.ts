@@ -69,7 +69,14 @@ export function useGenerationObserver(userId: string, generationId: string | nul
       const snapshot = JSON.parse(event.data) as GenerationSnapshot;
       conversationId = snapshot.conversationId;
       client.setQueryData<LiveGeneration>(key, fromSnapshot(snapshot));
-      if (isTerminalState(snapshot.state)) finish();
+      // A reply that already produced text or ended before this stream attached
+      // reports it in the snapshot, not as delta/terminal events.
+      if (snapshot.content !== "" || snapshot.reasoning !== "")
+        mark("chatui:first-assistant-event", { generationId });
+      if (isTerminalState(snapshot.state)) {
+        mark("chatui:generation-complete", { generationId });
+        finish();
+      }
     };
     source.addEventListener("snapshot", onFull);
     source.addEventListener("resync", onFull);
