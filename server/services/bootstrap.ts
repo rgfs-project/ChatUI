@@ -44,6 +44,7 @@ export function preferencesDto(p: Preferences): PreferencesDto {
     projects: p.projects,
     chatProjects: p.chatProjects,
     uiBlocks: p.uiBlocks,
+    previews: p.previews,
     feedback: p.feedback,
   });
 }

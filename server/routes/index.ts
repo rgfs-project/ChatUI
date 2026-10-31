@@ -42,6 +42,8 @@ import {
 import {
   artifactSourceRoute,
   deleteArtifactRoute,
+  mintPreviewRoute,
+  previewRoute,
   getArtifactRoute,
   listArtifactsRoute,
 } from "./artifacts.ts";
@@ -123,6 +125,8 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(getArtifactRoute),
   erase(artifactSourceRoute),
   erase(deleteArtifactRoute),
+  erase(mintPreviewRoute),
+  erase(previewRoute),
   erase(listMemoriesRoute),
   erase(createMemoryRoute),
   erase(updateMemoryRoute),

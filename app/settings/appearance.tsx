@@ -178,34 +178,46 @@ function ReduceMotion() {
 }
 
 /** Interactive blocks (Phase 14b): render ```ui blocks, or show them as code. */
-function InteractiveBlocks() {
+/**
+ * A boolean preference as a switch. Query updates reach components after a
+ * tick, so the switch shows the user's choice at once (a controlled input
+ * would otherwise snap back) until the server has saved it.
+ */
+function PreferenceSwitch({
+  name,
+  id,
+  label,
+  hint,
+  defaultOn,
+}: {
+  name: "uiBlocks" | "previews";
+  id: string;
+  label: string;
+  hint: string;
+  defaultOn: boolean;
+}) {
   const { userId } = useChat();
   const client = useQueryClient();
   const toast = useToast();
   const prefs = useQuery(preferencesQuery(userId)).data;
-  // Query updates reach components after a tick; the switch shows the user's
-  // choice at once (a controlled input would otherwise snap back) until saved.
   const [choice, setChoice] = useState<boolean | null>(null);
-  const enabled = choice ?? prefs?.uiBlocks !== false;
+  const stored = prefs?.[name];
+  const enabled = choice ?? (defaultOn ? stored !== false : stored === true);
   return (
-    <Row
-      label="Interactive blocks"
-      labelFor="ui-blocks"
-      hint="Cards, tabs, charts and quizzes in replies. Off shows them as code."
-    >
+    <Row label={label} labelFor={id} hint={hint}>
       <input
-        id="ui-blocks"
+        id={id}
         type="checkbox"
         role="switch"
         className="switch"
         checked={enabled}
         onChange={(event) => {
-          const uiBlocks = event.target.checked;
-          setChoice(uiBlocks);
+          const value = event.target.checked;
+          setChoice(value);
           const key = qk.preferences(userId);
           void apiJson<PreferencesDto>("/api/preferences", {
             method: "PATCH",
-            json: { uiBlocks },
+            json: { [name]: value },
           }).then(
             (updated) => {
               client.setQueryData(key, updated);
@@ -265,6 +277,28 @@ export const appearanceRows: SettingsRow[] = [
     id: "ui-blocks",
     label: "Interactive blocks",
     keywords: "intelligent ui cards tabs charts quiz blocks",
-    render: () => <InteractiveBlocks />,
+    render: () => (
+      <PreferenceSwitch
+        name="uiBlocks"
+        id="ui-blocks"
+        label="Interactive blocks"
+        hint="Cards, tabs, charts and quizzes in replies. Off shows them as code."
+        defaultOn
+      />
+    ),
+  },
+  {
+    id: "previews",
+    label: "Run file previews",
+    keywords: "preview html svg run sandbox interactive files code",
+    render: () => (
+      <PreferenceSwitch
+        name="previews"
+        id="previews"
+        label="Run file previews"
+        hint="Offers Run preview for HTML and SVG files from replies. They run sandboxed: no network, no access to your account or this page."
+        defaultOn={false}
+      />
+    ),
   },
 ];

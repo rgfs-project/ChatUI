@@ -12,6 +12,7 @@ import { loadProviders, type ProviderEntry } from "./providers/config.ts";
 import { createSafeFetch, systemResolver, type Resolver } from "./providers/ssrf.ts";
 import { PasswordHasher } from "./auth/passwords.ts";
 import { RouteLimits } from "./auth/route-limits.ts";
+import { PreviewTokens } from "./artifacts/preview.ts";
 import { AuthService, type AuthContext } from "./auth/service.ts";
 import { SessionStore } from "./auth/sessions.ts";
 import { PreferencesStore } from "./storage/preferences.ts";
@@ -77,7 +78,8 @@ export interface AppOptions {
   config: Pick<
     Config,
     "nodeEnv" | "inContainer" | "provider" | "storage" | "attachments" | "dataDir" | "auth"
-  >;
+  > &
+    Partial<Pick<Config, "previewOrigin">>;
   logger: Logger;
   version: string;
   /** Builds the React Router document handler; receives per-request values. */
@@ -519,6 +521,11 @@ export function createApp(options: AppOptions): ChatUiApp {
     sse: { ...DEFAULT_SSE_OPTIONS, ...options.sse },
     logger,
     limits: new RouteLimits(authConfig.rateLimits, () => now().getTime()),
+    preview: {
+      tokens: new PreviewTokens(() => now().getTime()),
+      origin: options.config.previewOrigin ?? null,
+      embedder: authConfig.publicOrigin,
+    },
   };
   const cspMode: CspMode = options.config.nodeEnv === "development" ? "development" : "production";
 
@@ -556,7 +563,7 @@ export function createApp(options: AppOptions): ChatUiApp {
       },
     }),
   );
-  app.use(...securityHeaders(cspMode));
+  app.use(...securityHeaders(cspMode, options.config.previewOrigin ?? null));
 
   const assets = express.Router();
   if (options.clientDir) {

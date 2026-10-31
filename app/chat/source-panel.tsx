@@ -1,7 +1,7 @@
 import * as RadixDialog from "@radix-ui/react-dialog";
 import "./source-panel.css";
 import { useQuery } from "@tanstack/react-query";
-import { Download, X } from "lucide-react";
+import { Code2, Download, Play, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import type { ArtifactDto } from "@shared/artifacts";
@@ -12,6 +12,9 @@ import { useChat } from "./chat-context";
 import { CopyButton } from "./message";
 import { formatSize } from "./message-attachments";
 import { CodeBlock } from "./render/code";
+import { PreviewFrame } from "./preview-frame";
+import { isPreviewable } from "@shared/preview";
+import { preferencesQuery } from "../lib/query/queries";
 
 /** File extension → highlighter language. */
 function languageOf(filename: string): string | null {
@@ -53,6 +56,10 @@ export default function SourcePanel({ id, onClose }: { id: string; onClose: () =
     },
   });
   const file = meta.data;
+  // Phase 19: only with the setting on, only for small HTML/SVG, only on request.
+  const previewsOn = useQuery(preferencesQuery(userId)).data?.previews === true;
+  const canPreview = previewsOn && file !== undefined && isPreviewable(file.filename, file.size);
+  const [previewing, setPreviewing] = useState(false);
   // Opened by an event, not a Radix trigger: return focus to whatever opened it.
   const [opener] = useState(() =>
     typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null),
@@ -70,6 +77,7 @@ export default function SourcePanel({ id, onClose }: { id: string; onClose: () =
           className="dialog source-panel"
           aria-describedby={undefined}
           data-testid="source-panel"
+          data-artifact-id={id}
           // Focus the panel itself: a focused toolbar button would show its tooltip.
           onOpenAutoFocus={(event) => {
             event.preventDefault();
@@ -101,6 +109,18 @@ export default function SourcePanel({ id, onClose }: { id: string; onClose: () =
                 </span>
               ) : null}
             </RadixDialog.Title>
+            {canPreview ? (
+              <button
+                type="button"
+                className="pill-button source-mode"
+                onClick={() => {
+                  setPreviewing(!previewing);
+                }}
+              >
+                {previewing ? <Code2 size={16} aria-hidden /> : <Play size={16} aria-hidden />}
+                <span>{previewing ? "Show source" : "Run preview"}</span>
+              </button>
+            ) : null}
             {source.data !== undefined ? <CopyButton text={source.data} label="Copy file" /> : null}
             <a
               className="icon-button"
@@ -123,6 +143,8 @@ export default function SourcePanel({ id, onClose }: { id: string; onClose: () =
               </p>
             ) : source.data === undefined || !file ? (
               <p className="source-note">Loading…</p>
+            ) : previewing && canPreview ? (
+              <PreviewFrame artifactId={file.id} filename={file.filename} />
             ) : (
               <CodeBlock language={languageOf(file.filename)} source={source.data} />
             )}

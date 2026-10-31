@@ -26,6 +26,7 @@ describe("configuration", () => {
       listenHost: "127.0.0.1",
       inContainer: false,
       http: { maxConnections: 1_024, requestTimeoutMs: 600_000 },
+      previewOrigin: null,
       provider: {
         baseUrl: undefined,
         apiKey: undefined,

@@ -99,6 +99,7 @@ export function seededClient(result?: ConversationResult): QueryClient {
     projects: [],
     chatProjects: {},
     uiBlocks: null,
+    previews: null,
     feedback: {},
   });
   client.setQueryData(qk.conversations(USER.id), [

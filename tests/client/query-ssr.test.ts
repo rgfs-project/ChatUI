@@ -65,6 +65,7 @@ function services(delayMs = 0) {
           projects: [],
           chatProjects: {},
           uiBlocks: null,
+          previews: null,
           feedback: {},
         };
       },

@@ -10,6 +10,8 @@ export const preferencesDtoSchema = z.strictObject({
   imageMaxEdge: z.number().int().min(0).max(16_384).nullable(),
   /** Render ```ui blocks (Phase 14b); null = default (on). */
   uiBlocks: z.boolean().nullable(),
+  /** Run captured HTML/SVG files in a sandboxed preview (Phase 19); null = default (off). */
+  previews: z.boolean().nullable(),
   /** Thumbs up/down on replies (Phase 14b), changed through the feedback endpoint. */
   feedback: z.record(canonicalUuid, z.enum(["up", "down"])),
   /** Projects (Phase 13g), changed only through the project endpoints. */

@@ -76,6 +76,7 @@ describe("model selection order", () => {
           projects: [],
           chatProjects: {},
           uiBlocks: null,
+          previews: null,
           feedback: {},
         },
       }),

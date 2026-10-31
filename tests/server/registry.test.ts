@@ -49,6 +49,8 @@ const PUBLIC = new Set([
   "GET /api/auth/session",
   "POST /api/auth/login",
   "POST /api/auth/register",
+  // Phase 19: authorized by its single-use token, never by a session.
+  "GET /api/preview/:token",
 ]);
 const key = (route: AnyApiRoute) => `${route.method.toUpperCase()} ${route.path}`;
 

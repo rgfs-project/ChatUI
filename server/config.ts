@@ -94,6 +94,16 @@ const envSchema = z.object({
   // HTTP server limits (Phase 16).
   MAX_CONNECTIONS: intFrom(16, 100_000).default(1_024),
   REQUEST_TIMEOUT_MS: intFrom(10_000, 3_600_000).default(600_000),
+  // Optional separate origin for file previews (Phase 19, docs/threat-model-19.md).
+  PREVIEW_ORIGIN: z
+    .url({ protocol: /^https?$/, message: "must be an http(s) URL" })
+    .refine((value) => {
+      if (!URL.canParse(value)) return true;
+      const url = new URL(value);
+      return url.pathname === "/" && !url.search && !url.hash && !url.username;
+    }, "must be an origin only (no path, query or credentials)")
+    .transform((value) => new URL(value).origin)
+    .optional(),
 });
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -116,6 +126,8 @@ export interface Config {
   inContainer: boolean;
   /** HTTP server limits (Phase 16): open connections and the time to receive one request. */
   http: { maxConnections: number; requestTimeoutMs: number };
+  /** Origin that serves file previews (Phase 19); null = the app's own origin. */
+  previewOrigin: string | null;
   provider: ProviderConfig;
   storage: StorageConfig;
   attachments: AttachmentConfig;
@@ -357,6 +369,7 @@ export function loadConfig(
       maxConnections: parsed.data.MAX_CONNECTIONS,
       requestTimeoutMs: parsed.data.REQUEST_TIMEOUT_MS,
     },
+    previewOrigin: parsed.data.PREVIEW_ORIGIN ?? null,
     provider: {
       baseUrl: parsed.data.LLAMA_BASE_URL,
       apiKey: parsed.data.LLAMA_API_KEY,

@@ -22,7 +22,10 @@ type Directive = string | ((req: unknown, res: unknown) => string);
  * nonce; no unsafe-inline/unsafe-eval anywhere. Development additionally allows
  * Vite's HMR websocket and injected <style> tags.
  */
-export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
+export function cspDirectives(
+  mode: CspMode,
+  previewOrigin: string | null = null,
+): Record<string, Directive[]> {
   const nonce: Directive = (_req, res) => `'nonce-${getNonce(res as Response)}'`;
   const directives: Record<string, Directive[]> = {
     "default-src": ["'self'"],
@@ -39,7 +42,8 @@ export function cspDirectives(mode: CspMode): Record<string, Directive[]> {
     "manifest-src": ["'self'"],
     "worker-src": ["'none'"],
     "object-src": ["'none'"],
-    "frame-src": ["'none'"],
+    // Only sandboxed file previews (Phase 19): this origin or the preview origin.
+    "frame-src": ["'self'", ...(previewOrigin ? [previewOrigin] : [])],
     "base-uri": ["'none'"],
     "form-action": ["'self'"],
     "frame-ancestors": ["'none'"],
@@ -78,7 +82,10 @@ export const PERMISSIONS_POLICY = [
   "xr-spatial-tracking=()",
 ].join(", ");
 
-export function securityHeaders(mode: CspMode): RequestHandler[] {
+export function securityHeaders(
+  mode: CspMode,
+  previewOrigin: string | null = null,
+): RequestHandler[] {
   const assignNonce: RequestHandler = (_req, res, next) => {
     res.locals.cspNonce = createNonce();
     res.setHeader("Permissions-Policy", PERMISSIONS_POLICY);
@@ -87,7 +94,7 @@ export function securityHeaders(mode: CspMode): RequestHandler[] {
   return [
     assignNonce,
     helmet({
-      contentSecurityPolicy: { useDefaults: false, directives: cspDirectives(mode) },
+      contentSecurityPolicy: { useDefaults: false, directives: cspDirectives(mode, previewOrigin) },
       // HSTS belongs to the TLS-terminating proxy deployment introduced with auth (Phase 4).
       strictTransportSecurity: false,
       frameguard: { action: "deny" },

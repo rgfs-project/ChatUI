@@ -40,9 +40,14 @@ Whoever controls the file's content: the model, or anyone who can put text in fr
 9. **CPU and memory.** A preview that spins or allocates without end can slow the tab. Browsers with site isolation run sandboxed opaque-origin frames in their own process; `PREVIEW_ORIGIN` guarantees that through a separate site. The close button stays usable whenever the frame runs out of process. See Residual risks.
 10. **No secrets inside.** The preview document is exactly the captured file: no session data, user names or tokens are injected, and nothing about it is logged except the file id.
 
+## Measured
+
+In the E2E run, a preview running a 3 s busy loop delayed the page's own script by 16 ms. Chromium runs sandboxed opaque-origin frames in their own process, and the Show source button stopped it at once.
+
 ## Residual risks
 
 - **Same-process frames.** On a browser without sandboxed-frame process isolation and without `PREVIEW_ORIGIN`, a script that spins forever freezes the tab until the browser offers to stop it. The data stays safe; only availability is affected. Operators who enable previews for untrusted content should set `PREVIEW_ORIGIN`.
+- **The frame can navigate itself** (for example to a `data:` URL). The new document keeps the frame's sandbox, so it is still opaque, without network and unable to leave the frame.
 - **Phishing-looking content.** A preview can draw anything inside its frame, including a fake sign-in form. It cannot submit one (`form-action 'none'`, no network), and the frame is labelled "Preview of a file from a reply".
 
 ## Tests

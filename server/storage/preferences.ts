@@ -19,6 +19,8 @@ export interface Preferences {
   imageMaxEdge: number | null;
   /** Render ```ui blocks (Phase 14b); null = default (on). */
   uiBlocks: boolean | null;
+  /** Sandboxed previews of captured files (Phase 19); off unless true. */
+  previews: boolean | null;
   /** Feedback on replies (Phase 14b): assistant message id → thumbs up/down, newest last. */
   feedback: Record<string, "up" | "down">;
   /** Projects (Phase 13g): named folders, in display order. */
@@ -45,6 +47,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   historyImages: null,
   imageMaxEdge: null,
   uiBlocks: null,
+  previews: null,
   feedback: {},
   projects: [],
   chatProjects: {},
@@ -64,6 +67,7 @@ function sanitize(raw: unknown): { prefs: Preferences; extra: Record<string, unk
     projects,
     chatProjects,
     uiBlocks,
+    previews,
     feedback,
     ...extra
   } = r;
@@ -95,6 +99,7 @@ function sanitize(raw: unknown): { prefs: Preferences; extra: Record<string, unk
           ? imageMaxEdge
           : null,
       uiBlocks: typeof uiBlocks === "boolean" ? uiBlocks : null,
+      previews: typeof previews === "boolean" ? previews : null,
       feedback:
         typeof feedback === "object" && feedback !== null && !Array.isArray(feedback)
           ? Object.fromEntries(

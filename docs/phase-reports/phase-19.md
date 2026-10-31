@@ -1,0 +1,42 @@
+## Phase 19 report
+
+- **Approval:** the project owner approved Phase 19 on 2026-10-31 ("do 17, 18, 19").
+- **Plan:**
+  - Threat model first (`docs/threat-model-19.md`), comparing four options. The declarative widgets of Phase 14b stay. Scripted previews run in an opaque-origin sandbox on the app's URL, with an optional separate preview origin. `srcdoc` on the app origin was rejected.
+  - Then implement only that design, with INV-51 tests and an audit mutation.
+- **Scope completed:**
+  - **Setting:** Settings → Appearance → "Run file previews", off by default (`preferences.previews`). It is a shared `PreferenceSwitch` that "Interactive blocks" now uses too.
+  - **Source panel:** for a captured `.html`/`.htm`/`.svg` file up to 512 KB, **Run preview** shows the file in a frame and **Show source** removes it. Source, Copy and Download always remain. The frame is labelled "Preview of a file from a reply: it can't reach your account".
+  - **Links:** `POST /api/artifacts/:id/preview` (session, CSRF, owner, setting on) mints a single-use HMAC token for 60 s; the key lives only in this process. `GET /api/preview/:token` serves the exact bytes by token alone.
+  - **Isolation:**
+    - frame `sandbox="allow-scripts"`, without `allow-same-origin`, plus the response CSP `sandbox allow-scripts`;
+    - `default-src 'none'`, with only data:/blob: images, fonts and media;
+    - `connect-src`, `form-action`, `frame-src`, `worker-src`, `object-src` and `base-uri` all `'none'`;
+    - `frame-ancestors` is the app's origin, and the Permissions-Policy turns every feature off;
+    - `no-store`, `nosniff`, `no-referrer`, and no message listener in the app.
+  - The app's CSP gains `frame-src 'self'` (plus `PREVIEW_ORIGIN`) and nothing else; `frame-ancestors 'none'` stays.
+  - **`PREVIEW_ORIGIN`:** optional, an origin only, validated at startup. It puts previews on a separate site.
+- **Tests (INV-51):**
+  - `tests/server/preview.test.ts` (4):
+    - tokens are single-use, expire, and refuse forgery, alteration and a different process key;
+    - minting needs the owner and the setting, and only small HTML/SVG qualifies;
+    - the preview response headers, with no cookie needed;
+    - the app's framing policy.
+  - `tests/e2e/preview.spec.ts` (4):
+    - a hostile file fails at cookies, `localStorage`, the parent DOM, `top.location`, `fetch` to the API, popups and forged `postMessage`; no request leaves the frame, no page opens and the app is untouched;
+    - a legitimate slider preview works by keyboard, and with previews off only the source is offered;
+    - the link is single-use and works with no session;
+    - a CPU-spinning preview is stopped and the app recovers (the page was delayed 16 ms: the frame runs in its own process).
+  - `tests/server/registry.test.ts`: the preview route is in the public allowlist.
+  - The audit's INV-51 mutation (adding `allow-same-origin`) is **killed**.
+- **Quality gates:**
+  - `format:check`, `lint`, `typecheck`: PASS
+  - `test`: PASS (559)
+  - `build`: PASS
+  - `verify`: PASS (87/87)
+  - `test:e2e`: PASS (118/118)
+- **Budget:** chat JS 254,049 B (+1 B), within budget. The preview frame lives in the lazily loaded source panel.
+- **Not delivered or limits:** exactly as the threat model lists them.
+  - On a browser without sandboxed-frame process isolation and without `PREVIEW_ORIGIN`, a spinning preview can freeze the tab until the browser stops it (availability only).
+  - A preview can draw anything inside its labelled frame, but it can't submit it or send it anywhere.
+- **Commit/tag:** `feat(phase-19): isolated interactive artifact previews`, tag `phase-19`, pushed to `main`.

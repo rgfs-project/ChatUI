@@ -18,6 +18,7 @@ import type { ConversationMutations } from "./chat/mutations.ts";
 import type { SearchService } from "./chat/search.ts";
 import type { MemoryService } from "./memory/service.ts";
 import type { ArtifactStore } from "./artifacts/store.ts";
+import type { PreviewTokens } from "./artifacts/preview.ts";
 import type { ImportService } from "./portability/import.ts";
 import type { DataPaths } from "./storage/paths.ts";
 import type { TemporaryChats } from "./storage/temporary.ts";
@@ -82,6 +83,8 @@ export interface RouteServices {
   memory: MemoryService;
   /** Phase 13c. */
   artifacts: ArtifactStore;
+  /** Phase 19: preview links, the origin that serves them and the origin allowed to frame them. */
+  preview: { tokens: PreviewTokens; origin: string | null; embedder: string };
   /** Phase 13d: raw single-chat export, the portable archive and the importer. */
   dataPaths: DataPaths;
   exportArchive: (userId: string) => Promise<string>;

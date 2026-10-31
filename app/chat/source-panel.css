@@ -78,3 +78,33 @@ html[data-phone] .source-meta a {
 .dialog.source-panel:focus-visible {
   outline: none;
 }
+
+/* Sandboxed preview of a captured file (Phase 19). */
+.source-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+
+.preview-label {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sub);
+}
+
+.preview-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-menu-item);
+  /* Most generated pages assume a white page. */
+  background: #ffffff;
+}

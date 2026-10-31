@@ -761,6 +761,24 @@ export const MUTATIONS: Mutation[] = [
     vitest: [T("server/backup.test.ts")],
   },
   {
+    id: "INV-51",
+    title: "previews run with same-origin access",
+    edits: [
+      {
+        file: "server/routes/artifacts.ts",
+        find: '    "sandbox allow-scripts",',
+        replace: '    "sandbox allow-scripts allow-same-origin",',
+      },
+      {
+        file: "app/chat/preview-frame.tsx",
+        find: '        sandbox="allow-scripts"',
+        replace: '        sandbox="allow-scripts allow-same-origin"',
+      },
+    ],
+    vitest: [T("server/preview.test.ts")],
+    e2e: [T("e2e/preview.spec.ts")],
+  },
+  {
     id: "INV-52",
     title: "read aloud is offered without speech support",
     edits: [
