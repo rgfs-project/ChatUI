@@ -174,6 +174,11 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       DATA_DIR: dataDir,
       LLAMA_BASE_URL: llama.url,
       LOG_LEVEL: "warn",
+      // One account drives the whole suite faster than a person could; the
+      // per-account limits are covered in tests/server/security.test.ts.
+      RATE_LIMIT_GENERATIONS: "10000",
+      RATE_LIMIT_UPLOADS: "10000",
+      RATE_LIMIT_ADMIN: "10000",
     },
     stdio: ["ignore", "pipe", "inherit"],
   });
