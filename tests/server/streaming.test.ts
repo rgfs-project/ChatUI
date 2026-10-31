@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
@@ -560,6 +560,15 @@ describe("INV-21 / INV-60: checkpoints and restart recovery", () => {
     const again = await start({ dataDir });
     expect(
       blocksOf(again, body.conversationId as string).filter((b) => b.type === "assistant"),
+    ).toHaveLength(0);
+    await stop(again);
+    // Without its checkpoint (retention), the operation's terminalWritten flag still decides.
+    rmSync(path.join(dataDir, "_system", "generations", `${body.generationId as string}.json`), {
+      force: true,
+    });
+    const third = await start({ dataDir });
+    expect(
+      blocksOf(third, body.conversationId as string).filter((b) => b.type === "assistant"),
     ).toHaveLength(0);
   });
 

@@ -24,7 +24,13 @@ import {
 import { AppError } from "../errors.ts";
 import type { Logger } from "../logger.ts";
 import type { ChatIndex } from "../storage/chat-index.ts";
-import { atomicWrite, durableUnlink, ensureDir, readOrNull } from "../storage/fs.ts";
+import {
+  atomicWrite,
+  durableUnlink,
+  ensureDir,
+  ensureDirUnder,
+  readOrNull,
+} from "../storage/fs.ts";
 import type { KeyedLocks } from "../storage/locks.ts";
 import { parseConversation, serializeConversation } from "../storage/markdown.ts";
 import { nameKey, parseMemory, type MemoryStore } from "../storage/memories.ts";
@@ -574,7 +580,7 @@ export class ImportService {
 
   /** Streams an uploaded archive into staging (bounded) and returns its preview. */
   async receive(userId: string, stream: Readable): Promise<ImportPreview> {
-    await ensureDir(this.dir(userId));
+    await ensureDirUnder(this.d.paths.userDir(userId), this.dir(userId));
     const target = path.join(this.dir(userId), `upload-${randomBytes(8).toString("hex")}.zip`);
     const file = await open(target, "wx", 0o600);
     let size = 0;
@@ -750,7 +756,8 @@ export class ImportService {
       let written = 0;
       for (const w of writes) {
         check();
-        await ensureDir(path.dirname(path.dirname(w.file)));
+        // Never recreates a closed account's directory (INV-61).
+        await ensureDirUnder(this.d.paths.userDir(userId), path.dirname(path.dirname(w.file)));
         await ensureDir(path.dirname(w.file));
         await atomicWrite(w.file, w.bytes);
         written++;

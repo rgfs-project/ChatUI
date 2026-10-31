@@ -10,7 +10,7 @@ import type { AttachmentStore } from "../attachments/store.ts";
 import type { ArtifactStore } from "../artifacts/store.ts";
 import { AppError } from "../errors.ts";
 import type { GenerationManager } from "../generations/manager.ts";
-import { ensureDir, listDir, readOrNull } from "../storage/fs.ts";
+import { ensureDirUnder, listDir, readOrNull } from "../storage/fs.ts";
 import type { KeyedLocks } from "../storage/locks.ts";
 import { parseConversation } from "../storage/markdown.ts";
 import { isUuid, type DataPaths } from "../storage/paths.ts";
@@ -130,7 +130,7 @@ export async function exportArchive(userId: string, deps: ExportDeps): Promise<s
   await deps.hooks?.afterSnapshot?.();
 
   const dir = stagingDir(paths, userId);
-  await ensureDir(dir);
+  await ensureDirUnder(paths.userDir(userId), dir);
   const file = path.join(dir, `export-${randomBytes(8).toString("hex")}.zip`);
   const zip = await ZipWriter.create(file);
   const entries: ManifestEntry[] = [];

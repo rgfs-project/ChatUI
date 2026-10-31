@@ -4,7 +4,7 @@
 // holds the per-user memory-store lock. Loadable natively by Node.
 import { createHash, randomUUID } from "node:crypto";
 import { isScalar, isSeq, parseDocument, type Pair } from "yaml";
-import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "./fs.ts";
+import { atomicWrite, durableUnlink, ensureDirUnder, listDir, readOrNull } from "./fs.ts";
 import { lockKeys, type KeyedLocks } from "./locks.ts";
 import { isCanonicalTimestamp, isCanonicalUuid, normalizeBody, quote } from "./markdown.ts";
 import type { DataPaths } from "./paths.ts";
@@ -162,7 +162,7 @@ export class MemoryStore {
   }
 
   private async write(userId: string, memory: Omit<Memory, "revision">): Promise<Memory> {
-    await ensureDir(this.paths.memoriesDir(userId));
+    await ensureDirUnder(this.paths.userDir(userId), this.paths.memoriesDir(userId));
     const bytes = serializeMemory(memory);
     await atomicWrite(this.paths.memoryFile(userId, memory.id), bytes);
     return { ...memory, body: normalizeBody(memory.body), revision: revisionOf(bytes) };
@@ -262,7 +262,7 @@ export class MemoryStore {
       await durableUnlink(this.paths.memoryFile(userId, id));
       return;
     }
-    await ensureDir(this.paths.memoriesDir(userId));
+    await ensureDirUnder(this.paths.userDir(userId), this.paths.memoriesDir(userId));
     await atomicWrite(this.paths.memoryFile(userId, id), bytes);
   }
 

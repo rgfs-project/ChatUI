@@ -15,6 +15,7 @@ export default defineConfig(
     "demo-data/",
     "test-results/",
     "playwright-report/",
+    "coverage/",
   ]),
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,

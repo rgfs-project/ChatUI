@@ -226,6 +226,12 @@ describe("accounts", () => {
     expect(existsSync(path.join(dataDir, victim.userId))).toBe(false);
     expect(chatui.services.generations.activeCountForUser(victim.userId)).toBe(0);
     expect((await api(base, boss, "GET", `/api/generations/${generationId}`)).status).toBe(404);
+    // Late writers of every store fail instead of recreating the account.
+    await expect(chatui.services.conversations.create(victim.userId)).rejects.toThrow();
+    await expect(
+      chatui.services.memory.create(victim.userId, { name: "Late", body: "late" }),
+    ).rejects.toThrow();
+    expect(existsSync(path.join(dataDir, victim.userId))).toBe(false);
   });
 
   it("INV-61: a crash after `closing` resumes and completes the closure at startup", async () => {

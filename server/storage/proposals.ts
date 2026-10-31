@@ -3,7 +3,7 @@
 // validated and suppressed suggestions of its replies and their outcomes.
 // Every change holds the sidecar lock (contracts §2: after conversation
 // locks, before the memory-store lock). Loadable natively by Node.
-import { atomicWrite, durableUnlink, ensureDir, listDir, readOrNull } from "./fs.ts";
+import { atomicWrite, durableUnlink, ensureDirUnder, listDir, readOrNull } from "./fs.ts";
 import { lockKeys, type KeyedLocks } from "./locks.ts";
 import { isCanonicalUuid } from "./markdown.ts";
 import type { DataPaths } from "./paths.ts";
@@ -115,7 +115,7 @@ export class ProposalStore {
     conversationId: string,
     proposals: ProposalRecord[],
   ): Promise<void> {
-    await ensureDir(this.paths.proposalsDir(userId));
+    await ensureDirUnder(this.paths.userDir(userId), this.paths.proposalsDir(userId));
     let kept = proposals;
     if (kept.length > MAX_PROPOSALS_PER_CONVERSATION) {
       const excess = kept.length - MAX_PROPOSALS_PER_CONVERSATION;

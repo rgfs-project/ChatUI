@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   ARTIFACT_MAX_BYTES,
   artifactNameProblem,
@@ -300,6 +300,43 @@ describe("capture recovery (INV-40, INV-60)", () => {
     await serve({ dataDir });
     const again = await serve({ dataDir });
     expect((await list(again.base, alice)).map((a) => a.filename)).toEqual(["late.txt"]);
+  });
+
+  it("INV-40: a reply stopped after a complete fence creates no file", async () => {
+    const slow = await startMockLlama({ slots: 2, chatChunkDelayMs: 25 });
+    try {
+      const dataDir = tempDataDir();
+      writeProviders(dataDir, [
+        localProvider(slow.url, {
+          capabilities: { inputModalities: ["text"], reasoning: true, tools: true },
+        }),
+      ]);
+      const { base, chatui } = await serve({ dataDir });
+      const alice = await signIn(base, chatui);
+      const res = await api(base, alice, "POST", "/api/generations", {
+        providerId: "local",
+        model: MOCK_MODELS.chat,
+        content: `x\n\`\`\`txt file=stopped.txt\nnot kept\n\`\`\`\n${" and more".repeat(60)}`,
+        operationKey: crypto.randomUUID(),
+        operationIssuedAt: new Date().toISOString(),
+      });
+      const generationId = res.json.generationId;
+      // The fence is complete in the streamed text before Stop.
+      await vi.waitFor(
+        () => {
+          const content = chatui.services.generations.snapshot(generationId).content;
+          expect(content.match(/```/g)?.length).toBe(2);
+          expect(content).toContain(" and more");
+        },
+        { timeout: 10_000, interval: 20 },
+      );
+      await api(base, alice, "POST", `/api/generations/${generationId}/cancel`);
+      await chatui.services.generations.settled(generationId);
+      expect(chatui.services.generations.snapshot(generationId).state).toBe("cancelled");
+      expect(await chatui.services.artifacts.list(alice.userId)).toEqual([]);
+    } finally {
+      await slow.close();
+    }
   });
 
   it("unfinished replies never create files; interrupted writes are cleaned", async () => {

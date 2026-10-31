@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { atomicWrite, ensureDir, readOrNull } from "../storage/fs.ts";
+import { atomicWrite, ensureDir, ensureDirUnder, readOrNull } from "../storage/fs.ts";
 import type { KeyedLocks } from "../storage/locks.ts";
 import { isUuid, type DataPaths } from "../storage/paths.ts";
 
@@ -243,7 +243,7 @@ export class ArtifactStore {
         continue;
       await this.locks.run(`artifact:${userId}/${id}`, async () => {
         const dir = this.dir(userId, id);
-        await ensureDir(this.dir(userId));
+        await ensureDirUnder(this.paths.userDir(userId), this.dir(userId));
         await ensureDir(dir);
         await atomicWrite(path.join(dir, "blob"), bytes);
         const meta: ArtifactMeta = {

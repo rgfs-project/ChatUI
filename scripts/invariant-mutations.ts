@@ -472,7 +472,7 @@ export const MUTATIONS: Mutation[] = [
   },
   {
     id: "INV-32",
-    title: "stored messages re-render on every streamed token",
+    title: "the chat view subscribes to the token stream; nothing stops the re-render",
     edits: [
       {
         file: "app/chat/message.tsx",
@@ -480,10 +480,22 @@ export const MUTATIONS: Mutation[] = [
         replace: "export const Message = (function Message({",
       },
       {
-        // The transcript's memo is what keeps stored messages out of a delta's render.
         file: "app/chat/transcript.tsx",
         find: "export const Transcript = memo(function Transcript({",
         replace: "export const Transcript = (function Transcript({",
+      },
+      {
+        // Only the live reply subscribes to deltas; the chat view now does too.
+        file: "app/chat/chat-view.tsx",
+        find: "  const { result, conversationId, pending } = chat;",
+        replace:
+          "  void useLiveGeneration(chat.userId, chat.activeGenerationId);\n  const { result, conversationId, pending } = chat;",
+      },
+      {
+        file: "app/chat/chat-view.tsx",
+        find: 'import { LiveReply } from "./live-reply";',
+        replace:
+          'import { LiveReply } from "./live-reply";\nimport { useLiveGeneration } from "./generation";',
       },
     ],
     vitest: [T("client/render-isolation.test.tsx")],
@@ -892,6 +904,12 @@ export function makeQueryClient(server = typeof window === "undefined"): QueryCl
         file: "server/chat/send-service.ts",
         find: "      if (await this.o.isClosing?.(userId)) {",
         replace: '      if (await this.o.isClosing?.("00000000-0000-4000-8000-000000000000")) {',
+      },
+      {
+        // Writers also refuse a missing account root; both guards must go.
+        file: "server/storage/fs.ts",
+        find: '  if (!info?.isDirectory()) throw new AccountGoneError("the account directory does not exist");',
+        replace: "  if (!info?.isDirectory()) await ensureDir(root);",
       },
     ],
     vitest: [T("server/admin.test.ts")],
