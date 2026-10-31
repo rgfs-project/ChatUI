@@ -1,118 +1,89 @@
 # ChatUI
 
-A self-hosted AI chat frontend: React 19 + React Router Framework Mode **server-side rendering from the first commit**, one Express 5 process, canonical Markdown storage (from Phase 3), and server-owned generation.
+**A self-hosted, multi-user chat interface for your own language models.** ChatUI connects to [llama.cpp](https://github.com/ggml-org/llama.cpp) servers and other OpenAI-compatible endpoints. It keeps every conversation as a readable Markdown file you own and runs as one small Node.js process in a container.
 
-> **Status: Phase 12b (Library and profile).** A full chat interface: a sidebar of recent chats, URL-addressable conversations (`/chat/<id>`), a model menu, Markdown replies with copyable code, rename and delete with in-app confirmation, Settings (default model, appearance: theme, accent, text sizes, reduced motion; account; shortcuts) as a searchable overlay, and streaming that follows the reply only while you're at the bottom. Underneath: per-user canonical Markdown storage, several OpenAI-compatible providers, and server-owned generations that survive disconnects and restarts. Admins manage accounts, providers, models (visibility, sampling, system prompts) and instance settings from an Administration overlay. You can attach images, audio and text files to messages, and open images in a full-screen viewer. The Library lists every file you have, and your Profile shows your photo (in one of five shapes), streaks and a year of activity. The build order is in [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Fast and resilient.** Pages are rendered on the server, so you can type before JavaScript has loaded. Replies are generated server-side: they survive reloads, dropped connections and server restarts, and are never stored twice.
+- **Yours.** Chats, files, memories and settings live in one data directory as plain files. You can export everything as one ZIP, import it elsewhere, and back up or restore with a single command.
+- **Multi-user.** Accounts, an administration area, per-account isolation, rate limits and a reviewed security model ([SECURITY.md](SECURITY.md)).
+- **Accessible.** Keyboard-only operation, screen-reader announcements, WCAG 2.2 AA contrast in light and dark themes, and a phone layout.
 
-## Prerequisites
+---
 
-- Node.js **24.21.0** (see `.nvmrc`; `nvm use`)
-- npm 11
-- For `npm run verify`: Playwright's Chromium (`npx playwright install chromium`, one-time download)
+## Contents
 
-## Run with Compose (supported production runtime)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Connecting a model](#connecting-a-model)
+- [Using ChatUI](#using-chatui)
+- [Running it in production](#running-it-in-production)
+- [Backups and data](#backups-and-data)
+- [Security](#security)
+- [Development](#development)
+- [Known limitations](#known-limitations)
+- [Documentation](#documentation)
 
-Docker Compose:
+## Features
+
+| Area                 | What you get                                                                                                                                                                                                                                                                                                     |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat**             | Streaming replies with the model's reasoning shown separately ("Thought for 12s"). Stop, regenerate, edit and resend, delete a turn, a per-message model choice, and a **Think** toggle for reasoning models. Markdown with highlighted code, tables (copy as spreadsheet rows), math as MathML, and read aloud. |
+| **Composer**         | Native text box: Enter sends, Shift+Enter adds a line, IME-safe. Attach images, audio and text files by picker, paste or drag. Paste from web pages as Markdown, dictate where the browser supports it, and type `/` for commands.                                                                               |
+| **Organizing**       | Search across chats and files (Ctrl/⌘+K), pinned chats, projects (folders), temporary chats that disappear when you leave them, and a Library of every file you've uploaded or a reply created.                                                                                                                  |
+| **Memory and tools** | Notes ChatUI keeps in mind in every chat. With tool-capable models: searching and reading your earlier chats and files, the time, a calculator, creating files, and suggesting memories (saved only when you choose Save).                                                                                       |
+| **Rich replies**     | Interactive blocks in replies (cards, tabs, charts, quizzes, steps…), parsed and never run as code. Files a reply creates open as inert source. Optionally, HTML/SVG files run in an isolated **sandboxed preview** ([how it's contained](docs/threat-model-19.md)).                                             |
+| **Your data**        | Canonical Markdown per chat, export and import of everything (with a preview and conflict choices), per-chat Markdown download, and an offline backup/restore CLI.                                                                                                                                               |
+| **Accounts**         | Sign-in with Argon2id passwords, optional self-registration, a profile with photo and activity, and settings for theme, accent colour, text sizes, reduced motion and more.                                                                                                                                      |
+| **Administration**   | Accounts, providers (with connection test), model visibility, sampling and system prompts, instance settings, a notice banner, maintenance and an audit log.                                                                                                                                                     |
+| **Operations**       | Docker or rootless Podman Compose, non-root and read-only, a healthcheck, startup crash recovery, rate and resource limits, structured logs without secrets, and a strict CSP.                                                                                                                                   |
+
+## Quick start
+
+You need **Docker** (or **Podman**) and a llama.cpp server (or try the [demo](#try-it-without-a-model) first).
 
 ```bash
+git clone https://github.com/rgfs-project/ChatUI.git
+cd ChatUI
+cp .env.example .env          # then set LLAMA_BASE_URL (and LLAMA_API_KEY) in .env
 docker compose up -d --build
 ```
 
-Rootless Podman (named volume, labeled automatically):
-
-```bash
-podman compose up -d --build
-```
-
-Rootless Podman with `./data` bind-mounted and SELinux-labeled (`:Z`, see `compose.podman.yaml`):
-
-```bash
-mkdir -p data && podman compose -f compose.yaml -f compose.podman.yaml up -d --build
-```
-
-Then open http://127.0.0.1:3000 (override with `HOST_PORT`). The container:
-
-- publishes **only on `127.0.0.1`**; use an https TLS proxy for LAN or phone access (see below);
-- runs as the unprivileged `node` user (UID 1000) with a read-only root filesystem, all capabilities dropped and `no-new-privileges`;
-- keeps all persistent state in the `/data` volume (`chatui-data` by default), which survives `docker compose down`/`up`, recreate and image updates. Only `docker compose down -v` deletes it;
-- has a built-in healthcheck and `restart: unless-stopped`;
-- has the stable entrypoint `node server/cli.ts <command>`, e.g. `docker compose exec chatui node server/cli.ts healthcheck`.
-
-Operator commands (an unknown command exits with status 2 and the usage):
-
-| Command                                                                                            | Available from |
-| -------------------------------------------------------------------------------------------------- | -------------- |
-| `serve` (default), `healthcheck`                                                                   | Phase 1b       |
-| `provider:check` (reachability and credentials of `LLAMA_BASE_URL`)                                | Phase 2        |
-| `index:rebuild` (rebuild derived indexes; server stopped)                                          | Phase 3        |
-| `user:create --username <name> [--admin]` (password via prompt or stdin)                           | Phase 4        |
-| `user:reset-password --username <name>` (password via prompt or stdin)                             | Phase 10       |
-| `backup --out <dir> [--with-sessions]`, `restore --from <dir>` (server stopped; see Backups below) | Phase 16       |
-
-Updating: `git pull && docker compose up -d --build`. The `/data` volume is reused.
-
-To reach a llama.cpp server from the container, set `LLAMA_BASE_URL` (and `LLAMA_API_KEY` in `.env`) to an address the container can reach: a LAN address, `host.containers.internal` (Podman) or `host.docker.internal` with the `extra_hosts` entry commented in `compose.yaml` (Docker Engine on Linux). `localhost` inside the container is the container itself. Check it with `docker compose exec chatui node server/cli.ts provider:check`.
-
-## First admin and signing in
-
-Accounts are created by the operator (registration is closed by default). The password is read from a prompt, or from stdin when piped. It is never accepted as a command-line argument:
-
-```bash
-npm run user:create -- --username admin --admin
-```
-
-With Compose, run the same command inside the container:
+Create the first admin account. The password is asked for at a prompt, never on the command line:
 
 ```bash
 docker compose exec chatui node server/cli.ts user:create --username admin --admin
 ```
 
-Then open the URL in `PUBLIC_ORIGIN` (default `http://localhost:3000`) and sign in. `REGISTRATION_MODE=open` lets people create their own accounts at `/register`. Changing your password (Settings → Account) signs you out everywhere.
+Open **http://localhost:3000** and sign in.
 
-## Administration
-
-Admins open **Administration** from the profile menu (`/admin`). Every admin API checks the role on the server; members get a 404 page and never download the admin code.
-
-- **Accounts:** create, promote or demote, disable or enable, set a password (signs the account out everywhere), delete (type the username to confirm; chats, files and settings are removed). The last active admin can't be demoted, disabled or deleted.
-- **Providers:** add, edit, test and remove model servers, with the same network policy as `providers.json`. API keys are write-only: the UI shows only whether one is set.
-- **Models:** hide a model from members, and set its sampling (temperature, top-p, top-k, min-p, repeat penalty) and a system prompt. A system prompt may use `{{username}}`, `{{date}}`, `{{timezone}}` and `{{time}}`.
-- **Instance:** registration (overrides `REGISTRATION_MODE`), default model, a notice banner shown to everyone, an output-token cap and the time zone used for prompt dates.
-- **Maintenance and audit:** rebuild indexes; admin actions are logged to `DATA_DIR/_system/audit/YYYY-MM.jsonl`.
-
-Settings are stored in `DATA_DIR/_system/settings.json`; edits made in the UI survive restarts and win over the environment. Locked out of every admin account? Reset a password from the shell (it is read from a prompt or stdin):
+<details>
+<summary>Rootless Podman</summary>
 
 ```bash
-npm run user:reset-password -- --username admin
+podman compose up -d --build
+# or with ./data bind-mounted and SELinux-labelled:
+mkdir -p data && podman compose -f compose.yaml -f compose.podman.yaml up -d --build
 ```
 
-## Demo
+</details>
+
+### Try it without a model
 
 ```bash
+npm ci
 npm run demo
 ```
 
-Starts a self-contained instance on http://localhost:3000 with a mock model (no LLM needed), two accounts (`demo` / `demo password 1234`, an admin, and `demo2` with the same password) and sample chats in `./demo-data`. Delete that folder to start over. It never touches `./data`.
+This starts http://localhost:3000 with a built-in mock model, sample chats and two accounts: `demo` (an admin) and `demo2`, both with the password `demo password 1234`. Data goes to `./demo-data`; delete that folder to start over.
 
-## Chatting (development)
+## Connecting a model
+
+Set `LLAMA_BASE_URL` (and `LLAMA_API_KEY`) in `.env` to an address **the container can reach**. That means a LAN address, `host.containers.internal` (Podman), or `host.docker.internal` with the `extra_hosts` entry in `compose.yaml` (Docker on Linux). Inside the container, `localhost` is the container itself. Check the connection with:
 
 ```bash
-LLAMA_BASE_URL=http://<llama-host>:8080 LLAMA_API_KEY=<key> npm run dev
-# create an account (above), then open http://localhost:3000/
+docker compose exec chatui node server/cli.ts provider:check
 ```
 
-`/` opens a new chat (`/chat/new`); each conversation has its own address (`/chat/<id>`), and the server status page is at `/status`. The page renders the composer on the server (you can type before JavaScript loads). Replies stream with the model's reasoning shown separately. Reloading keeps watching the running reply, and Stop cancels it. `node server/cli.ts provider:check` tests connectivity and credentials, and `node scripts/probe-provider.ts` records what your llama-server actually does (see [docs/provider-notes.md](docs/provider-notes.md)).
-
-Under each of your messages are Copy, Edit and Delete; Edit turns the bubble into an editor, and Send replaces the message and everything after it, then asks for a new reply. Replies have Regenerate (it asks first, and replaces later messages too). Delete removes one message and its reply. Ctrl/⌘+K (or the search icon in the sidebar) searches your chats and files; opening a result jumps to the match. Pin a chat from its menu to keep it in the Pinned section. Settings → General → Delete all chats removes every chat and its files and keeps your settings.
-
-Settings → Memory holds notes ChatUI keeps in mind in every chat. With a provider whose `capabilities.tools` is `true` in `providers.json`, models can also search and read your earlier chats and files, check the time, calculate, and suggest memories; a suggestion appears under the reply and is saved only when you choose Save. Leave `tools` off until `node scripts/probe-provider.ts` shows your model handles tool calls (see [docs/provider-notes.md](docs/provider-notes.md)). In `npm run demo`, try `mock-tools` with `calc 6*7; remember Pet: has a cat`. Files a reply creates (with the `create_file` tool, or a fenced block marked ` ```py file=app.py `) appear as cards under it and in Library → From replies; they open as plain text, never run, and stay when their chat is deleted.
-
-Settings → Data controls exports everything you own as one ZIP (chats, files, files from replies, memories, suggestions, settings; never passwords or sessions) and imports such an archive: you see what would change first, choose what to do with items that differ, and pick which memories to add; nothing you have is overwritten. A chat's Share menu downloads its exact Markdown. A **Temporary chat** (the toggle on a new chat) stays out of your history, search, Library, exports and memories, and is deleted when you leave it. **Projects** in the sidebar group chats into folders; use "Move to project…" in a chat's menu (or type `/` in the composer). Replies can contain **interactive blocks** (a fenced block marked `ui`: callouts, cards, steps, tabs, stats, charts, quizzes, progress), rendered as plain components and never run as code; turn them off in Settings → Appearance. See [docs/threat-model-14b.md](docs/threat-model-14b.md) for the format.
-
-In the composer, **Think** (shown for providers with `capabilities.reasoning`) turns the model's reasoning on or off for your next messages; whether a model honours it depends on its chat template (see [docs/provider-notes.md](docs/provider-notes.md)). The microphone button dictates where your browser supports speech recognition (the browser may send the audio to its vendor's speech service; ChatUI never receives it). Pasting from a web page or document keeps headings, lists, links, tables and code as Markdown; Ctrl/⌘+Shift+V pastes plain text.
-
-## Providers (`providers.json`)
-
-Model servers are configured in `DATA_DIR/_system/providers.json`. On first start it is created with one `local` provider from `LLAMA_BASE_URL` / `LLAMA_API_KEY`; after that **the file is authoritative**: edit it in Administration → Providers (applied at once), or by hand and restart:
+On first start ChatUI writes `DATA_DIR/_system/providers.json` from those variables. From then on that file is the source of truth: edit it in **Administration → Providers** (applied immediately), or by hand and restart. Several providers can be configured, and you can switch provider and model at any point in a chat.
 
 ```json
 {
@@ -124,39 +95,63 @@ Model servers are configured in `DATA_DIR/_system/providers.json`. On first star
       "kind": "openai-compatible",
       "baseUrl": "http://192.168.1.20:8080",
       "apiKey": "optional-secret",
-      "timeoutMs": 300000,
-      "maxActiveGenerations": 1,
-      "capabilities": { "inputModalities": ["text"], "reasoning": true, "tools": false },
+      "capabilities": { "inputModalities": ["text", "image"], "reasoning": true, "tools": false },
       "contextTokens": 32768
     }
   ]
 }
 ```
 
-- **It contains secrets** (`apiKey`). ChatUI writes it `0600`. API keys never appear in any API response or log. Treat backups of `DATA_DIR` as secret.
-- `id` is 1–64 characters of `a-z 0-9 _ -`, and `kind` is `openai-compatible`. The optional fields fall back as follows:
-  - `timeoutMs` → `PROVIDER_TIMEOUT_MS`
-  - `maxActiveGenerations` → the provider's reported slots, else 1
-  - `contextTokens` → discovery, else `DEFAULT_CONTEXT_TOKENS`
-- An invalid entry is disabled and logged; startup continues. An unreachable provider is shown as unavailable and never blocks startup.
-- Removing a provider never touches conversations: old replies keep their provider/model labels, and new messages just can't select it. You can switch provider and model at any point in a conversation.
-- **Network policy (SSRF):** base URLs must be http(s) without credentials, query or fragment. Every request re-resolves the host, checks every address and pins the connection to the checked address. Redirects are never followed.
-  - Cloud metadata addresses (e.g. `169.254.169.254`, `fd00:ec2::254`) and link-local ranges are denied.
-  - Private and loopback hosts are allowed by default (`ALLOW_PRIVATE_PROVIDER_HOSTS`).
-  - `PROVIDER_HOST_ALLOWLIST` restricts hostnames. `PROVIDER_LINK_LOCAL_EXCEPTIONS` admits an exact `host=address:port` gateway (e.g. Podman's `host.containers.internal`).
+- **`capabilities`** tell ChatUI what the models can do:
+  - `inputModalities`: images and audio are only sent to models that accept them.
+  - `reasoning`: shows the Think toggle.
+  - `tools`: enables memory suggestions and the general tools.
 
-## LAN and phone access (TLS proxy)
+  Turn `tools` on only after `node scripts/probe-provider.ts` shows that your model handles tool calls. See [docs/provider-notes.md](docs/provider-notes.md) for what has been verified against llama.cpp.
 
-Session cookies are `Secure` behind https. ChatUI supports exactly two transports:
+- Optional per provider: `timeoutMs`, `maxActiveGenerations` (defaults to the server's reported slots, else 1) and `contextTokens` (defaults to discovery).
+- The file contains secrets. ChatUI writes it `0600`, and keys never appear in any response or log.
+- **Network policy:** provider URLs are checked against an SSRF policy. Cloud metadata and link-local addresses are always refused, every request re-resolves and pins the address, and redirects are never followed. Private and loopback hosts are allowed by default (`ALLOW_PRIVATE_PROVIDER_HOSTS`); `PROVIDER_HOST_ALLOWLIST` can restrict hosts further.
 
-1. `http://localhost` / `http://127.0.0.1` on the machine that runs ChatUI (the default).
-2. An `https://` URL served by a TLS-terminating reverse proxy. Set `PUBLIC_ORIGIN` to that URL and `TRUST_PROXY` to the number of proxy hops. Plain-http LAN access is refused at startup.
+## Using ChatUI
 
-Caddy on the ChatUI host (automatic certificates):
+- **`/` starts a new chat.** Every chat has its own address (`/chat/<id>`), so links, reloads and Back/Forward work as expected. A reply keeps streaming if you reload or briefly lose the connection.
+- **Under your messages:** Copy, Edit (resend from there) and Delete. **Under replies:** Copy, Read aloud, Regenerate, Good/Bad, Share and More.
+- **Search** with Ctrl/⌘+K: chats by title and text, files by name; a result jumps to the match.
+- **The `/` menu** in an empty composer: switch model, read the last reply aloud, rename the chat, move it to a project, or start a new chat.
+- **Temporary chat:** the toggle on a new chat. It stays out of your history, search, Library, exports and memory, and is deleted when you leave it.
+- **Settings**, from the account menu:
+  - **General:** default model.
+  - **Memory:** your notes.
+  - **Data:** export, import, delete all chats.
+  - **Appearance:** theme, accent, text sizes, reduced motion, interactive blocks, file previews.
+  - **Files:** image size and history.
+  - **Account:** password, sign out.
+  - **Keyboard shortcuts.**
+- **Keyboard:** everything works without a mouse. Ctrl/⌘+Shift+O starts a new chat and Ctrl/⌘+Shift+S toggles the sidebar.
+
+## Running it in production
+
+### What the container does
+
+- Publishes **only on `127.0.0.1`** (`HOST_PORT`, default 3000).
+- Runs as the unprivileged `node` user, with a read-only root filesystem, all capabilities dropped and `no-new-privileges`.
+- Keeps all state in the `/data` volume, which survives `down`/`up`, recreation and image updates (`docker compose down -v` deletes it).
+- Has a healthcheck and `restart: unless-stopped`. Updating is `git pull && docker compose up -d --build`.
+
+### LAN and phone access
+
+Cookies are `Secure` behind https. ChatUI supports two transports:
+
+1. `http://localhost`, on the machine that runs it (the default).
+2. An **https** URL served by a TLS-terminating reverse proxy. Set `PUBLIC_ORIGIN` to that URL and `TRUST_PROXY` to the number of proxy hops. Plain-http access from other machines is refused at startup.
+
+Caddy:
 
 ```text
 chat.example.com {
     reverse_proxy 127.0.0.1:3000
+    header Strict-Transport-Security "max-age=31536000"
 }
 ```
 
@@ -164,116 +159,161 @@ chat.example.com {
 PUBLIC_ORIGIN=https://chat.example.com TRUST_PROXY=1 docker compose up -d
 ```
 
-Tailscale HTTPS (reachable from your tailnet devices, including phones):
+Tailscale (reachable from your tailnet, including phones):
 
 ```bash
 tailscale serve --bg --https=443 http://127.0.0.1:3000
 PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net TRUST_PROXY=1 docker compose up -d
 ```
 
-Keep the Compose publication on `127.0.0.1`; the proxy is the only thing that talks to it. Set `Strict-Transport-Security` (HSTS) on the proxy: ChatUI does not terminate TLS, so it does not send HSTS itself. Caddy's `header Strict-Transport-Security "max-age=31536000"` does this. See [SECURITY.md](SECURITY.md) for the security review.
+### Accounts and administration
 
-## Data, backups and limits
+- Registration is **closed** by default. Create accounts with the CLI or in **Administration → Accounts**, or set `REGISTRATION_MODE=open` (also switchable in Administration).
+- Administration (`/admin`, admins only, checked on the server for every request) covers:
+  - **Accounts:** create, promote, disable, set a password, delete. The last admin is protected.
+  - **Providers:** add, edit, test, remove. Keys are write-only.
+  - **Models:** visibility, sampling, system prompts with `{{username}}`, `{{date}}`, `{{timezone}}` and `{{time}}`.
+  - **Instance:** registration, default model, notice banner, output cap, time zone.
+  - **Maintenance and audit log.**
+- Locked out of every admin account? `docker compose exec chatui node server/cli.ts user:reset-password --username admin`.
 
-- Everything lives under `DATA_DIR` (`/data` in the container). Conversations are canonical Markdown files, `DATA_DIR/<user-id>/chats/<conversation-id>.md` (format: `formatVersion: 1`). You can read and hand-edit them; edits appear after a restart or `npm run index:rebuild`. A file that no longer parses is listed as unreadable and never modified by ChatUI (it can be deleted).
-- Each account has its own directory `DATA_DIR/<user-id>/` (`user.json`, `chats/`, `preferences.json`, `operations/`). `_system/` holds `providers.json` (secrets), sessions (deleting them signs everyone out) and the derived username index.
-- **Attachments** live in `DATA_DIR/<user-id>/attachments/<id>/` (`blob` plus `meta.json`) and are part of every backup. Files uploaded in the Library are kept until you delete them. Your profile photo and shape are in `DATA_DIR/<user-id>/profile/`. Messages reference them by id. A file removed by hand shows as "File unavailable" and is skipped in prompts.
-- **Attachment limits** (environment; admins can change the file size and storage in Administration → Instance):
+### Command line
 
-  | Variable                      | Default | Meaning                                                             |
-  | ----------------------------- | ------- | ------------------------------------------------------------------- |
-  | `MAX_ATTACHMENT_BYTES`        | 25 MB   | Largest file, enforced while uploading                              |
-  | `USER_STORAGE_QUOTA_BYTES`    | 1 GB    | Total files per account                                             |
-  | `MAX_ATTACHMENTS_PER_MESSAGE` | 10      | Files per message                                                   |
-  | `MAX_IMAGE_PIXELS`            | 50 MP   | Largest image                                                       |
-  | `MAX_INLINE_TEXT_BYTES`       | 100 KB  | Text sent to the model per file; the rest is cut in the prompt only |
-  | `ATTACHMENT_PENDING_TTL`      | 24 h    | Uploads never sent are removed after this                           |
-  | `MAX_UPLOADS_PER_USER`        | 4       | Concurrent uploads                                                  |
-  | `MAX_PROMPT_MEDIA_PARTS`      | 8       | Most recent images/audio sent with a prompt                         |
-  | `MEDIA_TOKEN_RESERVE`         | 1024    | Tokens counted per image or audio clip                              |
+All commands run as `node server/cli.ts <command>` (in the container: `docker compose exec chatui node server/cli.ts …`). Passwords are read from a prompt or stdin, never from arguments.
 
-  Accepted: PNG, JPEG, WebP, GIF, WAV, MP3, FLAC and UTF-8 text/Markdown/CSV/JSON/source files. Types are decided by the file's contents; SVG, HTML, PDF and executables are refused. Images and audio go only to models that report image or audio input. Uploaded files are not virus-scanned; scan `DATA_DIR` separately if you need that.
+| Command                                   | Purpose                                               |
+| ----------------------------------------- | ----------------------------------------------------- |
+| `serve`                                   | Start the server (default)                            |
+| `healthcheck`                             | Exit 0 if the server answers                          |
+| `provider:check`                          | Reach `LLAMA_BASE_URL` and count its models           |
+| `user:create --username <name> [--admin]` | Create an account                                     |
+| `user:reset-password --username <name>`   | Set a password and sign the account out everywhere    |
+| `index:rebuild`                           | Rebuild derived indexes (server stopped)              |
+| `backup --out <dir> [--with-sessions]`    | Offline backup (server stopped)                       |
+| `restore --from <dir>`                    | Restore into an empty data directory (server stopped) |
 
-- **Backups.** `DATA_DIR` is the complete persistent state: accounts, chats, files, captured files, memories, suggestions, settings, preferences, profile photos, and `_system/` (providers with their API keys, instance settings, audit log, sessions, recovery records). A backup therefore holds **user content and secrets**; store it like `DATA_DIR` itself.
-  - **With the CLI** (the server must be stopped; the command refuses while one is running, even from another container):
+### Configuration
 
-    ```bash
-    docker compose stop chatui
-    docker compose run --rm -v "$PWD/backups:/backups" chatui backup --out /backups/2026-10-30
-    docker compose start chatui
-    ```
+Every variable is documented in [`.env.example`](.env.example) and validated at startup; invalid configuration stops the process with a clear message. The most important ones:
 
-    `backup` first runs the same startup recovery the server runs (interrupted imports are rolled back, interrupted replies are written, pending memory and file records are settled), then copies `DATA_DIR` into a new directory with `chatui-backup.json` (every file's size and SHA-256). It leaves out the derived `index/`, transient `import-staging/`, unfinished temporary files and, unless you pass `--with-sessions`, sessions (users then sign in again).
+| Variable                                                    | Default                              | Purpose                                              |
+| ----------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------- |
+| `PUBLIC_ORIGIN`                                             | `http://localhost:3000`              | The URL people use (https behind a proxy)            |
+| `TRUST_PROXY`                                               | `0`                                  | Number of reverse-proxy hops to trust                |
+| `LLAMA_BASE_URL`, `LLAMA_API_KEY`                           | —                                    | First provider (bootstraps `providers.json`)         |
+| `REGISTRATION_MODE`                                         | `closed`                             | `open` allows self-registration                      |
+| `MAX_ATTACHMENT_BYTES`, `USER_STORAGE_QUOTA_BYTES`          | 25 MB, 1 GB                          | File size and per-account storage                    |
+| `RATE_LIMIT_GENERATIONS` / `_UPLOADS` / `_ADMIN` / `_LOGIN` | 30 / 60 / 120 per min, 10 per 15 min | Per-account limits (per process)                     |
+| `MAX_CONNECTIONS`, `REQUEST_TIMEOUT_MS`                     | 1024, 10 min                         | HTTP server limits                                   |
+| `PREVIEW_ORIGIN`                                            | —                                    | Optional separate origin for sandboxed file previews |
 
-  - **Restore** only into an **empty** `DATA_DIR` (a new volume or directory): `node server/cli.ts restore --from <backup-dir>`. Every checksum is verified and a file the manifest doesn't list is refused before anything is written; then startup recovery runs once to check that the restored data starts. Files are created `0600` (directories `0700`) for the user running the command, so run it as the container's user (`docker compose run --rm -v … chatui restore --from /backups/…`).
-  - **Without the CLI:** stop the server, or copy from a filesystem snapshot, and copy all of `DATA_DIR`. `index/` and `<user>/import-staging/` are optional. Keep the recovery records (`operations/`, `_system/generations/`, memory intents, `_system/deleting/`): startup recovery finishes them on the next start.
-- **Single process only.** Exactly one ChatUI process may use a `DATA_DIR` (locks are in-process). Don't run two servers, or the CLI `index:rebuild`, against the same directory at the same time. A running server keeps `_system/server.lock` fresh; a second server logs a warning, and `backup`/`restore` refuse to run.
-- **Request limits** (per account, per process, reset by a restart): `RATE_LIMIT_GENERATIONS` (30 sends or regenerations a minute), `RATE_LIMIT_UPLOADS` (60 uploads, imports or full exports a minute) and `RATE_LIMIT_ADMIN` (120 admin changes a minute). Over a limit the API answers `429 RATE_LIMITED` with `Retry-After`. Sign-in is limited separately: `RATE_LIMIT_LOGIN` (10) attempts per 15 minutes per address and per username. The HTTP server caps headers at 16 KB (30 s to send them), a whole request at `REQUEST_TIMEOUT_MS` (10 minutes) and open connections at `MAX_CONNECTIONS` (1024).
-- Writes are atomic and durable (temp file, fsync, rename, directory fsync). On Windows, directory fsync is unavailable and rename-over-existing semantics differ; Linux containers are the supported runtime.
+## Backups and data
 
-## Install (development)
+**Everything lives in `DATA_DIR`** (`/data` in the container) as files you can read:
+
+```text
+data/
+  <user-id>/
+    chats/<chat-id>.md        one conversation, canonical Markdown (formatVersion 1)
+    attachments/<id>/         uploaded files (blob + meta.json)
+    artifacts/<id>/           files created by replies
+    memories/<id>.md          memory notes
+    preferences.json, profile/, operations/, index/ (derived, rebuilt when missing)
+  _system/
+    providers.json            provider config, including API keys (secret)
+    settings.json, audit/, sessions/, generations/ (recovery records)
+```
+
+Chat files can be read and hand-edited; edits appear after a restart. A file that no longer parses is listed as unreadable and never changed by ChatUI.
+
+**Back up with the CLI** (the server must be stopped; the command refuses while one is running, even from another container):
+
+```bash
+docker compose stop chatui
+docker compose run --rm -v "$PWD/backups:/backups" chatui backup --out /backups/$(date +%F)
+docker compose start chatui
+```
+
+`backup` first finishes any crash recovery, then copies the data with a checksum for every file. It leaves out derived indexes, temporary staging and, unless you pass `--with-sessions`, sign-in sessions. **`restore`** only writes into an empty data directory: it verifies every checksum and refuses unknown files before writing anything, then checks that the restored data starts. **Backups contain user content and secrets**: store them as carefully as the data itself.
+
+Without the CLI, stop the server (or use a filesystem snapshot) and copy all of `DATA_DIR`.
+
+Exactly **one ChatUI process** may use a data directory. A running server holds `_system/server.lock`, and a second one logs a warning.
+
+## Security
+
+ChatUI has had a full security review; [SECURITY.md](SECURITY.md) maps each control to its code and tests and lists the known exceptions. In short:
+
+- **Sessions:** server-side, stored only as hashes, rotated on sign-in, revoked on password, role or status changes.
+- **CSRF and validation:** CSRF protection on every change. Strict request schemas reject unknown fields, and responses are explicit DTOs.
+- **Isolation:** every user's data is isolated at the storage boundary, and all file paths are server-generated.
+- **Untrusted content:** model output is treated as hostile. Markdown never renders raw HTML, links are filtered, interactive blocks are parsed rather than executed, and files created by replies are served as inert text. Optional previews run in an opaque-origin sandbox with no network ([threat model](docs/threat-model-19.md)).
+- **Headers:** a strict Content-Security-Policy with a per-response nonce (no `unsafe-inline` scripts), `Permissions-Policy`, no framing, no third-party assets, no service worker.
+- **Limits:** rate limits, upload sniffing (SVG/HTML refused), quotas, and bounded imports (ZIP-bomb safe).
+
+Please report vulnerabilities privately (a GitHub security advisory) rather than in a public issue.
+
+## Development
+
+Prerequisites: **Node.js 24.21** (`.nvmrc`), npm 11, and Playwright's Chromium for browser tests (`npx playwright install chromium`).
 
 ```bash
 npm ci
+cp .env.example .env
+LLAMA_BASE_URL=http://<llama-host>:8080 npm run dev     # http://127.0.0.1:3000 with HMR
 ```
 
-## Run
+The stack:
 
-```bash
-cp .env.example .env        # optional; defaults are safe
-npm run dev                 # http://127.0.0.1:3000 with HMR
-```
+- React 19 with React Router 8 Framework Mode (server-side rendering);
+- TanStack Query, Radix primitives and Lucide icons;
+- Express 5, Zod and Pino;
+- Vite 8 and TypeScript 6 (strict);
+- Vitest and Playwright.
 
-| Script                    | Purpose                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dev`                     | Runs `dev:server` and `dev:client` together                                                                                                                                                                                                                                                                                                                                                               |
-| `dev:server`              | Express + embedded Vite (HMR); restarts on `server/` and `shared/` changes                                                                                                                                                                                                                                                                                                                                |
-| `dev:client`              | React Router route type generation in watch mode                                                                                                                                                                                                                                                                                                                                                          |
-| `build`                   | Production browser bundle (`build/client`) and SSR bundle (`build/server`)                                                                                                                                                                                                                                                                                                                                |
-| `start`                   | Production server from the build (`NODE_ENV=production`)                                                                                                                                                                                                                                                                                                                                                  |
-| `preview`                 | `build` then `start`                                                                                                                                                                                                                                                                                                                                                                                      |
-| `test` / `test:watch`     | Vitest unit and HTTP tests                                                                                                                                                                                                                                                                                                                                                                                |
-| `typecheck`               | Route typegen + `tsc` (strict)                                                                                                                                                                                                                                                                                                                                                                            |
-| `lint`                    | ESLint (type-aware, strict)                                                                                                                                                                                                                                                                                                                                                                               |
-| `format` / `format:check` | Prettier                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `user:create`             | Creates an account (`-- --username <name> [--admin]`); the password is read from a prompt or stdin                                                                                                                                                                                                                                                                                                        |
-| `user:reset-password`     | Sets a new password (`-- --username <name>`) read from a prompt or stdin, and signs the account out everywhere                                                                                                                                                                                                                                                                                            |
-| `index:rebuild`           | Rebuilds the derived conversation index from the Markdown files (stop the server first)                                                                                                                                                                                                                                                                                                                   |
-| `test:e2e`                | Builds, then runs the Playwright browser suite (reload mid-generation, network drop and reconnect, cancel) against the production server with a mock provider                                                                                                                                                                                                                                             |
-| `verify:compose`          | Builds the image and verifies the Compose runtime on Docker or Podman (loopback-only publishing, non-root, read-only rootfs, healthcheck, in-container SSR/hydration checks, `/data` persistence across recreate, clean shutdown). Exits 2 with `NOT RUN` if no container engine is available                                                                                                             |
-| `verify`                  | Builds, then runs the real production server on an ephemeral loopback port with a temporary `DATA_DIR`. It checks health JSON, server HTML without JS, CSP nonce wiring, API/asset/document 404 separation, browser hydration (production and development builds) with no warnings, the signed-in chat flow, persistence across restarts, account isolation, logout, disabled accounts and clean shutdown |
-
-Configuration variables are documented in [`.env.example`](.env.example) and validated at startup.
-
-## Quality gates
+### Quality gates
 
 ```bash
 npm run format:check && npm run lint && npm run typecheck && npm test && npm run verify && npm run test:e2e
-npm run perf:check       # also part of verify: bundle sizes against performance-budget.json
-npm run verify:compose   # needs Docker or Podman
-npm run clean-checkout   # fresh clone → npm ci → .env → build → admin → browser conversation
-npm run audit:invariants # breaks each invariant on purpose; its tests must fail (docs/invariant-audit.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs every gate on every push, plus the clean-checkout proof and `verify:compose` on Docker and on rootless Podman. Actions are pinned by commit SHA; the base image is pinned by digest. CI builds images but never publishes them.
+| Script             | What it checks                                                                                                                                                                                                                |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test`             | Unit and HTTP integration tests (Vitest)                                                                                                                                                                                      |
+| `verify`           | Builds, then exercises the real production server: SSR without JavaScript, CSP, hydration, sign-in, streaming, persistence across restarts, isolation, backup/restore, clean shutdown; includes `perf:check` (bundle budgets) |
+| `test:e2e`         | The Playwright browser suite against the production build and a deterministic mock model, including accessibility scans (axe) in both themes                                                                                  |
+| `verify:compose`   | Builds the image and verifies it on Docker or Podman                                                                                                                                                                          |
+| `clean-checkout`   | From a fresh clone: install, build, create an admin, hold a conversation in a browser                                                                                                                                         |
+| `audit:invariants` | Breaks each documented invariant on purpose and requires its tests to fail ([results](docs/invariant-audit.md))                                                                                                               |
+| `demo`             | A self-contained instance with a mock model                                                                                                                                                                                   |
 
-## Layout
+CI runs every gate on each push, plus the clean-checkout proof and the container checks on Docker and rootless Podman. Actions are pinned by commit SHA and the base image by digest.
+
+### Layout
 
 ```text
-app/        React Router route modules, root layout, server/client entries
-app/chat/   Chat shell: sidebar, header, transcript, composer, generation observer
-app/ui/     Accessible primitives (Radix menu/dialog/tooltip wrappers, toasts)
-app/lib/    Paths, fetch adapter, TanStack Query keys/queries, UI hints
-app/styles/ Design tokens and stylesheets
-server/     Express app, config, logging, CSP, errors, validation, API registry
-shared/     Types and schemas shared by client and server (@shared/*)
-tests/      Vitest + Supertest (server, storage, client components) and Playwright (e2e)
-scripts/    verify and dev orchestration
-public/     Static files copied into the client build
-data/       Persistent data (git-ignored): canonical Markdown, derived index, operation records
-docs/       Roadmap and phase reports
+app/        React Router routes, chat UI (app/chat), primitives (app/ui), styles
+server/     Express app, API registry, auth, providers, generations, storage, CLI
+shared/     Types and schemas shared by client and server
+tests/      Vitest (server, storage, client) and Playwright (e2e)
+scripts/    verify, demo, audits, provider probe
+docs/       Roadmap, threat models, audits, phase reports
 ```
 
-## Architecture
+## Known limitations
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the rendering model, HTTP boundary, CSP, API conventions and the invariant register. Phase reports are in [docs/phase-reports](docs/phase-reports).
+- **Importing Claude exports** is not available yet: it is waiting for real export samples to test against.
+- **Tool calls and the Think switch** are implemented against the OpenAI-compatible API but have not been verified against a live llama.cpp server; both are off unless you enable `tools`/`reasoning` for a provider ([provider notes](docs/provider-notes.md)).
+- **Single process** per data directory, and rate limits are counted per process.
+- No automated screen-reader test runs in CI (accessibility is checked with axe and the accessibility tree).
+- Linux containers are the supported runtime. Directory fsync and rename semantics differ on Windows.
+
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): rendering model, HTTP boundary, storage format, recovery, and the invariant register.
+- [SECURITY.md](SECURITY.md): the security review and exceptions.
+- [docs/provider-notes.md](docs/provider-notes.md): observed llama.cpp behaviour.
+- [docs/threat-model-14b.md](docs/threat-model-14b.md): interactive blocks.
+- [docs/threat-model-19.md](docs/threat-model-19.md): file previews.
+- [docs/invariant-audit.md](docs/invariant-audit.md) and [docs/primitives-audit.md](docs/primitives-audit.md).
+- [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/phase-reports](docs/phase-reports): how it was built.
