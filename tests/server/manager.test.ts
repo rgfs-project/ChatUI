@@ -96,6 +96,25 @@ describe("generation state machine", () => {
     }
   });
 
+  it("INV-05: a cancel after the reply was decided changes nothing", async () => {
+    const { provider, gate } = gatedProvider();
+    const generations = manager(provider);
+    const persisted: GenerationOutcome[] = [];
+    const id = launch(generations, persisted);
+    const events: GenerationEvent[] = [];
+    generations.observe(id, { send: (e) => events.push(e), close: () => undefined });
+    gate.resolve();
+    await generations.settled(id);
+    expect(generations.snapshot(id).state).toBe("completed");
+    // A late Stop click, an account cancel and a second Stop.
+    await generations.cancel(id);
+    generations.cancelForUser("u");
+    await generations.cancel(id);
+    expect(generations.snapshot(id).state).toBe("completed");
+    expect(events.filter((e) => e.type === "terminal")).toHaveLength(1);
+    expect(persisted.map((o) => o.state)).toEqual(["completed"]);
+  });
+
   it("walks pending → streaming → completed; the terminal event carries the revision", async () => {
     const { provider, gate } = gatedProvider();
     const generations = manager(provider);

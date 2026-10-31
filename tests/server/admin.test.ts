@@ -298,6 +298,23 @@ describe("providers (INV-19, INV-25)", () => {
       role: "user",
     });
     const seen: string[] = [];
+    // A key entered, rotated and used through the admin API (audit, logs, responses).
+    const SECOND_KEY = "sk-SENTINEL-ROTATED-KEY-77b0";
+    for (const res of [
+      await api(base, boss, "POST", "/api/admin/providers", {
+        id: "swept",
+        name: "Swept",
+        kind: "openai-compatible",
+        baseUrl: llama.url,
+        apiKey: SECRET_KEY,
+        capabilities: { inputModalities: ["text"], reasoning: false, tools: false },
+      }),
+      await api(base, boss, "PATCH", "/api/admin/providers/swept", { apiKey: SECOND_KEY }),
+      await api(base, boss, "POST", "/api/admin/providers/swept/test"),
+    ]) {
+      expect(res.status).toBeLessThan(300);
+      seen.push(res.text, JSON.stringify([...res.headers.entries()]));
+    }
     for (const route of apiRoutes) {
       if (route.method !== "get" || route.kind === "sse" || route.path.includes(":")) continue;
       for (const who of route.auth === "admin" ? [boss] : [user, boss]) {
@@ -306,7 +323,7 @@ describe("providers (INV-19, INV-25)", () => {
       }
     }
     const lines = JSON.stringify(logs.lines());
-    for (const sentinel of [SECRET_KEY, SECRET_PASSWORD]) {
+    for (const sentinel of [SECRET_KEY, SECRET_PASSWORD, SECOND_KEY]) {
       expect(seen.join("\n")).not.toContain(sentinel);
       expect(lines).not.toContain(sentinel);
     }
@@ -315,8 +332,10 @@ describe("providers (INV-19, INV-25)", () => {
       "utf8",
     );
     expect(audit).toContain('"user.create"');
-    expect(audit).not.toContain(SECRET_PASSWORD);
-    expect(audit).not.toContain(SECRET_KEY);
+    expect(audit).toContain('"provider.create"');
+    expect(audit).toContain('"provider.update"');
+    for (const sentinel of [SECRET_PASSWORD, SECRET_KEY, SECOND_KEY])
+      expect(audit).not.toContain(sentinel);
   });
 });
 
