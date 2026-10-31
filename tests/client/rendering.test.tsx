@@ -87,6 +87,14 @@ describe("code highlighting (lazy, inert)", () => {
     expect(el.querySelector(".code-block code")?.innerHTML).toBe("qapla'");
     expect(el.querySelector(".code-lang")?.textContent).toBe("klingon");
   });
+
+  it("HTML in a block of an unknown language stays text (INV-45)", async () => {
+    const el = await show('```klingon\n<img src=x onerror="alert(1)"><b>bold</b>\n```');
+    expect(el.querySelector("img, b")).toBeNull();
+    expect(el.querySelector(".code-block code")?.textContent).toBe(
+      '<img src=x onerror="alert(1)"><b>bold</b>',
+    );
+  });
 });
 
 describe("table tools", () => {

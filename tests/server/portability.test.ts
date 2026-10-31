@@ -687,10 +687,14 @@ describe("hostile archives (INV-42)", () => {
       ["not a zip", Buffer.from("plain text")],
       ["too large", Buffer.alloc(6 * 1024 * 1024)],
     ];
+    // Each case must be refused for its own reason, not an incidental one.
+    const reasons: Record<string, RegExp> = { "too many": /too many entries/ };
     for (const [label, bytes] of cases) {
       const res = await preview(base, alice, bytes);
       expect(res.status, label).toBe(400);
       expect(res.json.error.message, label).toMatch(/can't be imported/);
+      const reason = reasons[label];
+      if (reason) expect(res.json.error.message, label).toMatch(reason);
     }
     expect(readdirSync(path.join(dataDir, alice.userId, "import-staging"))).toEqual([]);
     expect(existsSync(path.join(dataDir, "evil.md"))).toBe(false);

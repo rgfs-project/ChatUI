@@ -479,6 +479,12 @@ export const MUTATIONS: Mutation[] = [
         find: "export const Message = memo(function Message({",
         replace: "export const Message = (function Message({",
       },
+      {
+        // The transcript's memo is what keeps stored messages out of a delta's render.
+        file: "app/chat/transcript.tsx",
+        find: "export const Transcript = memo(function Transcript({",
+        replace: "export const Transcript = (function Transcript({",
+      },
     ],
     vitest: [T("client/render-isolation.test.tsx")],
   },
@@ -597,6 +603,12 @@ export const MUTATIONS: Mutation[] = [
         replace: `      assistantMessageId &&
       (outcome.state === "completed" || outcome.state === "cancelled") &&
       outcome.artifacts.length > 0 &&`,
+      },
+      {
+        // The manager stages files only for completed replies; both checks must go.
+        file: "server/generations/manager.ts",
+        find: '      artifacts: state === "completed" ? this.captures(generation) : [],',
+        replace: "      artifacts: this.captures(generation),",
       },
     ],
     vitest: [T("server/artifacts.test.ts")],
@@ -778,7 +790,8 @@ export const MUTATIONS: Mutation[] = [
     <>`,
       },
     ],
-    verify: true,
+    // The server-rendered composer before hydration (verify checks it too, slowly).
+    e2e: [T("e2e/resilience.spec.ts")],
   },
   {
     id: "INV-55",

@@ -512,6 +512,14 @@ describe("search and pins", () => {
       400,
     );
     expect((await api(again.base, alice, "GET", "/api/search?q=fox&limit=51")).status).toBe(400);
+    // The limit caps the results, not only the parameter.
+    await send(again.base, alice, "another fox, newer");
+    const two = (await api(again.base, alice, "GET", "/api/search?q=fox")).json.chats as unknown[];
+    expect(two).toHaveLength(2);
+    const one = (await api(again.base, alice, "GET", "/api/search?q=fox&limit=1")).json.chats as {
+      title: string;
+    }[];
+    expect(one).toHaveLength(1);
     expect((await api(again.base, alice, "GET", "/api/search?q=%20")).json.chats).toEqual([]);
   });
 
