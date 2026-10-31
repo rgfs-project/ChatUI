@@ -52,7 +52,7 @@
   - `clean-checkout`: PASS (15/15)
   - `audit:invariants`: 61/61 killed
   - `npm audit --omit=dev`: 0 vulnerabilities
-- **Repeat runs:** the 10-in-a-row runs are done once over the finished project (after Phase 19), so they also cover Phases 18 and 19. Their results are added below.
+- **Repeat runs:** the 10-in-a-row runs are done once over the finished project (after Phase 19), so they also cover Phases 18 and 19. Results: unit tests passed 10 runs in a row (559 each); the full E2E suite passed with `--repeat-each=10` (1180/1180, 1.1 h). The repeats found three defects (two contrast failures, a missing perf mark when a fast reply arrives as a snapshot, an admin switch snap-back race) and four tests that depended on state left by an earlier run; all were fixed in `fix: repeat-run defects…` before the final run.
 - **Still open, honestly reported:**
   - **13e (Claude import)** is **blocked**: no real export fixtures exist. Its feature-matrix row stays pending.
   - **INV-51** waits for Phase 19.
