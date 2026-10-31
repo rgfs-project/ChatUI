@@ -25,6 +25,12 @@ test("performance marks fire once, compute ComposerTTI and FirstAssistantEvent, 
   await chooseModel(page, "mock-chat");
   await send(page, `measure ${SENTINEL}`);
   await expect(storedReplies(page).last()).toContainText(SENTINEL);
+  // The completion mark may land a moment after the stored reply renders.
+  await expect
+    .poll(() =>
+      page.evaluate(() => performance.getEntriesByName("chatui:generation-complete").length),
+    )
+    .toBe(1);
   const result = await page.evaluate(() => {
     const entries = performance
       .getEntriesByType("mark")

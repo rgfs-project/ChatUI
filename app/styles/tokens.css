@@ -67,8 +67,9 @@
   /* Colour (light) */
   --bg: #fcfcfc;
   --text: #0d0d0d;
-  --text-secondary: #8f8f8f;
-  --text-tertiary: #8f8f8f;
+  /* 5.2:1 on --bg and 4.6:1 on --hover (WCAG AA, Phase 18; was #8f8f8f, 3.2:1). */
+  --text-secondary: #6b6b6b;
+  --text-tertiary: #6b6b6b;
   --divider: #e3e3e3;
   --hover: #eeeeee;
   --active: #eeeeee;
@@ -94,6 +95,8 @@
   --inline-code-bg: #ececec;
   --code-text: #1f1f1f;
   --danger: #e02e2a;
+  /* Fill behind white text (danger buttons): 4.6:1 here, a deeper red in dark. */
+  --danger-fill: var(--danger);
   /* Syntax highlighting (plan §7) */
   --syntax-comment: #6e6e6e;
   --syntax-keyword: #6b4fd3;
@@ -101,7 +104,8 @@
   --syntax-string: #2e7d47;
   --syntax-number: #c2410c;
   --avatar: #8e63a6;
-  --focus: #f26b1d;
+  /* Focus rings need 3:1 against the page: a deeper orange than the accent (5:1). */
+  --focus: #c2410c;
   --tooltip-bg: #0d0d0d;
   --tooltip-text: #ffffff;
   --motion: 0.2s;

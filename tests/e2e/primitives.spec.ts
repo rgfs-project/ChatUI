@@ -33,9 +33,14 @@ test("a modal hides the page from assistive technology, locks scroll, and cleans
   const dialog = page.getByRole("dialog", { name: "Rename chat" });
   await expect(dialog).toBeVisible();
   const outside = await page.evaluate(() => {
-    const shell = document.querySelector(".chat-area");
+    // Radix hides every subtree outside the dialog except live regions (the
+    // reply announcer), so check the composer and transcript themselves.
+    const composer = document.getElementById("message");
+    const transcript = document.getElementById("transcript-scroller");
     return {
-      hidden: shell?.closest('[aria-hidden="true"]') !== null,
+      hidden:
+        composer?.closest('[aria-hidden="true"]') != null &&
+        transcript?.closest('[aria-hidden="true"]') != null,
       locked: document.body.hasAttribute("data-scroll-locked"),
     };
   });

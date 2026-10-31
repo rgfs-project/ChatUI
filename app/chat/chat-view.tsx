@@ -16,6 +16,7 @@ import { Composer, useAddFiles } from "./composer";
 import { Header } from "./header";
 import { NoticeBanner } from "./notice";
 import { LiveReply } from "./live-reply";
+import { StreamAnnouncer } from "./stream-announcer";
 import { UiBlocksContext } from "./ui/context";
 import { UserBubble } from "./message";
 import { draftKey } from "./drafts";
@@ -95,6 +96,10 @@ export function ChatView() {
   const conversation = result?.ok ? result.conversation : null;
   const messages = conversation?.messages ?? NO_MESSAGES;
   const storedIds = useMemo(() => new Set(messages.map((m) => m.id)), [messages]);
+  const lastReply = useMemo(() => {
+    const reply = messages.findLast((m) => m.role === "assistant");
+    return reply ? { id: reply.id, status: reply.status } : null;
+  }, [messages]);
   const showPending =
     pending !== null &&
     pending.conversationId === conversationId &&
@@ -245,6 +250,7 @@ export function ChatView() {
             ) : null}
           </div>
         </div>
+        <StreamAnnouncer running={chat.running} lastReply={lastReply} />
         {/* Server HTML only: after hydration the layout effect does this job. */}
         {conversation && !hydrated ? <ScrollToLatestOnLoad /> : null}
         <div className="dock">

@@ -119,13 +119,13 @@ a {
 }
 
 .pill-danger {
-  border-color: var(--danger);
-  background: var(--danger);
+  border-color: var(--danger-fill);
+  background: var(--danger-fill);
   color: #ffffff;
 }
 
 .pill-danger:hover:not(:disabled) {
-  background: var(--danger);
+  background: var(--danger-fill);
   opacity: 0.85;
 }
 
@@ -155,4 +155,21 @@ kbd {
   border-radius: 6px;
   font-family: var(--font-ui);
   font-size: 13px;
+}
+
+/*
+ * Focus states that meet WCAG 2.2 non-text contrast (Phase 18). Menu items
+ * highlight with a subtle background; keyboard focus adds a ring. Fields that
+ * draw their own frame show focus on the frame.
+ */
+.menu-item[data-highlighted]:focus-visible,
+.slash-option.is-active:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.composer:focus-within,
+.msg-editor:focus-within,
+.settings-search:focus-within {
+  border-color: var(--text-tertiary);
 }

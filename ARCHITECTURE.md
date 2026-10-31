@@ -912,6 +912,26 @@ Copy, Good/Bad response (`aria-pressed` toggles), Share reply (the system share 
 
 A switch bound to query data keeps the user's choice in local state until the save returns. TanStack notifies subscribers a tick later, and a controlled input would otherwise snap back for a moment.
 
+## Visual and accessibility polish (Phase 18)
+
+- **Contrast (WCAG 2.2 AA)** is now part of the axe gate (`tests/e2e/a11y.spec.ts`), in the light and dark themes, on every page and overlay. Token changes:
+  - Light secondary/tertiary text `#8f8f8f` → `#6b6b6b` (3.2:1 → 5.2:1 on the page, 4.6:1 on hover).
+  - Dark tertiary text `#8f8f8f` → `#a0a0a0` (4.1:1 → 5.1:1 on menus).
+  - Focus rings meet 3:1 against the page: light orange, green and yellow use deeper shades (`--focus`), and dark themes the bright accents.
+  - The yellow accent puts black icons on the accent (white was 2.2:1).
+  - Danger buttons use `--danger-fill`, `#dc2626` in dark (white on `#f87171` was 2.8:1).
+  - `tests/e2e/measurements.json` carries the new values.
+- **Focus states:** a global `:focus-visible` ring. Keyboard-highlighted menu and slash items add a ring. The composer, message editor and settings search show focus on their frame.
+- **Reply announcements** (`app/chat/stream-announcer.tsx`): one visually hidden, polite `role="status"` region says "Assistant is responding" when a reply starts and "Response complete / stopped / failed / timed out / interrupted" once it is stored. It never announces tokens, never takes focus and does not affect scroll pinning. Modals keep it announced: the dialog library leaves live regions out of `aria-hidden`.
+- **Theme before paint:** the server renders the saved theme as attributes on `<html>` from the appearance cookie. "System" follows `prefers-color-scheme` in CSS. There is no inline bootstrap script, so nothing is needed in the CSP. This is tested with JavaScript disabled.
+- **Typography:** the system font stack and a system monospace stack; no font file is ever requested (tested).
+- **Checked in E2E** (`tests/e2e/polish.spec.ts`):
+  - the announcements;
+  - CLS below 0.1 on a cold load of the 200-message chat and while streaming;
+  - the theme painted before any script;
+  - no font requests;
+  - keyboard-only sign-in, send, file picker, Settings and Administration, with a visible focus ring.
+
 ## Security review (Phase 16)
 
 The review, with each control's code and test and the open exceptions, is in [SECURITY.md](SECURITY.md). Phase 16 added:

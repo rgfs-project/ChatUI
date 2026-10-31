@@ -1,5 +1,5 @@
 {
-  "$comment": "Reference measurements (rebuild plan §5–7), CSS px at 1920×1080; accent is the plan's orange option (user choice, Phase 7a). Every UI gate keeps this audit green; change a value only with a reason in the phase report.",
+  "$comment": "Reference measurements (rebuild plan §5–7), CSS px at 1920×1080; accent is the plan's orange option (user choice, Phase 7a). Every UI gate keeps this audit green; change a value only with a reason in the phase report. Phase 18: secondary and tertiary text darkened (light) / lightened (dark) for WCAG AA contrast.",
   "boxes": [
     {
       "name": "sidebar",
@@ -379,10 +379,10 @@
         "color": "rgb(76, 32, 7)"
       },
       ".side-label": {
-        "color": "rgb(143, 143, 143)"
+        "color": "rgb(107, 107, 107)"
       },
       ".time-separator": {
-        "color": "rgb(143, 143, 143)"
+        "color": "rgb(107, 107, 107)"
       }
     },
     "dark": {
@@ -406,7 +406,7 @@
         "color": "rgb(175, 175, 175)"
       },
       ".time-separator": {
-        "color": "rgb(143, 143, 143)"
+        "color": "rgb(160, 160, 160)"
       }
     }
   },
