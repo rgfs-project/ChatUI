@@ -190,6 +190,11 @@
   display: inline-block;
 }
 
+.chat-pin {
+  flex: none;
+  color: var(--text-secondary);
+}
+
 .chat-flag {
   flex: none;
   color: var(--danger);
@@ -225,7 +230,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 60px;
+  height: 64px;
   /* Same 6 px inset as every other sidebar row (all rows share one width). */
   padding: 6px;
 }
@@ -236,7 +241,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  height: 48px;
+  height: 52px;
   /* The avatar stays 14 px from the sidebar edge. */
   padding: 0 8px;
   border: 0;
@@ -299,6 +304,46 @@
   width: 96px;
   height: 96px;
   font-size: 32px;
+}
+
+.profile-text,
+.profile-menu-head {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profile-role {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.profile-row .avatar,
+.profile-menu .avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 11px;
+}
+
+.profile-menu-head + .profile-menu-chevron {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+/* The account menu is as wide as the account row, like the sidebar above it. */
+.profile-menu {
+  width: var(--radix-dropdown-menu-trigger-width);
+}
+
+.profile-menu .menu-item:first-child {
+  min-height: 52px;
+}
+
+.profile-menu .menu-item:first-child .menu-text {
+  flex-direction: row;
+  align-items: center;
 }
 
 .profile-name {

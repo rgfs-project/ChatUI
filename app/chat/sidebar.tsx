@@ -11,6 +11,7 @@ import {
   FolderInput,
   FolderOpen,
   FolderPlus,
+  ChevronRight,
   CircleUserRound,
   LibraryBig,
   Keyboard,
@@ -94,6 +95,7 @@ const ConversationRow = memo(function ConversationRow({
           <span className="chat-title-text">{item.title}</span>
         </span>
         {item.malformed ? <span className="chat-flag">Unreadable</span> : null}
+        {pinned ? <Pin className="chat-pin" size={14} aria-label="Pinned" /> : null}
       </Link>
       <Menu
         label={`Options for ${item.title}`}
@@ -104,14 +106,6 @@ const ConversationRow = memo(function ConversationRow({
           </button>
         }
       >
-        <MenuItem
-          icon={pinned ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />}
-          onSelect={() => {
-            void ops.togglePin(item.id);
-          }}
-        >
-          {pinned ? "Unpin" : "Pin"}
-        </MenuItem>
         {item.malformed ? null : (
           <MenuItem
             icon={<Pencil size={16} aria-hidden />}
@@ -122,6 +116,25 @@ const ConversationRow = memo(function ConversationRow({
             Rename
           </MenuItem>
         )}
+        <MenuItem
+          icon={pinned ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />}
+          onSelect={() => {
+            void ops.togglePin(item.id);
+          }}
+        >
+          {pinned ? "Unpin" : "Pin"}
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem
+          danger
+          icon={<Trash2 size={16} aria-hidden />}
+          onSelect={() => {
+            void remove(item.id, item.title);
+          }}
+        >
+          Delete
+        </MenuItem>
+        {item.malformed ? null : <MenuSeparator />}
         {item.malformed ? null : (
           <MenuItem
             icon={<FolderInput size={16} aria-hidden />}
@@ -132,15 +145,6 @@ const ConversationRow = memo(function ConversationRow({
             Move to project…
           </MenuItem>
         )}
-        <MenuItem
-          danger
-          icon={<Trash2 size={16} aria-hidden />}
-          onSelect={() => {
-            void remove(item.id, item.title);
-          }}
-        >
-          Delete
-        </MenuItem>
       </Menu>
     </li>
   );
@@ -299,6 +303,7 @@ function Section({
 export const Sidebar = memo(function Sidebar() {
   useRenderProbe("Sidebar");
   const { userId, username, role, conversationId, logout } = useChat();
+  const roleLabel = role === "admin" ? "Administrator" : "Member";
   const {
     setSidebarOpen,
     recentsCollapsed,
@@ -472,12 +477,28 @@ export const Sidebar = memo(function Sidebar() {
               <Avatar userId={userId} username={username} />
               {/* The visible name is part of the accessible name ("Account: alice"). */}
               <span className="visually-hidden">Account: </span>
-              <span className="profile-name" data-testid="signed-in-user">
-                {username}
+              <span className="profile-text">
+                <span className="profile-name" data-testid="signed-in-user">
+                  {username}
+                </span>
+                <span className="profile-role">{roleLabel}</span>
               </span>
             </button>
           }
         >
+          <MenuItem
+            icon={<Avatar userId={userId} username={username} />}
+            onSelect={() => {
+              void navigate(paths.profile());
+            }}
+          >
+            <span className="profile-menu-head">
+              <span className="profile-menu-name">{username}</span>
+              <span className="profile-role">{roleLabel}</span>
+            </span>
+            <ChevronRight className="profile-menu-chevron" size={16} aria-hidden />
+          </MenuItem>
+          <MenuSeparator />
           <MenuItem
             icon={<CircleUserRound size={16} aria-hidden />}
             onSelect={() => {
