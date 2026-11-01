@@ -138,7 +138,7 @@
 .chat-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   margin: 0;
   padding: 0 0 8px;
   list-style: none;
@@ -152,9 +152,12 @@
   border-radius: var(--radius-row);
 }
 
+/* Keyboard focus only: a clicked row (a project toggle keeps focus) must not
+   stay highlighted next to the open chat. */
 .chat-row:hover,
 .chat-row.is-active,
-.chat-row:focus-within {
+.chat-row:has(:focus-visible),
+.chat-row:has(.row-menu[data-state="open"]) {
   background: var(--hover);
 }
 
@@ -202,7 +205,7 @@
 }
 
 .chat-row:hover .row-menu,
-.chat-row:focus-within .row-menu,
+.chat-row:has(:focus-visible) .row-menu,
 .chat-row.is-active .row-menu,
 .row-menu[data-state="open"] {
   display: inline-flex;
@@ -464,6 +467,7 @@
 }
 
 .project-chats {
+  padding-top: 4px;
   padding-left: 16px;
 }
 
