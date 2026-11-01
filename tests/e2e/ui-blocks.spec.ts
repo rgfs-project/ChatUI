@@ -45,17 +45,11 @@ test("a ui block renders without any request, works by keyboard, and turns off i
   // The reasoning is labelled with its duration; reply actions are there.
   await expect(reply.getByTestId("reasoning").locator("summary")).toHaveText(/^Thought/);
   await reply.hover();
-  const good = reply.getByRole("button", { name: "Good response" });
-  await good.click();
-  await expect(good).toHaveAttribute("aria-pressed", "true");
-  await page.reload();
-  await expect(
-    storedReplies(page).last().getByRole("button", { name: "Good response" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await storedReplies(page).last().hover();
-  await storedReplies(page).last().getByRole("button", { name: "More actions" }).click();
-  await expect(page.getByText("Answered by mock-chat")).toBeVisible();
-  await page.keyboard.press("Escape");
+  // Only copy, read aloud and regenerate: no feedback, share or overflow menu.
+  for (const name of ["Copy reply", "Regenerate"])
+    await expect(reply.getByRole("button", { name })).toBeVisible();
+  for (const name of ["Good response", "Bad response", "Share reply", "More actions"])
+    await expect(reply.getByRole("button", { name })).toHaveCount(0);
 
   // Off: the block is shown as its source.
   const chatUrl = page.url();

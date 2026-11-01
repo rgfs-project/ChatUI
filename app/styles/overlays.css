@@ -150,7 +150,8 @@
   padding: 0;
   overflow: hidden;
   border-radius: 0;
-  background: var(--dialog-bg);
+  /* Full-window pages share the app's background (the chat's, in both themes). */
+  background: var(--bg);
   box-shadow: none;
   transform: none;
 }
@@ -164,8 +165,8 @@
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: 2px;
-  width: 260px;
+  gap: 4px;
+  width: var(--sidebar-width);
   padding: 12px 8px;
   overflow-y: auto;
   background: var(--bg);
@@ -175,7 +176,7 @@
 .settings-nav-items {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .settings-back {

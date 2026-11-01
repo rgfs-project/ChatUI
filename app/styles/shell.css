@@ -77,6 +77,11 @@
   text-decoration: none;
 }
 
+/* The same 4px between rows everywhere (sidebar, chat lists, settings). */
+.sidebar-scroll > .side-row + .side-row {
+  margin-top: 4px;
+}
+
 .side-row:hover,
 .side-row.is-active {
   background: var(--hover);

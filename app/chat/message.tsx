@@ -1,22 +1,4 @@
-import {
-  Check,
-  Copy,
-  FileText,
-  MoreHorizontal,
-  Pencil,
-  RefreshCw,
-  Share,
-  Square,
-  ThumbsDown,
-  ThumbsUp,
-  Trash2,
-  Volume2,
-} from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { preferencesQuery } from "../lib/query/queries";
-import { Menu, MenuItem, MenuLabel } from "../ui/menu";
-import { useToast } from "../ui/toast";
-import { useChat } from "./chat-context";
+import { Check, Copy, Pencil, RefreshCw, Square, Trash2, Volume2 } from "lucide-react";
 import { memo, useLayoutEffect, useRef, useState } from "react";
 import type { AttachmentRef } from "@shared/attachments";
 import type { ProposalDto } from "@shared/memories";
@@ -278,90 +260,6 @@ export function UserBubble({
   );
 }
 
-/** Thumbs up/down (Phase 14b); kept with the preferences. */
-function FeedbackButtons({ messageId }: { messageId: string }) {
-  const ops = useConversationOps();
-  const { userId } = useChat();
-  const value = useQuery({
-    ...preferencesQuery(userId),
-    select: (p) => p.feedback[messageId] ?? null,
-  }).data;
-  return (
-    <>
-      <IconButton
-        label="Good response"
-        className="msg-action"
-        aria-pressed={value === "up"}
-        onClick={() => {
-          void ops.setFeedback(messageId, value === "up" ? null : "up");
-        }}
-      >
-        <ThumbsUp size={16} aria-hidden fill={value === "up" ? "currentColor" : "none"} />
-      </IconButton>
-      <IconButton
-        label="Bad response"
-        className="msg-action"
-        aria-pressed={value === "down"}
-        onClick={() => {
-          void ops.setFeedback(messageId, value === "down" ? null : "down");
-        }}
-      >
-        <ThumbsDown size={16} aria-hidden fill={value === "down" ? "currentColor" : "none"} />
-      </IconButton>
-    </>
-  );
-}
-
-/** Shares the reply's text with the system share sheet, or copies it. */
-function ShareButton({ text }: { text: string }) {
-  const toast = useToast();
-  return (
-    <IconButton
-      label="Share reply"
-      className="msg-action"
-      onClick={() => {
-        if (typeof navigator.share === "function") {
-          void navigator.share({ text }).catch(() => undefined);
-          return;
-        }
-        void copyText(text).then((copied) => {
-          toast(copied ? "Reply copied." : "Could not copy the reply", copied ? "info" : "error");
-        });
-      }}
-    >
-      <Share size={16} aria-hidden />
-    </IconButton>
-  );
-}
-
-/** Details and less common actions for a reply. */
-function MoreMenu({ message }: { message: MessageDto }) {
-  const toast = useToast();
-  return (
-    <Menu
-      label="More actions"
-      align="start"
-      trigger={
-        <button type="button" className="icon-button msg-action" aria-label="More actions">
-          <MoreHorizontal size={16} aria-hidden />
-        </button>
-      }
-    >
-      {message.model ? <MenuLabel>Answered by {message.model}</MenuLabel> : null}
-      <MenuItem
-        icon={<FileText size={16} aria-hidden />}
-        onSelect={() => {
-          void copyText(plainText(message.content)).then((copied) => {
-            toast(copied ? "Copied as plain text." : "Could not copy", copied ? "info" : "error");
-          });
-        }}
-      >
-        Copy as plain text
-      </MenuItem>
-    </Menu>
-  );
-}
-
 /** Markdown → readable plain text (markers removed, links as their text). */
 export function plainText(markdown: string): string {
   return markdown
@@ -430,11 +328,8 @@ export const Message = memo(function Message({
       {message.content ? (
         <div className="msg-actions">
           <CopyButton text={message.content} label="Copy reply" />
-          <FeedbackButtons messageId={message.id} />
-          <ShareButton text={message.content} />
           <ReadAloudButton id={message.id} text={message.content} />
           {turnUserId ? <RegenerateButton turnUserId={turnUserId} /> : null}
-          <MoreMenu message={message} />
         </div>
       ) : turnUserId ? (
         <div className="msg-actions">

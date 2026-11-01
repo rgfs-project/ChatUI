@@ -749,6 +749,14 @@
   color: var(--text);
 }
 
+.pill-dark:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 85%, var(--bg));
+}
+
+.pill-light:hover:not(:disabled) {
+  background: var(--hover);
+}
+
 .pill-light:disabled {
   opacity: 0.5;
 }
