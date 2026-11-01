@@ -20,7 +20,7 @@ import {
   Pin,
   PinOff,
   Search,
-  PanelLeftClose,
+  PanelLeft,
   Pencil,
   Settings,
   SquarePen,
@@ -360,7 +360,7 @@ export const Sidebar = memo(function Sidebar() {
               setSidebarOpen(false);
             }}
           >
-            <PanelLeftClose size={20} aria-hidden />
+            <PanelLeft size={20} aria-hidden />
           </IconButton>
         </div>
       </div>

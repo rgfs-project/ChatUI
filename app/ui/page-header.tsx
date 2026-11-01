@@ -1,4 +1,4 @@
-import { PanelLeftOpen } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { useUi } from "../lib/ui-context";
 import { IconButton } from "./icon-button";
@@ -17,7 +17,7 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
             setSidebarOpen(true);
           }}
         >
-          <PanelLeftOpen size={20} aria-hidden />
+          <PanelLeft size={20} aria-hidden />
         </IconButton>
         <h1 className="header-title">{title}</h1>
       </div>

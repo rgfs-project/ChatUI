@@ -4,7 +4,7 @@ import {
   FolderInput,
   MessageCircleDashed,
   MoreHorizontal,
-  PanelLeftOpen,
+  PanelLeft,
   Pencil,
   Pin,
   PinOff,
@@ -70,7 +70,7 @@ export const Header = memo(function Header() {
             setSidebarOpen(true);
           }}
         >
-          <PanelLeftOpen size={20} aria-hidden />
+          <PanelLeft size={20} aria-hidden />
         </IconButton>
         {/* Shown when the sidebar isn't (collapsed, phone, narrow); never on the draft itself. */}
         {conversationId !== null ? (
