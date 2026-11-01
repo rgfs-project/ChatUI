@@ -7,6 +7,21 @@
 - **Multi-user.** Accounts, an administration area, per-account isolation, rate limits and a reviewed security model ([SECURITY.md](SECURITY.md)).
 - **Accessible.** Keyboard-only operation, screen-reader announcements, WCAG 2.2 AA contrast in light and dark themes, and a phone layout.
 
+![ChatUI in the light theme: a chat planning a Sunday roast, with a menu and a shopping-list table](docs/screenshots/chat-light.png)
+
+<details>
+<summary>More screenshots: dark theme, code, phone</summary>
+
+![The same chat in the dark theme](docs/screenshots/chat-dark.png)
+
+![A reply with a highlighted Python code block and a Copy button](docs/screenshots/code.png)
+
+<img src="docs/screenshots/phone.png" alt="The phone layout: a hiking packing list" width="320">
+
+</details>
+
+<sub>Screenshots use the demo's sample chats and a mock model (`node scripts/screenshots.ts` regenerates them).</sub>
+
 ---
 
 ## Contents

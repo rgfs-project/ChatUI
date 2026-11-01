@@ -15,7 +15,9 @@ import path from "node:path";
 import { MOCK_MODELS, startMockLlama } from "../tests/support/mock-llama.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const DATA_DIR = path.join(ROOT, "demo-data");
+// DEMO_DATA_DIR and DEMO_USER exist for scripts/screenshots.ts.
+const DATA_DIR = path.resolve(ROOT, process.env.DEMO_DATA_DIR ?? "demo-data");
+const DEMO_USER = process.env.DEMO_USER ?? "demo";
 const PORT = process.env.PORT ?? "3000";
 const ORIGIN = `http://localhost:${PORT}`;
 export const DEMO_PASSWORD = "demo password 1234";
@@ -131,7 +133,7 @@ const SAMPLES: [string, Turn[]][] = [
 async function seed(): Promise<void> {
   if (existsSync(path.join(DATA_DIR, "_system", "users.index.json"))) return;
   mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
-  const demo = await createUser("demo", true);
+  const demo = await createUser(DEMO_USER, true);
   const demo2 = await createUser("demo2", false);
   SAMPLES.forEach(([title, turns], i) => {
     writeChat(demo, title, turns, 60 * (i + 1));
@@ -204,7 +206,7 @@ async function main(): Promise<void> {
     }
   ).version;
   process.stdout.write(
-    `\nChatUI ${version} demo: ${ORIGIN}\n  demo / ${DEMO_PASSWORD} (admin)\n  demo2 / ${DEMO_PASSWORD}\nCtrl+C to stop.\n\n`,
+    `\nChatUI ${version} demo: ${ORIGIN}\n  ${DEMO_USER} / ${DEMO_PASSWORD} (admin)\n  demo2 / ${DEMO_PASSWORD}\nCtrl+C to stop.\n\n`,
   );
   const stop = () => {
     server.kill("SIGTERM");
