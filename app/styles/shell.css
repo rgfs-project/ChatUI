@@ -161,7 +161,7 @@
    stay highlighted next to the open chat. */
 .chat-row:hover,
 .chat-row.is-active,
-.chat-row:has(:focus-visible),
+.chat-row:has(.chat-link:focus-visible),
 .chat-row:has(.row-menu[data-state="open"]) {
   background: var(--hover);
 }
@@ -190,11 +190,6 @@
   display: inline-block;
 }
 
-.chat-pin {
-  flex: none;
-  color: var(--text-secondary);
-}
-
 .chat-flag {
   flex: none;
   color: var(--danger);
@@ -216,9 +211,14 @@
 
 .chat-row:hover .row-menu,
 .chat-row:has(:focus-visible) .row-menu,
+.chat-row:has(.row-menu[data-state="open"]) .row-menu,
 .chat-row.is-active .row-menu,
 .row-menu[data-state="open"] {
   display: inline-flex;
+}
+
+.row-unpin {
+  margin-right: 0;
 }
 
 .row-menu:hover {

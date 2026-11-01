@@ -140,24 +140,7 @@
   margin: 0 0 16px;
 }
 
-.table-tools {
-  position: absolute;
-  top: -40px;
-  right: 0;
-  display: none;
-  gap: 4px;
-}
-
-.table-block:hover .table-tools,
-.table-block:focus-within .table-tools,
-html[data-phone] .table-tools {
-  display: flex;
-}
-
-html[data-phone] .table-block {
-  margin-top: 44px;
-}
-
+/* The round button style, used by the math block's Copy LaTeX. */
 .table-tool {
   display: inline-flex;
   align-items: center;
@@ -173,10 +156,6 @@ html[data-phone] .table-block {
 
 .table-tool:hover {
   color: var(--text);
-}
-
-.table-dialog {
-  width: min(1100px, calc(100vw - 32px));
 }
 
 /* Syntax highlighting (highlight.js classes) */

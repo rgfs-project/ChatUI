@@ -49,6 +49,18 @@
   padding: 0 16px 25px;
 }
 
+/* Text scrolling under the composer fades out instead of being cut off. */
+.dock::before {
+  position: absolute;
+  top: -32px;
+  right: 0;
+  left: 0;
+  height: 32px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  content: "";
+  pointer-events: none;
+}
+
 .greeting {
   margin: 0 0 28px;
   font-size: var(--text-greeting);
@@ -75,10 +87,12 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid var(--composer-border);
+  z-index: 1;
+  border: 1px solid var(--pill-border);
   border-radius: 50%;
-  background: var(--composer-bg);
-  box-shadow: var(--composer-shadow);
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
   transform: translateX(-50%);
 }
 
@@ -952,4 +966,15 @@ html[data-phone] .temporary-toggle {
   width: 44px;
   height: 44px;
   padding: 0;
+}
+
+/* A short window keeps its height for the conversation. */
+@media (max-height: 600px) {
+  .disclaimer {
+    display: none;
+  }
+
+  .dock {
+    padding-top: 8px;
+  }
 }

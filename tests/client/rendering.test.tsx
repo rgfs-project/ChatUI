@@ -5,7 +5,6 @@ import { Markdown } from "../../app/chat/markdown";
 import { speakableText } from "../../app/chat/read-aloud";
 import { highlighterModule } from "../../app/chat/render/code";
 import { katexModule, looksLikeMoney, normalizeMath } from "../../app/chat/render/math";
-import { tableToTsv } from "../../app/chat/render/table";
 
 beforeAll(async () => {
   await katexModule.load();
@@ -97,13 +96,11 @@ describe("code highlighting (lazy, inert)", () => {
   });
 });
 
-describe("table tools", () => {
-  it("Copy produces tab-separated rows that paste into spreadsheets", async () => {
+describe("tables", () => {
+  it("render plainly, with no table buttons", async () => {
     const el = await show("| a | b |\n|---|---|\n| 1 | two words |");
-    const table = el.querySelector("table");
-    expect(table && tableToTsv(table)).toBe("a\tb\n1\ttwo words");
-    expect(screen.getByRole("button", { name: "Copy table" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Expand table" })).toBeTruthy();
+    expect(el.querySelector("table")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /table/i })).toBeNull();
   });
 });
 

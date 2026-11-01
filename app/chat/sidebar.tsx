@@ -95,8 +95,19 @@ const ConversationRow = memo(function ConversationRow({
           <span className="chat-title-text">{item.title}</span>
         </span>
         {item.malformed ? <span className="chat-flag">Unreadable</span> : null}
-        {pinned ? <Pin className="chat-pin" size={14} aria-label="Pinned" /> : null}
       </Link>
+      {pinned ? (
+        <button
+          type="button"
+          className="row-menu row-unpin"
+          aria-label={`Unpin ${item.title}`}
+          onClick={() => {
+            void ops.togglePin(item.id);
+          }}
+        >
+          <Pin size={14} aria-hidden />
+        </button>
+      ) : null}
       <Menu
         label={`Options for ${item.title}`}
         align="start"
