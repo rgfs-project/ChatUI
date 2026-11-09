@@ -1,20 +1,18 @@
-import { ArrowLeft, Shield } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { DialogClose } from "../ui/dialog";
 
 export interface AdminNavItem {
   id: string;
   label: string;
-  icon: ReactNode;
   /** One line under the section title. */
   description: string;
 }
 
 /**
- * Administration's own full-window layout, deliberately unlike Settings: a
- * tinted console bar, the sections as tabs along the top, and a wide content
- * column of framed tables and panels. Settings keeps its side list of cards,
- * so the two places can't be mistaken for each other.
+ * Administration's own full-window layout: a plain bar, the sections as text
+ * tabs along the top, and a single content column. Settings keeps its side
+ * list of cards, so the two places can't be mistaken for each other.
  */
 export function AdminPage({
   items,
@@ -37,8 +35,7 @@ export function AdminPage({
           </button>
         </DialogClose>
         <p className="admin-brand" aria-hidden>
-          <Shield size={18} />
-          <span>Administration</span>
+          Administration
         </p>
       </header>
       <nav className="admin-tabs" aria-label="Administration sections">
@@ -52,8 +49,7 @@ export function AdminPage({
               onSelect(s.id);
             }}
           >
-            {s.icon}
-            <span>{s.label}</span>
+            {s.label}
           </button>
         ))}
       </nav>

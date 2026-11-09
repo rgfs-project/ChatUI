@@ -1,4 +1,3 @@
-import { Cpu, ScrollText, Server, Settings2, Users, Wrench } from "lucide-react";
 import { data, useLocation, useNavigate, useParams } from "react-router";
 import { InstanceSection, AuditSection, MaintenanceSection } from "../admin/instance";
 import { ModelsSection } from "../admin/models";
@@ -29,42 +28,36 @@ const SECTIONS = [
     id: "users",
     label: "Accounts",
     description: "Who can sign in, their role, and whether the account is active.",
-    icon: <Users size={18} aria-hidden />,
     render: () => <UsersSection />,
   },
   {
     id: "providers",
     label: "Providers",
     description: "The model servers this instance talks to.",
-    icon: <Server size={18} aria-hidden />,
     render: () => <ProvidersSection />,
   },
   {
     id: "models",
     label: "Models",
     description: "Which models members can choose, and their defaults.",
-    icon: <Cpu size={18} aria-hidden />,
     render: () => <ModelsSection />,
   },
   {
     id: "instance",
     label: "Instance",
     description: "The notice everyone sees and the default model for new chats.",
-    icon: <Settings2 size={18} aria-hidden />,
     render: () => <InstanceSection />,
   },
   {
     id: "maintenance",
     label: "Maintenance",
     description: "Rebuild chat indexes and refresh model discovery.",
-    icon: <Wrench size={18} aria-hidden />,
     render: () => <MaintenanceSection />,
   },
   {
     id: "audit",
     label: "Audit log",
     description: "Every administrative change, newest first.",
-    icon: <ScrollText size={18} aria-hidden />,
     render: () => <AuditSection />,
   },
 ] as const;
