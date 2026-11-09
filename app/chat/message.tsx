@@ -260,17 +260,6 @@ export function UserBubble({
   );
 }
 
-/** Markdown → readable plain text (markers removed, links as their text). */
-export function plainText(markdown: string): string {
-  return markdown
-    .replace(/^```[^\n]*\n?/gm, "")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, "$1$2")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .trim();
-}
-
 const NO_PROPOSALS: readonly ProposalDto[] = [];
 
 /** A stored message. Memoized: streaming another message never re-renders it. */

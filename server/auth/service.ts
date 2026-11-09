@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import type { SessionDto } from "@shared/auth";
+import { CSRF_HEADER, EXPECTED_USER_HEADER, type SessionDto } from "@shared/auth";
 import { ErrorCode } from "@shared/errors";
 import type { AuthConfig } from "../config.ts";
 import { AppError } from "../errors.ts";
@@ -162,11 +162,11 @@ export class AuthService {
 
   /** Synchronizer token + expected user for state-changing requests (contracts §5). */
   checkMutation(req: Request, auth: AuthContext | null): void {
-    const token = req.get("x-csrf-token");
+    const token = req.get(CSRF_HEADER);
     if (!auth || !token || !tokensEqual(token, auth.csrfToken)) {
       throw new AppError(ErrorCode.CSRF_INVALID, "Invalid or missing CSRF token");
     }
-    if (req.get("x-expected-user") !== auth.userId) {
+    if (req.get(EXPECTED_USER_HEADER) !== auth.userId) {
       throw new AppError(
         ErrorCode.SESSION_CHANGED,
         "The signed-in account changed; reload to continue",

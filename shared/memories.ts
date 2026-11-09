@@ -45,5 +45,3 @@ export const proposalDtoSchema = z.strictObject({
   createdAt: z.string(),
 });
 export type ProposalDto = z.infer<typeof proposalDtoSchema>;
-
-export const proposalListSchema = z.strictObject({ proposals: z.array(proposalDtoSchema) });

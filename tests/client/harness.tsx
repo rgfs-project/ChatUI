@@ -100,7 +100,6 @@ export function seededClient(result?: ConversationResult): QueryClient {
     chatProjects: {},
     uiBlocks: null,
     previews: null,
-    feedback: {},
   });
   client.setQueryData(qk.conversations(USER.id), [
     { id: CONV, title: "Seeded", createdAt: "", updatedAt: "", messageCount: 2, malformed: false },

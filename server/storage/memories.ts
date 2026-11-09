@@ -97,11 +97,6 @@ export function parseMemory(bytes: Buffer, expectedId: string): Memory | null {
   return { id: expectedId, name, body, createdAt, updatedAt, revision: revisionOf(bytes) };
 }
 
-export interface MemoryWriteHooks {
-  /** Test hook: runs after the memory file is written. */
-  afterWrite?: () => Promise<void>;
-}
-
 export class MemoryStore {
   private readonly paths: DataPaths;
   private readonly locks: KeyedLocks;

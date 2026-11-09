@@ -440,10 +440,3 @@ export function serializeConversation(model: ConversationModel): string {
 export function normalizeBody(text: string): string {
   return trimBlankLines(text.replace(/\r\n/g, "\n").split("\n")).join("\n");
 }
-
-/** Validates a model before serialization (the serializer assumes validity). */
-export function validateModel(model: ConversationModel): string | undefined {
-  const reparsed = parseConversation(serializeConversation(model));
-  if (!reparsed.ok) return reparsed.reason;
-  return undefined;
-}

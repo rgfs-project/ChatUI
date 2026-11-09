@@ -79,7 +79,7 @@ export function DisplayMath({ tex }: { tex: string }) {
       )}
       <button
         type="button"
-        className="table-tool math-copy"
+        className="math-copy"
         aria-label={copied ? "Copied" : "Copy LaTeX"}
         onClick={() => {
           void copyText(tex).then((ok) => {

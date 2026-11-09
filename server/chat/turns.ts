@@ -76,11 +76,3 @@ export function removedUsers(before: readonly Block[], kept: readonly Block[]): 
   const keptIds = new Set(kept.filter((b) => b.type === "user").map((b) => b.id));
   return before.filter((b): b is UserBlock => b.type === "user" && !keptIds.has(b.id));
 }
-
-/**
- * Source validity for later phases (13b proposals): a message is a valid
- * source only while it still exists in the canonical conversation.
- */
-export function messageExists(model: ConversationModel, messageId: string): boolean {
-  return model.blocks.some((b) => b.id === messageId);
-}

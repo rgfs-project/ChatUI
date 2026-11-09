@@ -30,7 +30,6 @@ import {
   deleteProjectRoute,
   moveToProjectRoute,
   renameProjectRoute,
-  replyFeedbackRoute,
 } from "./projects.ts";
 import {
   cancelImportRoute,
@@ -115,7 +114,6 @@ export const apiRoutes: readonly AnyApiRoute[] = [
   erase(renameProjectRoute),
   erase(deleteProjectRoute),
   erase(moveToProjectRoute),
-  erase(replyFeedbackRoute),
   erase(exportConversationRoute),
   erase(exportArchiveRoute),
   erase(previewImportRoute),

@@ -66,7 +66,6 @@ function services(delayMs = 0) {
           chatProjects: {},
           uiBlocks: null,
           previews: null,
-          feedback: {},
         };
       },
       models: async () => {

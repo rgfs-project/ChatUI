@@ -351,7 +351,7 @@ app-layout (protected: one auth guard for every child, catch-all included)
   - Display math has Copy LaTeX.
   - Display-only normalisation outside code fences: a whole line of `\[…\]` becomes a display block, and `\(…\)` inline. Inline math that starts with an amount ("$5 and $10") stays text.
 - **Code** (`render/code.tsx`): highlight.js `lib/common`. Its output escapes the source and adds only `hljs-*` spans. Unknown languages, and the moment before the chunk arrives, show plain preformatted text. Syntax colours are tokens (plan §7, light and dark).
-- **Tables** (`render/table.tsx`): Copy as tab-separated text (pastes into spreadsheets as cells) and Expand (dialog). Tools show on hover/focus, and always on phones.
+- **Tables** (`render/table.tsx`): plain, scrolling sideways when wider than the column.
 - **Read aloud** (`app/chat/read-aloud.ts`): the browser's `speechSynthesis`, offered only where it exists (INV-52), one reply at a time, with Markdown and code stripped from the spoken text.
 - **Lazy and first-party.** KaTeX and highlight.js are dynamic imports (`render/lazy.ts`), requested only when content needs them. The server and hydration render the plain fallback, so they agree. `verify` checks that neither library is in the chat page's initial JavaScript.
 - **Streaming stability (INV-46).** Unfinished fences, tables, lists and math render at every prefix (tests stream them). Scroll intent counts a scroll as the reader's only right after wheel, touch, pointer or scroll-key input, so scroll anchoring or a late-loading renderer changing heights above never unpins the reader.
@@ -906,7 +906,7 @@ The manager records when the first reasoning and the first answer text arrive. T
 
 ### Reply actions
 
-Copy, Good/Bad response (`aria-pressed` toggles), Share reply (the system share sheet, else copy), Read aloud, Regenerate, and More (…) with "Answered by <model>" and "Copy as plain text". Feedback is stored in `preferences.feedback` (assistant message id → `up`/`down`, at most 2,000, newest kept). It is set through `PUT /api/conversations/:id/messages/:messageId/feedback`, which checks that the reply exists in the user's chat; `PATCH /api/preferences` can't change it.
+Copy, Read aloud and Regenerate. Older preference files may still hold a `feedback` map from an earlier version; it is kept as an unknown key and not used.
 
 ### Optimistic switches
 

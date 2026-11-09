@@ -893,8 +893,8 @@ export function makeQueryClient(server = typeof window === "undefined"): QueryCl
     edits: [
       {
         file: "server/auth/service.ts",
-        find: '    if (req.get("x-expected-user") !== auth.userId) {',
-        replace: '    if (req.get("x-expected-user") === "never") {',
+        find: "    if (req.get(EXPECTED_USER_HEADER) !== auth.userId) {",
+        replace: '    if (req.get(EXPECTED_USER_HEADER) === "never") {',
       },
     ],
     vitest: [T("server/auth.test.ts"), T("server/registry.test.ts")],

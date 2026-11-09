@@ -77,7 +77,6 @@ describe("model selection order", () => {
           chatProjects: {},
           uiBlocks: null,
           previews: null,
-          feedback: {},
         },
       }),
     ).toEqual(["a", "one"]);

@@ -1,4 +1,4 @@
-import type { SessionDto } from "@shared/auth";
+import { CSRF_HEADER, EXPECTED_USER_HEADER, type SessionDto } from "@shared/auth";
 
 /**
  * Browser session state and the shared fetch wrapper (contracts §5, INV-59).
@@ -75,8 +75,8 @@ export async function apiFetch(
   const send = () => {
     const headers = new Headers(init.headers);
     if (mutation && current?.csrfToken && current.user) {
-      headers.set("X-CSRF-Token", current.csrfToken);
-      headers.set("X-Expected-User", current.user.id);
+      headers.set(CSRF_HEADER, current.csrfToken);
+      headers.set(EXPECTED_USER_HEADER, current.user.id);
     }
     return fetch(url, { ...init, headers });
   };
@@ -189,8 +189,8 @@ export function apiUpload<T>(
     xhr.open(options.method ?? "POST", url);
     xhr.setRequestHeader("Accept", "application/json");
     if (current?.csrfToken && current.user) {
-      xhr.setRequestHeader("X-CSRF-Token", current.csrfToken);
-      xhr.setRequestHeader("X-Expected-User", current.user.id);
+      xhr.setRequestHeader(CSRF_HEADER, current.csrfToken);
+      xhr.setRequestHeader(EXPECTED_USER_HEADER, current.user.id);
     }
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) options.onProgress?.(event.loaded / event.total);

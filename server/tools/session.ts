@@ -136,10 +136,6 @@ export const MEMORY_TOOLS: ToolDefinition[] = [
   ),
 ];
 
-export const TOOL_NAMES = new Set(
-  [...GENERAL_TOOLS, ...FILE_TOOLS, ...MEMORY_TOOLS].map((tool) => tool.function.name),
-);
-
 export interface ToolSessionContext {
   userId: string;
   conversationId: string;

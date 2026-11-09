@@ -53,11 +53,6 @@ function isUserRecord(value: unknown, id: string): value is UserRecord {
   );
 }
 
-export function publicUser(record: UserRecord): PublicUser {
-  const { passwordHash: _omit, ...rest } = record;
-  return rest;
-}
-
 export const REGISTRY_LOCK = "registry";
 
 export class UserStore {
