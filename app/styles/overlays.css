@@ -23,11 +23,15 @@
   align-items: center;
   gap: 10px;
   min-height: 36px;
-  /* Two-line items (a detail under the name) keep room above and below. */
-  padding: 6px 10px;
+  padding: 0 10px;
   border-radius: var(--radius-menu-item);
   outline: none;
   cursor: pointer;
+}
+
+/* Two-line items (a detail under the name) keep room above and below. */
+.menu-item:has(.menu-detail) {
+  padding-block: 6px;
 }
 
 .menu-item[data-highlighted] {
