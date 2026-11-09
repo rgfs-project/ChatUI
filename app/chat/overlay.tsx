@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { overlayBackground, paths } from "../lib/paths";
+import { overlayBackground, paths, type OverlayState } from "../lib/paths";
 import { Dialog } from "../ui/dialog";
 
 /**
@@ -14,6 +14,17 @@ export function useCloseOverlay(): () => void {
   return () => {
     if (overlayBackground(location.state)) void navigate(-1);
     else void navigate(paths.newChat(), { replace: true });
+  };
+}
+
+/** Opens an overlay over the current page; Back closes it (INV-53). */
+export function useOpenOverlay(): (to: string) => void {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return (to: string) => {
+    const background =
+      (location.state as Partial<OverlayState> | null)?.background ?? location.pathname;
+    void navigate(to, { state: { background } satisfies OverlayState });
   };
 }
 
