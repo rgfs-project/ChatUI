@@ -7,7 +7,7 @@ import { UsersSection } from "../admin/users";
 import { OverlayDialog } from "../chat/overlay";
 import { appContext } from "../context";
 import { paths } from "../lib/paths";
-import { SettingsPage } from "../settings/page-layout";
+import { AdminPage } from "../admin/layout";
 import type { Route } from "./+types/admin";
 
 export const handle = { kind: "overlay" };
@@ -28,36 +28,42 @@ const SECTIONS = [
   {
     id: "users",
     label: "Accounts",
+    description: "Who can sign in, their role, and whether the account is active.",
     icon: <Users size={18} aria-hidden />,
     render: () => <UsersSection />,
   },
   {
     id: "providers",
     label: "Providers",
+    description: "The model servers this instance talks to.",
     icon: <Server size={18} aria-hidden />,
     render: () => <ProvidersSection />,
   },
   {
     id: "models",
     label: "Models",
+    description: "Which models members can choose, and their defaults.",
     icon: <Cpu size={18} aria-hidden />,
     render: () => <ModelsSection />,
   },
   {
     id: "instance",
     label: "Instance",
+    description: "The notice everyone sees and the default model for new chats.",
     icon: <Settings2 size={18} aria-hidden />,
     render: () => <InstanceSection />,
   },
   {
     id: "maintenance",
     label: "Maintenance",
+    description: "Rebuild chat indexes and refresh model discovery.",
     icon: <Wrench size={18} aria-hidden />,
     render: () => <MaintenanceSection />,
   },
   {
     id: "audit",
     label: "Audit log",
+    description: "Every administrative change, newest first.",
     icon: <ScrollText size={18} aria-hidden />,
     render: () => <AuditSection />,
   },
@@ -76,13 +82,10 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
   }
   const current = SECTIONS.find((s) => s.id === params.section) ?? SECTIONS[0];
   return (
-    <OverlayDialog title="Administration" className="settings-dialog" page>
-      <SettingsPage
-        title="Administration"
-        navLabel="Administration sections"
+    <OverlayDialog title="Administration" className="settings-dialog admin-dialog-page" page>
+      <AdminPage
         items={SECTIONS}
-        current={current.id}
-        wide
+        current={current}
         onSelect={(id) => {
           void navigate(paths.admin(id), {
             replace: true,
@@ -90,11 +93,8 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
           });
         }}
       >
-        <h2 id="settings-section-title" className="settings-title">
-          {current.label}
-        </h2>
-        <div className="admin-panel">{current.render()}</div>
-      </SettingsPage>
+        {current.render()}
+      </AdminPage>
     </OverlayDialog>
   );
 }

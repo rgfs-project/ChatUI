@@ -211,3 +211,16 @@ html[data-phone] .composer-start,
 html[data-phone] .composer-actions {
   gap: 8px;
 }
+
+html[data-phone] .admin-top {
+  gap: 8px;
+  padding: 0 8px;
+}
+
+html[data-phone] .admin-tab {
+  min-width: 44px;
+}
+
+html[data-phone] .admin-content {
+  padding: 20px 16px 48px;
+}

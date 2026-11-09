@@ -146,7 +146,7 @@ export function MaintenanceSection() {
   const { userId } = useChat();
   const act = useAdminAction(userId);
   return (
-    <>
+    <div className="settings-card">
       <div className="settings-row">
         <div className="settings-row-text">
           <span className="settings-row-label">Rebuild chat indexes</span>
@@ -189,7 +189,7 @@ export function MaintenanceSection() {
         Operator commands (create users, reset passwords, rebuild indexes):{" "}
         <kbd>node server/cli.ts help</kbd>
       </p>
-    </>
+    </div>
   );
 }
 

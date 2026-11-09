@@ -283,6 +283,10 @@
     flex-direction: column;
   }
 
+  .admin-content {
+    padding: 20px 16px 48px;
+  }
+
   .settings-nav {
     width: auto;
     box-shadow: inset 0 -1px 0 var(--divider);
@@ -538,9 +542,175 @@
   margin-bottom: 8px;
 }
 
-/* ── Administration (Phase 10) ── */
+/* ── Administration (Phase 10): its own console layout, unlike Settings ── */
+.admin {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* A tinted bar says "you are administering the instance" at a glance. */
+.admin-top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  height: 56px;
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 22%, var(--bg));
+}
+
+.admin-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font-size: var(--text-ui);
+}
+
+.admin-back:hover {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+}
+
+.admin-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding-left: 16px;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--accent) 30%, var(--bg));
+  font-size: 15px;
+  font-weight: var(--weight-semibold);
+}
+
+.admin-brand svg {
+  color: var(--accent);
+}
+
+/* Sections as tabs along the top (Settings lists them down the side). */
+.admin-tabs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  box-shadow: inset 0 -1px 0 var(--divider);
+}
+
+.admin-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-ui);
+  box-shadow: inset 0 -2px 0 transparent;
+}
+
+.admin-tab:hover {
+  color: var(--text);
+}
+
+.admin-tab.is-active {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.admin-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.admin-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+}
+
+.admin-heading {
+  margin-bottom: 20px;
+}
+
+.admin-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: var(--weight-semibold);
+  line-height: 28px;
+}
+
+.admin-description {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-ui);
+}
+
 .admin-panel {
   overflow-x: auto;
+  font-size: var(--text-ui);
+}
+
+/* Forms and setting groups sit in shaded panels; tables get a frame. */
+.admin .admin-form,
+.admin .settings-card {
+  padding: 16px 20px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 2.5%, var(--bg));
+}
+
+.admin .settings-card {
+  padding-block: 4px;
+}
+
+.admin .admin-form .settings-subtitle {
+  margin-top: 0;
+}
+
+.admin .admin-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.admin .admin-table th {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: var(--hover);
+  font-size: var(--text-sub);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.admin .admin-table th:first-child,
+.admin .admin-table td:first-child {
+  padding-left: 16px;
+}
+
+.admin .admin-table th:last-child,
+.admin .admin-table td:last-child {
+  padding-right: 12px;
+}
+
+.admin .admin-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin .admin-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--text) 2.5%, var(--bg));
 }
 
 .admin-form {
@@ -597,7 +767,7 @@
 }
 
 /* Stays a table cell (display: flex would detach it from the row's border). */
-.admin-actions {
+.admin-table .admin-actions {
   text-align: right;
   white-space: nowrap;
 }
