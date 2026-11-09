@@ -24,7 +24,7 @@ import { useNavigate } from "react-router";
 import { paths } from "../lib/paths";
 import { useUi } from "../lib/ui-context";
 import { IconButton } from "../ui/icon-button";
-import { Menu, MenuItem } from "../ui/menu";
+import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { useChat } from "./chat-context";
 import { ModelMenu } from "./model-picker";
 
@@ -166,26 +166,6 @@ export const Header = memo(function Header() {
               </button>
             }
           >
-            {conversation.temporary ? null : (
-              <MenuItem
-                icon={pinned ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />}
-                onSelect={() => {
-                  void ops.togglePin(conversation.id);
-                }}
-              >
-                {pinned ? "Unpin" : "Pin"}
-              </MenuItem>
-            )}
-            {conversation.temporary ? null : (
-              <MenuItem
-                icon={<FolderInput size={16} aria-hidden />}
-                onSelect={() => {
-                  openProjectDialog({ kind: "move", conversationId: conversation.id });
-                }}
-              >
-                Move to project…
-              </MenuItem>
-            )}
             <MenuItem
               icon={<Pencil size={16} aria-hidden />}
               onSelect={() => {
@@ -198,6 +178,17 @@ export const Header = memo(function Header() {
             >
               Rename
             </MenuItem>
+            {conversation.temporary ? null : (
+              <MenuItem
+                icon={pinned ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />}
+                onSelect={() => {
+                  void ops.togglePin(conversation.id);
+                }}
+              >
+                {pinned ? "Unpin" : "Pin"}
+              </MenuItem>
+            )}
+            <MenuSeparator />
             <MenuItem
               danger
               icon={<Trash2 size={16} aria-hidden />}
@@ -207,6 +198,17 @@ export const Header = memo(function Header() {
             >
               Delete
             </MenuItem>
+            {conversation.temporary ? null : <MenuSeparator />}
+            {conversation.temporary ? null : (
+              <MenuItem
+                icon={<FolderInput size={16} aria-hidden />}
+                onSelect={() => {
+                  openProjectDialog({ kind: "move", conversationId: conversation.id });
+                }}
+              >
+                Move to project…
+              </MenuItem>
+            )}
           </Menu>
         ) : null}
       </div>

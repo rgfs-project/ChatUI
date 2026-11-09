@@ -23,7 +23,8 @@
   align-items: center;
   gap: 10px;
   min-height: 36px;
-  padding: 0 10px;
+  /* Two-line items (a detail under the name) keep room above and below. */
+  padding: 6px 10px;
   border-radius: var(--radius-menu-item);
   outline: none;
   cursor: pointer;
@@ -222,6 +223,7 @@
 
 .settings-card {
   padding: 0 20px;
+  font-size: var(--text-ui);
   border: 1px solid var(--divider);
   border-radius: var(--radius-suggestion);
 }
@@ -377,8 +379,13 @@
 }
 
 .native-select {
-  appearance: auto;
-  padding-right: 8px;
+  /* The same chevron as the custom pickers, not the browser's own arrow. */
+  appearance: none;
+  padding-right: 34px;
+  background-image: var(--select-chevron);
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
 }
 
 .mode-tiles {
@@ -585,10 +592,14 @@
   font-weight: var(--weight-semibold);
 }
 
+/* Stays a table cell (display: flex would detach it from the row's border). */
 .admin-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 2px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-actions > * + * {
+  margin-left: 2px;
 }
 
 .admin-badge {

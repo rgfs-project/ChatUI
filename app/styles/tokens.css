@@ -66,6 +66,7 @@
 
   /* Colour (light) */
   --bg: #fcfcfc;
+  --select-chevron: url("/icons/chevron-down.svg");
   --text: #0d0d0d;
   /* 5.2:1 on --bg and 4.6:1 on --hover (WCAG AA, Phase 18; was #8f8f8f, 3.2:1). */
   --text-secondary: #6b6b6b;

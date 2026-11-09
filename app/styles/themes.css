@@ -9,6 +9,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #000000;
+  --select-chevron: url("/icons/chevron-down-light.svg");
   --text: #f3f3f3;
   --text-secondary: #afafaf;
   --text-tertiary: #a0a0a0;
@@ -43,6 +44,7 @@
   :root[data-theme="system"] {
     color-scheme: dark;
     --bg: #000000;
+    --select-chevron: url("/icons/chevron-down-light.svg");
     --text: #f3f3f3;
     --text-secondary: #afafaf;
     --text-tertiary: #a0a0a0;
