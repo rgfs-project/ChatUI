@@ -25,4 +25,3 @@ export const changePasswordRequestSchema = z.strictObject({
   currentPassword: password,
   newPassword: password,
 });
-
