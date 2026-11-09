@@ -56,7 +56,7 @@
     {
       "name": "sidebar footer",
       "selector": ".sidebar-foot",
-      "height": 60,
+      "height": 64,
       "css": {
         "padding": "6px",
         "gap": "12px"
@@ -66,15 +66,15 @@
       "name": "profile row",
       "selector": ".profile-row",
       "width": 328,
-      "height": 48
+      "height": 52
     },
     {
       "name": "avatar",
       "selector": ".avatar",
-      "width": 24,
-      "height": 24,
+      "width": 32,
+      "height": 32,
       "css": {
-        "font-size": "9px",
+        "font-size": "11px",
         "font-weight": "600",
         "background-color": "rgb(142, 99, 166)"
       }
