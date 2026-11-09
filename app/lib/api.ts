@@ -1,4 +1,5 @@
-import { CSRF_HEADER, EXPECTED_USER_HEADER, type SessionDto } from "@shared/auth";
+import type { SessionDto } from "@shared/auth";
+import { CSRF_HEADER, EXPECTED_USER_HEADER } from "@shared/headers";
 
 /**
  * Browser session state and the shared fetch wrapper (contracts §5, INV-59).

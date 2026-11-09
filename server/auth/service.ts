@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
-import { CSRF_HEADER, EXPECTED_USER_HEADER, type SessionDto } from "@shared/auth";
+import type { SessionDto } from "@shared/auth";
+import { CSRF_HEADER, EXPECTED_USER_HEADER } from "@shared/headers";
 import { ErrorCode } from "@shared/errors";
 import type { AuthConfig } from "../config.ts";
 import { AppError } from "../errors.ts";

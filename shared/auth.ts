@@ -26,6 +26,3 @@ export const changePasswordRequestSchema = z.strictObject({
   newPassword: password,
 });
 
-/** Headers every state-changing request carries (contracts §5). */
-export const CSRF_HEADER = "X-CSRF-Token";
-export const EXPECTED_USER_HEADER = "X-Expected-User";
