@@ -56,7 +56,8 @@
   right: 0;
   left: 0;
   height: 32px;
-  background: linear-gradient(to bottom, transparent, var(--bg));
+  /* From the background colour at zero opacity: plain transparent is black and dims the middle. */
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg));
   content: "";
   pointer-events: none;
 }
