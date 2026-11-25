@@ -291,20 +291,6 @@
   width: 240px;
   max-width: 100%;
   height: 36px;
-  padding: 0 14px;
-  border-radius: var(--radius-pill);
-  background: var(--pill-bg);
-  font-size: var(--text-ui);
-}
-
-.text-field.settings-textarea {
-  height: auto;
-  padding: 8px 14px;
-  border-radius: 12px;
-  background: var(--pill-bg);
-  font-size: var(--text-ui);
-  line-height: 20px;
-  resize: vertical;
 }
 
 /* The end of a form in a card: a note on the left, its buttons on the right. */
@@ -685,13 +671,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.admin-textarea {
-  height: auto;
-  padding: 8px 12px;
-  line-height: 20px;
-  resize: vertical;
 }
 
 .admin-dialog {

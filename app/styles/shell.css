@@ -210,7 +210,7 @@
 }
 
 .chat-row:hover .row-menu,
-.chat-row:has(:focus-visible) .row-menu,
+.chat-row:has(:focus-visible:not([data-quiet-focus])) .row-menu,
 .chat-row:has(.row-menu[data-state="open"]) .row-menu,
 .chat-row.is-active .row-menu,
 .row-menu[data-state="open"] {

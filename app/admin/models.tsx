@@ -147,7 +147,7 @@ export function ModelsSection() {
             <textarea
               id="admin-system-prompt"
               name="systemPrompt"
-              className="text-field admin-textarea selectable"
+              className="text-field selectable"
               rows={6}
               defaultValue={editing.settings.systemPrompt ?? ""}
             />

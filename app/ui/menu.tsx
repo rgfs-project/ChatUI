@@ -48,13 +48,33 @@ export function Menu({
   onOpenChange?: (open: boolean) => void;
 }) {
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Opened by a pointer: focus still returns to the trigger on close, but
+  // without the keyboard ring (Escape would otherwise count as keyboard use).
+  const byPointer = useRef(false);
   return (
     <Dropdown.Root modal={false} {...(onOpenChange ? { onOpenChange } : {})}>
-      <Dropdown.Trigger asChild ref={triggerRef as RefObject<HTMLButtonElement | null>}>
+      <Dropdown.Trigger
+        asChild
+        ref={triggerRef as RefObject<HTMLButtonElement | null>}
+        onPointerDown={() => {
+          byPointer.current = true;
+        }}
+        onKeyDown={(event) => {
+          byPointer.current = false;
+          delete event.currentTarget.dataset.quietFocus;
+        }}
+        onBlur={(event) => {
+          delete event.currentTarget.dataset.quietFocus;
+        }}
+      >
         {trigger}
       </Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content
+          onCloseAutoFocus={() => {
+            const element = triggerRef.current;
+            if (byPointer.current && element) element.dataset.quietFocus = "";
+          }}
           className={`menu${contentClassName ? ` ${contentClassName}` : ""}`}
           align={align}
           side={side}

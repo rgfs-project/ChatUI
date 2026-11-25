@@ -89,7 +89,7 @@ export function InstanceSection() {
         <textarea
           id="admin-notice"
           name="notice"
-          className="text-field settings-textarea selectable"
+          className="text-field selectable"
           rows={2}
           maxLength={500}
           defaultValue={data.notice ?? ""}

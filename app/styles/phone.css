@@ -175,6 +175,22 @@ html[data-phone] .settings-panel {
 
 html[data-phone] .settings-row {
   flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* A field that wraps under its label takes the whole width. */
+html[data-phone] .settings-row-control:has(> .settings-input),
+html[data-phone] .text-field.settings-input {
+  width: 100%;
+}
+
+html[data-phone] .settings-actions {
+  flex-wrap: wrap;
+}
+
+/* 16px keeps phone browsers from zooming into a field on focus. */
+html[data-phone] .text-field {
+  font-size: 16px;
 }
 
 html[data-phone] .menu {
