@@ -111,11 +111,6 @@
   font-size: 13px;
 }
 
-.code-copy:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
 .code-block pre {
   margin: 0;
   padding: 0 20px 13px;
@@ -154,10 +149,6 @@
   border-radius: var(--radius-pill);
   background: var(--pill-bg);
   color: var(--text-secondary);
-}
-
-.math-copy:hover {
-  color: var(--text);
 }
 
 /* Syntax highlighting (highlight.js classes) */

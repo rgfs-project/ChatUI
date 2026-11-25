@@ -53,10 +53,6 @@
   color: #fff;
 }
 
-.viewer .icon-button:hover {
-  background: rgb(255 255 255 / 12%);
-}
-
 .viewer .icon-button:disabled {
   opacity: 0.35;
 }
@@ -71,10 +67,6 @@
   color: #fff;
   font-size: var(--text-ui);
   font-variant-numeric: tabular-nums;
-}
-
-.viewer-zoom:hover {
-  background: rgb(255 255 255 / 12%);
 }
 
 .viewer-stage {

@@ -268,10 +268,6 @@
   white-space: nowrap;
 }
 
-.composer-pill:hover {
-  background: var(--hover);
-}
-
 .composer-pill.is-on {
   border-color: transparent;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
@@ -357,11 +353,6 @@
   color: var(--text-secondary);
   font-size: var(--text-message);
   text-align: left;
-}
-
-.suggestion:hover {
-  background: var(--hover);
-  color: var(--text);
 }
 
 .composer-notice {
@@ -456,10 +447,6 @@
   color: var(--text);
   font-size: var(--text-ui);
   text-decoration: none;
-}
-
-.file-chip:hover {
-  background: var(--hover);
 }
 
 .file-chip.is-missing {
@@ -764,14 +751,6 @@
   color: var(--text);
 }
 
-.pill-dark:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 85%, var(--bg));
-}
-
-.pill-light:hover:not(:disabled) {
-  background: var(--hover);
-}
-
 .pill-light:disabled {
   opacity: 0.5;
 }
@@ -886,10 +865,6 @@
   text-align: left;
 }
 
-.artifact-card:hover {
-  background: var(--hover);
-}
-
 .artifact-card-text {
   display: flex;
   flex-direction: column;
@@ -919,11 +894,6 @@
   border-color: var(--text);
   background: var(--text);
   color: var(--bg);
-}
-
-.temporary-toggle.is-on:hover:not(:disabled) {
-  background: var(--text);
-  opacity: 0.85;
 }
 
 .temporary-badge {
