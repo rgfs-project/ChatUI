@@ -149,6 +149,12 @@ a {
   font-size: var(--text-ui);
 }
 
+/* Fields show focus on their frame, like the composer and search fields. */
+.text-field:focus-visible {
+  border-color: var(--text-tertiary);
+  outline: none;
+}
+
 textarea.text-field {
   height: auto;
   padding: 10px 16px;

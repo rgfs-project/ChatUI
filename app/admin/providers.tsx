@@ -291,6 +291,15 @@ export function ProvidersSection() {
             </label>
           </div>
           <div className="dialog-actions">
+            <button
+              type="button"
+              className="pill-button"
+              onClick={() => {
+                setEditing(null);
+              }}
+            >
+              Cancel
+            </button>
             <button type="submit" className="pill-button pill-primary">
               Save
             </button>

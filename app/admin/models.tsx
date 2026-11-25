@@ -137,7 +137,7 @@ export function ModelsSection() {
                     min={s.min}
                     max={s.max}
                     step={s.step}
-                    placeholder="model default"
+                    placeholder="Model default"
                     defaultValue={editing.settings.sampling[s.key] ?? ""}
                   />
                 </label>
@@ -156,6 +156,15 @@ export function ModelsSection() {
               next to the newest message, so the prompt prefix stays cacheable).
             </p>
             <div className="dialog-actions">
+              <button
+                type="button"
+                className="pill-button"
+                onClick={() => {
+                  setEditing(null);
+                }}
+              >
+                Cancel
+              </button>
               <button type="submit" className="pill-button pill-primary">
                 Save
               </button>

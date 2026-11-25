@@ -235,6 +235,15 @@ export function UsersSection() {
             autoComplete="new-password"
           />
           <div className="dialog-actions">
+            <button
+              type="button"
+              className="pill-button"
+              onClick={() => {
+                setPasswordFor(null);
+              }}
+            >
+              Cancel
+            </button>
             <button type="submit" className="pill-button pill-primary">
               Set password
             </button>
@@ -278,6 +287,15 @@ export function UsersSection() {
             autoComplete="off"
           />
           <div className="dialog-actions">
+            <button
+              type="button"
+              className="pill-button"
+              onClick={() => {
+                setDeleting(null);
+              }}
+            >
+              Cancel
+            </button>
             <button type="submit" className="pill-button pill-danger">
               Delete account
             </button>

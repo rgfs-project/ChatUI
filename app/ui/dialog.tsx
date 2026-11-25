@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { claimMenuOpener } from "./menu";
+import { quietFocus, usingPointer } from "./quiet-focus";
 
 /**
  * Focus return for a controlled dialog: to the menu trigger when a menu item
@@ -19,11 +20,13 @@ import { claimMenuOpener } from "./menu";
  */
 function useReturnFocus(open: boolean) {
   const target = useRef<HTMLElement | null>(null);
+  const byPointer = useRef(false);
   // A layout effect runs before Radix moves focus into the dialog (a passive
   // effect), so the element that had focus is still known. Not in
   // onOpenAutoFocus: Radix skips that when a field autofocuses.
   useLayoutEffect(() => {
     if (!open) return;
+    byPointer.current = usingPointer();
     const active = document.activeElement;
     target.current =
       claimMenuOpener() ??
@@ -36,6 +39,7 @@ function useReturnFocus(open: boolean) {
       if (element?.isConnected) {
         event.preventDefault();
         element.focus();
+        if (byPointer.current) quietFocus(element);
       }
     },
   };

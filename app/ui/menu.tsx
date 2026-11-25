@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { quietFocus, usingPointer } from "./quiet-focus";
 
 /**
  * A dialog opened from a menu item must return focus to the menu's trigger
@@ -48,32 +49,23 @@ export function Menu({
   onOpenChange?: (open: boolean) => void;
 }) {
   const triggerRef = useRef<HTMLElement | null>(null);
-  // Opened by a pointer: focus still returns to the trigger on close, but
-  // without the keyboard ring (Escape would otherwise count as keyboard use).
   const byPointer = useRef(false);
   return (
-    <Dropdown.Root modal={false} {...(onOpenChange ? { onOpenChange } : {})}>
-      <Dropdown.Trigger
-        asChild
-        ref={triggerRef as RefObject<HTMLButtonElement | null>}
-        onPointerDown={() => {
-          byPointer.current = true;
-        }}
-        onKeyDown={(event) => {
-          byPointer.current = false;
-          delete event.currentTarget.dataset.quietFocus;
-        }}
-        onBlur={(event) => {
-          delete event.currentTarget.dataset.quietFocus;
-        }}
-      >
+    <Dropdown.Root
+      modal={false}
+      onOpenChange={(open) => {
+        if (open) byPointer.current = usingPointer();
+        onOpenChange?.(open);
+      }}
+    >
+      <Dropdown.Trigger asChild ref={triggerRef as RefObject<HTMLButtonElement | null>}>
         {trigger}
       </Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content
           onCloseAutoFocus={() => {
             const element = triggerRef.current;
-            if (byPointer.current && element) element.dataset.quietFocus = "";
+            if (byPointer.current && element) quietFocus(element);
           }}
           className={`menu${contentClassName ? ` ${contentClassName}` : ""}`}
           align={align}
