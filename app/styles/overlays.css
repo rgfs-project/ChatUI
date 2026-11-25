@@ -348,15 +348,16 @@
 
 .toasts {
   position: fixed;
+  /* Spans the window (centring with left: 50% left each toast half the width). */
+  right: 16px;
   bottom: 16px;
-  left: 50%;
+  left: 16px;
   z-index: 70;
   display: flex;
   flex-direction: column;
   /* Each toast is as wide as its message; the close button sits at its end. */
   align-items: center;
   gap: 8px;
-  transform: translateX(-50%);
   pointer-events: none;
 }
 

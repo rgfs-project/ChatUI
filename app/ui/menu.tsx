@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useRef,
+  useState,
   type ReactElement,
   type ReactNode,
   type RefObject,
@@ -50,15 +51,32 @@ export function Menu({
 }) {
   const triggerRef = useRef<HTMLElement | null>(null);
   const byPointer = useRef(false);
+  const [open, setOpen] = useState(false);
+  const change = (next: boolean) => {
+    if (next) byPointer.current = usingPointer();
+    setOpen(next);
+    onOpenChange?.(next);
+  };
+  // A finger (or any pointer on a phone) opens the menu when it lifts, not
+  // when it lands: on a phone the menu is a bottom sheet that may appear under
+  // the pointer, and lifting it there would choose an item. A mouse on a
+  // desktop still opens on press.
+  const touch = useRef(false);
   return (
-    <Dropdown.Root
-      modal={false}
-      onOpenChange={(open) => {
-        if (open) byPointer.current = usingPointer();
-        onOpenChange?.(open);
-      }}
-    >
-      <Dropdown.Trigger asChild ref={triggerRef as RefObject<HTMLButtonElement | null>}>
+    <Dropdown.Root modal={false} open={open} onOpenChange={change}>
+      <Dropdown.Trigger
+        asChild
+        ref={triggerRef as RefObject<HTMLButtonElement | null>}
+        onPointerDown={(event) => {
+          touch.current =
+            event.pointerType !== "mouse" || document.documentElement.hasAttribute("data-phone");
+          if (touch.current) event.preventDefault();
+        }}
+        onClick={() => {
+          if (touch.current) change(!open);
+          touch.current = false;
+        }}
+      >
         {trigger}
       </Dropdown.Trigger>
       <Dropdown.Portal>

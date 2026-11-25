@@ -188,8 +188,47 @@ html[data-phone] .text-field {
   font-size: 16px;
 }
 
+/* Menus are bottom sheets on phones: full width from the bottom edge, the
+   page dimmed behind, rows sized for a thumb. Tapping outside closes them. */
+html[data-phone] [data-radix-popper-content-wrapper]:has(> .menu) {
+  position: fixed !important;
+  inset: auto 0 0 !important;
+  min-width: 0 !important;
+  transform: none !important;
+  box-shadow: 0 0 0 100vmax var(--backdrop);
+}
+
 html[data-phone] .menu {
-  max-width: calc(100vw - 16px);
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  max-height: 75dvh;
+  padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
+  border-width: 1px 0 0;
+  border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
+  font-size: 16px;
+}
+
+html[data-phone] .menu::before {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 2px auto 10px;
+  border-radius: var(--radius-pill);
+  background: var(--divider);
+  content: "";
+}
+
+html[data-phone] .menu .menu-item {
+  min-height: 52px;
+  padding: 0 16px;
+  gap: 14px;
+}
+
+/* Toasts sit at the top on phones, clear of the composer and keyboard. */
+html[data-phone] .toasts {
+  top: calc(12px + env(safe-area-inset-top));
+  bottom: auto;
 }
 
 /* Composer files sit above the text on phones too. */

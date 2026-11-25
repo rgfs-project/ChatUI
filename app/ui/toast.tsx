@@ -25,7 +25,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const notify = useCallback<Notify>((message, kind = "info") => {
     const id = nextId++;
-    setItems((list) => [...list.slice(-2), { id, kind, message }]);
+    // The same message again replaces the one showing (and restarts its timer).
+    setItems((list) => [
+      ...list.filter((t) => t.message !== message || t.kind !== kind).slice(-2),
+      { id, kind, message },
+    ]);
   }, []);
 
   const dismiss = useCallback((id: number) => {
