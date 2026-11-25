@@ -156,6 +156,18 @@ input[type="checkbox"]:not(.switch) {
   accent-color: var(--accent);
 }
 
+/* A button that reads as a link inside a sentence ("Try again"). */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 .form-error {
   margin: 8px 0 0;
   color: var(--danger);

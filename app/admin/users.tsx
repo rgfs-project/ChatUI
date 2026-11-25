@@ -59,18 +59,18 @@ export function UsersSection() {
         aria-label="Create account"
         onSubmit={(event) => void create(event)}
       >
-        <Row label="Username" labelFor="admin-new-username">
+        <Row label="Username" labelFor="admin-create-username">
           <input
-            id="admin-new-username"
+            id="admin-create-username"
             name="username"
             className="text-field settings-input selectable"
             required
             autoComplete="off"
           />
         </Row>
-        <Row label="Password" hint="At least 10 characters." labelFor="admin-new-password">
+        <Row label="Password" hint="At least 10 characters." labelFor="admin-create-password">
           <input
-            id="admin-new-password"
+            id="admin-create-password"
             name="password"
             type="password"
             className="text-field settings-input selectable"
@@ -79,9 +79,9 @@ export function UsersSection() {
             autoComplete="new-password"
           />
         </Row>
-        <Row label="Role" labelFor="admin-new-role">
+        <Row label="Role" labelFor="admin-create-role">
           <select
-            id="admin-new-role"
+            id="admin-create-role"
             name="role"
             className="pill-button pill-select native-select"
             defaultValue="user"

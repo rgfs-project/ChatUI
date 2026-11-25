@@ -17,6 +17,9 @@
   display: flex;
   flex: 1 1 220px;
   align-items: center;
+  /* May shrink below the input's default 20-character width, so the sort
+     and view controls stay on the same line. */
+  min-width: 0;
   gap: 8px;
   height: 36px;
   padding: 0 12px;

@@ -84,9 +84,14 @@ html[data-phone] .dock > .composer {
   order: 2;
 }
 
-html[data-phone] .chat-area.is-empty .greeting {
+html[data-phone] .chat-area.is-empty .greeting,
+html[data-phone] .chat-area.is-empty .temporary-intro {
   margin-top: auto;
   margin-bottom: auto;
+}
+
+html[data-phone] .chat-area.is-empty .temporary-intro .greeting {
+  margin: 0;
 }
 
 /* Touch: every control is at least 44 × 44 to the finger (the visual size stays). */

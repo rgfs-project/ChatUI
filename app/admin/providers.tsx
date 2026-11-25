@@ -182,7 +182,7 @@ export function ProvidersSection() {
         title={current ? `Edit ${current.name}` : "Add provider"}
         className="admin-dialog"
       >
-        <form className="dialog-form admin-provider-form" onSubmit={(event) => void save(event)}>
+        <form className="dialog-form" onSubmit={(event) => void save(event)}>
           {current ? null : (
             <label>
               Id (a–z, 0–9, _ -)

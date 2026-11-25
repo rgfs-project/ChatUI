@@ -126,7 +126,9 @@
   display: flex;
   gap: 4px;
   min-height: var(--action-button);
-  margin-top: 4px;
+  /* Buttons have no visible box, so the icons (not the buttons) line up with
+     the text above them. */
+  margin: 4px calc((16px - var(--action-button)) / 2) 0;
 }
 
 .msg-user .msg-actions {
@@ -357,10 +359,16 @@
 
 .composer-notice {
   width: min(var(--thread-width), 100%);
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   color: var(--text-secondary);
   font-size: var(--text-ui);
   text-align: center;
+}
+
+/* Under a greeting, a notice stays with the composer it is about. */
+.greeting + :is(.composer-notice, .composer-warning),
+.temporary-intro + :is(.composer-notice, .composer-warning) {
+  margin-top: -12px;
 }
 
 .switch-spinner {
@@ -600,7 +608,7 @@
 
 .composer-warning {
   width: min(var(--thread-width), 100%);
-  margin: 0 0 8px;
+  margin: 0 0 12px;
   color: var(--danger);
   font-size: var(--text-ui);
   text-align: center;
@@ -898,8 +906,14 @@
   align-items: center;
   gap: 8px;
   max-width: 520px;
-  margin: 0 auto;
+  /* Title and note read as one group, the same 28px above the composer as a
+     plain greeting. */
+  margin: 0 auto 28px;
   text-align: center;
+}
+
+.temporary-intro .greeting {
+  margin: 0;
 }
 
 .temporary-intro p {

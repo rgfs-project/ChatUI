@@ -141,6 +141,20 @@
 .dialog-form {
   display: flex;
   flex-direction: column;
+  /* 6px from a label to its field; 16px between one field and the next. */
+  gap: 6px;
+}
+
+.dialog-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-ui);
+}
+
+.dialog-form > :is(label, fieldset, .admin-fields):not(:first-child),
+.dialog-form > .dialog-actions {
+  margin-top: 10px;
 }
 
 /*
@@ -603,13 +617,6 @@
   border-bottom: 0;
 }
 
-.admin-provider-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--text-ui);
-}
-
 .admin-fields {
   display: flex;
   flex-wrap: wrap;
@@ -687,7 +694,8 @@
 }
 
 .admin-checks legend {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  padding: 0;
   font-size: var(--text-ui);
 }
 

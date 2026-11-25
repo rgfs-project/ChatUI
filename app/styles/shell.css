@@ -143,8 +143,14 @@
   flex-direction: column;
   gap: 4px;
   margin: 0;
-  padding: 0 0 8px;
+  padding: 0;
   list-style: none;
+}
+
+/* Room at the end of the scroll only: between sections it made the gap above
+   Recents 8px taller than the one above Projects. */
+.chat-list:last-child {
+  padding-bottom: 8px;
 }
 
 .chat-row {
