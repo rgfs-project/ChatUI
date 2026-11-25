@@ -455,11 +455,16 @@
   display: inline-flex;
 }
 
-/* The drawer (phones and narrow windows) holds the same sidebar. */
+/* The drawer (phones and narrow windows) holds the same sidebar. It sits a
+   layer below dialogs, so a dialog opened over it dims it too. */
+.dialog-backdrop.drawer-backdrop {
+  z-index: 30;
+}
+
 .drawer {
   position: fixed;
   inset: 0 auto 0 0;
-  z-index: 41;
+  z-index: 31;
   display: flex;
   width: min(var(--sidebar-width), 85vw);
   background: var(--bg);

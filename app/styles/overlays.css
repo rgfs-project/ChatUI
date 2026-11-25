@@ -238,6 +238,7 @@
 
 .settings-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -249,7 +250,11 @@
 
 .settings-row-text {
   display: flex;
+  /* The label keeps 240px; when the control no longer fits beside it, the
+     control wraps under the label instead of squeezing it. */
+  flex: 1 1 240px;
   flex-direction: column;
+  min-width: 0;
 }
 
 .settings-row-hint,
@@ -275,6 +280,10 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+}
+
+.settings-row.is-stacked > .settings-row-text {
+  flex: none;
 }
 
 /* Text fields in a row: the height, shape and type size of the pill buttons beside them. */

@@ -36,7 +36,7 @@ export function ImageSizeRow() {
   return (
     <Row
       label="Shrink large images"
-      hint="Images are resized in your browser before upload; this also removes location data."
+      hint="Images are resized in your browser before upload so their longest side fits; this also removes location data."
     >
       <select
         aria-label="Shrink large images"
@@ -50,7 +50,7 @@ export function ImageSizeRow() {
           <option key={value} value={value}>
             {value === 0
               ? "Never"
-              : `Longest side ${String(value)} px${value === DEFAULT_IMAGE_MAX_EDGE ? " (default)" : ""}`}
+              : `${String(value)} px${value === DEFAULT_IMAGE_MAX_EDGE ? " (default)" : ""}`}
           </option>
         ))}
       </select>
