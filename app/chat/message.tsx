@@ -106,6 +106,13 @@ function UserEditor({
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement | null>(null);
+  // Opening the editor puts the caret after the text, ready to add to it.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -134,7 +141,6 @@ function UserEditor({
         className="selectable"
         aria-label="Edited message"
         value={value}
-        autoFocus
         onChange={(event) => {
           setValue(event.currentTarget.value);
         }}
@@ -149,10 +155,10 @@ function UserEditor({
         }}
       />
       <div className="msg-editor-actions">
-        <button type="button" className="pill-button pill-dark" onClick={onDone}>
+        <button type="button" className="pill-button" onClick={onDone}>
           Cancel
         </button>
-        <button type="submit" className="pill-button pill-light" disabled={!changed || busy}>
+        <button type="submit" className="pill-button pill-primary" disabled={!changed || busy}>
           Send
         </button>
       </div>

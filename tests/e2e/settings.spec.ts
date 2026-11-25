@@ -7,7 +7,8 @@ test.describe("appearance", () => {
   }) => {
     await signIn(page, "/settings/appearance");
     const html = page.locator("html");
-    await expect(html).toHaveAttribute("data-theme", "light");
+    // With no choice saved, the theme follows the system.
+    await expect(html).toHaveAttribute("data-theme", "system");
     await page.getByRole("radio", { name: "Dark" }).check({ force: true });
     await expect(html).toHaveAttribute("data-theme", "dark");
     await page.getByRole("radio", { name: "Green" }).check({ force: true });
@@ -27,11 +28,11 @@ test.describe("appearance", () => {
     await hydrated(page);
     await expect(html).toHaveAttribute("data-theme", "dark");
     // Restore the defaults for the other tests in this run.
-    await page.getByRole("radio", { name: "Light" }).check({ force: true });
+    await page.getByRole("radio", { name: "System" }).check({ force: true });
     await page.getByRole("radio", { name: "Orange" }).check({ force: true });
     await page.getByLabel("Interface text size").selectOption("14");
     await page.getByRole("switch", { name: "Reduce motion" }).uncheck();
-    await expect(html).toHaveAttribute("data-theme", "light");
+    await expect(html).toHaveAttribute("data-theme", "system");
   });
 
   test("settings search finds rows across sections", async ({ page }) => {

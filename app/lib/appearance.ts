@@ -24,7 +24,7 @@ export interface Appearance {
 export const APPEARANCE_COOKIE = "chatui_appearance";
 
 export const DEFAULT_APPEARANCE: Appearance = {
-  theme: "light",
+  theme: "system",
   accent: "orange",
   uiSize: 14,
   codeSize: 12,

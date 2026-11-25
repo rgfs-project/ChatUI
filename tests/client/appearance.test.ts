@@ -19,10 +19,10 @@ describe("appearance cookie", () => {
     expect(parseAppearance(serializeAppearance(a))).toEqual(a);
   });
 
-  it("defaults to light, orange, 14/12 and system motion", () => {
+  it("defaults to the system theme, orange, 14/12 and system motion", () => {
     expect(parseAppearance(undefined)).toEqual(DEFAULT_APPEARANCE);
     expect(DEFAULT_APPEARANCE).toMatchObject({
-      theme: "light",
+      theme: "system",
       accent: "orange",
       uiSize: 14,
       codeSize: 12,

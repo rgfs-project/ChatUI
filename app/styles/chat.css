@@ -739,22 +739,6 @@
   gap: 8px;
 }
 
-.pill-dark {
-  border-color: transparent;
-  background: var(--text);
-  color: var(--bg);
-}
-
-.pill-light {
-  border-color: transparent;
-  background: var(--bg);
-  color: var(--text);
-}
-
-.pill-light:disabled {
-  opacity: 0.5;
-}
-
 /* Matches marked after opening a chat from search. */
 ::highlight(chatui-search) {
   background-color: color-mix(in srgb, var(--accent) 35%, transparent);

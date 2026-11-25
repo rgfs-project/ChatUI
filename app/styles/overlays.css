@@ -588,6 +588,16 @@
   padding: 16px 0;
 }
 
+/* A table wider than its card scrolls inside it instead of spilling out. */
+.settings-card:has(> .admin-table) {
+  overflow-x: auto;
+}
+
+.admin-table th,
+.admin-table td:first-child {
+  white-space: nowrap;
+}
+
 /* The card draws the bottom edge, so the last row keeps no divider of its own. */
 .settings-card .admin-table tr:last-child > td {
   border-bottom: 0;

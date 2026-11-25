@@ -73,7 +73,7 @@ test.use({ viewport: { width: 1920, height: 1080 } });
 
 for (const scheme of ["light", "dark"] as const) {
   test(`measurement audit (${scheme})`, async ({ page }) => {
-    // The theme is an explicit appearance choice (cookie), light by default.
+    // The theme is an explicit appearance choice (cookie); with none it follows the system.
     await page
       .context()
       .addCookies([

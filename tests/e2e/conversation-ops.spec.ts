@@ -30,6 +30,9 @@ test.describe("Phase 13a: message actions", () => {
     const editor = page.getByRole("form", { name: "Edit message" });
     const field = editor.getByRole("textbox", { name: "Edited message" });
     await expect(field).toBeFocused();
+    // The caret starts after the text, so typing adds to the message.
+    await field.press("!");
+    await expect(field).toHaveValue(`first ${stamp}!`);
     await field.fill("changed");
     await editor.getByRole("button", { name: "Cancel" }).click();
     await expect(editor).toHaveCount(0);
