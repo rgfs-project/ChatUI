@@ -11,6 +11,7 @@ import {
 import { applyAppearance, type Appearance } from "./appearance";
 import type { TimeFormat } from "./time";
 import { UI_COOKIES, writeUiCookie, type UiHints } from "./ui-cookies";
+import { noopSubscribe } from "./hydrated";
 
 /** Below this width the sidebar overlays the chat instead of sitting beside it. */
 export const NARROW_QUERY = "(max-width: 767px)";
@@ -44,8 +45,6 @@ interface UiState {
 }
 
 const UiContext = createContext<UiState | null>(null);
-
-const noopSubscribe = () => () => undefined;
 
 function browserZoneKey(): string {
   const resolved = Intl.DateTimeFormat().resolvedOptions();

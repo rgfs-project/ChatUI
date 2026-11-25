@@ -51,6 +51,7 @@ import {
 } from "./model-choice";
 import type { ConversationDto, ConversationSummary } from "@shared/conversations";
 import type { AttachmentDto, AttachmentRef } from "@shared/attachments";
+import { noopSubscribe } from "../lib/hydrated";
 
 /** Resends of an unresolved send with the same operation key (contracts §4.1). */
 const SEND_RETRIES = 3;
@@ -120,8 +121,6 @@ export interface ChatApi {
 }
 
 const ChatContext = createContext<ChatApi | null>(null);
-
-const noopSubscribe = () => () => undefined;
 
 export function useChat(): ChatApi {
   const api = useContext(ChatContext);

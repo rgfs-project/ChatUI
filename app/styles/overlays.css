@@ -264,15 +264,10 @@
 /* A form inside a card is made of rows too; its subtitle names the group. */
 .settings-form {
   border-bottom: 1px solid var(--divider);
-  font-size: var(--text-ui);
 }
 
 .settings-form > .settings-subtitle {
   margin: 16px 0 0;
-}
-
-.settings-form > .form-error {
-  margin: 8px 0 0;
 }
 
 /* A wide control (a text area) sits under its label. */
@@ -280,10 +275,6 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-}
-
-.settings-row.is-stacked > .settings-row-control {
-  width: 100%;
 }
 
 /* Text fields in a row: the height, shape and type size of the pill buttons beside them. */
@@ -623,7 +614,6 @@
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-ui);
 }
 
 .admin-table th,
@@ -800,10 +790,6 @@ html[data-phone] .notice-banner {
   gap: 8px;
   padding: 12px 0;
   border-top: 1px solid var(--divider);
-}
-
-.memory-form textarea {
-  resize: vertical;
 }
 
 .memory-form-actions {

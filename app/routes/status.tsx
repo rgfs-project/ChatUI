@@ -1,6 +1,7 @@
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import type { HealthDto } from "@shared/api";
 import { appContext } from "../context";
+import { useHydrated } from "../lib/hydrated";
 import type { Route } from "./+types/status";
 
 export function meta(): Route.MetaDescriptors {
@@ -22,17 +23,6 @@ function isHealthDto(value: unknown): value is HealthDto {
     value.status === "ok" &&
     "version" in value &&
     typeof value.version === "string"
-  );
-}
-
-const noopSubscribe = () => () => undefined;
-
-/** false during SSR and hydration, true once React has hydrated on the client. */
-function useHydrated(): boolean {
-  return useSyncExternalStore(
-    noopSubscribe,
-    () => true,
-    () => false,
   );
 }
 

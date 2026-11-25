@@ -19,9 +19,6 @@ export interface UserRecord {
   updatedAt: string;
 }
 
-/** What the rest of the server may see of an account. */
-export type PublicUser = Omit<UserRecord, "passwordHash">;
-
 export const USERNAME_RE = /^[a-z0-9_.-]{3,32}$/;
 
 export class UserError extends Error {
