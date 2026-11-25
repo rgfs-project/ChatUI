@@ -51,7 +51,6 @@ import { useUi } from "../lib/ui-context";
 import { ErrorBoundary as AreaBoundary } from "../ui/error-boundary";
 import { ConfirmProvider } from "../ui/dialog";
 import { ToastProvider } from "../ui/toast";
-import { TooltipProvider } from "../ui/tooltip";
 import type { Route } from "./+types/app-layout";
 
 /** Search is its own chunk: the chat page never loads it until it opens (Phase 13a). */
@@ -185,13 +184,11 @@ export async function clientLoader({ params, request }: Route.ClientLoaderArgs) 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   return (
     <HydrationBoundary state={loaderData.dehydrated}>
-      <TooltipProvider>
-        <ToastProvider>
-          <ConfirmProvider>
-            <Shell />
-          </ConfirmProvider>
-        </ToastProvider>
-      </TooltipProvider>
+      <ToastProvider>
+        <ConfirmProvider>
+          <Shell />
+        </ConfirmProvider>
+      </ToastProvider>
     </HydrationBoundary>
   );
 }

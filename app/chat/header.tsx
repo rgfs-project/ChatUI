@@ -65,7 +65,6 @@ export const Header = memo(function Header() {
         <IconButton
           label="Open sidebar"
           className="sidebar-open"
-          tooltipSide="right"
           onClick={() => {
             setSidebarOpen(true);
           }}

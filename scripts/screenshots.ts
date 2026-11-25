@@ -100,7 +100,7 @@ try {
     .click();
   await page.getByRole("link", { name: "Help me pack for a weekend hiking trip" }).first().click();
   await page.waitForURL(/\/chat\/[0-9a-f-]{36}$/);
-  // A fresh load leaves no focus ring or tooltip on the sidebar button.
+  // A fresh load leaves no focus ring on the sidebar button.
   await page.reload();
   await page.waitForSelector('html[data-hydrated="true"]');
   await page.waitForTimeout(800);

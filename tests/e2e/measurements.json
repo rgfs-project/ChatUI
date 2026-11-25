@@ -20,7 +20,7 @@
       "width": 36,
       "height": 36,
       "css": {
-        "border-radius": "8px"
+        "border-radius": "999px"
       }
     },
     {
@@ -30,7 +30,7 @@
       "height": 35,
       "css": {
         "padding": "6px 10px",
-        "border-radius": "8px",
+        "border-radius": "999px",
         "gap": "8px"
       }
     },
@@ -41,7 +41,7 @@
       "height": 35,
       "css": {
         "padding": "6px 10px",
-        "border-radius": "8px",
+        "border-radius": "999px",
         "font-size": "14px",
         "line-height": "18px",
         "font-weight": "600"
@@ -111,7 +111,7 @@
       "width": 36,
       "height": 36,
       "css": {
-        "border-radius": "8px"
+        "border-radius": "999px"
       }
     },
     {
@@ -183,7 +183,7 @@
       "width": 32,
       "height": 32,
       "css": {
-        "border-radius": "8px"
+        "border-radius": "999px"
       }
     },
     {
@@ -324,7 +324,7 @@
       "height": 36,
       "css": {
         "padding": "0px 10px",
-        "border-radius": "10px",
+        "border-radius": "999px",
         "gap": "10px"
       }
     }

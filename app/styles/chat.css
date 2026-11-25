@@ -676,7 +676,7 @@
   gap: 10px;
   min-height: 44px;
   padding: 0 10px;
-  border-radius: var(--radius-menu-item);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font-size: var(--text-ui);
 }

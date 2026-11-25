@@ -1,19 +1,16 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { Tooltip } from "./tooltip";
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /** Accessible name; also the tooltip text unless `tooltip` is false. */
+  /** Accessible name of the icon-only button. */
   label: string;
-  tooltip?: boolean;
-  tooltipSide?: "top" | "right" | "bottom" | "left";
   children: ReactNode;
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { label, tooltip = true, tooltipSide, className, children, ...rest },
+  { label, className, children, ...rest },
   ref,
 ) {
-  const button = (
+  return (
     <button
       ref={ref}
       type="button"
@@ -23,12 +20,5 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     >
       {children}
     </button>
-  );
-  return tooltip ? (
-    <Tooltip label={label} {...(tooltipSide ? { side: tooltipSide } : {})}>
-      {button}
-    </Tooltip>
-  ) : (
-    button
   );
 });

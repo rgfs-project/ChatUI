@@ -13,7 +13,6 @@ import { qk } from "../../app/lib/query/keys";
 import { UiProvider } from "../../app/lib/ui-context";
 import { ConfirmProvider } from "../../app/ui/dialog";
 import { ToastProvider } from "../../app/ui/toast";
-import { TooltipProvider } from "../../app/ui/tooltip";
 
 export const USER = {
   id: "a1a1a1a1-0000-4000-8000-000000000001",
@@ -124,11 +123,9 @@ function Providers({ client, children }: { client: QueryClient; children: ReactN
         }}
         renderedAt="2026-10-29T12:00:00.000Z"
       >
-        <TooltipProvider>
-          <ToastProvider>
-            <ConfirmProvider>{children}</ConfirmProvider>
-          </ToastProvider>
-        </TooltipProvider>
+        <ToastProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </ToastProvider>
       </UiProvider>
     </QueryClientProvider>
   );

@@ -69,12 +69,11 @@ export const Sidebar = memo(function Sidebar() {
           ChatUI
         </Link>
         <div className="sidebar-head-actions">
-          <IconButton label="Search chats (Ctrl+K)" tooltipSide="bottom" onClick={openSearch}>
+          <IconButton label="Search chats (Ctrl+K)" onClick={openSearch}>
             <Search size={20} aria-hidden />
           </IconButton>
           <IconButton
             label="Close sidebar"
-            tooltipSide="right"
             onClick={() => {
               setSidebarOpen(false);
             }}

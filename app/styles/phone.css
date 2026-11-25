@@ -84,11 +84,6 @@ html[data-phone] .dock > .composer {
   order: 2;
 }
 
-/* Tooltips are for pointers with hover; never on a phone. */
-html[data-phone] .tooltip {
-  display: none;
-}
-
 html[data-phone] .chat-area.is-empty .greeting {
   margin-top: auto;
   margin-bottom: auto;

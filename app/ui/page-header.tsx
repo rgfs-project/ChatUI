@@ -12,7 +12,6 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
         <IconButton
           label="Open sidebar"
           className="sidebar-open"
-          tooltipSide="right"
           onClick={() => {
             setSidebarOpen(true);
           }}

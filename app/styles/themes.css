@@ -31,8 +31,6 @@
   --code-text: #d4d4d4;
   --danger: #f87171;
   --danger-fill: #dc2626;
-  --tooltip-bg: #f3f3f3;
-  --tooltip-text: #0d0d0d;
   --syntax-comment: #a8a8a8;
   --syntax-keyword: #b7a6e8;
   --syntax-function: #a99bdc;
@@ -67,8 +65,6 @@
     --danger: #f87171;
     --danger-fill: #dc2626;
     --danger-fill: #dc2626;
-    --tooltip-bg: #f3f3f3;
-    --tooltip-text: #0d0d0d;
     --syntax-comment: #a8a8a8;
     --syntax-keyword: #b7a6e8;
     --syntax-function: #a99bdc;

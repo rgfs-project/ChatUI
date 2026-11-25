@@ -52,8 +52,9 @@
   --icon-button: 36px;
   --action-button: 32px;
   --row-height: 35px;
-  --radius-row: 8px;
-  --radius-label: 6px;
+  /* Every single-line control is a pill: rows, icon buttons, menu items. */
+  --radius-row: var(--radius-pill);
+  --radius-label: var(--radius-pill);
   --radius-composer: 26px;
   --radius-bubble: 18px;
   --radius-code: 16px;
@@ -107,8 +108,6 @@
   --avatar: #8e63a6;
   /* Focus rings need 3:1 against the page: a deeper orange than the accent (5:1). */
   --focus: #c2410c;
-  --tooltip-bg: #0d0d0d;
-  --tooltip-text: #ffffff;
   --motion: 0.2s;
 }
 

@@ -100,7 +100,7 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 | Model picker                       | Radix DropdownMenu radio group |
 | Confirm                            | Radix AlertDialog              |
 | Rename and overlays                | Radix Dialog                   |
-| Tooltips                           | Radix Tooltip                  |
+| Tooltips                           | None (removed)                 |
 | Desktop sidebar collapse           | Native                         |
 | Toasts                             | Native live region             |
 | Composer                           | Native textarea                |
@@ -122,7 +122,6 @@ Every feature from the list is covered by §2. Items in neither the package nor 
 | Runtime | `@radix-ui/react-dropdown-menu` | 2.2.1   |
 | Runtime | `@radix-ui/react-dialog`        | 1.3.1   |
 | Runtime | `@radix-ui/react-alert-dialog`  | 1.2.1   |
-| Runtime | `@radix-ui/react-tooltip`       | 1.4.1   |
 | Dev     | `@testing-library/react`        | 16.3.3  |
 | Dev     | `@testing-library/dom`          | 10.4.2  |
 | Dev     | `@testing-library/user-event`   | 14.6.7  |

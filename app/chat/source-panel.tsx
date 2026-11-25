@@ -78,7 +78,7 @@ export default function SourcePanel({ id, onClose }: { id: string; onClose: () =
           aria-describedby={undefined}
           data-testid="source-panel"
           data-artifact-id={id}
-          // Focus the panel itself: a focused toolbar button would show its tooltip.
+          // Focus the panel itself, not its first toolbar button.
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             (event.currentTarget as HTMLElement | null)?.focus();

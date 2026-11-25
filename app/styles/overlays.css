@@ -1,4 +1,4 @@
-/* Menus, dialogs, tooltips and toasts render in portals above the shell. */
+/* Menus, dialogs and toasts render in portals above the shell. */
 .menu {
   z-index: 50;
   min-width: 240px;
@@ -24,7 +24,7 @@
   gap: 10px;
   min-height: 36px;
   padding: 0 10px;
-  border-radius: var(--radius-menu-item);
+  border-radius: var(--radius-pill);
   outline: none;
   cursor: pointer;
 }
@@ -301,7 +301,7 @@
 }
 
 .pill-select {
-  max-width: 260px;
+  max-width: 100%;
 }
 
 .shortcuts {
@@ -335,16 +335,6 @@
   .settings-panel {
     padding: 20px 16px 48px;
   }
-}
-
-.tooltip {
-  z-index: 60;
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: var(--tooltip-bg);
-  color: var(--tooltip-text);
-  font-size: 13px;
-  line-height: 18px;
 }
 
 .toasts {
