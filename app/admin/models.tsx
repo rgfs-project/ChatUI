@@ -47,70 +47,72 @@ export function ModelsSection() {
 
   return (
     <>
-      <table className="admin-table" aria-label="Models">
-        <thead>
-          <tr>
-            <th>Model</th>
-            <th>Provider</th>
-            <th>Visible</th>
-            <th>
-              <span className="visually-hidden">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {models.data?.models.map((model) => (
-            <tr key={`${model.providerId}/${model.modelId}`}>
-              <td className="selectable">
-                {model.modelId}
-                {model.settings.systemPrompt ? <span className="admin-badge">prompt</span> : null}
-              </td>
-              <td>{model.providerName}</td>
-              <td>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  className="switch"
-                  aria-label={`Show ${model.modelId} to members`}
-                  checked={
-                    !(override[`${model.providerId}/${model.modelId}`] ?? model.settings.hidden)
-                  }
-                  onChange={(event) => {
-                    const hidden = !event.target.checked;
-                    // Optimistic and synchronous: a controlled switch must not snap back.
-                    setOverride((o) => ({
-                      ...o,
-                      [`${model.providerId}/${model.modelId}`]: hidden,
-                    }));
-                    // Kept after a successful save (it then equals the server's
-                    // value, so a late refetch can't snap the switch back);
-                    // dropped if saving failed.
-                    void put({ ...model.settings, hidden }).then((saved) => {
-                      if (saved !== null) return;
-                      setOverride((o) => {
-                        const { [`${model.providerId}/${model.modelId}`]: _done, ...rest } = o;
-                        return rest;
-                      });
-                    });
-                  }}
-                />
-              </td>
-              <td className="admin-actions">
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={`Configure ${model.modelId}`}
-                  onClick={() => {
-                    setEditing(model);
-                  }}
-                >
-                  <Pencil size={16} aria-hidden />
-                </button>
-              </td>
+      <div className="settings-card">
+        <table className="admin-table" aria-label="Models">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Provider</th>
+              <th>Visible</th>
+              <th>
+                <span className="visually-hidden">Actions</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {models.data?.models.map((model) => (
+              <tr key={`${model.providerId}/${model.modelId}`}>
+                <td className="selectable">
+                  {model.modelId}
+                  {model.settings.systemPrompt ? <span className="admin-badge">prompt</span> : null}
+                </td>
+                <td>{model.providerName}</td>
+                <td>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    className="switch"
+                    aria-label={`Show ${model.modelId} to members`}
+                    checked={
+                      !(override[`${model.providerId}/${model.modelId}`] ?? model.settings.hidden)
+                    }
+                    onChange={(event) => {
+                      const hidden = !event.target.checked;
+                      // Optimistic and synchronous: a controlled switch must not snap back.
+                      setOverride((o) => ({
+                        ...o,
+                        [`${model.providerId}/${model.modelId}`]: hidden,
+                      }));
+                      // Kept after a successful save (it then equals the server's
+                      // value, so a late refetch can't snap the switch back);
+                      // dropped if saving failed.
+                      void put({ ...model.settings, hidden }).then((saved) => {
+                        if (saved !== null) return;
+                        setOverride((o) => {
+                          const { [`${model.providerId}/${model.modelId}`]: _done, ...rest } = o;
+                          return rest;
+                        });
+                      });
+                    }}
+                  />
+                </td>
+                <td className="admin-actions">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Configure ${model.modelId}`}
+                    onClick={() => {
+                      setEditing(model);
+                    }}
+                  >
+                    <Pencil size={16} aria-hidden />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {models.data?.models.length === 0 ? (
         <p className="settings-row-hint">No models discovered yet. Check the providers.</p>
       ) : null}

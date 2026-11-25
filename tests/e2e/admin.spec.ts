@@ -15,7 +15,7 @@ test.describe("administration (admin session)", () => {
     await page.getByRole("menuitem", { name: "Administration" }).click();
     await page.waitForURL(/\/admin$/);
     const dialog = page.getByRole("dialog", { name: "Administration" });
-    await expect(dialog.getByRole("heading", { name: "Accounts" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Accounts", exact: true })).toBeVisible();
 
     // Create a member.
     const create = dialog.getByRole("form", { name: "Create account" });

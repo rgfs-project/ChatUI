@@ -11,6 +11,7 @@ import { useState, type SyntheticEvent } from "react";
 import type { AdminUser } from "@shared/admin";
 import { useChat } from "../chat/chat-context";
 import { apiJson } from "../lib/api";
+import { FormActions, Row } from "../settings/row";
 import { Dialog } from "../ui/dialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/menu";
 import { useAdminAction, useAdminQuery } from "./data";
@@ -52,137 +53,149 @@ export function UsersSection() {
 
   return (
     <>
+      <h3 className="settings-subtitle admin-subtitle">Create account</h3>
       <form
-        className="admin-form"
+        className="settings-card"
         aria-label="Create account"
         onSubmit={(event) => void create(event)}
       >
-        <h3 className="settings-subtitle">Create account</h3>
-        <div className="admin-fields">
-          <label>
-            Username
-            <input name="username" className="text-field selectable" required autoComplete="off" />
-          </label>
-          <label>
-            Password
-            <input
-              name="password"
-              type="password"
-              className="text-field selectable"
-              required
-              minLength={10}
-              autoComplete="new-password"
-            />
-          </label>
-          <label>
-            Role
-            <select name="role" className="text-field native-select" defaultValue="user">
-              <option value="user">Member</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
+        <Row label="Username" labelFor="admin-new-username">
+          <input
+            id="admin-new-username"
+            name="username"
+            className="text-field settings-input selectable"
+            required
+            autoComplete="off"
+          />
+        </Row>
+        <Row label="Password" hint="At least 10 characters." labelFor="admin-new-password">
+          <input
+            id="admin-new-password"
+            name="password"
+            type="password"
+            className="text-field settings-input selectable"
+            required
+            minLength={10}
+            autoComplete="new-password"
+          />
+        </Row>
+        <Row label="Role" labelFor="admin-new-role">
+          <select
+            id="admin-new-role"
+            name="role"
+            className="pill-button pill-select native-select"
+            defaultValue="user"
+          >
+            <option value="user">Member</option>
+            <option value="admin">Admin</option>
+          </select>
+        </Row>
+        <FormActions>
           <button type="submit" className="pill-button pill-primary">
             Create
           </button>
-        </div>
+        </FormActions>
       </form>
+      <h3 className="settings-subtitle">All accounts</h3>
       {users.isPending ? <p className="settings-row-hint">Loading…</p> : null}
-      <table className="admin-table" aria-label="Accounts">
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th>Chats</th>
-            <th>
-              <span className="visually-hidden">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.data?.users.map((user) => (
-            <tr key={user.id} data-testid={`admin-user-${user.username}`}>
-              <td className="selectable">
-                {user.username}
-                {user.id === userId ? <span className="admin-badge">you</span> : null}
-              </td>
-              <td>{user.role === "admin" ? "Admin" : "Member"}</td>
-              <td className={user.status === "active" ? "" : "admin-muted"}>
-                {user.status === "active"
-                  ? "Active"
-                  : user.status === "disabled"
-                    ? "Disabled"
-                    : "Closing"}
-              </td>
-              <td>{user.conversationCount}</td>
-              <td className="admin-actions">
-                <Menu
-                  label={`Actions for ${user.username}`}
-                  align="end"
-                  trigger={
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={`Actions for ${user.username}`}
-                    >
-                      <MoreHorizontal size={18} aria-hidden />
-                    </button>
-                  }
-                >
-                  {user.role === "admin" ? (
-                    <MenuItem
-                      icon={<ShieldOff size={16} aria-hidden />}
-                      onSelect={() => void update(user, { role: "user" })}
-                    >
-                      Make member
-                    </MenuItem>
-                  ) : (
-                    <MenuItem
-                      icon={<ShieldCheck size={16} aria-hidden />}
-                      onSelect={() => void update(user, { role: "admin" })}
-                    >
-                      Make admin
-                    </MenuItem>
-                  )}
-                  {user.status === "active" ? (
-                    <MenuItem
-                      icon={<UserX size={16} aria-hidden />}
-                      onSelect={() => void update(user, { status: "disabled" })}
-                    >
-                      Disable
-                    </MenuItem>
-                  ) : (
-                    <MenuItem
-                      icon={<UserCheck size={16} aria-hidden />}
-                      onSelect={() => void update(user, { status: "active" })}
-                    >
-                      Enable
-                    </MenuItem>
-                  )}
-                  <MenuItem
-                    icon={<KeyRound size={16} aria-hidden />}
-                    onSelect={() => {
-                      setPasswordFor(user);
-                    }}
-                  >
-                    Set password
-                  </MenuItem>
-                  <MenuSeparator />
-                  <MenuItem
-                    danger
-                    icon={<Trash2 size={16} aria-hidden />}
-                    onSelect={() => {
-                      setDeleting(user);
-                    }}
-                  >
-                    Delete account
-                  </MenuItem>
-                </Menu>
-              </td>
+      <div className="settings-card">
+        <table className="admin-table" aria-label="Accounts">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Chats</th>
+              <th>
+                <span className="visually-hidden">Actions</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {users.data?.users.map((user) => (
+              <tr key={user.id} data-testid={`admin-user-${user.username}`}>
+                <td className="selectable">
+                  {user.username}
+                  {user.id === userId ? <span className="admin-badge">you</span> : null}
+                </td>
+                <td>{user.role === "admin" ? "Admin" : "Member"}</td>
+                <td className={user.status === "active" ? "" : "admin-muted"}>
+                  {user.status === "active"
+                    ? "Active"
+                    : user.status === "disabled"
+                      ? "Disabled"
+                      : "Closing"}
+                </td>
+                <td>{user.conversationCount}</td>
+                <td className="admin-actions">
+                  <Menu
+                    label={`Actions for ${user.username}`}
+                    align="end"
+                    trigger={
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Actions for ${user.username}`}
+                      >
+                        <MoreHorizontal size={18} aria-hidden />
+                      </button>
+                    }
+                  >
+                    {user.role === "admin" ? (
+                      <MenuItem
+                        icon={<ShieldOff size={16} aria-hidden />}
+                        onSelect={() => void update(user, { role: "user" })}
+                      >
+                        Make member
+                      </MenuItem>
+                    ) : (
+                      <MenuItem
+                        icon={<ShieldCheck size={16} aria-hidden />}
+                        onSelect={() => void update(user, { role: "admin" })}
+                      >
+                        Make admin
+                      </MenuItem>
+                    )}
+                    {user.status === "active" ? (
+                      <MenuItem
+                        icon={<UserX size={16} aria-hidden />}
+                        onSelect={() => void update(user, { status: "disabled" })}
+                      >
+                        Disable
+                      </MenuItem>
+                    ) : (
+                      <MenuItem
+                        icon={<UserCheck size={16} aria-hidden />}
+                        onSelect={() => void update(user, { status: "active" })}
+                      >
+                        Enable
+                      </MenuItem>
+                    )}
+                    <MenuItem
+                      icon={<KeyRound size={16} aria-hidden />}
+                      onSelect={() => {
+                        setPasswordFor(user);
+                      }}
+                    >
+                      Set password
+                    </MenuItem>
+                    <MenuSeparator />
+                    <MenuItem
+                      danger
+                      icon={<Trash2 size={16} aria-hidden />}
+                      onSelect={() => {
+                        setDeleting(user);
+                      }}
+                    >
+                      Delete account
+                    </MenuItem>
+                  </Menu>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <Dialog
         open={passwordFor !== null}
         onOpenChange={(open) => {

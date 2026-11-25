@@ -1,19 +1,24 @@
 import type { ReactNode } from "react";
 
-/** One labelled settings row: text on the left, its control on the right. */
+/**
+ * One labelled settings row: text on the left, its control on the right.
+ * `stacked` puts a wide control (a text area) under the text instead.
+ */
 export function Row({
   label,
   hint,
   children,
   labelFor,
+  stacked = false,
 }: {
   label: string;
   hint?: string;
   children: ReactNode;
   labelFor?: string;
+  stacked?: boolean;
 }) {
   return (
-    <div className="settings-row">
+    <div className={`settings-row${stacked ? " is-stacked" : ""}`}>
       <div className="settings-row-text">
         {labelFor ? (
           <label className="settings-row-label" htmlFor={labelFor}>
@@ -25,6 +30,16 @@ export function Row({
         {hint ? <span className="settings-row-hint">{hint}</span> : null}
       </div>
       <div className="settings-row-control">{children}</div>
+    </div>
+  );
+}
+
+/** The end of a form in a card: an optional note, then its buttons on the right. */
+export function FormActions({ hint, children }: { hint?: string; children: ReactNode }) {
+  return (
+    <div className="settings-actions">
+      {hint ? <span className="settings-row-hint">{hint}</span> : null}
+      <div className="settings-actions-buttons">{children}</div>
     </div>
   );
 }

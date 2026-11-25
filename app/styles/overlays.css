@@ -261,13 +261,66 @@
   margin: 0;
 }
 
+/* A form inside a card is made of rows too; its subtitle names the group. */
 .settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 0 16px;
   border-bottom: 1px solid var(--divider);
   font-size: var(--text-ui);
+}
+
+.settings-form > .settings-subtitle {
+  margin: 16px 0 0;
+}
+
+.settings-form > .form-error {
+  margin: 8px 0 0;
+}
+
+/* A wide control (a text area) sits under its label. */
+.settings-row.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.settings-row.is-stacked > .settings-row-control {
+  width: 100%;
+}
+
+/* Text fields in a row: the height, shape and type size of the pill buttons beside them. */
+.text-field.settings-input {
+  width: 240px;
+  max-width: 100%;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--pill-bg);
+  font-size: var(--text-ui);
+}
+
+.text-field.settings-textarea {
+  height: auto;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--pill-bg);
+  font-size: var(--text-ui);
+  line-height: 20px;
+  resize: vertical;
+}
+
+/* The end of a form in a card: a note on the left, its buttons on the right. */
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.settings-actions-buttons {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .pill-select {
@@ -281,10 +334,6 @@
 @media (max-width: 640px) {
   .settings {
     flex-direction: column;
-  }
-
-  .admin-content {
-    padding: 20px 16px 48px;
   }
 
   .settings-nav {
@@ -542,139 +591,31 @@
   margin-bottom: 8px;
 }
 
-/* ── Administration (Phase 10): minimal, with tabs on top (Settings lists them down the side) ── */
-.admin {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.admin-top {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  height: 52px;
-  padding: 0 16px;
-}
-
-.admin-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px 0 8px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-ui);
-}
-
-.admin-back:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-.admin-brand {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-ui);
-}
-
-.admin-tabs {
-  display: flex;
-  flex: none;
-  gap: 24px;
-  padding: 0 32px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  box-shadow: inset 0 -1px 0 var(--divider);
-}
-
-.admin-tab {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  height: 40px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--text-ui);
-  box-shadow: inset 0 -1px 0 transparent;
-}
-
-.admin-tab:hover,
-.admin-tab.is-active {
-  color: var(--text);
-}
-
-.admin-tab.is-active {
-  box-shadow: inset 0 -1px 0 var(--text);
-}
-
-.admin-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.admin-content {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 40px 32px 64px;
-}
-
-.admin-heading {
-  margin-bottom: 24px;
-}
-
-.admin-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: var(--weight-semibold);
-  line-height: 28px;
-}
-
-.admin-description {
-  margin: 2px 0 0;
-  color: var(--text-secondary);
-  font-size: var(--text-ui);
-}
-
+/* ── Administration (Phase 10): the same page, cards and text size as Settings ── */
 .admin-panel {
   overflow-x: auto;
   font-size: var(--text-ui);
 }
 
-.admin .admin-form {
-  margin-bottom: 32px;
-}
-
-.admin .admin-form .settings-subtitle {
+.admin-subtitle {
   margin-top: 0;
 }
 
-.admin .settings-card {
-  padding: 0;
-  border: 0;
+.admin-note {
+  display: block;
+  margin-top: 12px;
 }
 
-.admin .admin-table th {
-  font-weight: var(--weight-regular);
+.admin-empty {
+  display: block;
+  padding: 16px 0;
 }
 
-.admin-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-  font-size: var(--text-ui);
+/* The card draws the bottom edge, so the last row keeps no divider of its own. */
+.settings-card .admin-table tr:last-child > td {
+  border-bottom: 0;
 }
 
-.admin-form label,
-.admin-label,
 .admin-provider-form label {
   display: flex;
   flex-direction: column;
@@ -691,12 +632,6 @@
 
 .admin-fields label {
   flex: 1 1 140px;
-}
-
-.admin-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
 }
 
 .admin-table {
@@ -719,7 +654,7 @@
 }
 
 /* Stays a table cell (display: flex would detach it from the row's border). */
-.admin-table .admin-actions {
+.admin-actions {
   text-align: right;
   white-space: nowrap;
 }

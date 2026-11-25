@@ -3,6 +3,7 @@ import { useState, type SyntheticEvent } from "react";
 import type { AdminProvider } from "@shared/admin";
 import { useChat } from "../chat/chat-context";
 import { apiJson } from "../lib/api";
+import { Row } from "../settings/row";
 import { Dialog, useConfirm } from "../ui/dialog";
 import { useToast } from "../ui/toast";
 import { field, useAdminAction, useAdminQuery } from "./data";
@@ -108,69 +109,71 @@ export function ProvidersSection() {
   const current = editing?.mode === "edit" ? editing.provider : null;
   return (
     <>
-      <div className="admin-toolbar">
-        <button
-          type="button"
-          className="pill-button"
-          onClick={() => {
-            setEditing({ mode: "create" });
-          }}
-        >
-          <Plus size={16} aria-hidden /> Add provider
-        </button>
-      </div>
-      <table className="admin-table" aria-label="Providers">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Endpoint</th>
-            <th>API key</th>
-            <th>
-              <span className="visually-hidden">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {providers.data?.providers.map((provider) => (
-            <tr key={provider.id}>
-              <td>
-                {provider.name}
-                <span className="admin-muted"> · {provider.id}</span>
-              </td>
-              <td className="selectable admin-url">{provider.baseUrl}</td>
-              <td>{provider.hasApiKey ? "Set" : "None"}</td>
-              <td className="admin-actions">
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={`Test ${provider.name}`}
-                  onClick={() => void test(provider)}
-                >
-                  <Plug size={16} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={`Edit ${provider.name}`}
-                  onClick={() => {
-                    setEditing({ mode: "edit", provider });
-                  }}
-                >
-                  <Pencil size={16} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={`Remove ${provider.name}`}
-                  onClick={() => void remove(provider)}
-                >
-                  <Trash2 size={16} aria-hidden />
-                </button>
-              </td>
+      <div className="settings-card">
+        <Row label="Model servers" hint="Where this instance gets its models from.">
+          <button
+            type="button"
+            className="pill-button"
+            onClick={() => {
+              setEditing({ mode: "create" });
+            }}
+          >
+            <Plus size={16} aria-hidden /> Add provider
+          </button>
+        </Row>
+        <table className="admin-table" aria-label="Providers">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Endpoint</th>
+              <th>API key</th>
+              <th>
+                <span className="visually-hidden">Actions</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {providers.data?.providers.map((provider) => (
+              <tr key={provider.id}>
+                <td>
+                  {provider.name}
+                  <span className="admin-muted"> · {provider.id}</span>
+                </td>
+                <td className="selectable admin-url">{provider.baseUrl}</td>
+                <td>{provider.hasApiKey ? "Set" : "None"}</td>
+                <td className="admin-actions">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Test ${provider.name}`}
+                    onClick={() => void test(provider)}
+                  >
+                    <Plug size={16} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Edit ${provider.name}`}
+                    onClick={() => {
+                      setEditing({ mode: "edit", provider });
+                    }}
+                  >
+                    <Pencil size={16} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Remove ${provider.name}`}
+                    onClick={() => void remove(provider)}
+                  >
+                    <Trash2 size={16} aria-hidden />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <Dialog
         open={editing !== null}
         onOpenChange={(open) => {

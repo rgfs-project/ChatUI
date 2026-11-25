@@ -40,7 +40,7 @@ export function ImageSizeRow() {
     >
       <select
         aria-label="Shrink large images"
-        className="text-field native-select"
+        className="pill-button pill-select native-select"
         value={EDGES.includes(edge) ? edge : DEFAULT_IMAGE_MAX_EDGE}
         onChange={(event) => {
           void save({ imageMaxEdge: Number(event.currentTarget.value) });

@@ -23,7 +23,7 @@ import { appearanceRows } from "./appearance";
 import { HistoryImagesRow, ImageSizeRow, StorageRow } from "./files";
 import { ExportAll, ImportData } from "./data";
 import { MemoryManager } from "./memory";
-import { Row, type SettingsSection } from "./row";
+import { FormActions, Row, type SettingsSection } from "./row";
 
 function General() {
   const { userId, refreshModels } = useChat();
@@ -138,37 +138,43 @@ function ChangePassword() {
 
   return (
     <>
-      <form className="settings-form" onSubmit={(event) => void changePassword(event)}>
+      <form
+        className="settings-form"
+        aria-label="Change password"
+        onSubmit={(event) => void changePassword(event)}
+      >
         <h3 className="settings-subtitle">Change password</h3>
-        <label htmlFor="current">Current password</label>
-        <input
-          id="current"
-          name="current"
-          type="password"
-          className="text-field selectable"
-          autoComplete="current-password"
-          required
-        />
-        <label htmlFor="next">New password (at least 10 characters)</label>
-        <input
-          id="next"
-          name="next"
-          type="password"
-          className="text-field selectable"
-          autoComplete="new-password"
-          minLength={10}
-          required
-        />
-        <div className="dialog-actions">
-          <button type="submit" className="pill-button pill-primary" disabled={busy}>
-            Change password and sign out everywhere
-          </button>
-        </div>
+        <Row label="Current password" labelFor="current">
+          <input
+            id="current"
+            name="current"
+            type="password"
+            className="text-field settings-input selectable"
+            autoComplete="current-password"
+            required
+          />
+        </Row>
+        <Row label="New password" hint="At least 10 characters." labelFor="next">
+          <input
+            id="next"
+            name="next"
+            type="password"
+            className="text-field settings-input selectable"
+            autoComplete="new-password"
+            minLength={10}
+            required
+          />
+        </Row>
         {message ? (
           <p className="form-error" role="alert">
             {message}
           </p>
         ) : null}
+        <FormActions hint="Signs you out on every device, this one included.">
+          <button type="submit" className="pill-button pill-primary" disabled={busy}>
+            Change password
+          </button>
+        </FormActions>
       </form>
     </>
   );
